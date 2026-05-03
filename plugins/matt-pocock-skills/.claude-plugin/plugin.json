@@ -5,23 +5,5 @@
   "author": {
     "name": "Matt Pocock",
     "url": "https://github.com/mattpocock"
-  },
-  "skills": [
-    "diagnose",
-    "grill-with-docs",
-    "triage",
-    "improve-codebase-architecture",
-    "setup-matt-pocock-skills",
-    "tdd",
-    "to-issues",
-    "to-prd",
-    "zoom-out",
-    "caveman",
-    "grill-me",
-    "write-a-skill",
-    "git-guardrails-claude-code",
-    "migrate-to-shoehorn",
-    "scaffold-exercises",
-    "setup-pre-commit"
-  ]
+  }
 }

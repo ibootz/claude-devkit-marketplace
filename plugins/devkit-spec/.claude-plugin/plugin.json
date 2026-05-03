@@ -4,6 +4,5 @@
   "description": "规范驱动开发工具集 - Spec 分析、任务拆解、实施与审查",
   "author": {
     "name": "zhangq"
-  },
-  "skills": ["spec-analyze", "spec-tasks", "spec-impl", "spec-review", "spec-bugfix"]
+  }
 }

@@ -4,6 +4,5 @@
   "description": "技能修复工具 - 根据执行中发现的问题更新 SKILL.md 及相关文件",
   "author": {
     "name": "zhangq"
-  },
-  "skills": ["heal"]
+  }
 }
