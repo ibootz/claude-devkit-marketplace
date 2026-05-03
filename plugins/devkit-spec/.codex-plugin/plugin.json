@@ -1,0 +1,14 @@
+{
+  "name": "devkit-spec",
+  "version": "2.0.0",
+  "description": "规范驱动开发工具集 - Spec 分析、任务拆解、实施、审查与缺陷修复（5个技能）",
+  "author": {
+    "name": "zhangq"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "DevKit Spec",
+    "shortDescription": "规范驱动开发工具集",
+    "category": "Development"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "devkit-core",
+  "version": "5.0.0",
+  "description": "核心开发工具集 - 代码库分析、依赖排查、缺陷修复、多模型协作与辅助工具（4个技能）",
+  "author": {
+    "name": "zhangq"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "DevKit Core",
+    "shortDescription": "核心开发工具集",
+    "category": "Development"
+  }
+}

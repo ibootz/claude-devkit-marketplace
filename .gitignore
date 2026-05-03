@@ -1,0 +1,36 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# Node modules (if any)
+node_modules/
+.kilo/
+
+# Environment
+.env
+.env.local
+
+.claude-skills.env*
+.ace-tool/
+**/__pycache__/
+.mypy_cache/
+.kiro/
+.claude
+.gemini
+.codex
+.qwen

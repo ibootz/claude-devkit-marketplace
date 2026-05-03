@@ -1,0 +1,27 @@
+{
+  "name": "matt-pocock-skills",
+  "version": "1.0.0",
+  "description": "Matt Pocock 的工程技能集 - 调试、TDD、架构改进、问题分类、PRD 生成等实战工具",
+  "author": {
+    "name": "Matt Pocock",
+    "url": "https://github.com/mattpocock"
+  },
+  "skills": [
+    "diagnose",
+    "grill-with-docs",
+    "triage",
+    "improve-codebase-architecture",
+    "setup-matt-pocock-skills",
+    "tdd",
+    "to-issues",
+    "to-prd",
+    "zoom-out",
+    "caveman",
+    "grill-me",
+    "write-a-skill",
+    "git-guardrails-claude-code",
+    "migrate-to-shoehorn",
+    "scaffold-exercises",
+    "setup-pre-commit"
+  ]
+}

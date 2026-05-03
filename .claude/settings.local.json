@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "C:\\Users\\zhangq\\.claude\\plugins\\marketplaces",
+      "C:\\Users\\zhangq\\workspace\\study\\playground\\ai\\ccg-workflow",
+      "C:\\Users\\zhangq\\workspace\\study\\playground\\ai\\skills",
+      "C:\\Users\\zhangq\\workspace\\study\\playground\\ai\\superpowers"
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "heal",
+  "version": "1.0.0",
+  "description": "技能修复工具 - 根据执行中发现的问题更新 SKILL.md 及相关文件，支持审批工作流",
+  "author": {
+    "name": "zhangq"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Heal",
+    "shortDescription": "技能修复工具",
+    "category": "Productivity"
+  }
+}

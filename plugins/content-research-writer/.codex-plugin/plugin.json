@@ -1,0 +1,14 @@
+{
+  "name": "content-research-writer",
+  "version": "1.0.0",
+  "description": "内容研究写作助手 - 协助研究、引用、改进钩子、迭代大纲、提供实时反馈",
+  "author": {
+    "name": "zhangq"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Content Research Writer",
+    "shortDescription": "内容研究写作助手",
+    "category": "Productivity"
+  }
+}
