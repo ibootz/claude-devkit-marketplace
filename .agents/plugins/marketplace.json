@@ -20,8 +20,10 @@
       "description": "核心开发工具集 - 代码库分析、依赖排查、多模型协作与辅助工具（4个技能）",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "devkit-core",
-      "source": "local",
-      "path": "./plugins/devkit-core",
+      "source": {
+        "source": "local",
+        "path": "./plugins/devkit-core"
+      },
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
@@ -36,8 +38,10 @@
       "description": "规范驱动开发工具集 - Spec 分析、任务拆解、实施、审查与缺陷修复（5个技能）",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "devkit-spec",
-      "source": "local",
-      "path": "./plugins/devkit-spec",
+      "source": {
+        "source": "local",
+        "path": "./plugins/devkit-spec"
+      },
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
@@ -52,8 +56,10 @@
       "description": "技能修复工具 - 根据执行中发现的问题更新 SKILL.md 及相关文件，支持审批工作流。",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "heal",
-      "source": "local",
-      "path": "./plugins/heal",
+      "source": {
+        "source": "local",
+        "path": "./plugins/heal"
+      },
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
@@ -68,8 +74,10 @@
       "description": "提示词工程专家 - 优化 LLM 提示词、设计命令/钩子/技能、提升 AI 输出质量，基于 Anthropic 官方最佳实践。",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "prompt-engineering",
-      "source": "local",
-      "path": "./plugins/prompt-engineering",
+      "source": {
+        "source": "local",
+        "path": "./plugins/prompt-engineering"
+      },
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
@@ -84,8 +92,10 @@
       "description": "内容研究写作助手 - 协助研究、引用、改进钩子、迭代大纲、提供实时反馈的写作伙伴，支持 Web 搜索。",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "content-research-writer",
-      "source": "local",
-      "path": "./plugins/content-research-writer",
+      "source": {
+        "source": "local",
+        "path": "./plugins/content-research-writer"
+      },
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
@@ -101,8 +111,10 @@
       "description": "Matt Pocock 工程技能集 - 调试诊断、TDD、架构改进、问题分类、PRD 生成、沟通优化等实战工具",
       "homepage": "https://github.com/mattpocock/skills",
       "name": "matt-pocock-skills",
-      "source": "local",
-      "path": "./plugins/matt-pocock-skills",
+      "source": {
+        "source": "local",
+        "path": "./plugins/matt-pocock-skills"
+      },
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
@@ -117,8 +129,10 @@
        "description": "Oh my pi (omp) CLI 工具集成 - 在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务（4个技能）",
        "homepage": "https://github.com/can1357/oh-my-pi",
        "name": "omp",
-        "source": "local",
-        "path": "./plugins/omp",
+        "source": {
+          "source": "local",
+          "path": "./plugins/omp"
+        },
        "policy": {
          "installation": "AVAILABLE",
          "authentication": "ON_INSTALL"
@@ -134,8 +148,10 @@
         "description": "帮助发现和安装 agent 技能 - 基于 skills.sh 生态系统，使用 npx skills CLI 搜索和安装技能。",
         "homepage": "https://github.com/vercel-labs/skills",
         "name": "find-skills",
-      "source": "local",
-      "path": "./plugins/find-skills",
+      "source": {
+        "source": "local",
+        "path": "./plugins/find-skills"
+      },
         "policy": {
           "installation": "AVAILABLE",
           "authentication": "ON_INSTALL"
