@@ -57,6 +57,13 @@
       "category": "Development",
       "description": "Oh my pi (omp) CLI 工具集成 - 在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务（4个技能）",
       "version": "1.0.0"
+    },
+    {
+      "name": "find-skills",
+      "source": "./plugins/find-skills",
+      "category": "Productivity",
+      "description": "帮助发现和安装 agent 技能 - 基于 skills.sh 生态系统，使用 npx skills CLI 搜索和安装技能。",
+      "version": "1.0.0"
     }
   ]
 }
