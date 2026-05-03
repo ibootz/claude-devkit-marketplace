@@ -14,7 +14,7 @@
       "source": "./plugins/devkit-core",
       "category": "Development",
       "description": "核心开发工具集 - 代码库分析、依赖排查、多模型协作与辅助工具（4个技能）",
-      "version": "5.0.0"
+      "version": "5.0.1"
     },
     {
       "name": "devkit-spec",

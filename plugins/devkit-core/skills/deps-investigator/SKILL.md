@@ -1,6 +1,6 @@
 ---
 name: deps-investigator
-description: 查看第三方依赖源码、读取 Maven jar 或 node_modules 文件。Use when: 用户需要"看依赖源码"、"查第三方库实现"、"读 jar 包源码"、"看 node_modules 代码"、"查依赖版本差异"、"排查第三方库行为"、"定位依赖中的 bug"、"查某个类的实现"。通过脚本从本地 m2 仓库或 node_modules 中读取源码文件。
+description: "查看第三方依赖源码、读取 Maven jar 或 node_modules 文件。Use when: 用户需要\"看依赖源码\"、\"查第三方库实现\"、\"读 jar 包源码\"、\"看 node_modules 代码\"、\"查依赖版本差异\"、\"排查第三方库行为\"、\"定位依赖中的 bug\"、\"查某个类的实现\"。通过脚本从本地 m2 仓库或 node_modules 中读取源码文件。"
 ---
 
 # Deps Investigator Skill（依赖源码读取）
@@ -32,4 +32,3 @@ python "${CLAUDE_PLUGIN_ROOT}/skills/deps-investigator/scripts/deps_investigator
 
 - `references/configuration.md`：配置项
 - `scripts/deps_investigator.py`：脚本实现
-
