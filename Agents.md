@@ -1,7 +1,7 @@
 # Claude DevKit Marketplace - Agents 规则
 
 ## 目标
-- 本仓库为 Claude Code 插件市场仓库，核心目标是：稳定、可移植、可发布。
+- 本仓库为 Claude Code / Codex 插件市场仓库，核心目标是：稳定、可移植、可发布。
 - 任何改动必须以 `.claude-plugin/marketplace.json` 与各插件自身 `.claude-plugin/plugin.json` 为事实来源，避免文档/配置漂移。
 
 ## 仓库结构约束

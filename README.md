@@ -1,16 +1,10 @@
 # Claude DevKit Marketplace
 
-Claude DevKit 插件市场，提供精简后的 Claude Code 插件集合。
+Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插件。
 
 ## 概述
 
-当前市场聚焦 5 个保留插件：
-
-- `devkit-core`：核心开发工具集，聚焦分析、排障、多模型协作与辅助能力，并以统一的 `bugfix` skill 吸收原 `devkit-issue`
-- `devkit-spec`：规范驱动开发工作流
-- `heal`：技能自修复工具
-- `prompt-engineering`：提示词工程插件
-- `content-research-writer`：内容研究与写作助手
+本市场包含 8 个插件，覆盖核心开发、规范驱动工作流、技能生态、多模型协作等场景。
 
 原 `devkit-git`、`devkit-dev`、`devkit-issue` 已从市场移除，不再作为独立插件提供。
 
@@ -18,23 +12,21 @@ Claude DevKit 插件市场，提供精简后的 Claude Code 插件集合。
 
 ### 1. devkit-core
 
-核心开发工具集，覆盖代码库分析、依赖排查、缺陷修复、多模型协作与辅助工具。
+核心开发工具集，覆盖代码库分析、依赖排查与架构辅助。
 
-**包含 Skills (7 个)**:
+**Skills**:
 - `deps-investigator` - 依赖源码读取
-- `bugfix` - 统一的缺陷诊断与修复流程
-- `init-architect` - 架构初始化
+- `init-architect` - 架构初始化，生成 CLAUDE.md
 - `key-module-analysis` - 关键模块分析
 - `orphan-process-cleaner` - 孤儿进程清理
-- `using-codex` - 使用 Codex 模型
-- `using-gemini` - 使用 Gemini 模型
 
 ### 2. devkit-spec
 
 规范驱动开发工具集，支持完整的 Spec 工作流。
 
-**包含 Skills (4 个)**:
+**Skills**:
 - `spec-analyze` - 需求分析并生成 spec
+- `spec-bugfix` - 缺陷修复流程
 - `spec-tasks` - 将 spec 拆解为任务清单
 - `spec-impl` - 按任务清单实施
 - `spec-review` - 审查 spec 与实现一致性
@@ -57,7 +49,6 @@ Claude DevKit 插件市场，提供精简后的 Claude Code 插件集合。
 - 提示词优化与模板系统
 - 系统提示设计
 - 基于 Anthropic 官方最佳实践
-- 说服原则应用
 
 ### 5. content-research-writer
 
@@ -69,62 +60,124 @@ Claude DevKit 插件市场，提供精简后的 Claude Code 插件集合。
 - 支持 Web 搜索与内容获取
 - 多种写作工作流程（博客、新闻通讯、教程等）
 
+### 6. matt-pocock-skills
+
+Matt Pocock 工程技能集，包含调试诊断、TDD、架构改进等实战工具。
+
+**Skills**:
+- `diagnose` - 系统化诊断流程
+- `tdd` - 测试驱动开发
+- `improve-codebase-architecture` - 架构改进
+- `triage` - 问题分类与处理
+- `to-issues` - 生成任务清单
+- `to-prd` - 生成产品需求文档
+- `zoom-out` - 高层视角分析
+- `grill-me` - 方案压力测试
+- `grill-with-docs` - 结合文档的方案验证
+- `write-a-skill` - 技能创建指南
+- `caveman` - 精简沟通模式
+- 更多技能见插件目录
+
+### 7. omp (Oh My Pi)
+
+CLI 工具集成，在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务。
+
+**Skills**:
+- `using-omp` - OMP 基础使用
+- `omp-search` - 代码搜索
+- `omp-review` - 代码审查
+- `omp-subagent` - 子代理任务
+
+### 8. find-skills
+
+帮助发现和安装 agent 技能 - 基于 skills.sh 生态系统，使用 npx skills CLI 搜索和安装技能。
+
+- 搜索技能库
+- 安装指定技能
+- 列出已安装技能
+- 基于 vercel-labs/skills 生态
+
 ## 安装
 
-### 添加此市场
+### Claude Code
+
+#### 添加此市场
 
 ```bash
 /plugin marketplace add ibootz/claude-devkit-marketplace
 ```
 
-### 安装插件
+#### 安装插件
 
 添加市场后，可以安装市场中的任意插件：
 
 ```bash
-# 安装核心工具集
+# 核心开发工具集
 /plugin install devkit-core@claude-devkit-marketplace
 
-# 安装 Spec 工作流
+# 规范驱动开发
 /plugin install devkit-spec@claude-devkit-marketplace
 
-# 安装技能修复工具
+# 技能自修复
 /plugin install heal@claude-devkit-marketplace
 
-# 安装提示词工程插件
+# 提示词工程
 /plugin install prompt-engineering@claude-devkit-marketplace
 
-# 安装内容研究写作助手
+# 内容研究写作
 /plugin install content-research-writer@claude-devkit-marketplace
+
+# Matt Pocock 工程技能集
+/plugin install matt-pocock-skills@claude-devkit-marketplace
+
+# OMP 工具集成
+/plugin install omp@claude-devkit-marketplace
+
+# 技能发现与安装
+/plugin install find-skills@claude-devkit-marketplace
 ```
 
-### Hooks（可选）
+### Codex CLI
 
-DevKit Pro 提供 `SessionStart` / `UserPromptSubmit` hooks，用于会话提示。
+#### 添加此市场
 
-- 在 Claude Code 中执行 `/hooks` 应能看到这些 hooks；若未显示，建议重启 Claude Code 后重试。
+```bash
+codex plugin marketplace add ibootz/claude-devkit-marketplace
+```
 
-## 详细功能
+#### 安装插件
 
-### Skills
+在 Codex CLI 中打开插件目录，浏览并安装：
 
-#### deps-investigator
-第三方依赖源码读取（Maven/Node 模块），用于定位依赖行为与版本差异。
+```
+codex                          # 启动 Codex CLI
+/plugins                       # 打开插件目录
+```
 
-#### bugfix
-统一的缺陷诊断与修复流程，按需使用 worktree 隔离环境并补齐验证。
+在插件目录中：
+1. 切换到 "claude-devkit-marketplace" 市场标签
+2. 浏览或搜索插件
+3. 选择插件并点击安装
 
-### 关键 Skills
+或者使用命令行（如果支持）：
 
-- `/bugfix` - 统一的缺陷诊断、隔离修复与验证
+```bash
+# 安装单个插件
+codex plugin install devkit-core@claude-devkit-marketplace
+```
+
+## 关键 Skills 快速参考
+
 - `/init-architect` - 分析代码库并生成 `CLAUDE.md`
 - `/key-module-analysis` - 梳理关键模块边界、依赖与风险
 - `/spec-analyze` - 需求分析并生成 `spec.md`
 - `/spec-tasks` - 将 `spec.md` 拆解为任务清单
 - `/spec-impl` - 按任务清单实施改动
 - `/spec-review` - 审查规范或实现一致性
+- `/diagnose` - 系统化诊断问题
+- `/tdd` - 测试驱动开发
 
-详细参数与流程见各插件目录下的 `SKILL.md`，其中 `devkit-core` 汇总说明见 `plugins/devkit-core/README.md`。
+详细参数与流程见各插件目录下的 `SKILL.md`。
 
 ## 市场结构
 
@@ -133,12 +186,16 @@ claude-devkit-marketplace/
 ├── .claude-plugin/
 │   └── marketplace.json       # 市场配置文件
 ├── plugins/
-│   ├── devkit-core/           # 核心工具集
-│   ├── devkit-spec/           # Spec 工作流
-│   ├── heal/                  # 技能修复工具
-│   ├── prompt-engineering/    # 提示词工程
-│   └── content-research-writer/  # 内容研究写作
-└── README.md
+│   ├── devkit-core/
+│   ├── devkit-spec/
+│   ├── heal/
+│   ├── prompt-engineering/
+│   ├── content-research-writer/
+│   ├── matt-pocock-skills/
+│   ├── omp/
+│   └── find-skills/
+├── README.md
+└── AGENTS.md
 ```
 
 ## 开发
@@ -157,7 +214,7 @@ claude-devkit-marketplace/
 # 测试核心插件
 claude --plugin-dir ./plugins/devkit-core
 
-# 测试 MCP 插件
+# 测试其他插件
 claude --plugin-dir ./plugins/<plugin-name>
 ```
 
