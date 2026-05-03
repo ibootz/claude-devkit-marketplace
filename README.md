@@ -159,13 +159,6 @@ codex                          # 启动 Codex CLI
 2. 浏览或搜索插件
 3. 选择插件并点击安装
 
-或者使用命令行（如果支持）：
-
-```bash
-# 安装单个插件
-codex plugin install devkit-core@claude-devkit-marketplace
-```
-
 ## 关键 Skills 快速参考
 
 - `/init-architect` - 分析代码库并生成 `CLAUDE.md`

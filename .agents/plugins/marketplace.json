@@ -21,7 +21,7 @@
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "devkit-core",
       "source": {
-        "source": "local",
+        "type": "local",
         "path": "./plugins/devkit-core"
       },
       "policy": {
@@ -39,7 +39,7 @@
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "devkit-spec",
       "source": {
-        "source": "local",
+        "type": "local",
         "path": "./plugins/devkit-spec"
       },
       "policy": {
@@ -57,7 +57,7 @@
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "heal",
       "source": {
-        "source": "local",
+        "type": "local",
         "path": "./plugins/heal"
       },
       "policy": {
@@ -75,7 +75,7 @@
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "prompt-engineering",
       "source": {
-        "source": "local",
+        "type": "local",
         "path": "./plugins/prompt-engineering"
       },
       "policy": {
@@ -93,7 +93,7 @@
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "content-research-writer",
       "source": {
-        "source": "local",
+        "type": "local",
         "path": "./plugins/content-research-writer"
       },
       "policy": {
@@ -112,7 +112,7 @@
       "homepage": "https://github.com/mattpocock/skills",
       "name": "matt-pocock-skills",
       "source": {
-        "source": "local",
+        "type": "local",
         "path": "./plugins/matt-pocock-skills"
       },
       "policy": {
@@ -129,10 +129,10 @@
        "description": "Oh my pi (omp) CLI 工具集成 - 在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务（4个技能）",
        "homepage": "https://github.com/can1357/oh-my-pi",
        "name": "omp",
-       "source": {
-         "source": "local",
-         "path": "./plugins/omp"
-       },
+        "source": {
+          "type": "local",
+          "path": "./plugins/omp"
+        },
        "policy": {
          "installation": "AVAILABLE",
          "authentication": "ON_INSTALL"
@@ -148,10 +148,10 @@
         "description": "帮助发现和安装 agent 技能 - 基于 skills.sh 生态系统，使用 npx skills CLI 搜索和安装技能。",
         "homepage": "https://github.com/vercel-labs/skills",
         "name": "find-skills",
-        "source": {
-          "source": "local",
-          "path": "./plugins/find-skills"
-        },
+      "source": {
+        "type": "local",
+        "path": "./plugins/find-skills"
+      },
         "policy": {
           "installation": "AVAILABLE",
           "authentication": "ON_INSTALL"
