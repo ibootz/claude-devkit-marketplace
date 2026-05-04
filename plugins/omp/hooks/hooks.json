@@ -1,0 +1,26 @@
+{
+  "description": "OMP Plugin Hooks - 强制 Claude Code 使用 omp 作为执行代理",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/plugins/omp/hooks/scripts/session-start.js\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read|Edit|Write|Grep|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/plugins/omp/hooks/scripts/pre-tool-use.js\""
+          }
+        ]
+      }
+    ]
+  }
+}
