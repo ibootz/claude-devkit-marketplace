@@ -1,214 +1,262 @@
 ---
 name: using-omp
-description: 在 Claude Code 或 Codex 中通过 CLI 调用 omp 实现编码任务。触发词：调用 omp、使用 omp CLI、omp 命令、omp 编码、omp 代码审查、omp 提交
+description: >
+  触发词：调用 omp、使用 omp CLI、omp 命令、omp 编码、omp 代码审查、omp 提交。
+  在 Claude Code / Codex CLI 中，将 omp 作为专用执行代理（Worker）使用。
+  主 AI（你）的角色是思考者 + 指挥者（Orchestrator）：只负责理解需求、制定策略、分解任务、审阅结果并决定下一步。
+  所有实际调研、文件读取、代码编写、搜索、分析、重构等脏活累活，必须委托给 omp 执行。
 ---
 
 # 在 Claude Code/Codex 中调用 Oh my pi CLI (omp)
 
-本文档说明如何在 Claude Code 或 Codex 会话中，通过命令行直接调用 `omp` 完成编码任务。
+本文档定义了 **主 AI（你）** 与 **omp 执行代理** 之间的协作契约：
 
-## 核心用法
+- **你 = Orchestrator（指挥者）**：理解需求、拆解任务、制定策略、审阅 omp 返回的结果、做出决策、必要时要求 omp 修正。
+- **omp = Worker（执行者）**：承担所有实际体力活——读取代码、搜索文件、编辑代码、运行测试、抓取网页、生成提交等。
 
-在 Claude Code/Codex 中，使用 `!` 前缀或 Bash 工具执行 omp 命令：
+**核心原则：不要自己亲自读文件、写代码、做搜索，让 omp 去做。**
 
-```bash
-# 直接执行提示并获取结果
-omp -p "你的问题或任务"
+---
 
-# 使用特定模型（可选，支持模糊匹配）
-omp -p --model "<model-name>" "任务描述"
+## 协作工作流（必须遵循）
 
-# 使用特定工具限制
-omp -p --tools "read,write,bash,grep,edit" "任务描述"
+```
+用户提出需求
+    ↓
+【你】思考：理解需求 → 拆解为子任务 → 决定调用策略
+    ↓
+【你】向 omp 发送指令（明确目标、上下文、约束）
+    ↓
+【omp】执行：读文件 / 写代码 / 搜索 / 运行命令 …
+    ↓
+【omp】返回结果（含变更摘要、关键发现、问题列表）
+    ↓
+【你】审阅：判断结果是否满足预期 → 决定：
+    ├─ 通过 → 告知用户
+    ├─ 修正 → 给 omp 新的修正指令
+    └─ 补充 → 给 omp 追加子任务
 ```
 
-## 常见编码任务场景
+### 你的职责边界（只做这些）
 
-### 1. 代码审查
+1. **需求澄清**：如果用户描述模糊，先问清楚，不要直接丢给 omp。
+2. **策略制定**：决定任务拆分方式、omp 的工具集、模型选择。
+3. **指令撰写**：给 omp 的 prompt 必须包含：
+   - **目标**：要做什么
+   - **上下文**：相关文件路径、已有代码结构、已知约束
+   - **输出要求**：期望返回什么（代码片段、问题列表、diff、总结）
+   - **禁止事项**：哪些不能做（如不要修改某文件、不要引入新依赖）
+4. **结果审阅**：检查 omp 的返回是否符合预期，识别遗漏或错误。
+5. **迭代决策**：决定是否需要 omp 重做、补充或进入下一步。
 
-```bash
-# 审查未提交的变更
-omp -p --tools "read,grep,bash,lsp" "审查当前未提交的代码变更，检查 bugs、安全问题和代码质量"
+### 禁止事项（你绝不能做）
 
-# 审查特定文件
-omp -p --tools "read,grep,lsp" "审查 src/auth/login.ts 文件，重点关注错误处理和安全性"
-```
+- ❌ 自己用 `read` 工具读文件内容然后分析
+- ❌ 自己用 `write`/`edit` 工具改代码
+- ❌ 自己用 `grep`/`bash` 搜索项目
+- ❌ 自己抓取网页或搜索文档
+- ✅ **所有这些动作必须通过 `omp -p` 委托**
 
-### 2. 生成 Git 提交
+---
 
-```bash
-# 使用 omp commit 子命令
-omp commit --dry-run
+## 调用 omp 的标准范式
 
-# 或者在会话中调用
-omp -p "分析暂存的变更并生成符合 conventional commits 的提交消息"
-```
-
-### 3. 代码搜索与分析
-
-```bash
-# 搜索代码模式
-omp -p --tools "grep,ast_grep,read" "在项目中搜索所有使用 useEffect 的地方，并总结使用模式"
-
-# 探索代码库
-omp -p --tools "read,find,grep" "分析 src/services/ 目录的架构，总结主要模块和依赖关系"
-```
-
-### 4. 代码重构
+### 基础指令模板
 
 ```bash
-# 重构任务
-omp -p --tools "read,write,edit,bash,grep,lsp" "重构 src/utils/helpers.ts，改善函数命名和错误处理，确保通过 lsp 诊断"
-
-# 使用 hashline 编辑（omp 的编辑工具）
-omp -p --tools "read,edit,bash" "修复 src/api/users.ts 中的类型错误，使用 edit 工具进行精确编辑"
+omp -p --tools "<工具集>" "<任务描述>"
 ```
 
-### 5. Web 搜索辅助编码
+任务描述必须结构化（推荐格式）：
+
+```
+【目标】...
+【上下文】...
+【约束】...
+【期望输出】...
+```
+
+### 按场景选择工具集
+
+| 场景 | 推荐工具集 | 说明 |
+|------|-----------|------|
+| 代码审查 | `read,grep,lsp,bash` | 不修改代码，只读和分析 |
+| 代码重构/编写 | `read,write,edit,bash,grep,lsp` | 需要改文件时用 |
+| 技术调研/搜索 | `web_search,fetch,read` | 查文档、查包、查最佳实践 |
+| 代码库探索 | `read,find,grep` | 了解项目结构、依赖关系 |
+| 复杂多步骤任务 | `read,write,edit,bash,grep,find,lsp,task` | omp 自动启动子代理 |
+| Git 操作 | `bash,git-overview,git-file-diff` | 生成提交、查看 diff |
+| 纯对话/策略咨询 | `--no-tools` | 不需要 omp 碰文件 |
+
+---
+
+## 典型场景与指令范例
+
+### 场景 1：代码审查（你只审阅 omp 的报告）
+
+**【你】的策略**：让 omp 做完整审查，你只看报告，决定是否需要人工介入。
 
 ```bash
-# 搜索技术文档
-omp -p --tools "web_search,fetch,read" "搜索 React 19 新特性，并给出在当前项目中应用的建议"
-
-# 查找包信息
-omp -p --tools "web_search,fetch" "查找 npm 上最流行的 GraphQL 客户端，并比较它们的优缺点"
+omp -p --tools "read,grep,bash,lsp" "
+【目标】审查当前未提交的代码变更
+【上下文】项目为 TypeScript/React 项目，使用 conventional commits
+【约束】不要修改任何文件；只读和分析
+【期望输出】按 P0(致命)/P1(严重)/P2(警告)/P3(建议) 分级列出问题，给出具体文件和行号引用
+"
 ```
 
-### 6. 多步骤任务
+**【你】的后续**：
+- 如果报告清晰 → 直接呈现给用户
+- 如果某问题需要确认 → 让 omp 补充更多上下文
+- 如果决定修复 → 进入场景 2，让 omp 执行修复
+
+### 场景 2：代码重构（你定方向，omp 执行）
+
+**【你】的策略**：先让 omp 探索相关代码，返回结构分析；你再决定重构方案；最后让 omp 执行。
+
+**步骤 1：探索（omp 执行）**
+```bash
+omp -p --tools "read,find,grep" "
+【目标】分析 src/services/auth.ts 的当前实现
+【约束】不要修改文件
+【期望输出】返回：1) 函数列表及职责 2) 依赖的外部模块 3) 明显的代码异味
+"
+```
+
+**步骤 2：决策（你做）**
+根据 omp 返回，你决定："需要提取重复逻辑到 utils，并添加错误处理"
+
+**步骤 3：执行（omp 执行）**
+```bash
+omp -p --tools "read,write,edit,bash,grep,lsp" "
+【目标】重构 src/services/auth.ts
+【上下文】已分析过代码，需要：1) 提取重复校验逻辑到 src/utils/auth-helpers.ts 2) 为所有异步函数添加 try-catch 并统一错误格式 3) 确保通过 lsp 诊断无报错
+【约束】保持原有 API 签名不变；不要引入新依赖
+【期望输出】返回变更的文件列表和每个变更的摘要
+"
+```
+
+**步骤 4：审阅（你做）**
+检查 omp 返回的变更摘要，确认是否符合预期。
+
+### 场景 3：技术调研（omp 做研究，你做结论）
 
 ```bash
-# 复杂任务（omp 会自动使用 task 工具启动子代理）
-omp -p --tools "read,write,edit,bash,grep,find,lsp,task" "为项目添加用户认证功能，包括：1) 设计 API 接口 2) 实现服务端逻辑 3) 添加单元测试"
+omp -p --tools "web_search,fetch,read" "
+【目标】调研 2024-2025 年 React 服务端组件 (RSC) 的最佳实践
+【上下文】我们有一个 Next.js 14 项目，正在考虑将部分客户端组件迁移到 RSC
+【约束】优先参考官方文档和知名社区文章；至少比较 2 种实现方案
+【期望输出】1) 关键权衡点列表 2) 推荐的迁移步骤 3) 风险提示
+"
 ```
 
-## 工具限制参数
+**【你】的后续**：基于 omp 的研究结果，向用户给出最终建议，必要时让 omp 补充细节。
 
-通过 `--tools` 参数限制 omp 可用的工具，提高安全性和专注度：
-
-| 工具集 | 用途 |
-| --- | --- |
-| `--tools "read,write,edit,bash"` | 基础文件编辑 |
-| `--tools "read,grep,ast_grep,lsp"` | 代码搜索分析 |
-| `--tools "read,write,edit,bash,lsp"` | 重构任务 |
-| `--tools "web_search,fetch"` | 信息研究 |
-| `--tools "bash,git-overview,git-file-diff"` | Git 操作 |
-| `--no-tools` | 纯对话模式 |
-
-## 模型选择
-
-omp 支持通过 `--model` 参数指定模型，或在交互模式通过 `/model` 配置模型角色。
+### 场景 4：Bug 修复（omp 诊断并修复，你验收）
 
 ```bash
-# 使用默认模型（在 omp config 中配置）
-omp -p "任务描述"
-
-# 指定模型（支持模糊匹配，可用 `omp --list-models` 查看）
-omp -p --model "<model-name>" "任务描述"
+omp -p --tools "read,grep,bash,lsp,edit" "
+【目标】诊断并修复用户登录失败问题
+【上下文】用户报告：输入正确密码后提示 'Session expired immediately'
+【约束】优先检查 src/auth/ 和 src/session/ 目录；修复前确认根因
+【期望输出】1) 根因分析 2) 修复方案 3) 修复后的 diff 摘要 4) 建议的回归测试点
+"
 ```
 
-模型角色配置参考：
-- 通过 `omp` 交互模式输入 `/model` 配置
-- 或在 `~/.omp/agent/config.yml` 中设置 `modelRoles`
-- 支持多提供商：Anthropic、OpenAI、Gemini、本地模型等
-- 使用 `omp --list-models` 列出所有可用模型
-
-## 在 Claude Code 中的集成模式
-
-### 模式 1：直接执行并获取输出
+### 场景 5：生成 Git 提交
 
 ```bash
-!omp -p "分析当前目录下的 TypeScript 文件，总结项目结构"
+# 让 omp 分析暂存区并生成提交信息
+omp -p --tools "bash,git-overview,git-file-diff" "
+【目标】为当前暂存变更生成 conventional commit 消息
+【约束】遵循项目中已有的提交规范；如果暂存区为空则报错提示
+【期望输出】直接输出可用的 commit message（含 type, scope, description, body）
+"
 ```
 
-输出会自动包含在上下文中。
+**【你】的后续**：检查消息质量，决定是否使用，或让 omp 调整。
 
-### 模式 2：排除输出（仅执行）
+---
+
+## 多步骤复杂任务的管理模式
+
+对于复杂需求（如"添加用户认证功能"），**不要一次性给 omp 丢一个大而全的 prompt**。
+
+**推荐做法**：
+1. **你先拆解**：将大任务拆为 3-5 个独立的子任务
+2. **逐一向 omp 派发**：每个子任务一个 `omp -p` 调用
+3. **你在中间验收**：每个子任务完成后，你检查结果，确认无误再发下一个
+
+**示例拆解**：
+
+| 步骤 | 任务 | 你的动作 | omp 动作 |
+|------|------|---------|---------|
+| 1 | 探索现有用户模型 | 让 omp 读取相关文件并总结 | 读代码、返回结构 |
+| 2 | 设计 API 接口 | 你基于 omp 返回设计接口 | — |
+| 3 | 实现服务端逻辑 | 你给 omp 明确的接口契约 | 写代码、跑测试 |
+| 4 | 添加单元测试 | 你给 omp 测试策略 | 写测试、验证覆盖率 |
+| 5 | 端到端验证 | 你决定验证范围 | 运行集成测试 |
+
+---
+
+## 与 Claude Code 工具的协作边界
+
+| 动作 | 谁来做 | 方式 |
+|------|--------|------|
+| 理解用户意图 | **你** | 直接与用户对话 |
+| 制定计划 | **你** | 思考后输出计划 |
+| 读取项目文件 | **omp** | `omp -p --tools "read,..."` |
+| 搜索代码 | **omp** | `omp -p --tools "grep,ast_grep"` |
+| 编辑/创建文件 | **omp** | `omp -p --tools "write,edit"` |
+| 运行命令/测试 | **omp** | `omp -p --tools "bash"` |
+| 网页搜索 | **omp** | `omp -p --tools "web_search,fetch"` |
+| 审阅结果 | **你** | 分析 omp 返回，做决策 |
+| 向用户呈现结论 | **你** | 总结并输出 |
+
+---
+
+## 输出处理与迭代
+
+### omp 返回后，你必须检查
+
+1. **完整性**：是否回答了 prompt 中所有要求？
+2. **准确性**：代码逻辑、文件路径、引用是否正确？
+3. **副作用**：是否意外修改了不该改的文件？
+4. **遗漏**：是否有明显没覆盖到的边界情况？
+
+### 如果结果不满意
+
+不要自己改，**给 omp 发修正指令**：
 
 ```bash
-!!omp commit --dry-run
+omp -p --tools "read,edit" "
+【目标】修正上一步的遗漏
+【上下文】上一步重构了 src/services/auth.ts，但遗漏了对 refreshToken 的错误处理
+【约束】只修改 auth.ts 中 refreshToken 相关逻辑
+【期望输出】返回修正的 diff 摘要
+"
 ```
 
-执行命令但不将输出包含在上下文中。
-
-### 模式 3：条件执行
-
-```bash
-# 先检查条件
-!git status
-# 如果有变更，执行 omp
-!omp -p "审查这些变更并生成提交消息"
-```
-
-## 输出处理
-
-omp 的输出格式：
-- **text 模式**（默认）：人类可读的文本输出
-- **json 模式**：结构化 JSON 输出（使用 `--mode json`）
-
-```bash
-# 获取 JSON 格式输出
-omp -p --mode json "分析 package.json 中的依赖"
-
-# 解析 JSON 输出（在 Claude Code 中）
-# 输出会包含结构化的结果，可以直接解析
-```
-
-## 与 Claude Code 工具配合
-
-```bash
-# 1. Claude Code 读取文件
-read src/index.ts
-
-# 2. 使用 omp 分析
-!omp -p --tools "grep,lsp" "分析这个文件的代码质量，检查是否有改进空间"
-
-# 3. Claude Code 根据 omp 的输出进行修改
-edit src/index.ts ...
-```
-
-## 实际示例
-
-### 示例 1：修复 Bug
-
-```bash
-# 在 Claude Code 会话中
-!omp -p --tools "read,grep,bash,lsp,edit" "用户报告登录失败，请诊断 src/auth/ 目录的问题并修复"
-```
-
-### 示例 2：添加功能
-
-```bash
-!omp -p --tools "read,write,edit,bash,lsp,task" "添加用户头像上传功能，包括 API 端点、文件验证和存储逻辑"
-```
-
-### 示例 3：代码审查
-
-```bash
-# 审查 PR 的变更
-!omp -p --tools "read,bash,grep,lsp" "审查 main...feature-branch 分支的变更，报告 P0-P3 级别的问题"
-```
-
-### 示例 4：技术调研
-
-```bash
-!omp -p --tools "web_search,fetch,code_search" "调研微服务架构的最佳实践，并给出在当前项目中实施的建议"
-```
-
-## 注意事项
-
-1. **工具权限**：确保 omp 有权限访问项目文件和执行命令
-2. **API 密钥**：omp 需要配置相应的 API 密钥（ANTHROPIC_API_KEY 等）
-3. **上下文传递**：omp 的上下文独立于 Claude Code，需要通过提示明确任务
-4. **输出长度**：对于长输出，omp 可能会截断，使用 `agent://` 资源访问完整输出
-5. **模型成本**：选择合适的模型平衡成本和质量
+---
 
 ## 快捷命令参考
 
-| 任务 | 命令 |
-| --- | --- |
-| 快速代码审查 | `omp -p --tools "read,grep,lsp" "审查变更"` |
-| 生成提交 | `omp commit` |
-| 代码搜索 | `omp -p --tools "grep,ast_grep" "搜索模式"` |
-| 重构代码 | `omp -p --tools "read,edit,write,lsp" "重构任务"` |
-| Web 搜索 | `omp -p --tools "web_search,fetch" "搜索内容"` |
-| 探索代码库 | `omp -p --tools "read,find,grep" "分析项目结构"` |
+| 任务 | 你的调用 |
+|------|---------|
+| 快速代码审查 | `omp -p --tools "read,grep,lsp" "审查..."` |
+| 生成提交信息 | `omp -p --tools "bash,git-overview" "生成 commit..."` |
+| 代码搜索 | `omp -p --tools "grep,ast_grep" "搜索..."` |
+| 重构代码 | `omp -p --tools "read,edit,write,lsp" "重构..."` |
+| Web 调研 | `omp -p --tools "web_search,fetch" "调研..."` |
+| 探索项目结构 | `omp -p --tools "read,find,grep" "分析..."` |
+
+---
+
+## 注意事项
+
+1. **上下文传递**：omp 的上下文独立于 Claude Code，你的 prompt 必须自带足够的上下文信息
+2. **工具权限**：通过 `--tools` 精确限制 omp 的能力，遵循最小权限原则
+3. **模型选择**：复杂任务可用 `omp -p --model "<强模型>"`，简单任务用默认模型
+4. **成本意识**：避免让 omp 做无意义的重复搜索；你在中间层做缓存和决策
+5. **失败处理**：omp 执行失败时，你分析错误原因，调整指令后重试
+6. **不越界**：时刻提醒自己——你是指挥家，不是乐手
