@@ -123,18 +123,6 @@ export GEMINI_API_KEY="..."
 - [npm 包](https://www.npmjs.com/package/@oh-my-pi/pi-coding-agent)
 - [Claude Code 文档](https://docs.anthropic.com/claude-code)
 
-## Hooks
-
-本插件包含以下 hooks 来强制 Claude Code 使用 omp：
-
-| Hook 事件 | 触发条件 | 行为 |
-| --- | --- | --- |
-| `SessionStart` | 会话开始 | 注入 omp 使用指南和约定 |
-| `PreToolUse` | 使用 Read/Edit/Write/Grep/Bash 前 | 注入提醒，建议改用 omp -p 委托 |
-
-Hooks 在插件启用时自动加载，无需额外配置。如需禁用，可在 `.claude/settings.local.json` 中设置 `"disableAllHooks": true`。
-
 ## 版本历史
 
-- `1.1.0` - 添加 hooks 强制使用 omp，精简 using-omp 技能
 - `1.0.0` - 初始版本，包含 5 个技能：using-omp, omp-commit, omp-search, omp-review, omp-subagent

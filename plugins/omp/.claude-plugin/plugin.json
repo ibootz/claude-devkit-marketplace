@@ -1,9 +1,8 @@
 {
   "name": "omp",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "description": "Oh my pi (omp) CLI 工具集成 - 在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务",
   "author": {
     "name": "zhangq"
-  },
-  "hooks": "hooks/hooks.json"
+  }
 }
