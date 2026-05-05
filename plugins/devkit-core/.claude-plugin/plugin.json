@@ -4,5 +4,19 @@
   "description": "核心开发工具集 - 代码库分析、依赖排查、缺陷修复、多模型协作与辅助工具",
   "author": {
     "name": "zhangq"
-  }
+  },
+  "hooks": [
+    {
+      "type": "PreToolUse",
+      "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/block-cd.js",
+      "tools": ["Bash"],
+      "description": "阻断独立 cd 命令，防止污染会话 cwd"
+    },
+    {
+      "type": "PreToolUse",
+      "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/guard-full-read.js",
+      "tools": ["Read"],
+      "description": "拦截知识库/Skill 文档的全文读取，引导精准读取"
+    }
+  ]
 }
