@@ -1,7 +1,7 @@
 ---
 name: ompi-plan
 description: "PROACTIVELY 使用 ompi-cli 进行架构设计、技术方案制定和任务规划。触发词：设计方案、架构规划、制定计划、技术方案、任务拆解"
-tools: [Bash]
+tools: [Bash, Read, Grep]
 model: opus
 color: purple
 ---
