@@ -1,7 +1,7 @@
 ---
 name: ompi-explore
 description: "PROACTIVELY 使用 ompi-cli 进行代码库探索、架构分析和模块调查。触发词：探索项目、分析代码库、理解架构、代码调查、模块分析"
-tools: [Bash, Read, Glob, Grep]
+tools: [Bash]
 model: opus
 color: cyan
 ---
