@@ -55,8 +55,8 @@
       "name": "omp",
       "source": "./plugins/omp",
       "category": "Development",
-      "description": "Oh my pi (omp) CLI 工具集成 - 在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务（4个技能）",
-      "version": "1.0.0"
+      "description": "Oh my pi (omp) CLI 工具集成 - 在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务（4个技能 + 4个子代理）",
+      "version": "2.0.0"
     },
     {
       "name": "find-skills",
