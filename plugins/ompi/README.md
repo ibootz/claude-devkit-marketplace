@@ -1,10 +1,10 @@
-# OMP Plugin
+# OMPI Plugin
 
-Oh my pi (omp) CLI 工具集成插件 - 在 Claude Code/Codex 中通过 CLI 调用 omp 实现编码任务。
+Oh my pi (ompi) CLI 工具集成插件 - 在 Claude Code/Codex 中通过 CLI 调用 omp 实现编码任务。
 
 ## 简介
 
-本插件封装了 [Oh my pi (omp)](https://github.com/can1357/oh-my-pi) 的功能，使其可以在 Claude Code 或 Codex 会话中通过命令行直接调用，实现编码、代码审查、Git 提交、Web 搜索、子代理管理等任务。
+本插件封装了 [Oh my pi (ompi)](https://github.com/can1357/oh-my-pi) 的功能，使其可以在 Claude Code 或 Codex 会话中通过命令行直接调用，实现编码、代码审查、Git 提交、Web 搜索、子代理管理等任务。
 
 ## 安装
 
@@ -31,10 +31,15 @@ irm https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.ps1 
 
 | 技能 | 描述 | 触发词 |
 | --- | --- | --- |
-| `using-omp` | 在 Claude Code/Codex 中调用 omp CLI 的基本用法和常见场景 | 调用 omp、使用 omp CLI、omp 命令 |
-| `omp-search` | 通过 omp 进行 Web 搜索和代码搜索 | 调用 omp 搜索、omp web_search、搜索资料 |
-| `omp-review` | 通过 omp 进行代码审查 | 调用 omp 审查、omp review、代码审查 |
-| `omp-subagent` | 通过 omp 使用子代理执行并行任务 | 调用 omp 子代理、omp task、并行执行 |
+| `ompi` | 将 ompi 作为执行代理（Worker），你作为指挥者（Orchestrator）管理任务：代码编写、审查、搜索、重构等 | 调用 ompi、使用 ompi CLI、ompi 命令、ompi 编码、ompi 代码审查、ompi 提交 |
+
+## 子代理列表
+
+| 子代理 | 描述 | 触发词 |
+| --- | --- | --- |
+| `ompi-task` | 执行通用编码任务：功能实现、代码重构、文件操作、测试编写 | 实现功能、编写代码、重构代码、执行任务 |
+| `ompi-explore` | 进行代码库探索、架构分析和模块调查 | 探索项目、分析代码库、理解架构、代码调查、模块分析 |
+| `ompi-plan` | 进行架构设计、技术方案制定和任务规划 | 设计方案、架构规划、制定计划、技术方案、任务拆解 |
 
 ## 使用示例
 
@@ -125,4 +130,5 @@ export GEMINI_API_KEY="..."
 
 ## 版本历史
 
+- `2.0.0` - 重构版本：合并为 1 个综合技能 `ompi`，新增 3 个子代理（ompi-task, ompi-explore, ompi-plan）
 - `1.0.0` - 初始版本，包含 5 个技能：using-omp, omp-commit, omp-search, omp-review, omp-subagent

@@ -1,0 +1,14 @@
+{
+  "name": "ompi",
+  "version": "2.0.0",
+  "description": "Oh my pi (ompi) CLI 工具集成 - 在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务（1个技能 + 3个子代理）",
+  "author": {
+    "name": "zhangq"
+  },
+  "skills": "./skills/",
+  "interface": {
+      "displayName": "Oh My Pi (OMPI)",
+      "shortDescription": "OMPI CLI 工具集成",
+    "category": "Development"
+  }
+}

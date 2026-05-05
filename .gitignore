@@ -32,5 +32,4 @@ node_modules/
 .kiro/
 .claude
 .gemini
-.codex
 .qwen
