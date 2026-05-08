@@ -1,6 +1,6 @@
 {
   "name": "ompi",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Oh my pi (ompi) CLI 工具集成 - 在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务（1个技能 + 3个子代理 + 2个强制委派 hook，含假委派识别）",
   "author": {
     "name": "zhangq"
@@ -8,6 +8,7 @@
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
@@ -18,6 +19,7 @@
     ],
     "UserPromptSubmit": [
       {
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
