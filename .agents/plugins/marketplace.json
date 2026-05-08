@@ -122,23 +122,23 @@
       "version": "1.0.0"
     },
      {
-       "author": {
-         "name": "zhangq"
-       },
-       "category": "Development",
-       "description": "Oh my pi (omp) CLI 工具集成 - 在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务（4个技能）",
-       "homepage": "https://github.com/can1357/oh-my-pi",
-       "name": "omp",
-        "source": {
-          "source": "local",
-          "path": "./plugins/omp"
+        "author": {
+          "name": "zhangq"
         },
-       "policy": {
-         "installation": "AVAILABLE",
-         "authentication": "ON_INSTALL"
-       },
-       "version": "1.0.0"
-     },
+        "category": "Development",
+        "description": "Oh my pi (ompi) CLI 工具集成 - 在 Claude Code/Codex 中调用 ompi 实现编码、审查、搜索等任务（1个技能 + 3个子代理 + 2个强制委派 hook，含假委派识别）",
+        "homepage": "https://github.com/can1357/oh-my-pi",
+        "name": "ompi",
+         "source": {
+           "source": "local",
+           "path": "./plugins/ompi"
+         },
+        "policy": {
+          "installation": "AVAILABLE",
+          "authentication": "ON_INSTALL"
+        },
+        "version": "2.2.0"
+      },
       {
         "author": {
           "name": "vercel-labs",

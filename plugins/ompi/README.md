@@ -1,6 +1,6 @@
 # OMPI Plugin
 
-Oh my pi (ompi) CLI 工具集成插件 - 在 Claude Code/Codex 中通过 CLI 调用 omp 实现编码任务。
+Oh my pi (ompi) CLI 工具集成插件 - 在 Claude Code/Codex 中通过 CLI 调用 ompi 实现编码任务。
 
 ## 简介
 
@@ -10,7 +10,7 @@ Oh my pi (ompi) CLI 工具集成插件 - 在 Claude Code/Codex 中通过 CLI 调
 
 ### 前置条件
 
-确保已安装 omp CLI：
+确保已安装 ompi CLI：
 
 ```bash
 # 通过 Bun (推荐)
@@ -45,54 +45,54 @@ irm https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.ps1 
 
 ### 基本调用
 
-在 Claude Code/Codex 会话中，使用 `!` 前缀执行 omp 命令：
+在 Claude Code/Codex 会话中，使用 `!` 前缀执行 ompi 命令：
 
 ```bash
 # 直接执行提示并获取输出
-!omp -p "你的问题或任务"
+!ompi -p "你的问题或任务"
 
 # 使用特定工具限制
-!omp -p --tools "read,write,edit,bash" "任务描述"
+!ompi -p --tools "read,write,edit,bash" "任务描述"
 ```
 
 ### 代码审查
 
 ```bash
-!omp -p --tools "read,grep,lsp,report_finding" "审查当前未提交的代码变更，检查 bugs、安全问题和代码质量"
+!ompi -p --tools "read,grep,lsp,report_finding" "审查当前未提交的代码变更，检查 bugs、安全问题和代码质量"
 ```
 
 ### Git 提交
 
 ```bash
 # 生成提交
-!omp commit --dry-run
+!ompi commit --dry-run
 
 # 提交并推送
-!omp commit --push
+!ompi commit --push
 ```
 
 ### Web 搜索
 
 ```bash
 # 搜索技术文档
-!omp search "TypeScript 5.8 新特性"
+!ompi search "TypeScript 5.8 新特性"
 
 # 详细搜索
-!omp -p --tools "web_search,fetch" "搜索 React 19 新特性并总结"
+!ompi -p --tools "web_search,fetch" "搜索 React 19 新特性并总结"
 ```
 
 ### 子代理任务
 
 ```bash
 # 使用子代理探索项目
-!omp -p --tools "task,read,find,grep" "使用子代理探索项目架构并生成文档"
+!ompi -p --tools "task,read,find,grep" "使用子代理探索项目架构并生成文档"
 ```
 
 ## 配置
 
 ### API 密钥
 
-omp 需要配置相应的 API 密钥：
+ompi 需要配置相应的 API 密钥：
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
@@ -104,15 +104,15 @@ export GEMINI_API_KEY="..."
 
 ```bash
 # 使用快速模型
-!omp -p --model "anthropic/claude-sonnet-4-6" "任务描述"
+!ompi -p --model "anthropic/claude-sonnet-4-6" "任务描述"
 
 # 使用深度推理模型
-!omp -p --model "anthropic/claude-opus-4-6:high" "复杂任务"
+!ompi -p --model "anthropic/claude-opus-4-6:high" "复杂任务"
 ```
 
 ## 工具限制
 
-通过 `--tools` 参数限制 omp 可用的工具：
+通过 `--tools` 参数限制 ompi 可用的工具：
 
 | 工具集 | 用途 |
 | --- | --- |
