@@ -5,16 +5,26 @@
   "author": {
     "name": "zhangq"
   },
-  "hooks": [
-    {
-      "type": "SessionStart",
-      "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/orchestrator-protocol-init.js",
-      "description": "会话启动时注入完整 Orchestrator-Worker 协议，强制 AI 把执行委派给 ompi"
-    },
-    {
-      "type": "UserPromptSubmit",
-      "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/orchestrator-protocol-remind.js",
-      "description": "每次用户消息持续注入精简提醒，防止 AI 在长会话中淡化委派纪律；用户当前消息含豁免词时跳过"
-    }
-  ]
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/orchestrator-protocol-init.js"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/orchestrator-protocol-remind.js"
+          }
+        ]
+      }
+    ]
+  }
 }

@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude DevKit Pro Marketplace - 精简后的 Claude Code / Codex 插件市场，聚焦核心开发、Spec 工作流与高价值生产力插件",
-    "version": "2.0.0"
+    "version": "2.1.0"
   },
   "plugins": [
     {
@@ -55,8 +55,8 @@
       "name": "ompi",
       "source": "./plugins/ompi",
       "category": "Development",
-      "description": "Oh my pi (ompi) CLI 工具集成 - 在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务（1个技能 + 3个子代理）",
-      "version": "2.0.0"
+      "description": "Oh my pi (ompi) CLI 工具集成 - 在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务（1个技能 + 3个子代理 + 2个强制委派 hook，含假委派识别）",
+      "version": "2.2.0"
     },
     {
       "name": "find-skills",
