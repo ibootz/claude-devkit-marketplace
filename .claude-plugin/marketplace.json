@@ -52,10 +52,10 @@
       "version": "1.0.0"
     },
     {
-      "name": "ompi",
-      "source": "./plugins/ompi",
+      "name": "omp",
+      "source": "./plugins/omp",
       "category": "Development",
-      "description": "Oh my pi (ompi) CLI 工具集成 - 在 Claude Code/Codex 中调用 ompi 实现编码、审查、搜索等任务（1个技能 + 3个子代理 + 2个强制委派 hook，含假委派识别）",
+      "description": "Oh my pi (omp) CLI 工具集成 - 在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务（1个技能 + 3个子代理 + 2个强制委派 hook，含假委派识别）",
       "version": "2.2.1"
     },
     {

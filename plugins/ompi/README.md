@@ -1,16 +1,16 @@
-# OMPI Plugin
+# omp Plugin
 
-Oh my pi (ompi) CLI 工具集成插件 - 在 Claude Code/Codex 中通过 CLI 调用 ompi 实现编码任务。
+Oh my pi (omp) CLI 工具集成插件 - 在 Claude Code/Codex 中通过 CLI 调用 omp 实现编码任务。
 
 ## 简介
 
-本插件封装了 [Oh my pi (ompi)](https://github.com/can1357/oh-my-pi) 的功能，使其可以在 Claude Code 或 Codex 会话中通过命令行直接调用，实现编码、代码审查、Git 提交、Web 搜索、子代理管理等任务。
+本插件封装了 [Oh my pi (omp)](https://github.com/can1357/oh-my-pi) 的功能，使其可以在 Claude Code 或 Codex 会话中通过命令行直接调用，实现编码、代码审查、Git 提交、Web 搜索、子代理管理等任务。
 
 ## 安装
 
 ### 前置条件
 
-确保已安装 ompi CLI：
+确保已安装 omp CLI：
 
 ```bash
 # 通过 Bun (推荐)
@@ -31,68 +31,68 @@ irm https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.ps1 
 
 | 技能 | 描述 | 触发词 |
 | --- | --- | --- |
-| `ompi` | 将 ompi 作为执行代理（Worker），你作为指挥者（Orchestrator）管理任务：代码编写、审查、搜索、重构等 | 调用 ompi、使用 ompi CLI、ompi 命令、ompi 编码、ompi 代码审查、ompi 提交 |
+| `omp` | 将 omp 作为执行代理（Worker），你作为指挥者（Orchestrator）管理任务：代码编写、审查、搜索、重构等 | 调用 omp、使用 omp CLI、omp 命令、omp 编码、omp 代码审查、omp 提交 |
 
 ## 子代理列表
 
 | 子代理 | 描述 | 触发词 |
 | --- | --- | --- |
-| `ompi-task` | 执行通用编码任务：功能实现、代码重构、文件操作、测试编写 | 实现功能、编写代码、重构代码、执行任务 |
-| `ompi-explore` | 进行代码库探索、架构分析和模块调查 | 探索项目、分析代码库、理解架构、代码调查、模块分析 |
-| `ompi-plan` | 进行架构设计、技术方案制定和任务规划 | 设计方案、架构规划、制定计划、技术方案、任务拆解 |
+| `omp-task` | 执行通用编码任务：功能实现、代码重构、文件操作、测试编写 | 实现功能、编写代码、重构代码、执行任务 |
+| `omp-explore` | 进行代码库探索、架构分析和模块调查 | 探索项目、分析代码库、理解架构、代码调查、模块分析 |
+| `omp-plan` | 进行架构设计、技术方案制定和任务规划 | 设计方案、架构规划、制定计划、技术方案、任务拆解 |
 
 ## 使用示例
 
 ### 基本调用
 
-在 Claude Code/Codex 会话中，使用 `!` 前缀执行 ompi 命令：
+在 Claude Code/Codex 会话中，使用 `!` 前缀执行 omp 命令：
 
 ```bash
 # 直接执行提示并获取输出
-!ompi -p "你的问题或任务"
+!omp -p "你的问题或任务"
 
 # 使用特定工具限制
-!ompi -p --tools "read,write,edit,bash" "任务描述"
+!omp -p --tools "read,write,edit,bash" "任务描述"
 ```
 
 ### 代码审查
 
 ```bash
-!ompi -p --tools "read,grep,lsp,report_finding" "审查当前未提交的代码变更，检查 bugs、安全问题和代码质量"
+!omp -p --tools "read,grep,lsp,report_finding" "审查当前未提交的代码变更，检查 bugs、安全问题和代码质量"
 ```
 
 ### Git 提交
 
 ```bash
 # 生成提交
-!ompi commit --dry-run
+!omp commit --dry-run
 
 # 提交并推送
-!ompi commit --push
+!omp commit --push
 ```
 
 ### Web 搜索
 
 ```bash
 # 搜索技术文档
-!ompi search "TypeScript 5.8 新特性"
+!omp search "TypeScript 5.8 新特性"
 
 # 详细搜索
-!ompi -p --tools "web_search,fetch" "搜索 React 19 新特性并总结"
+!omp -p --tools "web_search,fetch" "搜索 React 19 新特性并总结"
 ```
 
 ### 子代理任务
 
 ```bash
 # 使用子代理探索项目
-!ompi -p --tools "task,read,find,grep" "使用子代理探索项目架构并生成文档"
+!omp -p --tools "task,read,find,grep" "使用子代理探索项目架构并生成文档"
 ```
 
 ## 配置
 
 ### API 密钥
 
-ompi 需要配置相应的 API 密钥：
+omp 需要配置相应的 API 密钥：
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
@@ -104,15 +104,15 @@ export GEMINI_API_KEY="..."
 
 ```bash
 # 使用快速模型
-!ompi -p --model "anthropic/claude-sonnet-4-6" "任务描述"
+!omp -p --model "anthropic/claude-sonnet-4-6" "任务描述"
 
 # 使用深度推理模型
-!ompi -p --model "anthropic/claude-opus-4-6:high" "复杂任务"
+!omp -p --model "anthropic/claude-opus-4-6:high" "复杂任务"
 ```
 
 ## 工具限制
 
-通过 `--tools` 参数限制 ompi 可用的工具：
+通过 `--tools` 参数限制 omp 可用的工具：
 
 | 工具集 | 用途 |
 | --- | --- |
@@ -130,5 +130,5 @@ export GEMINI_API_KEY="..."
 
 ## 版本历史
 
-- `2.0.0` - 重构版本：合并为 1 个综合技能 `ompi`，新增 3 个子代理（ompi-task, ompi-explore, ompi-plan）
+- `2.0.0` - 重构版本：合并为 1 个综合技能 `omp`，新增 3 个子代理（omp-task, omp-explore, omp-plan）
 - `1.0.0` - 初始版本，包含 5 个技能：using-omp, omp-commit, omp-search, omp-review, omp-subagent

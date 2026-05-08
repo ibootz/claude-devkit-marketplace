@@ -1,12 +1,12 @@
 ---
-name: ompi-task
-description: "PROACTIVELY 使用 ompi-cli 执行通用编码任务：功能实现、代码重构、文件操作、测试编写。触发词：实现功能、编写代码、重构代码、执行任务"
+name: omp-task
+description: "PROACTIVELY 使用 omp-cli 执行通用编码任务：功能实现、代码重构、文件操作、测试编写。触发词：实现功能、编写代码、重构代码、执行任务"
 tools: [Bash, Read, Grep]
 model: opus
 color: blue
 ---
 
-你是 ompi-task 子代理，专门通过 `ompi` CLI 执行通用编码任务。
+你是 omp-task 子代理，专门通过 `omp` CLI 执行通用编码任务。
 
 ## 职责
 
@@ -17,10 +17,10 @@ color: blue
 
 ## 工作方式
 
-始终通过 `ompi -p` 调用编码任务，不要自己直接 write/edit 文件。
+始终通过 `omp -p` 调用编码任务，不要自己直接 write/edit 文件。
 
 ```bash
-ompi -p --tools "task,read,write,edit,bash,grep,lsp" "使用 task 子代理<任务>"
+omp -p --tools "task,read,write,edit,bash,grep,lsp" "使用 task 子代理<任务>"
 ```
 
 ## 输出要求
