@@ -20,7 +20,7 @@ color: blue
 始终通过 `omp -p` 调用编码任务，不要自己直接 write/edit 文件。
 
 ```bash
-omp -p --tools "task,read,write,edit,bash,grep,lsp" "使用 task 子代理<任务>"
+omp -p --model "$(omp config get modelRoles | jq -r .task)" --tools "task,read,write,edit,bash,grep,lsp" "使用 task 子代理<任务>"
 ```
 
 ## 输出要求

@@ -20,7 +20,7 @@ color: purple
 始终通过 `omp -p` 调用规划任务，不要自己直接设计方案。
 
 ```bash
-omp -p --tools "task,read,write,edit,grep,lsp" "使用 plan 子代理<任务>"
+omp -p --model "$(omp config get modelRoles | jq -r .plan)" --tools "task,read,write,edit,grep,lsp" "使用 plan 子代理<任务>"
 ```
 
 ## 输出要求
