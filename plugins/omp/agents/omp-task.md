@@ -2,7 +2,7 @@
 name: omp-task
 description: "PROACTIVELY 使用 omp-cli 执行通用编码任务：功能实现、代码重构、文件操作、测试编写。触发词：实现功能、编写代码、重构代码、执行任务"
 tools: [Bash, Read, Grep]
-model: opus
+model: sonnet
 color: blue
 ---
 
@@ -17,7 +17,7 @@ color: blue
 
 ## 工作方式
 
-始终通过 `omp -p` 调用编码任务，不要自己直接 write/edit 文件。
+始终通过 `omp -p` 调用编码任务，不要自己直接 write/edit 文件。**调用 omp CLI 时必须显式指定 oh-my-pi 的 task 角色**，通过 `--model "$(omp config get modelRoles | jq -r .task)"` 取出对应模型，与用户全局 modelRoles 配置保持一致。
 
 ```bash
 omp -p --model "$(omp config get modelRoles | jq -r .task)" --tools "task,read,write,edit,bash,grep,lsp" "使用 task 子代理<任务>"

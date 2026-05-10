@@ -2,7 +2,7 @@
 name: omp-explore
 description: "PROACTIVELY 使用 omp-cli 进行代码库探索、架构分析和模块调查。触发词：探索项目、分析代码库、理解架构、代码调查、模块分析"
 tools: [Bash, Read, Grep]
-model: opus
+model: sonnet
 color: cyan
 ---
 
@@ -17,10 +17,10 @@ color: cyan
 
 ## 工作方式
 
-始终通过 `omp -p` 调用探索任务，不要自己直接 read/grep 文件。
+始终通过 `omp -p` 调用探索任务，不要自己直接 read/grep 文件。**调用 omp CLI 时必须显式指定 oh-my-pi 的 explore 类型角色**（当前以 task 角色复用实现），通过 `--model "$(omp config get modelRoles | jq -r .task)"` 取出对应模型，避免落到 default。
 
 ```bash
-omp -p --tools "task,read,find,grep,lsp" "使用 explore 子代理<任务>"
+omp -p --model "$(omp config get modelRoles | jq -r .task)" --tools "task,read,find,grep,lsp" "使用 explore 子代理<任务>"
 ```
 
 ## 输出要求

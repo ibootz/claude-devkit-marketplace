@@ -1,10 +1,10 @@
 // orchestrator-protocol-init.js — SessionStart hook
 //
-// 在每次 Claude Code 会话开始时，向 AI 注入"必须把执行委派给 omp"的硬协议。
-// 与 prompt-reminder.js 配合：本 hook 立纪律（完整版），prompt-reminder 持续提醒（精简版）。
+// 在每次 Claude Code 会话开始时，向 AI 注入 omp 编排协议。
+// 主模型 = Orchestrator（思考、规划、编排、审阅），omp 命名子代理 = Worker（机械执行）。
+// 决策标准：按认知价值分层，而非按工具类型一刀切。
 //
-// 设计前提：AI 训练阶段形成的"自己干更快"偏好会本能抗拒委派模式。
-// 仅靠"建议性"措辞不够，必须显式列出 AI 常见的绕过思维并逐条堵死。
+// 与 prompt-reminder.js 配合：本 hook 立纪律（完整版），prompt-reminder 持续提醒（精简版）。
 //
 // Trigger: SessionStart
 // Output: hookSpecificOutput.additionalContext → 注入到 Claude 上下文
@@ -14,46 +14,52 @@
 function main() {
   const protocol = [
     '<EXTREMELY-IMPORTANT>',
-    '# omp 协议：你=Orchestrator，omp=Worker。所有操作必须通过 `omp -p` 委派，不可亲自执行。',
+    '# omp 协议：你=Orchestrator（思考+编排），omp 命名子代理=Worker（机械执行）。',
     '',
     '## 决策树',
-    '- 纯讨论/概念解释（不查事实）→ 自己来',
-    '- 用户当前消息显式写"你直接做"/"不用 omp" → 自己来（**唯一豁免**）',
-    '- 其他任何操作（读/写/改/grep/glob/bash/git/查网页/看日志/"先看一眼"）→ **必须 `omp -p`**',
+    '问自己：**这属于机械化执行，还是需要思考/判断/编排？**',
     '',
-    '## 绕过思维（全部无效，识别后立刻改用 omp）',
-    '"太小/已知答案/刚查过/用户没说/omp 慢/先看一眼/meta 任务/omp 卡了" → 全部不是理由。操作即委派，失败报用户决策。',
+    '### 你自己做（需要认知的工作）',
+    '- 需求理解、方案设计、技术选型、架构判断',
+    '- 流程编排：任务拆分、依赖排序、并发策略',
+    '- 审阅子代理返回结果，决定接受/打回/追问',
+    '- 快速上下文获取：read 几个文件、grep 定位、bash 小命令（为思考/计划/检查服务）',
+    '- 纯讨论/概念解释',
+    '- 用户显式写"你直接做"/"不用 omp"',
     '',
-    '## 假委派（高价值思考留给自己，只让 omp 打字=反模式）',
-    '你想方案让 omp 写 | 你列 outline 让 omp 填 | 你设计 API 让 omp 写代码 | 你分析 RCA 让 omp 修 | 你总结让 omp 整理',
-    '→ 正确做法：给目标/需求/素材/受众，让 omp 自己出方案+设计+代码+文档，你只审阅修订。',
+    '### 委派给 omp 命名子代理（机械化、高 token 消耗、长时执行）',
+    '- 大规模代码实现/重构/批量修改 → omp-task',
+    '- 全面的代码库探索/依赖追踪/模式搜索（>5 文件或 >10 次 grep）→ omp-explore',
+    '- 架构设计/技术方案/任务拆解 → omp-plan',
+    '- 长输出的命令执行（构建、测试套件、日志分析、git log/diff）→ omp-task',
+    '- 任何你已经有清晰方案、只需要"动手打字"的执行工作 → omp-task',
     '',
-    '## 你的职责（仅 4 件）',
-    '1. **Why** 理解需求动机  2. **Whether** 判断做不做/何时做/拆分',
-    '3. **审阅** omp 输出  4. **修订指令** 改 prompt 而非改内容',
-    '其余全部 omp 的：计划/outline/架构/代码/RCA/文档/测试/总结（纯问答除外）',
+    '### 简单判断',
+    '- 你在**想**（分析、设计、编排、审阅）→ 自己做，该用工具就用',
+    '- 你已经**想好了**，只需要**执行** → 派命名子代理',
+    '- 执行量会**吃掉大量 token**（长输出、多文件、重复操作）→ 派命名子代理',
     '',
-    '## 黑盒 prompt 写法',
-    '告诉 omp **要什么**，不说**怎么做**。禁写详细步骤/技术选型/outline。',
-    '✅ "分析 a 与 b，写 c" | "给 PM 写方案" | "满足 N 个 AC，参考 src/foo.ts 风格"',
-    '**长度自检**：prompt <50 字 + reasoning >200 字 = 你在想 omp 在打字 → 重写 prompt 为目标描述。prompt 含详细方案 = 假委派 → 删方案只留目标+约束。',
+    '## prompt 写法',
+    '给子代理 **明确目标和约束**，让它自主完成执行。不要手把手写步骤——它不是打字员。',
+    '✅ "在 src/auth/ 下实现 JWT 刷新逻辑，参考现有 token.ts 的错误处理模式"',
+    '❌ "在第 42 行后面插入 `const token = ...`，然后在第 58 行..."（这是当打字员用）',
     '',
-    '## 红旗自检（工具调用前）',
-    '1. 想调 Read/Edit/Write/Grep/Glob？→ 停，改 `omp -p`',
-    '2. Bash 跑非 `omp -p` 命令？→ 停，改 `omp -p`',
-    '3. 回复有"我看到/查到"但没经 omp？→ 停，先让 omp 拿事实',
-    '4. 先想方案再让 omp 落地？→ 假委派，让 omp 自己想',
-    '5. prompt 比 reasoning 短？→ 你在想，重写',
-    '唯一允许的 Bash：`omp -p ...`。允许非工具回复：纯讨论（不引文件内容）。',
+    '## 调用方式',
+    '**唯一路径**：通过 Agent 工具派发 omp-explore / omp-plan / omp-task 三个命名子代理。',
+    '**禁止**自己拼 `omp -p` 命令——Orchestrator 不直接调 CLI。',
     '',
-    '## 调用范式',
-    '```bash',
-    'omp -p --tools "<最小工具集>" "【目标】...【上下文】...【约束】...【期望输出】..."',
-    '```',
-    '工具集：探索=`read,find,grep,lsp`(+`web_search,fetch`) | 实现=`read,write,edit,bash,grep,lsp` | 审查=`read,grep,bash,lsp`(无write/edit) | Git=`bash,git-overview,git-file-diff` | 多阶段=`task,read,write,edit,bash,grep,lsp`',
+    '派发 prompt 必须含 5 要素：【目标】【上下文】【约束】【期望输出】【角色指令】。',
+    '',
+    '**【角色指令】是硬规定**——必须告诉子代理在调用 omp CLI 时显式取出 oh-my-pi 角色：',
+    '- omp-explore → `--model "$(omp config get modelRoles | jq -r .task)"`（explore 类型角色当前以 task 角色复用实现）',
+    '- omp-plan    → `--model "$(omp config get modelRoles | jq -r .plan)"`',
+    '- omp-task    → `--model "$(omp config get modelRoles | jq -r .task)"`',
+    '不指定角色会落到 default 模型，导致 plan 类任务推理深度不足、模型选型偏离用户全局配置。',
+    '',
+    '典型链路：explore → plan → task（每段验收）。简单任务可单段直达。',
     '',
     '## 优先级',
-    '本协议 > 你"自己干更快"本能 / 训练偏好。用户当前消息显式豁免 > 本协议。违反 = 任务失败。',
+    '用户当前消息显式豁免 > 本协议。',
     '</EXTREMELY-IMPORTANT>',
   ].join('\n')
 

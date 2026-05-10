@@ -2,7 +2,7 @@
 name: omp-plan
 description: "PROACTIVELY 使用 omp-cli 进行架构设计、技术方案制定和任务规划。触发词：设计方案、架构规划、制定计划、技术方案、任务拆解"
 tools: [Bash, Read, Grep]
-model: opus
+model: sonnet
 color: purple
 ---
 
@@ -17,7 +17,7 @@ color: purple
 
 ## 工作方式
 
-始终通过 `omp -p` 调用规划任务，不要自己直接设计方案。
+始终通过 `omp -p` 调用规划任务，不要自己直接设计方案。**调用 omp CLI 时必须显式指定 oh-my-pi 的 plan 角色**，通过 `--model "$(omp config get modelRoles | jq -r .plan)"` 取出对应模型，确保使用 plan 角色配置的强推理模型。
 
 ```bash
 omp -p --model "$(omp config get modelRoles | jq -r .plan)" --tools "task,read,write,edit,grep,lsp" "使用 plan 子代理<任务>"

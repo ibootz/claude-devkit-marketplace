@@ -1,10 +1,9 @@
 // orchestrator-protocol-remind.js — UserPromptSubmit hook
 //
-// 用户每次提交消息时，向 AI 上下文注入一句"你必须委派给 omp"的精简提醒。
+// 用户每次提交消息时，向 AI 注入 omp 编排协议的精简提醒。
 // 与 orchestrator-protocol-init.js 配合：本 hook 持续提醒（短），init 立纪律（长）。
-//
-// 设计前提：AI 在长会话中会逐渐淡化 SessionStart 注入的协议，需要在每个用户回合
-// 重新上膛。但要短，避免上下文污染。
+// 主模型 = Orchestrator（思考+编排），omp = Worker（机械执行）。
+// 决策标准：按认知价值分层，而非按工具类型一刀切。
 //
 // Trigger: UserPromptSubmit
 // Output: hookSpecificOutput.additionalContext → 拼到当前用户消息后的上下文
@@ -46,18 +45,15 @@ function main() {
 
   const reminder = [
     '<omp-reminder>',
-    '⚠ 本会话激活了 omp Orchestrator-Worker 协议（详见 SessionStart 注入的完整版）。',
+    '本会话激活了 omp 编排协议（详见 SessionStart 注入的完整版）。',
     '',
-    '回复前自检四条：',
-    '1. 我打算调 Read / Edit / Write / Grep / Glob？→ **停**。改 `omp -p` 委派。',
-    '2. 我打算用 Bash 跑非 `omp -p` 命令？→ **停**。改 `omp -p` 委派。',
-    '3. 我用"我看到 / 我记得"代替查事实？→ **停**。让 omp 拿事实。',
-    '4. 我打算"先想详细方案，再让 omp 落地写文件"？→ **停**。这是假委派——让 omp 自己想方案，你只描述目标和约束。',
+    '决策标准：**这属于机械化执行，还是需要思考/判断/编排？**',
     '',
-    '价值划分铁律：思考、设计、列大纲、分析 RCA、总结 = omp 的活；你的活只有 Why / Whether / 审阅 / 修订指令 4 件。',
+    '- 你在**想**（分析、设计、编排、审阅、快速定位上下文）→ 自己做，该用工具就用',
+    '- 你已经**想好了**，只需要**执行** → `omp -p`',
+    '- 执行量会**吃掉大量 token**（长输出、多文件、重复操作、批量修改）→ `omp -p`',
     '',
-    '唯一豁免 = 用户**当前**消息明说"你直接做" / "不用 omp"。',
-    '本能上的"自己干更快" / "这事很小" / "就看一眼" / "我先想清楚再委派" 全部无效。',
+    '给 omp 目标和约束，不要手把手写步骤。',
     '</omp-reminder>',
   ].join('\n')
 
