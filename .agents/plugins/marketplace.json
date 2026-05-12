@@ -157,6 +157,24 @@
         "authentication": "ON_INSTALL"
       },
       "version": "1.0.0"
+    },
+    {
+      "author": {
+        "name": "zhangq"
+      },
+      "category": "Productivity",
+      "description": "AI 工作纪律每轮注入 - 上下文管理 / 子代理协作 / 表达约束 / 思维模式 / Agent 工具派发，一个 UserPromptSubmit hook，零 skill，适合全局开启",
+      "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
+      "name": "working-discipline",
+      "source": {
+        "source": "local",
+        "path": "./plugins/working-discipline"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "version": "1.0.0"
     }
   ]
 }
