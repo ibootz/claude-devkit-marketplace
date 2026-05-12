@@ -6,12 +6,24 @@
 //
 // 与 prompt-reminder.js 配合：本 hook 立纪律（完整版），prompt-reminder 持续提醒（精简版）。
 //
+// 开关：环境变量 OMP_PROTOCOL_ENABLED ∈ {1,true,on,yes}（大小写不敏感）才注入；
+//       未设置 / 其他值 → 静默放行，不写任何上下文。
+//
 // Trigger: SessionStart
 // Output: hookSpecificOutput.additionalContext → 注入到 Claude 上下文
 
 'use strict'
 
+function isEnabled() {
+  const v = String(process.env.OMP_PROTOCOL_ENABLED || '').trim().toLowerCase()
+  return v === '1' || v === 'true' || v === 'on' || v === 'yes'
+}
+
 function main() {
+  if (!isEnabled()) {
+    process.exit(0)
+  }
+
   const protocol = [
     '<EXTREMELY-IMPORTANT>',
     '# omp 协议：你=Orchestrator（思考+编排），omp 命名子代理=Worker（机械执行）。',

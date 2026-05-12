@@ -1,7 +1,7 @@
 {
   "name": "omp",
-  "version": "2.2.2",
-  "description": "Oh my pi (omp) CLI 工具集成 - 在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务（1个技能 + 3个子代理 + 2个强制委派 hook，含假委派识别）",
+  "version": "2.3.0",
+  "description": "Oh my pi (omp) CLI 工具集成 - 在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务（1个技能 + 3个子代理 + 2个可选注入 hook，由 OMP_PROTOCOL_ENABLED 显式开启）",
   "author": {
     "name": "zhangq"
   },

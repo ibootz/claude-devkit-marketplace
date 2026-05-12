@@ -5,12 +5,24 @@
 // 主模型 = Orchestrator（思考+编排），omp = Worker（机械执行）。
 // 决策标准：按认知价值分层，而非按工具类型一刀切。
 //
+// 开关：环境变量 OMP_PROTOCOL_ENABLED ∈ {1,true,on,yes}（大小写不敏感）才注入；
+//       未设置 / 其他值 → 静默放行，不读 stdin 也不写任何上下文。
+//
 // Trigger: UserPromptSubmit
 // Output: hookSpecificOutput.additionalContext → 拼到当前用户消息后的上下文
 
 'use strict'
 
+function isEnabled() {
+  const v = String(process.env.OMP_PROTOCOL_ENABLED || '').trim().toLowerCase()
+  return v === '1' || v === 'true' || v === 'on' || v === 'yes'
+}
+
 function main() {
+  if (!isEnabled()) {
+    process.exit(0)
+  }
+
   // 读 stdin（Claude Code 会把当前用户 prompt 通过 JSON 传入）以判断是否豁免
   let stdinRaw = ''
   try {
