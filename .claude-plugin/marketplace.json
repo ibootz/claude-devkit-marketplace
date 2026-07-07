@@ -71,6 +71,13 @@
       "category": "Productivity",
       "description": "AI 工作纪律每轮注入 - 上下文管理 / 子代理协作 / 表达约束 / 思维模式 / Agent 工具派发，一个 UserPromptSubmit hook，零 skill，适合全局开启",
       "version": "1.0.0"
+    },
+    {
+      "name": "dws",
+      "source": "./plugins/dws",
+      "category": "Productivity",
+      "description": "钉钉全产品能力集成 - 通过 dws CLI 管理 AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/考勤/日志/DING消息/钉钉文档/云盘/AI听记/邮箱/在线电子表格/知识库（1个技能）",
+      "version": "1.0.0"
     }
   ]
 }
