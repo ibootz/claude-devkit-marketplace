@@ -76,8 +76,8 @@
       "name": "discover-unknowns",
       "source": "./plugins/discover-unknowns",
       "category": "Productivity",
-      "description": "发现你的未知 - 与 Claude 协作的任务生命周期方法论，在实现前/中/后系统挖掘并澄清未知（盲点扫描/头脑风暴/访谈/参考/实现计划/实现笔记/提案/测验）。1个统领 SKILL + 8个模式 SKILL（可 /斜杠 直调；头脑风暴/访谈优先委派 superpowers），源自 Anthropic 官方博客",
-      "version": "1.1.0"
+      "description": "发现你的未知 - 与 Claude 协作挖掘未知的方法论：动手前用盲点扫描/头脑风暴/访谈/参考暴露未知，合并前用测验确认理解。3个 SKILL（统领/brainstorm/quiz，brainstorm 优先委派 superpowers）+ 1个 UserPromptSubmit 未知雷达 hook，源自 Anthropic 官方博客",
+      "version": "2.0.0"
     }
   ]
 }

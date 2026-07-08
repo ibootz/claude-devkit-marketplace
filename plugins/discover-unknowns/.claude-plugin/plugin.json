@@ -1,8 +1,21 @@
 {
   "name": "discover-unknowns",
-  "version": "1.1.0",
-  "description": "发现你的未知 - 一套与 Claude 协作的任务生命周期方法论：在实现前/中/后系统性挖掘并澄清未知。1个统领 SKILL + 8个模式 SKILL（均可 /斜杠 直接调用；头脑风暴与访谈优先委派 superpowers:brainstorming）。源自 Anthropic 官方博客《A field guide to Claude Fable 5: Finding your unknowns》",
+  "version": "2.0.0",
+  "description": "发现你的未知 - 与 Claude 协作挖掘未知的方法论：动手前用盲点扫描/头脑风暴/访谈/参考暴露未知，合并前用测验确认理解。3个 SKILL（discover-unknowns 统领 + brainstorm 头脑风暴与访谈 + quiz 测验，brainstorm 优先委派 superpowers:brainstorming）+ 1个 UserPromptSubmit 未知雷达 hook（可用 DISCOVER_UNKNOWNS_RADAR=off 关闭）。源自 Anthropic 官方博客《A field guide to Claude Fable 5: Finding your unknowns》",
   "author": {
     "name": "zhangq"
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/unknowns-radar.js"
+          }
+        ]
+      }
+    ]
   }
 }

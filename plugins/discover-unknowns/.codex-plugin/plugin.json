@@ -1,7 +1,7 @@
 {
   "name": "discover-unknowns",
-  "version": "1.1.0",
-  "description": "发现你的未知 - 一套与 Claude 协作的任务生命周期方法论：在实现前/中/后系统性挖掘并澄清未知。1个统领 SKILL + 8个模式 SKILL（头脑风暴与访谈优先委派 superpowers:brainstorming，未安装时用内置指令）",
+  "version": "2.0.0",
+  "description": "发现你的未知 - 与 Claude 协作挖掘未知的方法论：动手前用盲点扫描/头脑风暴/访谈/参考暴露未知，合并前用测验确认理解。3个 SKILL + 1个 UserPromptSubmit 未知雷达 hook（brainstorm 优先委派 superpowers:brainstorming，未安装时用内置指令）",
   "author": {
     "name": "zhangq"
   },
