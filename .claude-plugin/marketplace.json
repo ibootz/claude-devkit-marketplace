@@ -71,6 +71,13 @@
       "category": "Productivity",
       "description": "AI 工作纪律每轮注入 - 上下文管理 / 子代理协作 / 表达约束 / 思维模式 / Agent 工具派发，一个 UserPromptSubmit hook，零 skill，适合全局开启",
       "version": "1.0.0"
+    },
+    {
+      "name": "discover-unknowns",
+      "source": "./plugins/discover-unknowns",
+      "category": "Productivity",
+      "description": "发现你的未知 - 与 Claude 协作的任务生命周期方法论，在实现前/中/后系统挖掘并澄清未知（盲点扫描/头脑风暴/访谈/参考/实现计划/实现笔记/提案/测验）。1个 SKILL + 8个 slash 命令，源自 Anthropic 官方博客",
+      "version": "1.0.0"
     }
   ]
 }

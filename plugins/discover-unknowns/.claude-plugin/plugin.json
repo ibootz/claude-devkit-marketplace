@@ -1,0 +1,8 @@
+{
+  "name": "discover-unknowns",
+  "version": "1.0.0",
+  "description": "发现你的未知 - 一套与 Claude 协作的任务生命周期方法论：在实现前/中/后系统性挖掘并澄清未知（盲点扫描/头脑风暴/访谈/参考/实现计划/实现笔记/提案/测验）。1个统领 SKILL + 8个 slash 命令。源自 Anthropic 官方博客《A field guide to Claude Fable 5: Finding your unknowns》",
+  "author": {
+    "name": "zhangq"
+  }
+}

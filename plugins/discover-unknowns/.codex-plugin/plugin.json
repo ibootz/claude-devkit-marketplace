@@ -1,0 +1,14 @@
+{
+  "name": "discover-unknowns",
+  "version": "1.0.0",
+  "description": "发现你的未知 - 一套与 Claude 协作的任务生命周期方法论：在实现前/中/后系统性挖掘并澄清未知。Codex 侧通过 SKILL 提供（内嵌 8 个实践模式），Claude 侧额外提供 8 个 slash 命令入口",
+  "author": {
+    "name": "zhangq"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "发现你的未知 (discover-unknowns)",
+    "shortDescription": "与 Claude 协作挖掘未知的方法论",
+    "category": "Productivity"
+  }
+}
