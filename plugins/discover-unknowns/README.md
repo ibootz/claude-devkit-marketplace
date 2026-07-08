@@ -13,28 +13,26 @@
 | 未知的已知 | 显而易见到不会写、但看到就认得 | 原型 / 参考 |
 | 未知的未知 | 完全没考虑过 | 盲点扫描 |
 
-## 八个模式（= 八个 slash 命令）
+## 九个 Skill（模式 skill 均可 `/斜杠` 直接调用）
 
-| 阶段 | 命令 | 作用 |
+| 阶段 | Skill | 作用 |
 |------|------|------|
+| 统领 | `discover-unknowns` | 心智模型 + 编排逻辑：何时主动进入哪个模式 |
 | 前 | `/blind-spot-pass` | 盲点扫描：挖未知的未知并讲解 |
-| 前 | `/brainstorm` | 头脑风暴与原型：多方向 + 假数据原型 |
-| 前 | `/interview` | 访谈：一次一问，优先会改架构的问题 |
+| 前 | `/brainstorm` | 头脑风暴与原型：多方向 + 假数据原型 ※ |
+| 前 | `/interview` | 访谈：一次一问，优先会改架构的问题 ※ |
 | 前 | `/reference` | 参考：用源代码复刻语义（优于截图） |
 | 前 | `/impl-plan` | 实现计划：易变决策置顶、机械重构沉底 |
 | 中 | `/impl-notes` | 实现笔记：记录偏离，选保守方案继续 |
 | 后 | `/pitch` | 提案讲解：打包成可争取批准的文档 |
 | 后 | `/quiz` | 测验：通过才 merge |
 
-## 组成
+※ **superpowers 集成**：`brainstorm` 与 `interview` 会先检查可用技能列表中是否存在 `superpowers:brainstorming`（[obra/superpowers](https://github.com/obra/superpowers)）。已安装则优先委派该 skill（访谈场景叠加"优先问会改架构的问题"约束）；未安装则使用本插件内置指令，功能不受影响。
 
-- **SKILL `discover-unknowns`**：统领方法论与编排逻辑（何时该主动进入哪个模式），内嵌全部八个模式与原文示例 prompt。Claude 会在陌生/含糊/大颗粒度任务上主动应用。
-- **8 个 slash 命令**（Claude Code）：每个模式的快捷入口，接受任务上下文作为参数。
+## 安装
 
-## 安装与平台差异
-
-- **Claude Code**：安装本插件后，SKILL 与 8 个 slash 命令均自动可用。
-- **Codex CLI**：本 marketplace 的 codex 安装器（`scripts/install-codex.js`）支持 skills，会把 `skills/discover-unknowns` 复制到 `~/.agents/skills/`。方法论与八个模式**通过 SKILL 提供**（模式内容已内嵌在 SKILL 中）；由于安装器暂无 slash 命令通道，Codex 侧**不提供独立的 8 个 `/命令`**，直接按 SKILL 描述执行即可。
+- **Claude Code**：安装本插件后 9 个 skill 自动可用，模式 skill 支持 `/名称` 直接调用，也会按语义自动触发。
+- **Codex CLI**：`node scripts/install-codex.js --plugins=discover-unknowns`，9 个 skill 全部复制到 `~/.agents/skills/`（skill 化后 Codex 侧与 Claude 侧能力一致）。
 
 ## 一句话用法
 

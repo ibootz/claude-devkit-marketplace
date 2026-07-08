@@ -181,7 +181,7 @@
         "name": "zhangq"
       },
       "category": "Productivity",
-      "description": "发现你的未知 - 与 Claude 协作的任务生命周期方法论，在实现前/中/后系统挖掘并澄清未知（盲点扫描/头脑风暴/访谈/参考/实现计划/实现笔记/提案/测验）。Codex 侧通过 SKILL 提供（内嵌八个模式），源自 Anthropic 官方博客",
+      "description": "发现你的未知 - 与 Claude 协作的任务生命周期方法论，在实现前/中/后系统挖掘并澄清未知（盲点扫描/头脑风暴/访谈/参考/实现计划/实现笔记/提案/测验）。1个统领 SKILL + 8个模式 SKILL（头脑风暴/访谈优先委派 superpowers:brainstorming），源自 Anthropic 官方博客",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "discover-unknowns",
       "source": {
@@ -192,7 +192,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "1.0.0"
+      "version": "1.1.0"
     }
   ]
 }
