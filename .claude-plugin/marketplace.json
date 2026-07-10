@@ -6,7 +6,10 @@
   },
   "metadata": {
     "description": "Claude DevKit Pro Marketplace - 精简后的 Claude Code / Codex 插件市场，聚焦核心开发、Spec 工作流与高价值生产力插件",
-    "version": "2.1.0"
+    "version": "2.2.0"
+  },
+  "renames": {
+    "matt-pocock-skills": "mattpocock-skills"
   },
   "plugins": [
     {
@@ -45,11 +48,14 @@
       "version": "1.0.0"
     },
     {
-      "name": "matt-pocock-skills",
-      "source": "./plugins/matt-pocock-skills",
+      "name": "mattpocock-skills",
+      "source": {
+        "source": "github",
+        "repo": "mattpocock/skills"
+      },
       "category": "Development",
-      "description": "Matt Pocock 工程技能集 - 调试诊断、TDD、架构改进、问题分类、PRD 生成、沟通优化等实战工具",
-      "version": "1.0.0"
+      "description": "Matt Pocock 工程技能集（远程引用上游 github.com/mattpocock/skills，随 /plugin marketplace update 拉取最新）- 含 engineering/productivity 两大类实战技能：TDD、诊断 bug、架构改进、问题分类、to-spec/to-tickets、code-review、prototype、research 等",
+      "version": "2.0.0"
     },
     {
       "name": "omp",
