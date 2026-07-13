@@ -1,6 +1,6 @@
 # Working Discipline
 
-**版本**: 1.3.0
+**版本**: 1.3.1
 **作者**: zhangq
 **许可证**: MIT
 
