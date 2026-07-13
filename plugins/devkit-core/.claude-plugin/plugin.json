@@ -1,30 +1,8 @@
 {
   "name": "devkit-core",
-  "version": "5.0.1",
+  "version": "5.1.0",
   "description": "核心开发工具集 - 代码库分析、依赖排查、缺陷修复、多模型协作与辅助工具",
   "author": {
     "name": "zhangq"
-  },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/block-cd.js"
-          }
-        ]
-      },
-      {
-        "matcher": "Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/guard-full-read.js"
-          }
-        ]
-      }
-    ]
   }
 }
