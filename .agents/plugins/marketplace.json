@@ -1,7 +1,7 @@
 {
   "metadata": {
     "description": "Claude DevKit Pro Marketplace - 精简后的 Claude Code / Codex 插件市场，聚焦核心开发、Spec 工作流与高价值生产力插件",
-    "version": "2.1.0"
+    "version": "2.2.0"
   },
   "name": "claude-devkit-marketplace",
   "interface": {
@@ -174,6 +174,24 @@
         "authentication": "ON_INSTALL"
       },
       "version": "2.0.0"
+    },
+    {
+      "author": {
+        "name": "zhangq"
+      },
+      "category": "Development",
+      "description": "跨平台 shell 脚本强制 lint - AI 通过 Write/Edit/MultiEdit 生成 shell 脚本时，PostToolUse hook 自动扫描 GNU(Linux) 与 BSD(macOS) 不可移植写法（sed -i/readlink -f/date -d/find -printf/grep -P/stat -c/declare -A/mapfile/${var^^}/mktemp 模板 等），命中即回灌违规点与可移植改法促其修正，确保同时兼容 Linux 与 macOS。零 skill，可用 PORTABLE_SHELL_LINT=off 关闭",
+      "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
+      "name": "portable-shell",
+      "source": {
+        "source": "local",
+        "path": "./plugins/portable-shell"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "version": "1.0.0"
     }
   ]
 }

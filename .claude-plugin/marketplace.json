@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude DevKit Pro Marketplace - 精简后的 Claude Code / Codex 插件市场，聚焦核心开发、Spec 工作流与高价值生产力插件",
-    "version": "2.2.0"
+    "version": "2.3.0"
   },
   "renames": {
     "matt-pocock-skills": "mattpocock-skills"
@@ -84,6 +84,13 @@
       "category": "Productivity",
       "description": "发现你的未知 - 与 Claude 协作挖掘未知的方法论：动手前用盲点扫描/头脑风暴/访谈/参考暴露未知，合并前用测验确认理解。3个 SKILL（统领/brainstorm/quiz，brainstorm 优先委派 superpowers）+ 1个 UserPromptSubmit 未知雷达 hook，源自 Anthropic 官方博客",
       "version": "2.0.0"
+    },
+    {
+      "name": "portable-shell",
+      "source": "./plugins/portable-shell",
+      "category": "Development",
+      "description": "跨平台 shell 脚本强制 lint - AI 通过 Write/Edit/MultiEdit 生成 shell 脚本时，PostToolUse hook 自动扫描 GNU(Linux) 与 BSD(macOS) 不可移植写法（sed -i/readlink -f/date -d/find -printf/grep -P/stat -c/declare -A/mapfile/${var^^}/mktemp 模板 等），命中即回灌违规点与可移植改法促其修正，确保同时兼容 Linux 与 macOS。零 skill，可用 PORTABLE_SHELL_LINT=off 关闭",
+      "version": "1.0.0"
     }
   ]
 }

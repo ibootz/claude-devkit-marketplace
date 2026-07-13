@@ -1,0 +1,21 @@
+{
+  "name": "portable-shell",
+  "version": "1.0.0",
+  "description": "跨平台 shell 脚本强制 lint - 当 AI 通过 Write/Edit/MultiEdit 生成 shell 脚本时，PostToolUse hook 自动扫描 GNU(Linux) 与 BSD(macOS) 之间不可移植的写法（sed -i / readlink -f / date -d / find -printf / grep -P / stat -c / declare -A / mapfile / ${var^^} / mktemp 模板 等），命中即回灌违规点与可移植改法促其修正，确保脚本同时兼容 Linux 与 macOS。可用 PORTABLE_SHELL_LINT=off 关闭",
+  "author": {
+    "name": "zhangq"
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/portable-shell-lint.js"
+          }
+        ]
+      }
+    ]
+  }
+}
