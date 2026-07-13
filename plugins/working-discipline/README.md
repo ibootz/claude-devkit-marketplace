@@ -1,19 +1,21 @@
 # Working Discipline
 
-**版本**: 1.2.0
+**版本**: 1.3.0
 **作者**: zhangq
 **许可证**: MIT
 
-向 Claude 上下文注入一份 **AI 工作纪律**，覆盖上下文管理、子代理协作、表达约束、思维模式、Agent 工具派发五个维度，让 AI 的产出与协作行为保持在可审计、可复用的轨道上。通过两个 hook 事件覆盖主会话与子代理：`UserPromptSubmit` 在主会话每轮注入完整纪律，`SubagentStart` 在子代理启动时注入精简版纪律（补齐 subagent 覆盖缺口）。
+向 Claude 上下文注入一份 **AI 工作纪律**，覆盖上下文管理、子代理协作、表达约束、思维模式、Agent 工具派发五个维度，让 AI 的产出与协作行为保持在可审计、可复用的轨道上。通过两个注入 hook 覆盖主会话与子代理：`UserPromptSubmit` 在主会话每轮注入完整纪律，`SubagentStart` 在子代理启动时注入精简版纪律（补齐 subagent 覆盖缺口）。
+
+除注入外，本插件还带一个 **`PreToolUse` 硬拦截 hook**（`block-cd`）：Bash 工具的 cwd 在多次调用之间持久保留，AI 一旦执行独立 `cd`（如 `cd /tmp`）就会污染会话工作目录、让后续相对路径全部失准。`block-cd` 在这类命令真正执行前 exit 2 阻断并引导改用绝对路径或子 shell `(cd /path && cmd)`。它把「不许污染 cwd」这条工作纪律从软性提示升级为硬性拦截。
 
 ---
 
 ## 插件定位
 
-- 两个 hook：`UserPromptSubmit`（主会话每轮）+ `SubagentStart`（子代理启动时），零 skill、零命令、零子代理
+- 三个 hook：`UserPromptSubmit`（主会话每轮注入）+ `SubagentStart`（子代理启动时注入）+ `PreToolUse`（Bash 命令执行前拦截 `block-cd`），零 skill、零命令、零子代理
 - 不依赖任何项目结构与外部工具
 - 适合作为**全局基线**长期开启（用户级安装），任何项目都能受益
-- 注入内容仅约束 AI 行为，不修改用户文件，无副作用
+- 注入 hook 仅约束 AI 行为、不修改用户文件；`block-cd` 只拦截会污染 cwd 的独立 `cd`（子 shell、命令替换、no-op cd 均放行），不改动任何文件，无副作用
 
 ## 注入内容概要
 
@@ -36,6 +38,8 @@
 
 ## 工作机制
 
+### 注入 hook（working-discipline.js）
+
 ```text
 UserPromptSubmit（主会话每轮）  或  SubagentStart（子代理启动时）
    ↓
@@ -48,6 +52,18 @@ stdout 输出 { hookSpecificOutput: { hookEventName, additionalContext } }
    ↓
 Claude Code 把 additionalContext 拼接进对应上下文
 （SubagentStart 的注入进子代理自己的 transcript，不入主会话）
+```
+
+### 拦截 hook（guards/block-cd.js）
+
+```text
+PreToolUse（Bash 工具调用前）
+   ↓
+node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/block-cd.js
+   ↓  读取 stdin 的 tool_input.command 与 cwd：
+   ↓    剥离子 shell / 命令替换 → 切分顶层片段 → 逐个判定 cd
+   ↓    存在会改变 cwd 的独立 cd → exit 2 阻断（stderr 输出改法指引）
+   ↓    全部是子 shell cd / no-op cd（目标解析后等于当前 cwd） → exit 0 放行
 ```
 
 ## 安装
@@ -70,16 +86,19 @@ node scripts/install-codex.js --plugins=working-discipline --scope=user
 
 ```text
 plugins/working-discipline/
-├── .claude-plugin/plugin.json    # hook 注册
-├── hooks/working-discipline.js   # UserPromptSubmit 注入脚本
+├── .claude-plugin/plugin.json      # hook 注册（注入 + 拦截）
+├── hooks/
+│   ├── working-discipline.js       # UserPromptSubmit / SubagentStart 注入脚本
+│   └── guards/block-cd.js          # PreToolUse 拦截脚本（阻断污染 cwd 的独立 cd）
 └── README.md
 ```
 
 ## 与其他插件的关系
 
 - 与 `omp` 插件互补：omp 的 `orchestrator-protocol-remind.js` 注入 omp 编排协议（强制委派 omp 子代理），本插件注入通用工作纪律（覆盖 Claude 原生 Agent 工具），二者可并行启用
-- 与 `devkit-core` 的 `block-cd.js` / `guard-full-read.js` 互补：那些是 `PreToolUse` 拦截器，本插件是 `UserPromptSubmit` 注入器，触发时机与作用对象不同
+- `block-cd.js` 原属 `devkit-core`，自本插件 1.3.0 起迁入此处，与「工作纪律」定位归并（devkit-core 自 5.1.0 起不再内置任何 hook）；同批删除的 `guard-full-read.js`（大文件全文读取拦截）因与「精确读文件」注入纪律重复，未一并迁入
 
 ## 自定义
 
-如需调整注入内容（增删条款 / 切换风格），直接编辑 `hooks/working-discipline.js` 内的 `prompt` 数组即可，每行是 markdown 的一行。
+- 调整注入内容（增删条款 / 切换风格）：直接编辑 `hooks/working-discipline.js` 内各 `SECTION_*` 数组即可，每行是 markdown 的一行
+- 调整 cd 拦截行为（阈值、放行场景）：编辑 `hooks/guards/block-cd.js`

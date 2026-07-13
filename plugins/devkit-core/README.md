@@ -49,7 +49,6 @@
 ```text
 plugins/devkit-core/
 ├── .claude-plugin/plugin.json
-├── hooks/
 └── skills/
     ├── bugfix/
     ├── deps-investigator/
@@ -67,3 +66,4 @@ plugins/devkit-core/
 - `bugfix` 已替代原 `issue-debug` 与 `issue-fix`
 - `dev-feature`、`dev-review`、`dev-test`、`init`、`planner`、`ui-ux-designer`、`get-current-datetime` 已从当前插件中移除
 - 该插件不再声明独立 Git 技能，相关能力建议交由专门插件提供
+- 自 5.1.0 起不再内置任何 hook：`guard-full-read.js`（大文件全文读取拦截）已删除；`block-cd.js`（污染 cwd 的独立 `cd` 拦截）已迁至 `working-discipline` 插件
