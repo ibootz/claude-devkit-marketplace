@@ -76,7 +76,7 @@
       "source": "./plugins/working-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律注入 + 拦截 - 上下文管理 / 子代理协作（在飞≤16 动态上限·嵌套≤2 软约束）/ 表达约束（含求真·简体中文·列表编号）/ 思维模式（含落地写 md 前的受众分辨）/ Agent 工具派发。UserPromptSubmit 覆盖主会话、SubagentStart 覆盖子代理；PreToolUse 硬拦截污染 cwd 的独立 cd 命令。零 skill，适合全局开启",
-      "version": "1.3.4"
+      "version": "1.3.5"
     },
     {
       "name": "discover-unknowns",

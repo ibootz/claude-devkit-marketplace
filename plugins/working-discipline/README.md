@@ -1,86 +1,119 @@
 # Working Discipline
 
-**版本**: 1.3.4
-**作者**: zhangq
-**许可证**: MIT
+一个纯 hook 插件，用两种方式把「AI 工作纪律」落到 Claude Code 上：
 
-向 Claude 上下文注入一份 **AI 工作纪律**，覆盖上下文管理、子代理协作、表达约束、思维模式、Agent 工具派发五个维度，让 AI 的产出与协作行为保持在可审计、可复用的轨道上。通过两个注入 hook 覆盖主会话与子代理：`UserPromptSubmit` 在主会话每轮注入完整纪律，`SubagentStart` 在子代理启动时注入精简版纪律（补齐 subagent 覆盖缺口）。
+1. **注入**：每轮往主会话、以及每次子代理启动时的 context 里，塞入一份可审计、可复用的行为准则
+2. **拦截**：Bash 工具执行前，硬拦截会污染会话 cwd 的独立 `cd` 命令
 
-除注入外，本插件还带一个 **`PreToolUse` 硬拦截 hook**（`block-cd`）：Bash 工具的 cwd 在多次调用之间持久保留，AI 一旦执行独立 `cd`（如 `cd /tmp`）就会污染会话工作目录、让后续相对路径全部失准。`block-cd` 在这类命令真正执行前 exit 2 阻断并引导改用绝对路径或子 shell `(cd /path && cmd)`。它把「不许污染 cwd」这条工作纪律从软性提示升级为硬性拦截。
+零 skill、零命令、零子代理，装了就生效。不修改用户文件，无副作用。
 
 ---
 
-## 插件定位
+## 什么时候用
 
-- 三个 hook：`UserPromptSubmit`（主会话每轮注入）+ `SubagentStart`（子代理启动时注入）+ `PreToolUse`（Bash 命令执行前拦截 `block-cd`），零 skill、零命令、零子代理
-- 不依赖任何项目结构与外部工具
-- 适合作为**全局基线**长期开启（用户级安装），任何项目都能受益
-- 注入 hook 仅约束 AI 行为、不修改用户文件；`block-cd` 只拦截会污染 cwd 的独立 `cd`（子 shell、命令替换、no-op cd 均放行），不改动任何文件，无副作用
+- 想让 Claude 的行为在长会话、多 agent 协作里更规整、更可预测
+- 被 AI 独立 `cd /tmp` 之后所有相对路径失准坑过
+- 团队或个人想固化一套「工作纪律基线」，任何项目都能开着
 
-## 注入内容概要
+## 什么时候不用
+
+- 项目里已有更严格的 `CLAUDE.md`，且不希望被通用纪律覆盖
+- 只是短会话、单文件微改，不想付出每轮注入的 token 成本
+
+---
+
+## 一、注入：主会话与子代理各注入什么
 
 | 维度 | 关键约束 | 主会话 | 子代理 |
 |------|---------|:---:|:---:|
-| **一、上下文纪律** | 精确路径/行号读文件、子代理优先、bash 输出限流 | ✅ | ✅ |
-| **二、子代理协作** | **在飞总量动态上限 16**（派发前 `TaskList` 统计）、**嵌套≤2 层软约束**、共享骨架文件、任务组合、结构化回执 | ✅ | ✅ |
-| **三、表达约束** | 不自造术语、关键对象点名、引用自带信息、待确认四要素、行号引用、求真、简体中文、有序列表编号 | ✅ | ✅ |
-| **四、思维模式** | 举一反三 / 整体 / 第一性 / 逆向 / 自查自纠 / 读者视角 / 落地写 md 前的受众分辨（按需触发） | ✅ | — |
-| **五、Agent 工具派发** | subagent_type × model 路由表、显式 model 指定、成本意识 | ✅ | — |
+| 一、上下文纪律 | 精确路径读文件、子代理优先、bash 输出限流 | ✅ | ✅ |
+| 二、子代理协作 | 在飞≤16、嵌套≤2、共享骨架文件、结构化回执 | ✅ | ✅ |
+| 三、表达约束 | 关键对象点名、待确认四要素、行号引用、简体中文、列表编号 | ✅ | ✅ |
+| 四、思维模式 | 举一反三 / 整体 / 第一性 / 逆向 / 自查自纠 / 读者视角 / 写 md 前受众分辨 | ✅ | — |
+| 五、Agent 派发 | subagent_type × model 路由表、显式 model、成本意识 | ✅ | — |
 
-> 子代理版（`SubagentStart`）只注入一、二、三节——四、五两节主要指导父代理如何派发，对子代理自身无意义，故略去以省 token。
+子代理版只带一~三节。四、五两节主要是指导父代理如何派发子代理，对子代理自身无意义，故省 token 略去。
 
-### 关于"在飞≤16"与"嵌套≤2"的性质说明
+> 完整注入文本见 `hooks/working-discipline.js` 里的 `SECTION_*` 数组。
 
-这两条是**纪律软约束**，靠注入文本让 AI 自觉遵守，不是 Claude Code 的硬限制：
+## 二、拦截：`block-cd` 挡住污染 cwd 的独立 `cd`
 
-- **在飞≤16**：Claude Code 无并发数原生配置；规则要求每次派发前用 `TaskList` 统计 status=running 的在飞子代理，控制全系统在飞总量 ≤16。
-- **嵌套≤2**：Claude Code 原生嵌套硬上限为 **5 层且不可配置**（`SubagentStart` 也无法拦截派发），故 2 层限制只能作为软约束由各层自觉传递——第 1 层子代理在给第 2 层写 prompt 时须写明"禁止再派 subagent"。
+Bash 工具的 cwd 在多次调用之间**持久保留**。AI 中间执行一次 `cd /tmp`，后续所有相对路径操作都会失准——排查半天才发现是 cwd 被静默改掉了。
 
-## 工作机制
+`block-cd` 在 `PreToolUse` 里扫描每条 Bash 命令：
 
-### 注入 hook（working-discipline.js）
+- **阻断**（exit 2）：命令链里存在会真正改动 cwd 的独立 `cd`，stderr 输出改写指引
+- **放行**（exit 0）：
+  - 子 shell：`(cd /path && cmd)`，cwd 不回流父进程
+  - 命令替换：`$(cd /path && pwd)`、`` `cd /path && pwd` ``
+  - 字符串内的 `cd`：`echo "cd /tmp"`、`git commit -m "cd fix"`
+  - **no-op cd**：目标解析后等于当前 cwd（`cd .`、`cd ./`、`cd <当前目录绝对路径>`）
 
-```text
-UserPromptSubmit（主会话每轮）  或  SubagentStart（子代理启动时）
-   ↓
-node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js
-   ↓  读取 stdin 的 hook_event_name 分流：
-   ↓    UserPromptSubmit → 完整纪律（一~五节）
-   ↓    SubagentStart    → 子代理版纪律（一、二、三节）
-   ↓
-stdout 输出 { hookSpecificOutput: { hookEventName, additionalContext } }
-   ↓
-Claude Code 把 additionalContext 拼接进对应上下文
-（SubagentStart 的注入进子代理自己的 transcript，不入主会话）
-```
-
-### 拦截 hook（guards/block-cd.js）
-
-```text
-PreToolUse（Bash 工具调用前）
-   ↓
-node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/block-cd.js
-   ↓  读取 stdin 的 tool_input.command 与 cwd：
-   ↓    剥离子 shell / 命令替换 → 切分顶层片段 → 逐个判定 cd
-   ↓    存在会改变 cwd 的独立 cd → exit 2 阻断（stderr 输出改法指引）
-   ↓    全部是子 shell cd / no-op cd（目标解析后等于当前 cwd） → exit 0 放行
-```
+---
 
 ## 安装
 
-### Claude Code
+**Claude Code**
 
 ```bash
 /plugin install working-discipline@claude-devkit-marketplace
 ```
 
-### Codex CLI
+**Codex CLI**（用户级安装，对所有项目生效）
 
 ```bash
 node scripts/install-codex.js --plugins=working-discipline --scope=user
 ```
 
-`--scope=user` 会写入用户目录，对所有项目生效。
+---
+
+## 工作机制速览
+
+**注入 hook**（`hooks/working-discipline.js`）
+
+```text
+UserPromptSubmit（主会话每轮） 或 SubagentStart（子代理启动时）
+   ↓
+node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js
+   ↓  读 stdin 的 hook_event_name 分流：
+   ↓    UserPromptSubmit → 完整纪律（一~五节）
+   ↓    SubagentStart    → 精简纪律（一~三节）
+   ↓
+stdout 输出 { hookSpecificOutput: { hookEventName, additionalContext } }
+   ↓
+Claude Code 把 additionalContext 拼进对应 context
+（SubagentStart 的注入只进子代理自己的 transcript，不入主会话）
+```
+
+**拦截 hook**（`hooks/guards/block-cd.js`）
+
+```text
+PreToolUse（Bash 工具调用前）
+   ↓
+node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/block-cd.js
+   ↓  读 stdin 的 tool_input.command 与 cwd：
+   ↓    剥离子 shell / 命令替换 → 切分顶层片段 → 逐个判定 cd
+   ↓    存在会改变 cwd 的独立 cd → exit 2 阻断（stderr 输出改法指引）
+   ↓    全部是子 shell cd 或 no-op cd → exit 0 放行
+```
+
+---
+
+## 深入话题
+
+### 「在飞≤16」和「嵌套≤2」是纪律软约束
+
+这两条不是 Claude Code 的硬限制，是靠注入文本让 AI 自觉遵守：
+
+- **在飞≤16**：Claude Code 没有并发数的原生配置。规则要求 AI 每次派发前用 `TaskList` 统计 `status=running` 的在飞子代理，全系统总量控制在 16 以内。
+- **嵌套≤2**：Claude Code 原生嵌套硬上限是 **5 层且不可配置**，`SubagentStart` 也无法拦截派发行为。所以 2 层限制只能由各层自觉传递——第 1 层子代理在给第 2 层写 prompt 时，须明确写「你是第 2 层子代理，禁止再派任何 subagent」。
+
+### 与其他插件的关系
+
+- 与 `omp` 插件互补：`omp` 的 `orchestrator-protocol-remind.js` 注入 omp 编排协议（强制委派 omp 子代理），本插件注入通用工作纪律（覆盖 Claude 原生 Agent 工具）——二者可并行启用。
+- `block-cd.js` 原本在 `devkit-core`，本插件 1.3.0 起迁入此处；`devkit-core` 自 5.1.0 起不再内置任何 hook。同批删除的 `guard-full-read.js`（大文件全文读取拦截）因与「精确读文件」注入纪律重复，未一并迁入。
+
+---
 
 ## 目录结构
 
@@ -88,17 +121,16 @@ node scripts/install-codex.js --plugins=working-discipline --scope=user
 plugins/working-discipline/
 ├── .claude-plugin/plugin.json      # hook 注册（注入 + 拦截）
 ├── hooks/
-│   ├── working-discipline.js       # UserPromptSubmit / SubagentStart 注入脚本
-│   └── guards/block-cd.js          # PreToolUse 拦截脚本（阻断污染 cwd 的独立 cd）
+│   ├── working-discipline.js       # UserPromptSubmit / SubagentStart 注入
+│   └── guards/block-cd.js          # PreToolUse 拦截（阻断污染 cwd 的独立 cd）
 └── README.md
 ```
 
-## 与其他插件的关系
-
-- 与 `omp` 插件互补：omp 的 `orchestrator-protocol-remind.js` 注入 omp 编排协议（强制委派 omp 子代理），本插件注入通用工作纪律（覆盖 Claude 原生 Agent 工具），二者可并行启用
-- `block-cd.js` 原属 `devkit-core`，自本插件 1.3.0 起迁入此处，与「工作纪律」定位归并（devkit-core 自 5.1.0 起不再内置任何 hook）；同批删除的 `guard-full-read.js`（大文件全文读取拦截）因与「精确读文件」注入纪律重复，未一并迁入
-
 ## 自定义
 
-- 调整注入内容（增删条款 / 切换风格）：直接编辑 `hooks/working-discipline.js` 内各 `SECTION_*` 数组即可，每行是 markdown 的一行
-- 调整 cd 拦截行为（阈值、放行场景）：编辑 `hooks/guards/block-cd.js`
+- 增删注入条款 / 切换风格 → 编辑 `hooks/working-discipline.js` 里的 `SECTION_*` 数组，每行是 markdown 一行
+- 调整 `cd` 拦截行为（阈值、放行场景） → 编辑 `hooks/guards/block-cd.js`
+
+---
+
+版本 1.3.5 · 作者 zhangq · MIT
