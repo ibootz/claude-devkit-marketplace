@@ -26,13 +26,14 @@
 
 | 维度 | 关键约束 | 主会话 | 子代理 |
 |------|---------|:---:|:---:|
-| 一、上下文纪律 | 精确路径读文件、子代理优先、bash 输出限流 | ✅ | ✅ |
+| 一、上下文纪律 | 精确路径读文件、子代理优先、bash 输出限流、macOS 中文路径防漏检（NFC/NFD） | ✅ | ✅ |
 | 二、子代理协作 | 在飞≤16、嵌套≤2、共享骨架文件、结构化回执 | ✅ | ✅ |
 | 三、表达约束 | 关键对象点名、待确认四要素、行号引用、简体中文、列表编号 | ✅ | ✅ |
 | 四、思维模式 | 举一反三 / 整体 / 第一性 / 逆向 / 自查自纠 / 读者视角 / 写 md 前受众分辨 | ✅ | — |
 | 五、Agent 派发 | subagent_type × model 路由表、显式 model、成本意识 | ✅ | — |
+| 六、外部写操作授权 | dws 钉钉 CLI 默认只读；写操作（发消息/写删文档/写表格等）须逐批出示内容清单获用户当次明确许可；上游放行不算授权；叫停即冻结 | ✅ | ✅ |
 
-子代理版只带一~三节。四、五两节主要是指导父代理如何派发子代理，对子代理自身无意义，故省 token 略去。
+子代理版带一~三、六节。四、五两节主要是指导父代理如何派发子代理，对子代理自身无意义，故省 token 略去；六节必须进子代理版——general-purpose 子代理带 Bash 权限，同样能执行 `dws` 写命令（章节编号与主版一致，故子代理版编号跳过四、五）。
 
 > 完整注入文本见 `hooks/working-discipline.js` 里的 `SECTION_*` 数组。
 
@@ -76,8 +77,8 @@ UserPromptSubmit（主会话每轮） 或 SubagentStart（子代理启动时）
    ↓
 node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js
    ↓  读 stdin 的 hook_event_name 分流：
-   ↓    UserPromptSubmit → 完整纪律（一~五节）
-   ↓    SubagentStart    → 精简纪律（一~三节）
+   ↓    UserPromptSubmit → 完整纪律（一~六节）
+   ↓    SubagentStart    → 精简纪律（一~三、六节）
    ↓
 stdout 输出 { hookSpecificOutput: { hookEventName, additionalContext } }
    ↓
@@ -133,4 +134,4 @@ plugins/working-discipline/
 
 ---
 
-版本 1.3.5 · 作者 zhangq · MIT
+版本 1.4.1 · 作者 zhangq · MIT

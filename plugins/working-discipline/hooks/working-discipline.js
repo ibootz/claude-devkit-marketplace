@@ -37,7 +37,7 @@ const SECTION_CONTEXT = [
   '- 读取文件前先确定检索目标，用精确路径和行号范围查询，禁止无目的全文件读取',
   '- 尽可能使用**可并行子代理**处理任务，避免大量中间结果占据主上下文',
   '- 可能产生 >20 行输出的命令（git log/diff、npm test、gh、docker logs、各类 list/dump 等），优先交给子代理执行（通过 `Agent` 工具调用，模型显式选 `haiku`（机械执行/规整提取）或 `sonnet`（需语义推理）），子代理在独立上下文中分析并返回摘要',
-  '- **bash 输出限流（必做）**：执行前估不准输出量的命令（list/dump/log/diff/find），必须先做限流——`| wc -l` 探测体量、`| head -N` 截断、`| grep <key>` 过滤、或 `> /tmp/x.txt && grep ...` 落盘后选择性读',
+  '- **macOS 中文路径静默漏检（必防）**：macOS 下 git 输出的路径是 NFC 归一形态（`core.precomposeunicode`），磁盘上实际文件名则常是 NFD 分解形态——中文等非 ASCII 路径两种形态字节不同、肉眼全同，一律按"可能不一致"防御。后果：grep/diff 按字节比较，跨源比对（一边来自 git 输出、一边来自磁盘 find/ls 枚举）会静默匹配不上；git 输出的路径直接拼作文件参数，在部分文件系统（SMB/NFS/Linux 容器卷等）上报 No such file，报错再被 `2>/dev/null` 吞掉后，空结果就会被误读成"确实没有"。规避：a) 非 ASCII 路径检索优先 git 单源闭环（`git grep` / `git ls-files`），不与磁盘枚举结果互相 grep；b) 必须跨源比对时先统一形态（`iconv -f UTF-8-MAC -t UTF-8` 将 NFD 转 NFC）或把路径中非 ASCII 段换成 glob 通配 `*`；c) 探测/统计类命令禁挂 `2>/dev/null`；d) 「非 ASCII 路径 + 空结果」不得直接判"没有"——先 `ls` 父目录确认实体是否存在再下结论',
 ].join('\n')
 
 const SECTION_SUBAGENT = [
@@ -175,6 +175,15 @@ const SECTION_DISPATCH = [
   '- 升 `opus` 或 `fable` 时，`prompt` 里显式点明"已知失败/难点是什么、上一档失败的具体表现"，避免高档模型盲跑走弯路',
 ].join('\n')
 
+const SECTION_EXTERNAL_WRITE = [
+  '## 六、外部系统写操作授权（dws 钉钉 CLI）',
+  '',
+  '- **默认只读**：`dws` CLI 只允许只读操作（list / get / search / read / detail / status / download / export 等查询类）。**任何写操作未经用户当次明确许可一律禁止**——包括但不限于：发送消息（`chat message send` / `send-by-bot` / `send-by-webhook` / `send-card`、`ding message send`）、撤回消息（recall 类）、创建/编辑/删除钉钉文档（`doc create` / `update` / `delete` / `block` 写类 / `permission update` / `move` / `copy`）、写电子表格与 AI 表格（`sheet` 写类、`aitable` 的 record / field / table / base / view 增删改）、云盘上传删除、日程 / 待办 / 审批 / 邮件 / 日志的创建修改发送。判定准则：**凡会改变钉钉侧任何数据、或让任何人收到任何消息的命令都是写操作；拿不准的一律按写操作处理**。',
+  '- **授权粒度 = 单批次**：执行前必须把完整内容清单出示给用户（发消息 = 逐条收件人 + 消息全文；写文档/表格 = 目标对象 + 具体改动内容），获得用户对**该批次**的明确同意后才执行，执行后如实报告结果。上游环节的放行（如「发单」「开始跑」「继续」「按方案执行」）**不构成**对 dws 写操作的授权；一次同意只覆盖当次出示的那一批，新批次必须重新出示、重新确认。',
+  '- **叫停即冻结**：用户叫停后立即停止，冻结全部后续 dws 写操作直到用户重新授权；主动告知已执行部分与可撤回选项（如 `dws chat message recall`）。',
+  '- **子代理传染性**：派发的子代理任务可能触及 dws 命令时，prompt 必须原文携带本节约束；未获用户授权的任务只允许子代理产出「待发内容清单」，禁止其执行任何发送/写入。',
+].join('\n')
+
 // ── 按事件组合注入内容 ────────────────────────────────────────────
 
 function buildMainPrompt() {
@@ -190,12 +199,16 @@ function buildMainPrompt() {
     SECTION_THINKING,
     '',
     SECTION_DISPATCH,
+    '',
+    SECTION_EXTERNAL_WRITE,
   ].join('\n')
 }
 
-// 子代理版：只带对子代理自身有意义的部分（上下文/协作/表达），
+// 子代理版：只带对子代理自身有意义的部分（上下文/协作/表达/外部写授权），
 // 去掉"思维模式全表"和"Agent 派发大路由表"以省 token；子代理如需再派下一层，
 // 上方"二、"已含在飞 16 上限与 2 层嵌套约束。
+// 注：SECTION_EXTERNAL_WRITE 必须进子代理版——general-purpose 子代理带 Bash 权限，
+// 同样能执行 dws 写命令；章节编号"六"与主版保持一致（子代理版故意跳号，同一字符串单一真相源）。
 function buildSubagentPrompt() {
   return [
     '# AI 工作纪律（子代理版）',
@@ -208,6 +221,8 @@ function buildSubagentPrompt() {
     SECTION_SUBAGENT,
     '',
     SECTION_EXPRESSION,
+    '',
+    SECTION_EXTERNAL_WRITE,
   ].join('\n')
 }
 
