@@ -85,6 +85,44 @@ Bash 工具的 cwd 在多次调用之间**持久保留**。AI 中间执行一次
 
 ---
 
+## 五、拦截：`agent-browser-headed` 挡住 headless 起动，指路怎么起可见 CFT
+
+**设计理由**：AI 会话用 agent-browser 时默认走 headless 模式起 Chrome for Testing（CFT）实例。虽然 CFT 与用户日常 Google Chrome 是两个不同的 app bundle（分别在 `/Users/zhangq/.agent-browser/browsers/chrome-*` 和 `/Applications/Google Chrome.app`），profile 也可以完全隔离，但 headless 模式下**用户视角看不到 AI 在操作什么**——AI 点了哪个按钮、填了什么表单、跳到了哪个 URL、遇到了什么弹窗，全都是黑箱。用户会误以为 AI 没启动实例、或在动自己的 Chrome。真实事故：2026-07-20 D-001 verify 期间 AI 用 headless 起 CFT 复现前端问题，用户看不到窗口质疑"你现在是创建了一个 headless 的 chrome 浏览器实例吗？为啥我看还是在向我使用的 chrome 实例进行权限申请呢"，AI 才发现 --headed 应该是硬要求。正确做法是 AI 必须用 `--headed` 起可见独立 CFT 窗口 + 用 `--profile <独立临时目录>` 指定独立 profile 目录，让用户能眼睛看到 AI 每一步操作、随时打断纠正、可视化调试。这条规范的原则是"AI 的自动化操作对用户可见，不做黑箱"。
+
+`agent-browser-headed` 在 `PreToolUse` 里扫描每条 Bash 命令，**同时满足以下三条**才拦截：
+
+- 命令里出现 `agent-browser` 或 `npx agent-browser`，且紧跟其后（同一顶层命令片段内，跳过 flag 与 flag 的值）能匹配到一个**启动类子命令**
+- 命令整串**缺** `--headed`（`--headed false` 视为显式选择 headless，不算缺）
+- 命令整串**不含** `AGENT_BROWSER_HEADED=true` 环境变量前缀
+
+**启动类子命令**（会真正拉起一个新 CFT 实例）：
+
+| 子命令 | 说明 |
+|--------|------|
+| `open` | 打开新页面/新实例 |
+| `connect` | 连接并拉起实例 |
+| `chat` | 仅当后面接了 URL 位置参数才算启动；纯 REPL 模式（`chat` 不带参数）不拦 |
+
+**探测/后续操作类子命令一律放行**（即使含 `agent-browser` 也不触发本规则）：只读探测（`skills` `doctor` `install` `upgrade`）、生命周期无关（`close` `mcp` `dashboard` `session` `plugin` `auth` `profiles` `confirm` `deny`）、后续操作类（browser 已启动后的动作，如 `snapshot` `click` `fill` `type` `screenshot` `eval` `network` `tab` 等一整套）。
+
+命中拦截时 `stderr` 输出：
+
+```text
+[L1-BLOCKER] tool=Bash check=agent-browser-headed finding="agent-browser {子命令} 缺 --headed;起 headless CFT 会让用户看不到 AI 操作过程" hint="改用 agent-browser --headed --profile /tmp/ab-<slug>-profile {子命令} <args>,起可见独立 CFT 窗口;若确实要 headless 显式加 --headed false 或前缀 AGENT_BROWSER_HEADED=true"
+```
+
+**放行场景**：子命令不属于启动类 / 命令含 `--headed`（含 `--headed false`）/ 命令含 `AGENT_BROWSER_HEADED=true` / `chat` 后没有 URL 位置参数（REPL 模式）。
+
+正确调用示例：
+
+```bash
+agent-browser --headed --profile /tmp/ab-dogfood-profile open https://example.com
+AGENT_BROWSER_HEADED=true agent-browser open https://example.com   # 环境变量放行，等价效果
+agent-browser --headed false open https://example.com              # 显式选择 headless，允许
+```
+
+---
+
 ## 安装
 
 **Claude Code**
@@ -158,6 +196,21 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/claude-md-max-lines.js
    ↓    行数 ≤ 200 → exit 0 放行
 ```
 
+**拦截 hook**（`hooks/guards/agent-browser-headed.js`）
+
+```text
+PreToolUse（Bash 工具调用前）
+   ↓
+node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-browser-headed.js
+   ↓  读 stdin 的 tool_input.command：
+   ↓    不含 agent-browser → exit 0 放行
+   ↓    命令整串含 --headed / --headed false / AGENT_BROWSER_HEADED=true → exit 0 放行
+   ↓    切分顶层片段 → 定位 agent-browser（或 npx agent-browser）→ 匹配子命令
+   ↓    子命令不属于启动类（open/connect/chat） → exit 0 放行
+   ↓    chat 子命令且无 URL 位置参数（REPL 模式） → exit 0 放行
+   ↓    其余情况（启动类子命令 + 缺 --headed） → exit 2 阻断（stderr 输出改法指引）
+```
+
 ---
 
 ## 深入话题
@@ -174,6 +227,7 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/claude-md-max-lines.js
 - 与 `omp` 插件互补：`omp` 的 `orchestrator-protocol-remind.js` 注入 omp 编排协议（强制委派 omp 子代理），本插件注入通用工作纪律（覆盖 Claude 原生 Agent 工具）——二者可并行启用。
 - `block-cd.js` 原本在 `devkit-core`（现已更名 `devkit-tool`），本插件 1.3.0 起迁入此处；`devkit-tool` 自 5.1.0 起不再内置任何 hook。同批删除的 `guard-full-read.js`（大文件全文读取拦截）因与「精确读文件」注入纪律重复，未一并迁入。
 - `max-source-lines.js` / `claude-md-max-lines.js` 与另一个插件 `quality-lint` 的 md 200 行拦截是同类思路（`PostToolUse` 拦 Write/Edit、`[L1-BLOCKER]` 输出格式）但各自独立实现——两个插件归属不同、不互相依赖，`quality-lint` 管的是文档质量的通用规则，本插件这两条是「最高宪法」层面单独声明的行数硬约束。
+- `agent-browser-headed.js` 只管 `agent-browser` CLI 的启动参数（`--headed`），不涉及浏览器自动化能力本身；具体怎么用 agent-browser 走各会话的个人 memory / 全局 CLAUDE.md 约定（如是否用 `--profile` 指向独立临时目录），本插件只负责在缺 `--headed` 时硬拦。
 
 ---
 
@@ -186,6 +240,7 @@ plugins/working-discipline/
 │   ├── working-discipline.js       # UserPromptSubmit / SubagentStart 注入
 │   └── guards/
 │       ├── block-cd.js             # PreToolUse 拦截（阻断污染 cwd 的独立 cd）
+│       ├── agent-browser-headed.js # PreToolUse 拦截（agent-browser 启动类命令缺 --headed）
 │       ├── max-source-lines.js     # PostToolUse 拦截（单一源码文件超 1000 行）
 │       └── claude-md-max-lines.js  # PostToolUse 拦截（CLAUDE.md 超 200 行，指路拆到 .claude/rules/）
 └── README.md
@@ -195,9 +250,10 @@ plugins/working-discipline/
 
 - 增删注入条款 / 切换风格 → 编辑 `hooks/working-discipline.js` 里的 `SECTION_*` 数组，每行是 markdown 一行
 - 调整 `cd` 拦截行为（阈值、放行场景） → 编辑 `hooks/guards/block-cd.js`
+- 调整 agent-browser 启动类子命令 / 白名单子命令 → 编辑 `hooks/guards/agent-browser-headed.js` 里的 `LAUNCH_SUBCOMMANDS` / `ALLOWLIST_SUBCOMMANDS`
 - 调整源码文件行数阈值 / 扩展名列表 → 编辑 `hooks/guards/max-source-lines.js` 里的 `LINE_LIMIT` / `SOURCE_EXTENSIONS`
 - 调整 CLAUDE.md 行数阈值 / 排除目录 → 编辑 `hooks/guards/claude-md-max-lines.js` 里的 `LINE_LIMIT` / `EXCLUDED_SEGMENT_PATTERN`
 
 ---
 
-版本 1.5.0 · 作者 zhangq · MIT
+版本 1.6.0 · 作者 zhangq · MIT
