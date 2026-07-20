@@ -3,7 +3,7 @@
 一个纯 hook 插件，用两种方式把「AI 工作纪律」落到 Claude Code 上：
 
 1. **注入**：每轮往主会话、以及每次子代理启动时的 context 里，塞入一份可审计、可复用的行为准则
-2. **拦截**：Bash 工具执行前硬拦截污染 cwd 的独立 `cd` 命令；Write/Edit 工具写入完成后硬拦截超 1000 行的单一源码文件、超 200 行的 CLAUDE.md
+2. **拦截**：Bash 工具执行前硬拦截污染 cwd 的独立 `cd` 命令、缺 `--headed`/缺 `--profile` 的 `agent-browser` 启动类命令；Write/Edit 工具写入完成后硬拦截超 1000 行的单一源码文件、超 200 行的 CLAUDE.md
 
 零 skill、零命令、零子代理，装了就生效。不修改用户文件（拦截类 hook 只阻断"继续往下走"，不撤销已完成的写入），无副作用。
 
@@ -50,6 +50,24 @@ Bash 工具的 cwd 在多次调用之间**持久保留**。AI 中间执行一次
   - 字符串内的 `cd`：`echo "cd /tmp"`、`git commit -m "cd fix"`
   - **no-op cd**：目标解析后等于当前 cwd（`cd .`、`cd ./`、`cd <当前目录绝对路径>`）
 
+### Known Limitation：跨插件 cd 探测差异
+
+`block-cd` 只保证"AI 自己的 cwd 不被污染"，但它**不能**保证其他插件对同一条命令的 cwd 探测逻辑与 AI 实际使用的语法兼容——这是一个跨插件的已知局限，遇到时不要去改对方插件的探测逻辑，改 AI 自己发出的命令语法即可规避。
+
+**事故来源（2026-07-20，D-001-feat-job-sequence-model 会话）**：上一轮 subagent 在 commit `7b88241` 之后要把改动 push 到 `claude-devkit-marketplace`（一个与当前项目完全无关的第三方仓库），用的命令是 `(cd /Users/zhangq/Workspace/mine/claude-devkit-marketplace && git push origin main)`——这条命令本身完全合法，`block-cd` 也正常放行（子 shell 语法，cwd 不回流父进程）。但推送被同时装着的 **sdlc 插件**的 `hooks/ontology-push-guard.js` 拦截，报错「BLOCKED: ontology 正向同步未收口 for D-001-feat-job-sequence-model」——这条错误信息里提到的 delivery 分支跟 `claude-devkit-marketplace` 毫无关系，是一次跨仓库误伤。
+
+追下去发现根因在 sdlc 插件的 `hooks/lib/worktree-utils.js:317-345` 的 `resolveGitCwd()` 函数：它需要判定"这条 git 命令实际作用于哪个仓库"，用的识别手段是正则 `/^cd\s+.../` 匹配命令字符串**开头**的 `cd` 前缀（第 328-342 行同时显式支持 `git -C <path>` 这种全局选项形式）。`block-cd` 教 AI 用的子 shell 语法 `(cd /path && cmd)` 带括号、不以 `cd` 开头，那个正则天然匹配不上；`resolveGitCwd()` 找不到显式 cwd 声明后，fall back 到 `stdinCwd`（也就是当前 Claude 会话所在的 worktree），于是把发往 `claude-devkit-marketplace` 的 push 误认成是 D-001 delivery 分支的 push，触发了一个完全不相关的 ontology 收口门禁。
+
+**推荐用法**：涉及 git 命令时，优先直接用 `git -C <path> <cmd>`，而不是 `(cd /path && git ...)` 子 shell 语法——`-C` 是 git 官方支持的全局选项，语义等价（"以 `<path>` 作为 git 操作的工作目录"），但字面上不含 `cd` token、不进子 shell，`block-cd` 本身放行（天然不触发 `CD_PATTERN`），且各类插件的 cwd 探测正则（如上面这个 sdlc 插件的例子）通常会显式支持 `-C` 这种标准写法。例如：
+
+```bash
+git -C /Users/zhangq/Workspace/mine/claude-devkit-marketplace push origin main
+git -C /abs/path/to/repo status
+git -C /abs/path/to/repo log --oneline -5
+```
+
+非 git 命令（如任意 shell 命令）仍然只能走 `(cd /path && cmd)` 子 shell 语法——`-C` 是 git 专有选项，不是通用 shell 机制。本节仅描述现象与规避方法，`block-cd.js` 本身的核心拦截逻辑（识别独立 `cd`）未改动，只在拦截时的 stderr 提示里追加了这段教育文字（见 `hooks/guards/block-cd.js` 第 5 条指引）。
+
 ---
 
 ## 三、拦截：`max-source-lines` 挡住超 1000 行的单一源码文件
@@ -85,15 +103,20 @@ Bash 工具的 cwd 在多次调用之间**持久保留**。AI 中间执行一次
 
 ---
 
-## 五、拦截：`agent-browser-headed` 挡住 headless 起动，指路怎么起可见 CFT
+## 五、拦截：`agent-browser-launch` 挡住 headless 起动 / 缺 profile 起动，指路怎么起可见且能复用登录态的 CFT
 
-**设计理由**：AI 会话用 agent-browser 时默认走 headless 模式起 Chrome for Testing（CFT）实例。虽然 CFT 与用户日常 Google Chrome 是两个不同的 app bundle（分别在 `/Users/zhangq/.agent-browser/browsers/chrome-*` 和 `/Applications/Google Chrome.app`），profile 也可以完全隔离，但 headless 模式下**用户视角看不到 AI 在操作什么**——AI 点了哪个按钮、填了什么表单、跳到了哪个 URL、遇到了什么弹窗，全都是黑箱。用户会误以为 AI 没启动实例、或在动自己的 Chrome。真实事故：2026-07-20 D-001 verify 期间 AI 用 headless 起 CFT 复现前端问题，用户看不到窗口质疑"你现在是创建了一个 headless 的 chrome 浏览器实例吗？为啥我看还是在向我使用的 chrome 实例进行权限申请呢"，AI 才发现 --headed 应该是硬要求。正确做法是 AI 必须用 `--headed` 起可见独立 CFT 窗口 + 用 `--profile <独立临时目录>` 指定独立 profile 目录，让用户能眼睛看到 AI 每一步操作、随时打断纠正、可视化调试。这条规范的原则是"AI 的自动化操作对用户可见，不做黑箱"。
+**设计理由（--headed 部分）**：AI 会话用 agent-browser 时默认走 headless 模式起 Chrome for Testing（CFT）实例。虽然 CFT 与用户日常 Google Chrome 是两个不同的 app bundle（分别在 `/Users/zhangq/.agent-browser/browsers/chrome-*` 和 `/Applications/Google Chrome.app`），profile 也可以完全隔离，但 headless 模式下**用户视角看不到 AI 在操作什么**——AI 点了哪个按钮、填了什么表单、跳到了哪个 URL、遇到了什么弹窗，全都是黑箱。用户会误以为 AI 没启动实例、或在动自己的 Chrome。真实事故：2026-07-20 D-001 verify 期间 AI 用 headless 起 CFT 复现前端问题，用户看不到窗口质疑"你现在是创建了一个 headless 的 chrome 浏览器实例吗？为啥我看还是在向我使用的 chrome 实例进行权限申请呢"，AI 才发现 --headed 应该是硬要求。
 
-`agent-browser-headed` 在 `PreToolUse` 里扫描每条 Bash 命令，**同时满足以下三条**才拦截：
+**设计理由（--profile 部分）**：同一 D-001 会话里加了 `--headed` 硬要求之后，暴露出第二个问题——AI 默认用一次性临时 profile 目录（如 `/tmp/ab-spsd-d001-profile`）起 CFT，profile 目录里没有任何登录态，导致**每次会话都要在浏览器里重新登录一遍业务系统**（手动登录拿 token 再注入 URL），浪费大量时间。用户拍板方案：硬要求 `--profile`（或等价的 `AGENT_BROWSER_PROFILE` 环境变量），引导 AI 复用一个用户在日常 Chrome 里专门建立、一次性登录好业务系统的 "AI Testing" profile 目录（与用户日常用的 `Default` profile 物理隔离，不会互相抢 `SingletonLock`），登录态跨会话持久化；纯隔离测试场景仍可以用 `--profile "$(mktemp -d)"` 之类的独立临时目录满足这条硬性要求（不复用登录态，但也不违反规则）。具体如何创建与使用 "AI Testing" profile 见本节末尾子章节。
 
-- 命令里出现 `agent-browser` 或 `npx agent-browser`，且紧跟其后（同一顶层命令片段内，跳过 flag 与 flag 的值）能匹配到一个**启动类子命令**
-- 命令整串**缺** `--headed`（`--headed false` 视为显式选择 headless，不算缺）
-- 命令整串**不含** `AGENT_BROWSER_HEADED=true` 环境变量前缀
+这条规范的原则是"AI 的自动化操作对用户可见，不做黑箱；且默认应该复用登录态，不强迫用户反复登录"。
+
+`agent-browser-launch`（原名 `agent-browser-headed`，2026-07-20 因职责扩展为同时管 `--headed` 与 `--profile` 而改名）在 `PreToolUse` 里扫描每条 Bash 命令：
+
+- 先判定命令里出现 `agent-browser` 或 `npx agent-browser`，且紧跟其后（同一顶层命令片段内，跳过 flag 与 flag 的值）能匹配到一个**启动类子命令**——不是启动类子命令一律放行
+- 对匹配到启动类子命令的调用，**以下两条独立检查，命中任意一条就拦截**（两条都缺时，`finding`/`hint` 会把两个问题都列出来）：
+  1. 命令整串**缺** `--headed`（`--headed false` 视为显式选择 headless，不算缺）且**不含** `AGENT_BROWSER_HEADED=true` 环境变量前缀
+  2. 该 agent-browser 调用**缺** `--profile <值>`（或 `--profile=<值>`，值本身不做路径合法性校验，交给 agent-browser CLI 自己校验）且**不含** `AGENT_BROWSER_PROFILE=<值>` 环境变量前缀
 
 **启动类子命令**（会真正拉起一个新 CFT 实例）：
 
@@ -105,21 +128,56 @@ Bash 工具的 cwd 在多次调用之间**持久保留**。AI 中间执行一次
 
 **探测/后续操作类子命令一律放行**（即使含 `agent-browser` 也不触发本规则）：只读探测（`skills` `doctor` `install` `upgrade`）、生命周期无关（`close` `mcp` `dashboard` `session` `plugin` `auth` `profiles` `confirm` `deny`）、后续操作类（browser 已启动后的动作，如 `snapshot` `click` `fill` `type` `screenshot` `eval` `network` `tab` 等一整套）。
 
-命中拦截时 `stderr` 输出：
+命中拦截时 `stderr` 输出（示例为两条都缺的情况；只缺一条时 `finding`/`hint` 只列那一条）：
 
 ```text
-[L1-BLOCKER] tool=Bash check=agent-browser-headed finding="agent-browser {子命令} 缺 --headed;起 headless CFT 会让用户看不到 AI 操作过程" hint="改用 agent-browser --headed --profile /tmp/ab-<slug>-profile {子命令} <args>,起可见独立 CFT 窗口;若确实要 headless 显式加 --headed false 或前缀 AGENT_BROWSER_HEADED=true"
+[L1-BLOCKER] tool=Bash check=agent-browser-launch finding="agent-browser open 缺 --headed;起 headless CFT 会让用户看不到 AI 操作过程;缺 --profile;不设置 profile 每次都要在浏览器里重新登录业务系统,无法复用登录态" hint="加 --headed 起可见独立 CFT 窗口(若确实要 headless 显式加 --headed false 或前缀 AGENT_BROWSER_HEADED=true);加 --profile <目录>(复用登录态用专门建的"AI Testing" Chrome profile 目录,纯隔离测试场景可用 --profile "$(mktemp -d)" 独立临时目录满足硬性要求;或前缀 AGENT_BROWSER_PROFILE=<目录>);示例:agent-browser --headed --profile \"/Users/<user>/Library/Application Support/Google/Chrome/Profile 1\" open <args>"
 ```
 
-**放行场景**：子命令不属于启动类 / 命令含 `--headed`（含 `--headed false`）/ 命令含 `AGENT_BROWSER_HEADED=true` / `chat` 后没有 URL 位置参数（REPL 模式）。
+**放行场景**：子命令不属于启动类 / `chat` 后没有 URL 位置参数（REPL 模式）/ 命令同时含 `--headed`（或 `AGENT_BROWSER_HEADED=true`）**且**含 `--profile <值>`（或 `AGENT_BROWSER_PROFILE=<值>`）。**注意 1.6.0 版本里的旧放行示例 `agent-browser --headed open https://example.com`（只带 `--headed` 不带 `--profile`）在 1.7.0 起会被拦截**——这是本次改动带来的预期行为变更，不是回归 bug。
 
 正确调用示例：
 
 ```bash
-agent-browser --headed --profile /tmp/ab-dogfood-profile open https://example.com
-AGENT_BROWSER_HEADED=true agent-browser open https://example.com   # 环境变量放行，等价效果
-agent-browser --headed false open https://example.com              # 显式选择 headless，允许
+agent-browser --headed --profile "/Users/<user>/Library/Application Support/Google/Chrome/Profile 1" open https://example.com
+AGENT_BROWSER_HEADED=true AGENT_BROWSER_PROFILE=/tmp/ab-profile agent-browser open https://example.com   # 环境变量放行，等价效果
+agent-browser --headed false --profile /tmp/ab-profile open https://example.com   # 显式选择 headless，仍需带 --profile
+agent-browser --headed --profile "$(mktemp -d)" open https://example.com          # 纯隔离测试场景，独立临时目录也满足硬性要求
 ```
+
+### AI Testing profile 创建与使用指南
+
+**为什么需要**：AI 每次用 agent-browser 起 CFT 若用一次性临时 profile 目录（`--profile /tmp/xxx`），目录里没有任何登录态，每次都要在浏览器里重新登录业务系统才能继续测试，浪费大量往返时间。让用户在日常 Chrome 里建一个专用的 "AI Testing" profile，一次性登录好目标业务系统，之后 AI 每次起 CFT 都 `--profile` 指向这同一个目录，登录态（cookie / localStorage）就能跨会话持久化复用，不用每次重新走登录流程。
+
+**一次性设置步骤（用户端操作，AI 不能代做，需要用户本人在日常 Chrome 里手动操作）**：
+
+1. 打开 Google Chrome（用户日常在用的那个，不是 CFT）→ 点右上角头像 → 选"添加"/"Add"→ 输入 profile 名字，比如 `AI Testing`（名字随意，只是 UI 显示名，不影响磁盘路径）→ 完成创建，Chrome 会打开一个新窗口，这个新窗口就是 `AI Testing` profile。
+2. 在这个新窗口里手动登录一次目标业务系统（例如某个内部测试环境的域名，具体域名以各项目实际情况为准，此处不写死）。
+3. 在同一个 `AI Testing` profile 窗口里（**不是** `Default` profile 窗口）打开 `chrome://version/`，找到 "个人资料路径" / "Profile Path" 字段，复制这个绝对路径。macOS 上通常形如：
+
+   ```text
+   /Users/<user>/Library/Application Support/Google/Chrome/Profile 1
+   ```
+
+   注意：`AI Testing` 是这个 profile 的 UI 显示名，磁盘上的实际目录名是 `Profile N`（`N` 取决于这是你创建的第几个非 Default profile），两者不是同一个字符串，别搞混。
+4. 把这个路径记到项目 `CLAUDE.md` 或个人 memory 里，后续所有 AI 起 CFT 时的 `--profile` 参数都指向它。
+
+**AI 起 CFT 时的调用方式**：
+
+```bash
+agent-browser --headed --profile "/Users/<user>/Library/Application Support/Google/Chrome/Profile 1" open "http://localhost:8084/#/"
+```
+
+或用环境变量等价替代：
+
+```bash
+export AGENT_BROWSER_PROFILE="/Users/<user>/Library/Application Support/Google/Chrome/Profile 1"
+agent-browser --headed open "http://localhost:8084/#/"
+```
+
+**关键坑警告**：macOS 上，用户日常 Chrome 主实例只要正在运行，它当前打开的那个 profile 目录就会被 `SingletonLock` 独占——如果 CFT 用同一个 profile 目录起，会**强制关掉用户日常 Chrome 或者干脆起不来**。这正是为什么 `AI Testing` **必须是一个与用户日常主力使用的 profile（通常是 `Default`）不同的独立 profile**：用户日常 Chrome 平时停留在 `Default` profile 上，AI 的 CFT 专用 `AI Testing` profile，两者各自持有各自的 `SingletonLock`，互不干扰、可以同时开着。相应地，AI 用 CFT 跑 `AI Testing` profile 期间，用户不要手动把自己的日常 Chrome 窗口切到 `AI Testing` profile，否则会跟 CFT 抢锁。
+
+**豁免场景**：如果 AI 的任务本身就是要做"隔离测试、完全不带任何登录态"（比如测一个匿名可访问的公开页面），不需要复用 `AI Testing` 的登录态，可以用 `--profile /tmp/<随机目录>` 或直接 `--profile "$(mktemp -d)"`——这样起的仍然是一个全新、干净的 profile 目录，同样满足本 hook "必须带 `--profile`" 的硬性要求，只是不复用登录态。不要误以为"任何时候都必须用 `AI Testing` 这一个固定 profile"，具体用哪个 profile 由当次任务性质决定。
 
 ---
 
@@ -196,19 +254,21 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/claude-md-max-lines.js
    ↓    行数 ≤ 200 → exit 0 放行
 ```
 
-**拦截 hook**（`hooks/guards/agent-browser-headed.js`）
+**拦截 hook**（`hooks/guards/agent-browser-launch.js`，原名 `agent-browser-headed.js`）
 
 ```text
 PreToolUse（Bash 工具调用前）
    ↓
-node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-browser-headed.js
+node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-browser-launch.js
    ↓  读 stdin 的 tool_input.command：
    ↓    不含 agent-browser → exit 0 放行
-   ↓    命令整串含 --headed / --headed false / AGENT_BROWSER_HEADED=true → exit 0 放行
    ↓    切分顶层片段 → 定位 agent-browser（或 npx agent-browser）→ 匹配子命令
    ↓    子命令不属于启动类（open/connect/chat） → exit 0 放行
    ↓    chat 子命令且无 URL 位置参数（REPL 模式） → exit 0 放行
-   ↓    其余情况（启动类子命令 + 缺 --headed） → exit 2 阻断（stderr 输出改法指引）
+   ↓    命令整串缺 --headed（非 --headed false/AGENT_BROWSER_HEADED=true）→ 记一条 finding
+   ↓    该调用缺 --profile <值>（非 AGENT_BROWSER_PROFILE=<值>）→ 记一条 finding
+   ↓    有 finding → exit 2 阻断（stderr 输出改法指引，两条问题都缺时一并列出）
+   ↓    无 finding → exit 0 放行
 ```
 
 ---
@@ -227,7 +287,7 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-browser-headed.js
 - 与 `omp` 插件互补：`omp` 的 `orchestrator-protocol-remind.js` 注入 omp 编排协议（强制委派 omp 子代理），本插件注入通用工作纪律（覆盖 Claude 原生 Agent 工具）——二者可并行启用。
 - `block-cd.js` 原本在 `devkit-core`（现已更名 `devkit-tool`），本插件 1.3.0 起迁入此处；`devkit-tool` 自 5.1.0 起不再内置任何 hook。同批删除的 `guard-full-read.js`（大文件全文读取拦截）因与「精确读文件」注入纪律重复，未一并迁入。
 - `max-source-lines.js` / `claude-md-max-lines.js` 与另一个插件 `quality-lint` 的 md 200 行拦截是同类思路（`PostToolUse` 拦 Write/Edit、`[L1-BLOCKER]` 输出格式）但各自独立实现——两个插件归属不同、不互相依赖，`quality-lint` 管的是文档质量的通用规则，本插件这两条是「最高宪法」层面单独声明的行数硬约束。
-- `agent-browser-headed.js` 只管 `agent-browser` CLI 的启动参数（`--headed`），不涉及浏览器自动化能力本身；具体怎么用 agent-browser 走各会话的个人 memory / 全局 CLAUDE.md 约定（如是否用 `--profile` 指向独立临时目录），本插件只负责在缺 `--headed` 时硬拦。
+- `agent-browser-launch.js`（原名 `agent-browser-headed.js`）管 `agent-browser` CLI 的两个启动参数（`--headed` 与 `--profile`），不涉及浏览器自动化能力本身；`--profile` 具体指向哪个目录（"AI Testing" 专用 profile 还是临时目录）走各会话的个人 memory / 全局 CLAUDE.md 约定，本插件只负责在缺 `--headed` 或缺 `--profile` 时硬拦，不管值本身是否合法。
 
 ---
 
@@ -239,8 +299,8 @@ plugins/working-discipline/
 ├── hooks/
 │   ├── working-discipline.js       # UserPromptSubmit / SubagentStart 注入
 │   └── guards/
-│       ├── block-cd.js             # PreToolUse 拦截（阻断污染 cwd 的独立 cd）
-│       ├── agent-browser-headed.js # PreToolUse 拦截（agent-browser 启动类命令缺 --headed）
+│       ├── block-cd.js             # PreToolUse 拦截（阻断污染 cwd 的独立 cd；git 命令额外指引 git -C）
+│       ├── agent-browser-launch.js # PreToolUse 拦截（agent-browser 启动类命令缺 --headed 或缺 --profile）
 │       ├── max-source-lines.js     # PostToolUse 拦截（单一源码文件超 1000 行）
 │       └── claude-md-max-lines.js  # PostToolUse 拦截（CLAUDE.md 超 200 行，指路拆到 .claude/rules/）
 └── README.md
@@ -249,11 +309,11 @@ plugins/working-discipline/
 ## 自定义
 
 - 增删注入条款 / 切换风格 → 编辑 `hooks/working-discipline.js` 里的 `SECTION_*` 数组，每行是 markdown 一行
-- 调整 `cd` 拦截行为（阈值、放行场景） → 编辑 `hooks/guards/block-cd.js`
-- 调整 agent-browser 启动类子命令 / 白名单子命令 → 编辑 `hooks/guards/agent-browser-headed.js` 里的 `LAUNCH_SUBCOMMANDS` / `ALLOWLIST_SUBCOMMANDS`
+- 调整 `cd` 拦截行为（阈值、放行场景、git -C 教育提示文案） → 编辑 `hooks/guards/block-cd.js`
+- 调整 agent-browser 启动类子命令 / 白名单子命令 / `--headed`、`--profile` 硬要求 → 编辑 `hooks/guards/agent-browser-launch.js` 里的 `LAUNCH_SUBCOMMANDS` / `ALLOWLIST_SUBCOMMANDS`
 - 调整源码文件行数阈值 / 扩展名列表 → 编辑 `hooks/guards/max-source-lines.js` 里的 `LINE_LIMIT` / `SOURCE_EXTENSIONS`
 - 调整 CLAUDE.md 行数阈值 / 排除目录 → 编辑 `hooks/guards/claude-md-max-lines.js` 里的 `LINE_LIMIT` / `EXCLUDED_SEGMENT_PATTERN`
 
 ---
 
-版本 1.6.0 · 作者 zhangq · MIT
+版本 1.7.0 · 作者 zhangq · MIT

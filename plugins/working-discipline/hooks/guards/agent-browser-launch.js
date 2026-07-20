@@ -1,4 +1,7 @@
-// agent-browser-headed.js — PreToolUse 门控钩子
+// agent-browser-launch.js — PreToolUse 门控钩子
+// （原名 agent-browser-headed.js；2026-07-20 起改名，因本 hook 现在同时管
+//  --headed 与 --profile 两个启动参数，旧名字只提"headed"会让后来维护者
+//  误以为 --profile 的拦截逻辑在别处）
 //
 // 【用途】
 // AI 会话用 agent-browser 起 Chrome for Testing（CFT）实例时，默认走
@@ -7,14 +10,28 @@
 // verify 期间 AI 用 headless 起 CFT 复现前端问题，用户看不到窗口质疑
 // "你现在是创建了一个 headless 的 chrome 浏览器实例吗？为啥我看还是
 // 在向我使用的 chrome 实例进行权限申请呢"，才发现 --headed 应是硬要求。
-// 本 hook 拦住缺 --headed 的启动类命令，逼 AI 起可见独立 CFT 窗口。
+//
+// 同一会话还暴露了第二个问题：AI 默认用一次性临时 profile 目录
+// （如 /tmp/ab-xxx-profile）起 CFT，每次会话都要在浏览器里手动登录一次
+// 业务系统（拿 token 注入 URL），浪费大量时间。用户拍板方案：硬要求
+// --profile（或 AGENT_BROWSER_PROFILE 环境变量），引导 AI 复用一个专门
+// 建立的 "AI Testing" Chrome profile（用户在日常 Chrome 里一次性创建
+// 并登录业务系统，profile 目录与用户日常用的 Default profile 物理隔离，
+// 不会被 CFT 抢 SingletonLock），登录态跨会话持久化；纯隔离测试场景
+// 仍可用 --profile "$(mktemp -d)" 之类的独立临时目录满足硬性要求。
+//
+// 本 hook 拦住缺 --headed 或缺 --profile 的启动类命令，逼 AI 起可见、
+// 登录态可复用的独立 CFT 窗口。
 //
 // 【触发条件】（需同时满足）
 // - 工具：Bash，命令含 `agent-browser` 或 `npx agent-browser`
 // - 紧跟其后的子命令属于启动类子命令（见 LAUNCH_SUBCOMMANDS）；
 //   `chat` 仅当接了 URL 位置参数才算启动，纯 REPL 模式不拦
-// - 命令整串缺 `--headed`（含 `--headed false` 视为显式选择 headless，放行）
-// - 命令整串不含 `AGENT_BROWSER_HEADED=true` 环境变量前缀
+// - 以下两条任一命中就拦截：
+//   1. 命令整串缺 `--headed`（含 `--headed false` 视为显式选择 headless，放行）
+//      且不含 `AGENT_BROWSER_HEADED=true` 环境变量前缀
+//   2. 该 agent-browser 调用缺 `--profile <值>`（或 `--profile=<值>`）
+//      且不含 `AGENT_BROWSER_PROFILE=<值>` 环境变量前缀
 //
 // 【子命令识别】
 // 找到 agent-browser（或 npx agent-browser）token 后，在同一顶层命令
@@ -27,17 +44,18 @@
 // - 子命令不在启动类集合（只读探测 skills/doctor/install/upgrade、
 //   生命周期无关 close/mcp/dashboard/session/plugin/auth/profiles/
 //   confirm/deny、后续操作类 snapshot/click/fill/... 等）
-// - 命令含 --headed（且非 `--headed false`）
-// - 命令含 `--headed false`（显式选择 headless）
-// - 命令含 `AGENT_BROWSER_HEADED=true`
-// - `chat` 子命令后没有 URL 位置参数（REPL 模式）
+// - 命令含 --headed（且非 `--headed false`）AND 命令含 --profile <值>
+// - 命令含 `--headed false`（显式选择 headless）AND 命令含 --profile <值>
+// - 命令含 `AGENT_BROWSER_HEADED=true` 可替代 --headed；
+//   命令含 `AGENT_BROWSER_PROFILE=<值>` 可替代 --profile
+// - `chat` 子命令后没有 URL 位置参数（REPL 模式）——两条检查都跳过
 //
 // 【阻塞行为】
-// 命中即 exit 2 阻断，stderr 输出：
-//   [L1-BLOCKER] tool=Bash check=agent-browser-headed
+// 命中即 exit 2 阻断，stderr 输出（示例，同时缺两项时 finding/hint 会
+// 各自列出两条问题）：
+//   [L1-BLOCKER] tool=Bash check=agent-browser-launch
 //     finding="agent-browser {子命令} 缺 --headed;起 headless CFT 会让用户看不到 AI 操作过程"
-//     hint="改用 agent-browser --headed --profile /tmp/ab-<slug>-profile {子命令} <args>,
-//           起可见独立 CFT 窗口;若确实要 headless 显式加 --headed false 或前缀 AGENT_BROWSER_HEADED=true"
+//     hint="加 --headed 起可见独立 CFT 窗口...;示例:agent-browser --headed --profile \"...\" {子命令} <args>"
 //
 // Input: JSON on stdin with tool_name / tool_input.command
 // Exit 0 = 放行; Exit 2 = 阻断
@@ -195,6 +213,28 @@ function hasHeadedFlag(command) {
   return /--headed\b/.test(command)
 }
 
+// AGENT_BROWSER_PROFILE=<非空值> 环境变量前缀
+function hasProfileEnv(command) {
+  return /\bAGENT_BROWSER_PROFILE=\S/.test(command)
+}
+
+// 在调用尾部 token 里找 --profile <值> 或 --profile=<值>；
+// 值本身不做路径合法性校验（交给 agent-browser CLI 自己校验），
+// 只要求存在一个非空、不是另一个 flag 的值。
+function hasProfileFlagInTail(tail) {
+  for (let i = 0; i < tail.length; i++) {
+    const t = tail[i]
+    if (t === '--profile') {
+      const next = tail[i + 1]
+      return !!(next && !next.startsWith('-'))
+    }
+    if (t.startsWith('--profile=')) {
+      return t.length > '--profile='.length
+    }
+  }
+  return false
+}
+
 // chat 子命令：仅当后面接了 URL 位置参数才算"启动"，纯 REPL 模式不拦
 function chatHasUrlArg(tail) {
   const chatIndex = tail.indexOf('chat')
@@ -228,12 +268,9 @@ function main() {
   if (!command) process.exit(0)
   if (!/\bagent-browser\b/.test(command)) process.exit(0)
 
-  // 以下三个判定对整条命令字符串扫描一次即可，各顶层片段共用结果
-  const headedEnv = hasHeadedEnv(command)
-  const explicitHeadless = isExplicitHeadlessFlag(command)
-  const headedFlag = hasHeadedFlag(command)
-
-  if (headedEnv || explicitHeadless || headedFlag) process.exit(0)
+  // 以下判定对整条命令字符串扫描一次即可，各顶层片段共用结果
+  const headedOk = hasHeadedEnv(command) || isExplicitHeadlessFlag(command) || hasHeadedFlag(command)
+  const profileEnvOk = hasProfileEnv(command)
 
   const segments = splitSegments(command)
 
@@ -248,7 +285,23 @@ function main() {
 
     if (subcommand === 'chat' && !chatHasUrlArg(tail)) continue // REPL 模式，不拦
 
-    const msg = `[L1-BLOCKER] tool=Bash check=agent-browser-headed finding="agent-browser ${subcommand} 缺 --headed;起 headless CFT 会让用户看不到 AI 操作过程" hint="改用 agent-browser --headed --profile /tmp/ab-<slug>-profile ${subcommand} <args>,起可见独立 CFT 窗口;若确实要 headless 显式加 --headed false 或前缀 AGENT_BROWSER_HEADED=true"`
+    const missingHeaded = !headedOk
+    const missingProfile = !(profileEnvOk || hasProfileFlagInTail(tail))
+
+    if (!missingHeaded && !missingProfile) continue
+
+    const findings = []
+    const hints = []
+    if (missingHeaded) {
+      findings.push('缺 --headed;起 headless CFT 会让用户看不到 AI 操作过程')
+      hints.push('加 --headed 起可见独立 CFT 窗口(若确实要 headless 显式加 --headed false 或前缀 AGENT_BROWSER_HEADED=true)')
+    }
+    if (missingProfile) {
+      findings.push('缺 --profile;不设置 profile 每次都要在浏览器里重新登录业务系统,无法复用登录态')
+      hints.push('加 --profile <目录>(复用登录态用专门建的"AI Testing" Chrome profile 目录,纯隔离测试场景可用 --profile "$(mktemp -d)" 独立临时目录满足硬性要求;或前缀 AGENT_BROWSER_PROFILE=<目录>)')
+    }
+
+    const msg = `[L1-BLOCKER] tool=Bash check=agent-browser-launch finding="agent-browser ${subcommand} ${findings.join(';')}" hint="${hints.join(';')};示例:agent-browser --headed --profile \\"/Users/<user>/Library/Application Support/Google/Chrome/Profile 1\\" ${subcommand} <args>"`
     process.stderr.write(msg + '\n')
     process.exit(2)
   }
