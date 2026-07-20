@@ -4,7 +4,7 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 
 ## 概述
 
-本市场包含 10 个插件，覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、协作方法论等场景。
+本市场包含 11 个插件，覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、协作方法论等场景。
 
 原 `devkit-git`、`devkit-dev`、`devkit-issue` 已从市场移除，不再作为独立插件提供。
 
@@ -19,6 +19,7 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 - `init-architect` - 架构初始化，生成 CLAUDE.md
 - `key-module-analysis` - 关键模块分析
 - `orphan-process-cleaner` - 孤儿进程清理
+- `marketplace-cache-sync` - 插件市场拉取 + 已启用插件缓存刷新
 
 ### 2. devkit-spec
 
