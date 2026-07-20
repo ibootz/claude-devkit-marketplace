@@ -3,9 +3,9 @@
 一个纯 hook 插件，用两种方式把「AI 工作纪律」落到 Claude Code 上：
 
 1. **注入**：每轮往主会话、以及每次子代理启动时的 context 里，塞入一份可审计、可复用的行为准则
-2. **拦截**：Bash 工具执行前，硬拦截会污染会话 cwd 的独立 `cd` 命令
+2. **拦截**：Bash 工具执行前硬拦截污染 cwd 的独立 `cd` 命令；Write/Edit 工具写入完成后硬拦截超 1000 行的单一源码文件、超 200 行的 CLAUDE.md
 
-零 skill、零命令、零子代理，装了就生效。不修改用户文件，无副作用。
+零 skill、零命令、零子代理，装了就生效。不修改用户文件（拦截类 hook 只阻断"继续往下走"，不撤销已完成的写入），无副作用。
 
 ---
 
@@ -49,6 +49,39 @@ Bash 工具的 cwd 在多次调用之间**持久保留**。AI 中间执行一次
   - 命令替换：`$(cd /path && pwd)`、`` `cd /path && pwd` ``
   - 字符串内的 `cd`：`echo "cd /tmp"`、`git commit -m "cd fix"`
   - **no-op cd**：目标解析后等于当前 cwd（`cd .`、`cd ./`、`cd <当前目录绝对路径>`）
+
+---
+
+## 三、拦截：`max-source-lines` 挡住超 1000 行的单一源码文件
+
+单一源码文件行数超过硬阈值是"职责过大"的信号——该文件大概率在做不止一件事，继续往里堆代码只会让可读性、可测试性、review 成本一起变差。这条规范只管"行数"这一个维度，不做语法/风格检查，交给 linter 去做。
+
+`max-source-lines` 在 `PostToolUse` 里检查每次 Write / Edit 落盘后的文件：
+
+- **触发时机**：Write / Edit 工具写入完成之后（文件已落盘，检查的是落盘后的真实内容，不是本次 diff 的增量行数）
+- **命中扩展名**（小写比对）：`.java .js .ts .jsx .tsx .vue .py .go .rs .rb .php .cpp .cc .cxx .c .h .hpp .cs .kt .swift .m .mm .css .scss .sass .less .sql`——只管源码，`.md .json .yaml .yml .toml .env .lock` 等非源码文件不受此规则约束
+- **判定条件**：命中扩展名 AND 总行数（按 `\n` 字面分割，空文件计 0 行）> 1000
+- **阻断**（exit 2）：`stderr` 输出 `[L1-BLOCKER] file={相对路径} check=source-max-lines finding="{N} lines exceeds limit 1000"`
+- **放行**（exit 0）：扩展名不在源码列表 / 行数 ≤ 1000 / `file_path` 缺失或文件读取失败（基础设施异常不误拦）
+
+注意这是 `PostToolUse` 钩子——文件已经写完，阻断的是"继续往下走"而非撤销这次写入。命中后应当把文件拆分成职责更单一的多个模块，而不是无视提示继续在同一文件里累加代码。
+
+---
+
+## 四、拦截：`claude-md-max-lines` 挡住超 200 行的 CLAUDE.md，并指路怎么拆
+
+这条规范要解决的不是"CLAUDE.md 不许长"，而是"不许靠压缩正文来规避长"。真实事故：某项目的 CLAUDE.md 逼近 200 行阈值后，AI 把原本 3 段独立的踩坑记录（症状 / 根因 / 解法三段式）硬压成 1 段紧凑文字塞进 200 行以内——压缩过程中丢掉了完整因果链、具体的 `file:行号` 引用、以及未来 AI 需要的典型场景与边界场景示例，CLAUDE.md 表面上"合规"了，但作为纪律文档的可用性被严重削弱。正确做法是拆分文档结构：CLAUDE.md 只保留"一览目录 + 短标题 + 相对路径引用"，具体细节各自落成独立文件放进 `.claude/rules/{topic}.md`（不受 200 行限制），CLAUDE.md 里用 markdown 相对链接指过去，比如 `[本机启动纪律](./.claude/rules/local-dev-startup.md)`。
+
+`claude-md-max-lines` 在 `PostToolUse` 里检查每次 Write / Edit 落盘后的文件：
+
+- **触发时机**：Write / Edit 工具写入完成之后
+- **命中文件**：`basename` 不区分大小写等于 `claude.md`（`CLAUDE.md` / `claude.md` / `Claude.Md` 均命中），且不限于仓库根——多 CLAUDE.md 项目里子目录下的 CLAUDE.md 同样受此规则约束
+- **排除**：路径含 `.claude/rules/` 目录段的 md 文件不受限——这正是拆分后应当落脚的地方，天然可以超过 200 行
+- **判定条件**：命中文件 AND 总行数（按 `\n` 字面分割，空文件计 0 行）> 200
+- **阻断**（exit 2）：`stderr` 输出 `[L1-BLOCKER] file={相对路径} check=claude-md-max-lines finding="{N} lines exceeds limit 200" hint="拆到 .claude/rules/{topic}.md 用相对链接引用,禁止压缩正文导致约束丢失"`——注意 `hint` 字段明确指路"怎么拆"，不是只报一个数字让 AI 自己瞎猜怎么合规
+- **放行**（exit 0）：`basename` 不是 `claude.md` / 路径落在 `.claude/rules/**` 下 / 行数 ≤ 200 / `file_path` 缺失或文件读取失败
+
+同样是 `PostToolUse` 钩子，阻断的是"继续往下走"。命中后正确的应对是把超限段落搬到 `.claude/rules/` 下的新文件、CLAUDE.md 里换成一行链接引用，绝不是把多段内容硬压缩成一段。
 
 ---
 
@@ -98,6 +131,33 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/block-cd.js
    ↓    全部是子 shell cd 或 no-op cd → exit 0 放行
 ```
 
+**拦截 hook**（`hooks/guards/max-source-lines.js`）
+
+```text
+PostToolUse（Write / Edit 工具写入完成后）
+   ↓
+node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/max-source-lines.js
+   ↓  读 stdin 的 tool_input.file_path 与 cwd：
+   ↓    扩展名不在源码列表 → exit 0 放行
+   ↓    读落盘后文件内容，按 \n 分割计数行数
+   ↓    行数 > 1000 → exit 2 阻断（stderr 输出 source-max-lines 提示）
+   ↓    行数 ≤ 1000 → exit 0 放行
+```
+
+**拦截 hook**（`hooks/guards/claude-md-max-lines.js`）
+
+```text
+PostToolUse（Write / Edit 工具写入完成后）
+   ↓
+node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/claude-md-max-lines.js
+   ↓  读 stdin 的 tool_input.file_path 与 cwd：
+   ↓    basename 不是 claude.md（大小写不敏感）→ exit 0 放行
+   ↓    路径含 .claude/rules/ 目录段 → exit 0 放行（拆分后的细节页不受限）
+   ↓    读落盘后文件内容，按 \n 分割计数行数
+   ↓    行数 > 200 → exit 2 阻断（stderr 输出 claude-md-max-lines 提示 + hint 拆分指引）
+   ↓    行数 ≤ 200 → exit 0 放行
+```
+
 ---
 
 ## 深入话题
@@ -113,6 +173,7 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/block-cd.js
 
 - 与 `omp` 插件互补：`omp` 的 `orchestrator-protocol-remind.js` 注入 omp 编排协议（强制委派 omp 子代理），本插件注入通用工作纪律（覆盖 Claude 原生 Agent 工具）——二者可并行启用。
 - `block-cd.js` 原本在 `devkit-core`（现已更名 `devkit-tool`），本插件 1.3.0 起迁入此处；`devkit-tool` 自 5.1.0 起不再内置任何 hook。同批删除的 `guard-full-read.js`（大文件全文读取拦截）因与「精确读文件」注入纪律重复，未一并迁入。
+- `max-source-lines.js` / `claude-md-max-lines.js` 与另一个插件 `quality-lint` 的 md 200 行拦截是同类思路（`PostToolUse` 拦 Write/Edit、`[L1-BLOCKER]` 输出格式）但各自独立实现——两个插件归属不同、不互相依赖，`quality-lint` 管的是文档质量的通用规则，本插件这两条是「最高宪法」层面单独声明的行数硬约束。
 
 ---
 
@@ -123,7 +184,10 @@ plugins/working-discipline/
 ├── .claude-plugin/plugin.json      # hook 注册（注入 + 拦截）
 ├── hooks/
 │   ├── working-discipline.js       # UserPromptSubmit / SubagentStart 注入
-│   └── guards/block-cd.js          # PreToolUse 拦截（阻断污染 cwd 的独立 cd）
+│   └── guards/
+│       ├── block-cd.js             # PreToolUse 拦截（阻断污染 cwd 的独立 cd）
+│       ├── max-source-lines.js     # PostToolUse 拦截（单一源码文件超 1000 行）
+│       └── claude-md-max-lines.js  # PostToolUse 拦截（CLAUDE.md 超 200 行，指路拆到 .claude/rules/）
 └── README.md
 ```
 
@@ -131,7 +195,9 @@ plugins/working-discipline/
 
 - 增删注入条款 / 切换风格 → 编辑 `hooks/working-discipline.js` 里的 `SECTION_*` 数组，每行是 markdown 一行
 - 调整 `cd` 拦截行为（阈值、放行场景） → 编辑 `hooks/guards/block-cd.js`
+- 调整源码文件行数阈值 / 扩展名列表 → 编辑 `hooks/guards/max-source-lines.js` 里的 `LINE_LIMIT` / `SOURCE_EXTENSIONS`
+- 调整 CLAUDE.md 行数阈值 / 排除目录 → 编辑 `hooks/guards/claude-md-max-lines.js` 里的 `LINE_LIMIT` / `EXCLUDED_SEGMENT_PATTERN`
 
 ---
 
-版本 1.4.1 · 作者 zhangq · MIT
+版本 1.5.0 · 作者 zhangq · MIT
