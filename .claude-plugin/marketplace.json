@@ -6,18 +6,19 @@
   },
   "metadata": {
     "description": "Claude DevKit Pro Marketplace - 精简后的 Claude Code / Codex 插件市场，聚焦核心开发、Spec 工作流与高价值生产力插件",
-    "version": "2.3.0"
+    "version": "2.4.0"
   },
   "renames": {
-    "matt-pocock-skills": "mattpocock-skills"
+    "matt-pocock-skills": "mattpocock-skills",
+    "devkit-core": "devkit-tool"
   },
   "plugins": [
     {
-      "name": "devkit-core",
-      "source": "./plugins/devkit-core",
+      "name": "devkit-tool",
+      "source": "./plugins/devkit-tool",
       "category": "Development",
-      "description": "核心开发工具集 - 代码库分析、依赖排查、多模型协作与辅助工具（5个技能）",
-      "version": "5.2.0"
+      "description": "工具技能集 - 代码库分析、依赖排查、多模型协作与 Claude Code 自身运维辅助工具（5个技能）",
+      "version": "6.0.0"
     },
     {
       "name": "devkit-spec",

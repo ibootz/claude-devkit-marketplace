@@ -1,17 +1,16 @@
-# DevKit-Core
+# DevKit-Tool
 
-**版本**: 5.2.0
+**版本**: 6.0.0
 **作者**: zhangq
 **许可证**: MIT
 
-核心开发工具套件，当前聚焦 5 个 Skills，覆盖代码库分析、依赖排查、多模型协作与 Claude Code 自身运维辅助工具。
+工具技能套件（原 `devkit-core`），当前聚焦 5 个 Skills，覆盖代码库分析、依赖排查、多模型协作与 Claude Code 自身运维辅助工具。
 
 ---
 
 ## 插件定位
 
-- 聚焦高复用的分析、排障与协作能力
-- 保留原 `devkit-core` 的基础能力与多模型协作能力
+- 聚焦高复用的分析、排障与协作能力，专门收纳与具体业务无关的通用工具类技能
 - 不再内置原 `devkit-dev` 的开发工作流技能，避免与当前市场定位重叠
 - 不再内置原 `devkit-git` 的独立 Git 技能，避免与更成熟的外部插件重复
 - 不再内置缺陷修复技能，相关能力交由 `devkit-spec` 插件的 `spec-bugfix` 提供
@@ -46,7 +45,7 @@
 ## 目录结构
 
 ```text
-plugins/devkit-core/
+plugins/devkit-tool/
 ├── .claude-plugin/plugin.json
 └── skills/
     ├── deps-investigator/

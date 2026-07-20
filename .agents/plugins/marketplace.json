@@ -1,7 +1,7 @@
 {
   "metadata": {
     "description": "Claude DevKit Pro Marketplace - 精简后的 Claude Code / Codex 插件市场，聚焦核心开发、Spec 工作流与高价值生产力插件",
-    "version": "2.2.0"
+    "version": "2.4.0"
   },
   "name": "claude-devkit-marketplace",
   "interface": {
@@ -17,18 +17,18 @@
         "name": "zhangq"
       },
       "category": "Development",
-      "description": "核心开发工具集 - 代码库分析、依赖排查、多模型协作与辅助工具（4个技能）",
+      "description": "工具技能集 - 代码库分析、依赖排查、多模型协作与 Claude Code 自身运维辅助工具（5个技能）",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
-      "name": "devkit-core",
+      "name": "devkit-tool",
       "source": {
         "source": "local",
-        "path": "./plugins/devkit-core"
+        "path": "./plugins/devkit-tool"
       },
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "5.1.0"
+      "version": "6.0.0"
     },
     {
       "author": {

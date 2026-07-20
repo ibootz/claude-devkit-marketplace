@@ -10,9 +10,9 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 
 ## 可用插件
 
-### 1. devkit-core
+### 1. devkit-tool
 
-核心开发工具集，覆盖代码库分析、依赖排查与架构辅助。
+工具技能集（原 `devkit-core`），覆盖代码库分析、依赖排查、多模型协作与 Claude Code 自身运维辅助工具。
 
 **Skills**:
 - `deps-investigator` - 依赖源码读取
@@ -136,8 +136,8 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 添加市场后，可以安装市场中的任意插件：
 
 ```bash
-# 核心开发工具集
-/plugin install devkit-core@claude-devkit-marketplace
+# 工具技能集
+/plugin install devkit-tool@claude-devkit-marketplace
 
 # 规范驱动开发
 /plugin install devkit-spec@claude-devkit-marketplace
@@ -213,7 +213,7 @@ node scripts/install-codex.js --all --scope=user
 node scripts/install-codex.js
 
 # 只安装指定插件
-node scripts/install-codex.js --plugins=devkit-core,omp
+node scripts/install-codex.js --plugins=devkit-tool,omp
 
 # 预览模式（不实际修改文件）
 node scripts/install-codex.js --all --dry-run
@@ -225,7 +225,7 @@ node scripts/install-codex.js --all --dry-run
 
 **安装内容**：
 - **Skills**：所有 8 个插件的技能目录
-- **Hooks**：devkit-core 的 PreToolUse 守卫钩子、omp 的 SessionStart/UserPromptSubmit 钩子、working-discipline 与 discover-unknowns 的 UserPromptSubmit 注入钩子（portable-shell 的 PostToolUse lint 钩子为 Claude Code 专有，Codex 侧不生效）
+- **Hooks**：omp 的 SessionStart/UserPromptSubmit 钩子、working-discipline 与 discover-unknowns 的 UserPromptSubmit 注入钩子（portable-shell 的 PostToolUse lint 钩子为 Claude Code 专有，Codex 侧不生效；devkit-tool 自 5.1.0 起不再内置任何 hook）
 - **Agents**：omp 的 3 个子代理（omp-explore、omp-plan、omp-task）
 
 #### 卸载
@@ -261,7 +261,7 @@ claude-devkit-marketplace/
 ├── .claude-plugin/
 │   └── marketplace.json       # 市场配置文件
 ├── plugins/
-│   ├── devkit-core/
+│   ├── devkit-tool/
 │   ├── devkit-spec/
 │   ├── heal/
 │   ├── prompt-engineering/
@@ -288,8 +288,8 @@ claude-devkit-marketplace/
 ### 本地测试
 
 ```bash
-# 测试核心插件
-claude --plugin-dir ./plugins/devkit-core
+# 测试 devkit-tool
+claude --plugin-dir ./plugins/devkit-tool
 
 # 测试其他插件
 claude --plugin-dir ./plugins/<plugin-name>
