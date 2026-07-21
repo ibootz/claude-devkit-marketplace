@@ -76,8 +76,8 @@
       "name": "working-discipline",
       "source": "./plugins/working-discipline",
       "category": "Productivity",
-      "description": "AI 工作纪律注入 + 拦截 - 上下文管理（含 macOS 中文路径 NFC/NFD 防漏检）/ 子代理协作（在飞≤16 动态上限·嵌套≤2 软约束）/ 表达约束（含求真·简体中文·列表编号）/ 思维模式（含落地写 md 前的受众分辨）/ Agent 工具派发 / 外部写操作授权（dws 钉钉 CLI 默认只读，写操作须逐批许可）。UserPromptSubmit 覆盖主会话每轮，SubagentStart 覆盖子代理；PreToolUse 硬拦截污染 cwd 的独立 cd 命令（block-cd）。零 skill，适合全局开启",
-      "version": "1.4.1"
+      "description": "AI 工作纪律注入 + 拦截 - 上下文管理（含 macOS 中文路径 NFC/NFD 防漏检）/ 子代理协作（在飞≤16 动态上限·嵌套≤2 软约束）/ 表达约束（含求真·简体中文·列表编号）/ 思维模式（含落地写 md 前的受众分辨）/ Agent 工具派发（含图片/截图核验）/ 外部写操作授权（dws 钉钉 CLI 默认只读，写操作须逐批许可）。UserPromptSubmit 覆盖主会话每轮，SubagentStart 覆盖子代理；PreToolUse 硬拦截污染 cwd 的独立 cd 命令（block-cd）。零 skill，适合全局开启",
+      "version": "1.7.1"
     },
     {
       "name": "discover-unknowns",
