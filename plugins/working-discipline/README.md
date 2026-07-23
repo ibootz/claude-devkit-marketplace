@@ -30,7 +30,7 @@
 | 二、子代理协作 | 在飞≤16、嵌套≤2、共享骨架文件、结构化回执 | ✅ | ✅ |
 | 三、表达约束 | 关键对象点名、待确认四要素、行号引用、简体中文、列表编号 | ✅ | ✅ |
 | 四、思维模式 | 举一反三 / 整体 / 第一性 / 逆向 / 自查自纠 / 读者视角 / 写 md 前受众分辨 | ✅ | — |
-| 五、Agent 派发 | subagent_type × model 路由表、显式 model、成本意识、图片/截图核验规范、派发命名带模型前缀（`description` 用 `[haiku]/[sonnet]/[opus]/[fable]` 方括号前缀；`name` 用 `haiku-/sonnet-/opus-/fable-` 连字符前缀）便于 `TaskList` 一眼识别在飞档次 | ✅ | — |
+| 五、Agent 派发 | subagent_type × model 路由表、显式 model、成本意识、图片/截图核验规范、派发命名带模型前缀（`description` 用 `[haiku]/[sonnet]/[opus]/[fable]` 方括号前缀；`name` 用 `haiku-/sonnet-/opus-/fable-` 连字符前缀）便于 `TaskList` 一眼识别在飞档次、多 subagent 并发时等齐再总结（收执时机·仅主会话适用·防主对话上下文膨胀·让用户一次拍板省切换成本） | ✅ | — |
 | 六、外部写操作授权 | dws 钉钉 CLI 默认只读；写操作（发消息/写删文档/写表格等）须逐批出示内容清单获用户当次明确许可；上游放行不算授权；叫停即冻结 | ✅ | ✅ |
 
 子代理版带一~三、六节。四、五两节主要是指导父代理如何派发子代理，对子代理自身无意义，故省 token 略去；六节必须进子代理版——general-purpose 子代理带 Bash 权限，同样能执行 `dws` 写命令（章节编号与主版一致，故子代理版编号跳过四、五）。
@@ -316,4 +316,4 @@ plugins/working-discipline/
 
 ---
 
-版本 1.7.1 · 作者 zhangq · MIT
+版本 1.9.0 · 作者 zhangq · MIT
