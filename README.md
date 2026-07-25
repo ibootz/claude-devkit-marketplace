@@ -241,6 +241,25 @@ node scripts/uninstall-codex.js --plugins=omp
 node scripts/uninstall-codex.js --all --dry-run
 ```
 
+### 版本一致性检查
+
+同一个插件的版本号登记在**三处**，改了插件却漏改市场清单是本仓库反复发生的遗漏：`plugins/<dir>/.claude-plugin/plugin.json`（真相源）、`.claude-plugin/marketplace.json`（Claude Code 市场清单）、`.agents/plugins/marketplace.json`（Codex 市场清单）。真实案例：`working-discipline` 连续两次 bump（1.8.0 / 1.9.0）都只改了 `plugin.json`，两份市场清单一直卡在 1.7.1；`omp` 升到 2.3.0 后 Codex 清单仍是 2.2.0。后果是用户按市场清单看到的版本号与描述都是过期的。
+
+```bash
+# 检查（有问题 exit 1，适合挂 CI / pre-push）
+node scripts/check-versions.js
+
+# 把两份市场清单的 version 对齐 plugin.json
+node scripts/check-versions.js --fix
+
+# 只输出问题行，通过时不打表
+node scripts/check-versions.js --quiet
+```
+
+检查项包括版本三方不一致、市场清单漏登记、清单里有条目但 `plugins/` 下无对应目录（幽灵条目）。远程源插件（`source` 为 `{"source":"github",...}`，如 `mattpocock-skills`）自动豁免——它们没有本地 `plugin.json`，且 `install-codex.js` 只从本地 `plugins/<name>/` 目录安装，所以不登记到 Codex 清单是有意设计而非遗漏。
+
+`--fix` **只对齐 `version` 字段，不动 `description`**：描述该写什么需要人工判断，机器对齐只会把陈旧描述固化下来，修完仍需自行确认市场清单里的描述是否同步。
+
 ## 关键 Skills 快速参考
 
 - `/init-architect` - 分析代码库并生成 `CLAUDE.md`
@@ -260,6 +279,8 @@ node scripts/uninstall-codex.js --all --dry-run
 claude-devkit-marketplace/
 ├── .claude-plugin/
 │   └── marketplace.json       # 市场配置文件
+├── .agents/plugins/
+│   └── marketplace.json       # Codex 市场配置文件（install-codex.js 读这一份）
 ├── plugins/
 │   ├── devkit-tool/
 │   ├── devkit-spec/
@@ -271,6 +292,10 @@ claude-devkit-marketplace/
 │   ├── working-discipline/
 │   ├── discover-unknowns/
 │   └── portable-shell/
+├── scripts/
+│   ├── install-codex.js       # 安装插件到 Codex CLI
+│   ├── uninstall-codex.js     # 从 Codex CLI 卸载插件
+│   └── check-versions.js      # 版本三方一致性检查
 ├── README.md
 └── AGENTS.md
 ```
@@ -283,7 +308,9 @@ claude-devkit-marketplace/
 2. 按照插件规范创建必要的配置文件
    - 对于普通插件：`.claude-plugin/plugin.json`、`skills/`、`commands/` 等
    - 对于 MCP 插件：`.mcp.json`（或 `.claude-plugin/plugin.json` + `.mcp.json`）
-3. 在 `.claude-plugin/marketplace.json` 中添加插件条目
+3. 在 `.claude-plugin/marketplace.json` 中添加插件条目（Claude Code 市场清单）
+4. **同时**在 `.agents/plugins/marketplace.json` 中添加对应条目（Codex 市场清单，`scripts/install-codex.js` 读的是这一份）——只有远程源插件（`source` 为 `{"source":"github",...}`）可以不登记，因为 `install-codex.js` 只从本地 `plugins/<name>/` 目录安装
+5. 跑 `node scripts/check-versions.js` 确认三处版本登记一致（漏改市场清单是本仓库反复出现的遗漏，见下方「版本一致性检查」）
 
 ### 本地测试
 
