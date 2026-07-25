@@ -27,15 +27,52 @@
 | 维度 | 关键约束 | 主会话 | 子代理 |
 |------|---------|:---:|:---:|
 | 一、上下文纪律 | 精确路径读文件、子代理优先、bash 输出限流、macOS 中文路径防漏检（NFC/NFD） | ✅ | ✅ |
-| 二、子代理协作 | 在飞≤16、嵌套≤2、共享骨架文件、结构化回执 | ✅ | ✅ |
+| 二、子代理协作 | 在飞≤16（靠自记账盘点，明确禁用 `TaskList` 统计——它是任务板不是在飞 agent 列表）、嵌套≤2、共享骨架文件、结构化回执 | ✅ | ✅ |
 | 三、表达约束 | 关键对象点名、待确认四要素、行号引用、简体中文、列表编号 | ✅ | ✅ |
 | 四、思维模式 | 举一反三 / 整体 / 第一性 / 逆向 / 自查自纠 / 读者视角 / 写 md 前受众分辨 | ✅ | — |
-| 五、Agent 派发 | subagent_type × model 路由表、显式 model、成本意识、图片/截图核验规范、派发命名带模型前缀（`description` 用 `[haiku]/[sonnet]/[opus]/[fable]` 方括号前缀；`name` 用 `haiku-/sonnet-/opus-/fable-` 连字符前缀）便于 `TaskList` 一眼识别在飞档次、多 subagent 并发时等齐再总结（收执时机·仅主会话适用·防主对话上下文膨胀·让用户一次拍板省切换成本） | ✅ | — |
+| 五、Agent 派发 | subagent_type × model 路由表、显式 model、成本意识、图片/截图核验规范、派发命名规范（`name` 与 `description` 双必填；`description` 用 `[haiku]/[sonnet]/[opus]/[fable]` 方括号前缀，`name` 用 `haiku-/sonnet-/opus-/fable-` 连字符前缀；禁止把 prompt 原文灌进 `description`；同批并发名字必须互相可辨；同规覆盖 teammate 与 `Workflow`）便于在飞 agent 面板一眼识别档次与各自任务、多 subagent 并发时等齐再总结（收执时机·仅主会话适用·等齐判据是各 agent 的完成通知到齐而非查 `TaskList`·防主对话上下文膨胀·让用户一次拍板省切换成本） | ✅ | 仅 5.5 |
 | 六、外部写操作授权 | dws 钉钉 CLI 默认只读；写操作（发消息/写删文档/写表格等）须逐批出示内容清单获用户当次明确许可；上游放行不算授权；叫停即冻结 | ✅ | ✅ |
 
-子代理版带一~三、六节。四、五两节主要是指导父代理如何派发子代理，对子代理自身无意义，故省 token 略去；六节必须进子代理版——general-purpose 子代理带 Bash 权限，同样能执行 `dws` 写命令（章节编号与主版一致，故子代理版编号跳过四、五）。
+子代理版带一~三节、五节的 5.5 派发命名规范、六节。四节与五节其余部分主要是指导父代理如何选 `subagent_type` × `model`，对子代理自身价值低，故省 token 略去；六节必须进子代理版——`general-purpose` 子代理带 Bash 权限，同样能执行 `dws` 写命令。
+
+**5.5 为什么单独进子代理版**（1.11.0 起）：第 1 层子代理可以再派第 2 层（受二节的嵌套 2 层上限约束），派发时同样要给 `name` / `description` 命名，而下面第六节的 `agent-naming` 硬门禁对**子代理发起的** `Agent` 调用一样生效——不注入的话，子代理会在完全不知道规范的情况下被 exit 2 硬拦，只能靠读 stderr 反推规则。代价是每次子代理启动多约 2.5k 字符注入，换取命名合规与"被拦时知道为什么"。章节编号与主版严格一致（子代理版为一、二、三、五、六，缺四），同一条规则不出现两套编号。
 
 > 完整注入文本见 `hooks/working-discipline.js` 里的 `SECTION_*` 数组。
+
+### 派发命名规范：为什么禁止把 prompt 灌进 `description`（注入文本 5.5 节）
+
+**事故来源（2026-07-25）**：用户截图的在飞 agent 面板上，5 个子代理是这样显示的——
+
+```text
+> ● main
+  ○ ontology-drain      你是第 1 层子代理（orch...
+  ○ verdict-part1       你是第 1 层子代理，可派...
+  ○ verdict-part2       你是第 1 层子代理，可派...
+  ○ general-purpose   [sonnet] 映射 16 个 spe...
+  ○ verdict-part3      你是第 1 层子代理，可派...
+```
+
+面板左列显示 `Agent` 工具的 `name`（未指定 `name` 时回落显示 `subagent_type`），右列显示 `description`。这一屏同时暴露三个问题：
+
+1. `ontology-drain` / `verdict-part1` / `verdict-part2` / `verdict-part3` 四个 `name` 都不带模型档次前缀——用户看不出这批在飞任务烧的是 `haiku` 还是 `opus`，成本与"这个任务值不值得上高档模型"无从评估
+2. 这四个的右列全是 `prompt` 原文的开头「你是第 1 层子代理，可派…」——一方面把内部提示词（角色设定句、嵌套层级约束这类纪律条款）暴露到 UI 上，另一方面四行描述文字完全同质，面板彻底失去"谁在做什么"的信息量
+3. 唯一合规的 `[sonnet] 映射 16 个 spe…` 那行反过来没给 `name`，左列回落成裸的 `general-purpose`——一旦同批并发多个 `general-purpose`，左列同样退化成若干行相同文字
+
+对应的注入规则（`SECTION_DISPATCH` 的 5.5 节）分四条：`name` 必填、同会话内不重名、格式 `模型名-任务语义`（`name` 受正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` 约束，只能写 ASCII 字母数字与 `-` `_`，中文和方括号会被直接拒绝，这也是 `name` 用连字符前缀而 `description` 用方括号前缀的原因）；`description` 必填、`[模型名]` 前缀 + 3-5 词任务摘要，`prompt` 与 `description` **禁止共用同一段文字**（`prompt` 给子代理读，长、含约束与上下文；`description` 给面板显示，短、只讲任务是什么）；同批并发的名字必须互相可辨，光加数字后缀不算合格（`verdict-part1/2/3` 应改成把分片依据写进名字的 `sonnet-verdict-spec-01-05` 这类，或在 `description` 里点明范围 `[sonnet] 判定 spec 01-05`）；`Workflow` 的 `meta.name` / `meta.description` / `meta.phases[].title` / `meta.phases[].detail` / `agent(prompt, {label})` 的 `label` 同规，其中 `meta.description` 会出现在权限确认弹窗里，粘 prompt 等于让用户在弹窗里读一段内部指令。
+
+#### 「面板显示提示词」的成因：字段抄错，还是字段留空后的 UI 回落？
+
+一个自然的怀疑是：会不会是因为**子代理压根没法命名**，Claude Code 才只能拿 prompt 第一行凑一个显示名？据工具契约核对，答案是**能命名，且两条成因都存在**：
+
+- **能命名（已核实）**：`Agent` 工具确实有 `name` 参数，受正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` 约束，文档职责是「Makes it addressable via `SendMessage({to: name})`」——用于给长期在飞的 subagent / teammate 一个可寻址的稳定标识。截图左列出现的 `ontology-drain` / `verdict-part1` 本身就是命名生效的证据：它们不是任何已注册的 `subagent_type`，只可能是当次传入的 `name`。
+- **成因 a：把 prompt 原文抄进了显示字段**。`Agent` 工具的 `description` 是 **required** 字段（schema 里 `required: ["description", "prompt"]`），不可能因为"没给值"而被系统拿 prompt 顶替——所以经 `Agent` 工具派发的子代理，右列出现 prompt 文字只能是 `description` 被主动填成了 prompt 开头。
+- **成因 b：可选的显示字段留空，UI 回落到 prompt 摘要**。`Workflow` 的 `agent(prompt, {label})` 里 `label` 是**可选**参数，文档原文写的是「`opts.label` **overrides** the display label」——`override`（覆盖）一词意味着不传 `label` 时存在一个系统默认显示名，而这个默认名极可能就是 prompt 的开头截断。
+
+第三条属于**依据文档措辞的推断，未做实测确认**（要确证需跑一个最小 workflow，一个 `agent()` 不给 `label`、一个给 `label`，对比 `/workflows` 进度树的显示）。因此 5.5 节的规则不去赌单一成因，而是两条都堵：显示字段禁止与 `prompt` 共用文字（防 a），同时把所有**可选**的显示字段一律当必填处理、显式给值（防 b）。
+
+另外提醒一处易混：`TaskList` 工具返回的是**任务板**字段（`id` / `subject` / `status` / `owner` / `blockedBy`），与上面这张 agent 面板不是同一个数据源，`TaskList` 里并不存在 `name` / `subagent_type` / `model` 字段，也**不能**用来统计在飞子代理数（详见下方「深入话题 → 「在飞≤16」和「嵌套≤2」是纪律软约束」，1.10.1 修掉了旧规则里这处误用）。
+
+1.11.0 起这一节**有了配套硬门禁**：`hooks/guards/agent-naming.js` 在 `PreToolUse` 拦 `Agent` 工具调用，违规即 exit 2 阻断并把 finding 回灌给 AI，详见下方「六、拦截：`agent-naming`」。注入纪律负责"让 AI 知道该怎么命名"，硬门禁负责"AI 没照做时拦下来"，两者配套。
 
 ## 二、拦截：`block-cd` 挡住污染 cwd 的独立 `cd`
 
@@ -181,6 +218,51 @@ agent-browser --headed open "http://localhost:8084/#/"
 
 ---
 
+## 六、拦截：`agent-naming` 挡住命名不规范的 subagent 派发
+
+注入纪律 5.5 节靠 AI 自觉，命中率不足——截图事故里 4 个子代理全违规就是证据。这道 `PreToolUse` 门禁把 5.5 的要求变成硬约束：违规的 `Agent` 调用直接 exit 2 阻断，AI 收到 stderr 里的 finding 后修正重派。
+
+**触发条件**：`tool_name` 是 `Agent`。注意**不匹配旧工具名 `Task`**——旧名环境下的 `tool_input` 可能压根没有 `name` / `model` 字段，强制校验会造成永久性误拦，fail-open 优于误伤。
+
+**校验项**（命中任意一条即拦，多条时 finding 里全部列出）：
+
+| # | 校验 | 为什么 |
+|---|------|--------|
+| 1 | `model` 缺失或不在 `haiku`/`sonnet`/`opus`/`fable` | 纪律要求显式指定，禁止默认回落 |
+| 2 | `name` 缺失 | 省略后面板左列只能回落显示裸 `subagent_type`，同批多个无法分辨 |
+| 3 | `name` 不以 `{model}-` 开头 | 前缀必须与实际 `model` 一致，不许写不符的档次 |
+| 4 | `name` 不满足 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` | Agent 工具的原生约束，提前拦下来并给清楚提示（写中文会被工具直接拒） |
+| 5 | `description` 缺失或不以 `[{model}] ` 开头 | 同上，且方括号内档次要与 `model` 一致 |
+| 6 | `description` 正文以角色设定句开头（`你是` / `You are` / `【` / `#` / `作为一名` 等） | 把 prompt 原文抄进 `description` 的高置信特征 |
+| 7 | `description` 正文长度 ≥ 20 且正好是 `prompt` 的开头 | 抄袭特征。20 字符门槛是为了避免误报——3-5 词摘要与 prompt 开头偶然重合的概率不低，短文本不判 |
+| 8 | `description` 正文超过 60 字符 | 纪律要求 3-5 词摘要，超长说明塞了 prompt 内容 |
+
+**放行场景**：`tool_name` 不是 `Agent` / `subagent_type` 属于豁免名单 / stdin 读取或 JSON 解析失败 / `tool_input` 缺失 / 全部校验通过。
+
+**豁免名单**（`EXEMPT_SUBAGENT_TYPES`）：`fork`、`statusline-setup`、`output-style-setup`。其中 `fork` 是必须豁免的——Agent 工具文档明确写它「always inherit the parent model」，`model` 覆盖会被忽略，强制模型前缀自相矛盾。
+
+命中拦截时 `stderr` 输出（示例为截图里那个真实违规）：
+
+```text
+[L1-BLOCKER] tool=Agent check=agent-naming finding="name="verdict-part1" 缺模型档次前缀;用户无法从面板判断在飞任务烧的是哪一档模型;description="你是第 1 层子代理，可派发第 2 层" 缺 [模型名] 方括号前缀" hint="name 改成 "sonnet-verdict-part1";description 改成 "[sonnet] <3-5 词任务摘要>";完整规范见注入纪律 5.5 节;确需临时关闭本门禁用 AGENT_NAMING_GUARD=off"
+```
+
+### 误拦风险与总开关
+
+这道门禁**默认开启且全局生效**，需要清楚它的影响面：其他插件或 skill 内部派发 subagent 时（如 `omp` 的强制委派、各类 spec 工作流），若它们不遵守本插件的命名规范，同样会被拦下来。这是**预期行为**——规范要统一才有意义——但如果它挡住了你必须跑的既有工作流，用环境变量关闭：
+
+```bash
+AGENT_NAMING_GUARD=off   # 大小写不敏感，设为 off 即整条门禁放行
+```
+
+想永久关闭就从 `.claude-plugin/plugin.json` 的 `PreToolUse` 里删掉这条 hook 注册；想放宽某类 agent，把它的 `subagent_type` 加进 `agent-naming.js` 的 `EXEMPT_SUBAGENT_TYPES`。
+
+### Known Limitation：`Workflow` 内部的 `label` 拦不到
+
+本 hook 只覆盖 `Agent` 工具的直接派发。`Workflow` 脚本内部 `agent(prompt, {label})` 的调用**不经过 `PreToolUse`**（它发生在 workflow 运行时的脚本执行层），因此 `label` 缺失或抄 prompt 都拦不到，只能靠注入纪律 5.5.4 约束。理论上可以拦 `Workflow` 工具本身、对 `script` 字符串做正则提取来校验 `meta.name` 与各 `agent()` 的 `label`，但正则解析 JS 源码的可靠性太低（易误判模板字符串、嵌套括号、注释里的调用），故未实现。
+
+---
+
 ## 安装
 
 **Claude Code**
@@ -225,6 +307,23 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/block-cd.js
    ↓    剥离子 shell / 命令替换 → 切分顶层片段 → 逐个判定 cd
    ↓    存在会改变 cwd 的独立 cd → exit 2 阻断（stderr 输出改法指引）
    ↓    全部是子 shell cd 或 no-op cd → exit 0 放行
+```
+
+**拦截 hook**（`hooks/guards/agent-naming.js`）
+
+```text
+PreToolUse（Agent 工具调用前）
+   ↓
+node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-naming.js
+   ↓  读 stdin 的 tool_name 与 tool_input：
+   ↓    AGENT_NAMING_GUARD=off → exit 0 放行（总开关）
+   ↓    tool_name 不是 Agent（含旧名 Task）→ exit 0 放行
+   ↓    subagent_type ∈ {fork, statusline-setup, output-style-setup} → exit 0 放行
+   ↓    校验 model 显式 → name 必填/前缀符 model/满足原生正则
+   ↓    校验 description 必填/[模型名] 前缀符 model
+   ↓    校验 description 正文非 prompt 角色句 / 非 prompt 开头逐字重合 / ≤60 字符
+   ↓    有 finding → exit 2 阻断（stderr 一并列出所有违规与改法）
+   ↓    无 finding → exit 0 放行
 ```
 
 **拦截 hook**（`hooks/guards/max-source-lines.js`）
@@ -279,7 +378,11 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-browser-launch.js
 
 这两条不是 Claude Code 的硬限制，是靠注入文本让 AI 自觉遵守：
 
-- **在飞≤16**：Claude Code 没有并发数的原生配置。规则要求 AI 每次派发前用 `TaskList` 统计 `status=running` 的在飞子代理，全系统总量控制在 16 以内。
+- **在飞≤16**：Claude Code 没有并发数的原生配置，也**没有任何工具能枚举在飞子代理**。规则要求 AI 每次派发前靠**自记账**盘点本会话在飞数（派发时 +1，收到某 agent 的 `<task-notification>` 完成通知或其 `Agent` 工具返回时 -1），把本会话在飞总量控制在 16 以内。
+
+  这里曾有一处错误，1.10.1 修掉：旧版规则文本写的是「用 `TaskList` 统计当前 `status=running` 的在飞子代理数量」，两处都不成立——`TaskList` 读的是**任务板**（字段 `id` / `subject` / `status` / `owner` / `blockedBy`），跟在飞子代理不是同一个数据源；而它的 `status` 枚举只有 `pending` / `in_progress` / `completed` / `deleted`，**根本没有 `running` 这个值**，照字面执行只会拿到一个恒为空的过滤结果，等于把上限约束变成了空转。同批修正的还有第 5.7 节「等齐再总结」的判据：旧文本写「等 `TaskList` 显示本批次全部在飞子代理都到 `completed`」，同样查错了数据源，现改为「本批次每个 agent 各自的完成通知/工具返回都已到齐」。
+
+  另外两点边界要清楚：`TaskOutput` 虽然能按 `task_id` 查后台任务状态，但它已被标记 DEPRECATED，且只接受**单个已知的** `task_id`，无法枚举；能列出全系统在飞任务的入口是用户侧的 `/tasks` 斜杠命令，**AI 无法自行调用**。所以规则同时收窄了口径——自查范围只限本会话自己派发的子代理，禁止 AI 声称统计过"全系统在飞总量"，跨会话口径需请用户用 `/tasks` 核对；长会话 auto-compact 压掉早期派发记录导致记账失准时，按保守口径分批派或请用户报数，不许凭印象估。
 - **嵌套≤2**：Claude Code 原生嵌套硬上限是 **5 层且不可配置**，`SubagentStart` 也无法拦截派发行为。所以 2 层限制只能由各层自觉传递——第 1 层子代理在给第 2 层写 prompt 时，须明确写「你是第 2 层子代理，禁止再派任何 subagent」。
 
 ### 与其他插件的关系
@@ -301,6 +404,7 @@ plugins/working-discipline/
 │   └── guards/
 │       ├── block-cd.js             # PreToolUse 拦截（阻断污染 cwd 的独立 cd；git 命令额外指引 git -C）
 │       ├── agent-browser-launch.js # PreToolUse 拦截（agent-browser 启动类命令缺 --headed 或缺 --profile）
+│       ├── agent-naming.js         # PreToolUse 拦截（Agent 派发缺 name/model、前缀不符 model、description 泄露 prompt）
 │       ├── max-source-lines.js     # PostToolUse 拦截（单一源码文件超 1000 行）
 │       └── claude-md-max-lines.js  # PostToolUse 拦截（CLAUDE.md 超 200 行，指路拆到 .claude/rules/）
 └── README.md
@@ -311,9 +415,10 @@ plugins/working-discipline/
 - 增删注入条款 / 切换风格 → 编辑 `hooks/working-discipline.js` 里的 `SECTION_*` 数组，每行是 markdown 一行
 - 调整 `cd` 拦截行为（阈值、放行场景、git -C 教育提示文案） → 编辑 `hooks/guards/block-cd.js`
 - 调整 agent-browser 启动类子命令 / 白名单子命令 / `--headed`、`--profile` 硬要求 → 编辑 `hooks/guards/agent-browser-launch.js` 里的 `LAUNCH_SUBCOMMANDS` / `ALLOWLIST_SUBCOMMANDS`
+- 调整 subagent 命名门禁（豁免的 `subagent_type`、`description` 正文长度上限、提示词泄露句式清单） → 编辑 `hooks/guards/agent-naming.js` 里的 `EXEMPT_SUBAGENT_TYPES` / `DESC_BODY_MAX` / `PROMPT_LEAK_PREFIXES` / `LEAK_MATCH_MIN`；临时整体关闭用环境变量 `AGENT_NAMING_GUARD=off`
 - 调整源码文件行数阈值 / 扩展名列表 → 编辑 `hooks/guards/max-source-lines.js` 里的 `LINE_LIMIT` / `SOURCE_EXTENSIONS`
 - 调整 CLAUDE.md 行数阈值 / 排除目录 → 编辑 `hooks/guards/claude-md-max-lines.js` 里的 `LINE_LIMIT` / `EXCLUDED_SEGMENT_PATTERN`
 
 ---
 
-版本 1.9.0 · 作者 zhangq · MIT
+版本 1.11.0 · 作者 zhangq · MIT

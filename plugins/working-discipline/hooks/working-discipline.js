@@ -43,7 +43,10 @@ const SECTION_CONTEXT = [
 const SECTION_SUBAGENT = [
   '## 二、子代理协作纪律（避免重复加载与失联）',
   '',
-  '- **在飞总量动态上限 16 个（必做）**：每次决定派发 subagent 之前，先用 `TaskList` 统计当前 status=running 的在飞子代理数量（含后台 background、其他分支/其他任务在飞的），确保「当前在飞 + 本次拟派发」的总数**不超过 16**。这是**全系统在飞总量**的动态约束，不是"单条消息 N 个"的静态约束——每次派发前重新统计，不要凭记忆。接近上限时分批派发，等 `TaskList` 显示有空位再补派。',
+  '- **在飞总量动态上限 16 个（必做）**：每次决定派发 subagent 之前，先盘点当前本会话已派发、尚未收到完成通知的在飞子代理数量（含 `run_in_background` 的后台子代理），确保「当前在飞 + 本次拟派发」的总数**不超过 16**。这是**动态在飞总量**约束，不是"单条消息 N 个"的静态约束——每次派发前重新盘点，接近上限时分批派发，等有 agent 回执腾出空位再补派。',
+  '  - **统计手段只有自记账，没有可调用的查询工具**（重要，别用错工具）：派发时计数 +1，收到某个 agent 的 `<task-notification>` 完成通知或其 `Agent` 工具返回时该项 -1。`TaskList` / `TaskGet` **不能**用于此目的——它们读的是**任务板**（字段为 `id` / `subject` / `status` / `owner` / `blockedBy`，`status` 枚举只有 `pending` / `in_progress` / `completed` / `deleted`，不存在 `running`），与在飞子代理不是同一个数据源，任务板里也没有 `subagent_type` / `model` 字段。`TaskOutput` 已标记 DEPRECATED 且只能按**已知的单个** `task_id` 查询，无法枚举。',
+  '  - **跨会话在飞量 AI 看不到**：列出全系统在飞任务的入口是用户侧的 `/tasks` 斜杠命令，AI 无法自行调用。因此本条上限的自查范围**只限本会话自己派发的子代理**；禁止声称已统计过"全系统在飞总量"。需要跨会话口径时请用户用 `/tasks` 核对。',
+  '  - **自记账的失效场景**：长会话触发 auto-compact 后，早期派发记录可能被压缩掉导致计数失准。此时按保守口径处理（宁可少派、分批派），或直接请用户用 `/tasks` 报一次当前在飞数，不要凭印象估一个数继续大批派发。',
   '- **嵌套深度上限 2 层（软约束）**：主会话直接派发的子代理记为第 1 层；只有第 1 层子代理可以再派第 2 层子代理；第 2 层子代理**禁止再派** subagent。落地办法——你在给下一层子代理写 prompt 时，如果你自己已经是被派发出来的子代理（即你处在第 1 层），必须在下一层 prompt 里明确写「你是第 2 层子代理，禁止再派发任何 subagent」。',
   '- **共享骨架文件**：多个 subagent 都要读同一份长文档时，父代理先读一次，把共同需要的"参考骨架"提取成一份 scratch 文件，让每个 subagent 引用它而非重读原文',
   '  - 位置选择：放在**用户临时目录**，不放 `~/.claude/`（跨会话污染）也不放 git 跟踪目录（污染仓库）；任务结束清理',
@@ -113,6 +116,29 @@ const SECTION_THINKING = [
   '   - **动笔前必须留痕**（硬要求，防止 AI 心里想过就跳过）：调用 `Write` / `Edit` 写 md 文件之前，必须先在对话里显式输出一句「本次 md 受众判定：{人 / AI / 人机混合}，理由：……」；这句话必须**先于**任何写 md 的工具调用出现，缺此步骤视为直接跳过了受众分辨。写完后按判定对应的子项准则再自检一遍——判定为"AI 读"或"人机混合"必检"上下文齐备 / 用词精确 / 示例覆盖典型与边界"三条，判定为"人读"必检"结论前置 / 避免堆术语 / 示例落地"三条，缺项当场补回',
 ].join('\n')
 
+const SECTION_NAMING = [
+  '### 5.5 派发命名规范（subagent / teammate / workflow 通用 · 禁止提示词泄露）',
+  '',
+  '**适用对象**：`Agent` 工具的 `name` 与 `description`、`TaskCreate` 的任务名、长期在飞 teammate 的 `name`、`Workflow` 的 `meta.name` / `meta.description` / `meta.phases[].title` / `meta.phases[].detail` / `agent(prompt, {label})` 的 `label`。下面四条对每一个字段都成立。',
+  '',
+  '**5.5.1 `name` 必填，禁止省略**',
+  '派发 subagent / teammate 时 `name` 不是可选项，必须显式给值，且**同一会话内不得复用同名**（`SendMessage` 的寻址规则是 latest wins——新 agent 占用同名后，旧 agent 就只能靠 spawn 结果里的 raw `agentId`（形如 `a...-...`）寻址，等于把先派的 agent 弄丢）。省略 `name` 的后果：在飞 agent 列表面板左列只能回落显示裸的 `subagent_type`，同批派 3 个 `general-purpose` 就是三行一模一样的 `general-purpose`，用户和父代理都分不出谁在做什么。',
+  '格式 `模型名-任务语义`：`模型名` 取 `haiku` / `sonnet` / `opus` / `fable` 之一（与实际传入的 `model` 一致，不许写不符的档次），`任务语义` 用英文 kebab-case——`name` 受正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` 约束，只接受 ASCII 字母数字与 `-` `_`，写中文或方括号会被直接拒绝。示例：`sonnet-review-login-flow` / `opus-debug-order-race` / `haiku-grep-auth-refs` / `fable-hunt-memleak`。',
+  '',
+  '**5.5.2 `description` 必须是任务摘要，禁止灌 prompt 原文**',
+  '`description` 只写"这个子代理在做什么"的 3-5 词摘要，并以 `[模型名]` 方括号前缀开头（`[haiku]` / `[sonnet]` / `[opus]` / `[fable]`，同样与实际 `model` 一致）。合规示例：`[sonnet] 审查登录流程` / `[opus] 修 order race condition` / `[haiku] grep auth 引用`。',
+  '**禁止**把 `prompt` 的开头文字、角色设定句、纪律条款、上下文铺陈复制进 `description`。典型错误：`description` 写成「你是第 1 层子代理，可派发……」这类 prompt 前缀——一整批子代理的面板描述完全同质，既把内部提示词暴露到 UI 上，又丢掉了本该显示的任务信息。`prompt` 与 `description` 是两个独立字段，**不许共用同一段文字**：`prompt` 给子代理读（长、含约束与上下文），`description` 给面板显示（短、只讲任务是什么）。',
+  '面板上出现 prompt 文字有两条成因，两条都要防：(a) 主动把 prompt 原文抄进了 `description` / `label`；(b) 该显示字段**留空**，UI 回落用 prompt 开头当显示名（`Agent` 工具的 `description` 是必填字段不会留空，但 `Workflow` 的 `agent(prompt, {label})` 里 `label` 是可选参数，省略即触发回落）。因此凡是可选的显示字段一律**当必填处理**，显式给值。',
+  '',
+  '**5.5.3 同批并发必须互相可辨**',
+  '同一时刻在飞的多个子代理，其 `name` 与 `description` 必须能一眼区分各自负责什么。只靠数字后缀而看不出任务差异**不合格**——例如 `verdict-part1` / `verdict-part2` / `verdict-part3` 三个名字既缺模型前缀，也没说清各自判定的是哪一部分。正确做法是把分片依据写进名字（`sonnet-verdict-spec-01-05` / `sonnet-verdict-spec-06-10`），或在 `description` 里点明分片范围（`[sonnet] 判定 spec 01-05`）。',
+  '',
+  '**5.5.4 `Workflow` 的命名**',
+  '`agent(prompt, {label})` 的 `label` 虽是可选参数但**必须显式给**（省略时 workflow 进度树会回落用 prompt 开头当显示名，正是提示词泄露到 UI 的直接成因），按 5.5.2 同样带 `[模型名]` 前缀 + 任务语义（`label` 无字符集限制，可用中文任务语义）。`meta.name` 用 kebab-case 任务语义：整个 workflow 统一走某一档模型时同样加 `模型名-` 前缀（`sonnet-migrate-auth-calls`），跨档混用时不加前缀（`migrate-auth-calls`），档次由各 `agent()` 的 `label` 逐个体现。`meta.description`、`meta.phases[].title`、`meta.phases[].detail` 写这个 workflow / 阶段做什么，**同样禁止粘贴 prompt 原文**——`meta.description` 会出现在权限确认弹窗里，粘 prompt 等于让用户在弹窗里读一段内部指令。',
+  '',
+  '**本节有硬门禁**：`hooks/guards/agent-naming.js` 在 `PreToolUse` 拦 `Agent` 工具调用——缺 `name` / 缺 `model` / `name` 前缀与 `model` 不一致 / `description` 缺 `[模型名]` 前缀 / `description` 正文是 prompt 角色设定句或与 prompt 开头逐字重合 / 正文超 60 字符，任一命中即 exit 2 阻断并把 finding 回灌给你。被拦后按 finding 修正 `name` / `description` / `model` 重新派发，不要试图绕过。',
+].join('\n')
+
 const SECTION_DISPATCH = [
   '## 五、Agent 工具派发子代理（大输出 / 智能检索 / 多步推理）',
   '',
@@ -170,12 +196,13 @@ const SECTION_DISPATCH = [
   '调用 `Agent` 工具时参数模板：',
   '- `subagent_type`：按 5.1 选',
   '- `model`：按 5.2 判定标尺 + 5.3 场景路由表选，显式填 `"haiku"` / `"sonnet"` / `"opus"` / `"fable"`',
-  '- `description`：3-5 词任务摘要，**必须以 `[模型名]` 方括号前缀开头**（示例：`[haiku] grep auth 引用` / `[sonnet] 审查登录流程` / `[opus] 修 order race condition` / `[fable] 深挖内存泄漏`）；目的是让 `TaskList` / `/tasks` 面板一眼可辨在飞子代理的模型档次，方便用户和父代理评估成本与合理性。同一原则适用于 `Workflow` 里 `agent(prompt, {label, ...})` 的 `label` 字段',
-  '- `name`（可选，用于 `SendMessage({to: name})` 寻址的长期在飞子代理 / teammate）：**若指定则必须以 `模型名-` 连字符前缀开头**（示例：`haiku-grep-auth` / `sonnet-review-login` / `opus-debug-order-race` / `fable-hunt-memleak`）；因 `name` 字段有正则约束 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` 不允许方括号，故用连字符替代，语义与 `description` 的方括号前缀一致',
+  '- `name`、`description`：**两个都必填**，格式硬要求与禁止事项见下方 5.5（同一套要求覆盖 teammate 与 `Workflow`），不得省略、不得与 `prompt` 共用文字',
   '- `prompt`：`【目标】... 【上下文】... 【约束】... 【期望输出】...`',
   '- 升 `opus` 或 `fable` 时，`prompt` 里显式点明"已知失败/难点是什么、上一档失败的具体表现"，避免高档模型盲跑走弯路',
   '',
-  '### 5.5 图片/截图核验规范（subagent 派发时必守）',
+  SECTION_NAMING,
+  '',
+  '### 5.6 图片/截图核验规范（subagent 派发时必守）',
   '',
   '**触发场景**：用户报 bug / 需求时提供了截图（如通过 `[Image #N]` 引用附加、或在描述里明确给出图片路径），随后需要派 subagent 分析/复现/修复该问题。',
   '',
@@ -183,13 +210,13 @@ const SECTION_DISPATCH = [
   '',
   '**豁免**：纯后端 5xx / DB / MQ 类问题（截图对根因定位无价值）；纯 spec 矛盾 / 纯 CI 问题（首帧不进浏览器）；用户明确说"不用附图片"。',
   '',
-  '### 5.6 多 subagent 并发时等齐再总结（收执时机 · 仅主会话适用）',
+  '### 5.7 多 subagent 并发时等齐再总结（收执时机 · 仅主会话适用）',
   '',
   '**作用域限制**：本节**只**约束主会话（用户能直接看到对话输出的最上层 agent），**不**约束子代理内部处理下级回执的行为。原因：子代理有自己独立的对话上下文，中间"总结"过程不进入用户可见的主对话，最终它只返回一份结构化回执给上级——本节三个动机（用户可见窗口不膨胀 / 关键信息不被 auto-compact 挤走 / 用户一次拍板省切换成本）在子代理内部都不成立，子代理内部逐条处理下级回执反而更简单直接。故本节仅注入 `UserPromptSubmit`（主会话每轮），不进 `SubagentStart`。',
   '',
-  '**触发条件**：`TaskList` 显示同一时刻在飞子代理数 ≥2 时。',
+  '**触发条件**：同一批次派发的子代理数 ≥2，且其中至少一个尚未返回回执时（判据是自己的派发记账，不是 `TaskList`——理由见上方"二、"在飞统计手段一条）。',
   '',
-  '**规则**：即使其中一个或几个已提前返回回执，主会话**不得**在主对话里对已完成的这几个做逐条总结、复述、或据此二次派生新任务（用户主动追问某条除外）——只需**静默累积**回执原文，等 `TaskList` 显示本批次全部在飞子代理都到 `completed`（或用户明确同意提前中止剩余任务）后再**一次性**对全批做汇总回复，把所有需要用户拍板的事项、跨条比对结论、冲突/重复项集中列在这一次汇总里。',
+  '**规则**：即使其中一个或几个已提前返回回执，主会话**不得**在主对话里对已完成的这几个做逐条总结、复述、或据此二次派生新任务（用户主动追问某条除外）——只需**静默累积**回执原文，等本批次**每一个**子代理各自的完成信号都已到齐（即每个 agent 的 `<task-notification>` 完成通知或 `Agent` 工具返回都收到了；不是去查 `TaskList` 的 `completed` 状态，那是任务板字段、与子代理生命周期无关），或用户明确同意提前中止剩余任务后，再**一次性**对全批做汇总回复，把所有需要用户拍板的事项、跨条比对结论、冲突/重复项集中列在这一次汇总里。',
   '',
   '**理由**：(1) 逐条即时总结会连锁触发 markdown 排版展开 / 甚至新任务派发，把用户可见的对话窗口过早撑大，后到的关键回执发现容易被挤到上下文压缩边界甚至被后续 auto-compact 折叠丢失；(2) 一次性汇总便于跨条比对、去重、发现冲突；(3) **所有需要用户拍板的事项统一在最后一次汇总里集中列出，用户一次拍板显著快于逐条拍板**——每次逐条拍板都要让用户重新装载上下文（回忆当前在跑什么、这一条与其他并发条的关联），切换成本高，最终墙钟时间反而更长。',
   '',
@@ -225,11 +252,16 @@ function buildMainPrompt() {
   ].join('\n')
 }
 
-// 子代理版：只带对子代理自身有意义的部分（上下文/协作/表达/外部写授权），
-// 去掉"思维模式全表"和"Agent 派发大路由表"以省 token；子代理如需再派下一层，
-// 上方"二、"已含在飞 16 上限与 2 层嵌套约束。
-// 注：SECTION_EXTERNAL_WRITE 必须进子代理版——general-purpose 子代理带 Bash 权限，
-// 同样能执行 dws 写命令；章节编号"六"与主版保持一致（子代理版故意跳号，同一字符串单一真相源）。
+// 子代理版：只带对子代理自身有意义的部分（上下文/协作/表达/派发命名/外部写授权），
+// 去掉"思维模式全表"和"Agent 派发大路由表"以省 token。
+// 注 1：SECTION_EXTERNAL_WRITE 必须进子代理版——general-purpose 子代理带 Bash 权限，
+// 同样能执行 dws 写命令。
+// 注 2：SECTION_NAMING（5.5 派发命名规范）必须进子代理版——第 1 层子代理可以再派第 2 层
+// （见"二、"的 2 层嵌套上限），派发时同样要给 name/description 命名，且 agent-naming.js
+// 的 PreToolUse 硬门禁对子代理发起的 Agent 调用一样生效；不注入的话子代理会在不知道
+// 规范的情况下被硬拦。代价是每次子代理启动多约 2.5k 字符注入，换取命名合规。
+// 注 3：章节编号与主版保持一致（子代理版故意跳号：一、二、三、五、六，缺四；同一字符串
+// 单一真相源，避免同一条规则出现两套编号）。
 function buildSubagentPrompt() {
   return [
     '# AI 工作纪律（子代理版）',
@@ -242,6 +274,12 @@ function buildSubagentPrompt() {
     SECTION_SUBAGENT,
     '',
     SECTION_EXPRESSION,
+    '',
+    '## 五、Agent 工具派发子代理（子代理版只保留命名规范）',
+    '',
+    '你若要再派下一层子代理（受上方"二、"的嵌套 2 层上限约束），命名必须守下面这一节。`subagent_type` × `model` 路由表、模型分档判定、图片/截图核验、并发收执时机等其余派发条款见主会话版，此处为省 token 略去——但你派发时仍须显式指定 `model`。',
+    '',
+    SECTION_NAMING,
     '',
     SECTION_EXTERNAL_WRITE,
   ].join('\n')
