@@ -50,7 +50,10 @@
 const fs = require('fs')
 const { currentTurnImagePaths } = require('../lib/transcript')
 
-const MODELS = ['haiku', 'sonnet', 'opus', 'fable']
+// 可选模型三档。**不含 haiku**（2026-07-27 起）：haiku 在机械任务上省下的那点
+// 成本，抵不过它读错文件结构、漏掉边界条件后父代理返工重派的开销——最低档一律
+// 从 sonnet 起步。写了 haiku 会在第一层被拦并回灌路由表。
+const MODELS = ['sonnet', 'opus', 'fable']
 
 // Agent 工具 name 字段的原生正则约束（只接受 ASCII 字母数字与 - _）
 const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
@@ -87,18 +90,14 @@ const ROUTING_TABLE = [
   '',
   '| 场景 | subagent_type | model |',
   '|---|---|---|',
-  '| 关键字 grep / 文件定位 / 找定义引用 | `Explore` | `haiku` |',
-  '| 单文件只读分析（日志、CSV、JSON 字段提取） | `Explore` | `haiku` |',
-  '| 代码库架构调查 / 多文件交叉理解 / 依赖追踪 | `Explore` | `sonnet` |',
-  '| 常规代码审查（业务逻辑与设计意图理解） | `Explore` | `sonnet` |',
+  '| 只读检索与分析：grep / 文件定位 / 找定义引用 / 单文件字段提取（日志·CSV·JSON） | `Explore` | `sonnet` |',
+  '| 代码库架构调查 / 多文件交叉理解 / 依赖追踪 / 常规代码审查 | `Explore` | `sonnet` |',
   '| **深度代码审查**（安全审计 / 并发正确性 / 边界条件 / 协议一致性 / 数据一致性） | `Explore` | `opus` |',
   '| 常规架构设计 / 技术方案 / 任务拆解 / 风险评估 | `Plan` | `sonnet` |',
   '| **重大架构设计**（系统级取舍 / 破坏性变更 / 跨模块不变量迁移 / 长期演进） | `Plan` | `opus` |',
-  '| Git 提交消息生成 / git log·diff 简单摘要 | `general-purpose` | `haiku` |',
-  '| 大输出命令执行 + 摘要（npm test / docker logs / 长 list / dump） | `general-purpose` | `haiku` |',
-  '| 机械文件改写（重命名、格式化、模板填充、批量替换） | `general-purpose` | `haiku` |',
-  '| Web 文档检索 + 关键信息提取 | `general-purpose` | `haiku` |',
-  '| Web 多源调研 + 综合分析 | `general-purpose` | `sonnet` |',
+  '| 机械执行类：大输出命令 + 摘要（npm test / docker logs / dump）、git log·diff 摘要、提交消息生成 | `general-purpose` | `sonnet` |',
+  '| 机械文件改写（重命名、格式化、模板填充、批量替换） | `general-purpose` | `sonnet` |',
+  '| Web 文档检索 / 多源调研 + 综合分析 | `general-purpose` | `sonnet` |',
   '| 常规多步骤编码 / 重构 / 普通 bug 修复 / 测试编写 | `general-purpose` | `sonnet` |',
   '| **复杂 bug 排查**：跨模块 / 难复现 / 并发·竞态·死锁 / 内存泄漏 / 时序 / 性能回退 / 长链根因 | `general-purpose` | `opus` |',
   '| **性能诊断与优化**：找真正瓶颈 / 判断优化方向 / 基准设计 / 复杂度分析 | `general-purpose` | `opus` |',
@@ -107,13 +106,13 @@ const ROUTING_TABLE = [
   '| **深度技术调研**：对抗性验证 / 多源交叉核对 / 可信度评估 | `general-purpose` | `opus` |',
   '| **兜底升级**：同一任务在 opus 下已完整跑过 ≥2 轮仍无进展 | 沿用原类型 | `fable` |',
   '',
-  '模型四档判定标尺：',
-  '- `haiku`：机械执行、模式匹配、规整提取、简短摘要——不涉及语义取舍',
-  '- `sonnet`：需语义理解、跨文件推理、常规设计权衡——大多数编码/审查任务的默认档',
+  '模型三档判定标尺（**无 haiku 档，最低从 sonnet 起**）：',
+  '- `sonnet`：**全局最低档兼默认档**。机械执行（模式匹配、规整提取、批量改写、简短摘要）',
+  '  与常规语义任务（跨文件推理、常规设计权衡、多步骤编码与审查）**都从这一档起步**',
   '- `opus`：命中任一即用——(a) 需严密因果链（跨层追根因）；(b) 极高正确性要求',
   '  （安全/并发/协议/资金/权限）；(c) sonnet 已明显吃力（漏点多、方案有硬缺陷、修 A 出 B）',
   '- `fable`：兜底升级不作首选——同一任务用 opus 完整跑过 ≥2 轮仍无进展才启用',
-  '- `Plan` 类型最低起点是 `sonnet`；禁止预防性堆模型，能用低档不用高档',
+  '- 禁止预防性堆模型：没有 opus 触发信号就留在 sonnet，不确定时一档一档升，别一步跳顶',
 ].join('\n')
 
 const RECEIPT_TEMPLATE = [
@@ -190,13 +189,18 @@ function checkNaming(ti) {
   const hints = []
   const modelOk = MODELS.indexOf(model) !== -1
 
-  // 1. model 必须显式指定且在四档之内
+  // 1. model 必须显式指定且在三档之内
   if (!model) {
     findings.push('缺 model;禁止依赖默认模型回落')
-    hints.push('显式加 model:"haiku"|"sonnet"|"opus"|"fable"')
+    hints.push('显式加 model:"sonnet"|"opus"|"fable"')
+  } else if (model === 'haiku') {
+    // haiku 单独给 finding：它是最常见的误填（旧纪律里曾是合法档），
+    // 泛泛报「不在三档之内」不足以让人知道该换成哪一档。
+    findings.push('model="haiku" 已从可选档次中移除;最低档是 sonnet')
+    hints.push('机械执行/规整提取类任务同样用 model:"sonnet",并把 name / description 前缀一并改成 sonnet')
   } else if (!modelOk) {
-    findings.push(`model="${model}" 不在四档 haiku/sonnet/opus/fable 之内`)
-    hints.push('model 只能填 haiku|sonnet|opus|fable')
+    findings.push(`model="${model}" 不在三档 sonnet/opus/fable 之内`)
+    hints.push('model 只能填 sonnet|opus|fable')
   }
 
   // 2~4. name 必填 + 模型前缀 + 字符集合法
@@ -209,7 +213,12 @@ function checkNaming(ti) {
       hints.push('name 用英文 kebab-case,不能含中文/空格/方括号')
     }
     const namePrefix = MODELS.find((m) => name.startsWith(m + '-'))
-    if (!namePrefix) {
+    if (name.startsWith('haiku-')) {
+      // 单独识别旧档前缀，避免回落到「缺前缀」分支后给出 "sonnet-haiku-xxx" 这种
+      // 把旧档次名留在任务语义里的错误改法。
+      findings.push(`name="${name}" 用了已移除的 haiku 档前缀`)
+      hints.push(`name 改成 "${modelOk ? model : 'sonnet'}-${name.slice(6) || '<任务语义>'}"`)
+    } else if (!namePrefix) {
       findings.push(`name="${name}" 缺模型档次前缀;用户无法从面板判断在飞任务烧的是哪一档模型`)
       hints.push(`name 改成 "${modelOk ? model : '<模型名>'}-${name.replace(/^[^A-Za-z0-9]+/, '') || '<任务语义>'}"`)
     } else if (modelOk && namePrefix !== model) {
@@ -224,12 +233,18 @@ function checkNaming(ti) {
     findings.push('缺 description')
     hints.push(`description 填 "[${modelOk ? model : '<模型名>'}] <3-5 词任务摘要>"`)
   } else {
-    const m = description.match(/^\[(haiku|sonnet|opus|fable)\]\s*/)
+    // 正则里保留 haiku 只为**识别**旧档前缀并给出精确改法（否则会掉进「缺前缀」
+    // 分支，descBody 解析不出来，连带跳过后面的提示词泄露检测）；它已不是合法
+    // 档次，命中即报错，不会放行。
+    const m = description.match(/^\[(sonnet|opus|fable|haiku)\]\s*/)
     if (!m) {
       findings.push(`description="${truncate(description, 40)}" 缺 [模型名] 方括号前缀`)
       hints.push(`description 改成 "[${modelOk ? model : '<模型名>'}] <3-5 词任务摘要>"`)
     } else {
-      if (modelOk && m[1] !== model) {
+      if (m[1] === 'haiku') {
+        findings.push('description 前缀 "[haiku]" 用了已移除的档次')
+        hints.push(`description 前缀改成 "[${modelOk ? model : 'sonnet'}]"`)
+      } else if (modelOk && m[1] !== model) {
         findings.push(`description 前缀 "[${m[1]}]" 与实际 model="${model}" 不一致`)
         hints.push(`description 前缀改成 "[${model}]"`)
       }
@@ -272,7 +287,15 @@ function checkDispatchQuality(ti, payload) {
   const routingConfirmed = /档位已确认/.test(prompt)
   const READ_ONLY_INTENT = /分析|调查|查找|定位|梳理|检索|阅读|审查|评估|理解|探索|统计|列出|盘点/
   const WRITE_INTENT = /修改|新增|删除|重构|实现|修复|写入|创建|编辑|提交|安装|生成|补充|更新|执行|运行|跑一?下|测试|构建|npm |mvn |yarn |git commit/
-  const HIGH_COMPLEXITY = /安全|漏洞|注入|越权|并发|竞态|死锁|内存泄漏|资源泄漏|性能瓶颈|性能回退|根因|深度审查|深度调研|架构设计|一致性|不变量|时序/
+  // 「最低档别干必须 opus 的活」。haiku 移除后最低档变成 sonnet，这条由原来的
+  // 「haiku + 高复杂度」平移而来，但词表**必须同步收窄**，原因有二：
+  //   (a) sonnet 是默认档，绝大多数派发都走它，宽词表的误拦面比作用于 haiku 时大得多；
+  //   (b) 旧词表里「架构设计」「一致性」与路由表自相矛盾——路由表明写「常规架构设计
+  //       → sonnet / 重大架构设计 → opus」，留着就会把常规设计任务拦死。
+  // 同理「安全」「注入」这类单字词也换成限定写法：本仓库语境里「注入」几乎都指
+  // 依赖注入 / 上下文注入，裸词会天天误拦。
+  const OPUS_REQUIRED =
+    /安全审计|安全漏洞|安全风险|安全加固|越权|提权|SQL\s*注入|注入漏洞|注入攻击|反序列化|SSRF|并发|竞态|死锁|内存泄漏|资源泄漏|性能瓶颈|性能回退|根因|深度审查|深度调研|数据一致性|协议一致性|不变量|时序问题/
 
   if (!routingConfirmed) {
     if (subagentType === 'general-purpose' && READ_ONLY_INTENT.test(prompt) && !WRITE_INTENT.test(prompt)) {
@@ -285,24 +308,22 @@ function checkDispatchQuality(ti, payload) {
         ROUTING_TABLE,
       ].join('\n')
     }
-    if (model === 'haiku' && HIGH_COMPLEXITY.test(prompt)) {
+    if (model === 'sonnet' && OPUS_REQUIRED.test(prompt)) {
       return [
-        'prompt 命中高复杂度信号（安全 / 并发 / 竞态 / 泄漏 / 性能 / 根因 / 架构 / 一致性 等），',
-        '这类任务对正确性要求极高或需要跨层因果链推理，`haiku` 无力胜任——它只适合机械执行、',
-        '模式匹配、规整提取。请升到 `opus`（并同步改 name / description 的模型前缀）。',
-        '若判断确实是机械任务（只是 prompt 里恰好出现了这些词），在 prompt 里写明',
-        '「档位已确认：<理由>」再派发。',
+        'prompt 命中必须起 `opus` 的信号（安全审计·漏洞 / 越权·提权 / 并发·竞态·死锁 /',
+        '内存·资源泄漏 / 性能瓶颈·回退 / 根因 / 深度审查·调研 / 数据·协议一致性 / 不变量 /',
+        '时序问题 等）。这类任务要么需要跨层因果链推理，要么对正确性要求极高，`sonnet`',
+        '作为**最低档**不足以胜任（haiku 已从档次表移除，sonnet 就是地板，不能再往下让）。',
+        '请升到 `opus`，并同步改 name / description 的模型前缀。',
+        '',
+        '若判断这其实是常规任务、只是 prompt 里恰好出现了这些词（例如「依赖注入」「上下文',
+        '注入」这类与安全无关的用法），在 prompt 里写明「档位已确认：<理由>」再派发。',
         '',
         ROUTING_TABLE,
       ].join('\n')
     }
-    if (subagentType === 'Plan' && model === 'haiku') {
-      return [
-        '`Plan` 子代理最低起点是 `sonnet`——设计天然需要推理（权衡取舍、拆解依赖、评估风险），',
-        'haiku 无力胜任。涉及重大架构 / 破坏性变更 / 系统级取舍时应起 `opus`。',
-        '改 model 后记得同步改 name / description 的模型前缀。',
-      ].join('\n')
-    }
+    // 原「`Plan` + haiku」检查已删除：haiku 不再是合法档次，第一层就会拦下，
+    // 这条在第二层永远不可能命中。Plan 最低 sonnet 现由 MODELS 的地板天然保证。
   }
 
   // prompt 必须索要结构化回执
