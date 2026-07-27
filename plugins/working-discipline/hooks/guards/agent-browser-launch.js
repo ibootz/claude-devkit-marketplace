@@ -63,6 +63,9 @@
 'use strict'
 
 const fs = require('fs')
+// 顶层片段切分 / token 切分 / 去引号：与 block-cd.js 共用 ../lib/shell-parse.js，
+// 避免同一份逐字符解析逻辑在多个 guard 里各存一份
+const { splitSegments, tokenize, stripQuotes } = require('../lib/shell-parse')
 
 // 启动类子命令：会真正拉起一个新 CFT 实例的子命令
 const LAUNCH_SUBCOMMANDS = new Set(['open', 'connect', 'chat'])
@@ -87,94 +90,6 @@ const ALL_KNOWN_SUBCOMMANDS = new Set([...LAUNCH_SUBCOMMANDS, ...ALLOWLIST_SUBCO
 
 // URL 位置参数判定（chat 子命令专用）：形如 scheme://
 const URL_PATTERN = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//
-
-// 顶层片段切分（; && || | 换行为分隔符，引号内的分隔符不参与切分），
-// 与 block-cd.js 的 splitSegments 同思路，避免跨命令误判子命令归属。
-function splitSegments(cmd) {
-  const segments = []
-  let cur = ''
-  let inDouble = false
-  let inSingle = false
-  for (let i = 0; i < cmd.length; i++) {
-    const c = cmd[i]
-    const prev = cmd[i - 1]
-    if (!inSingle && c === '"' && prev !== '\\') {
-      inDouble = !inDouble
-      cur += c
-      continue
-    }
-    if (!inDouble && c === "'") {
-      inSingle = !inSingle
-      cur += c
-      continue
-    }
-    if (!inDouble && !inSingle) {
-      if (c === '\n' || c === ';') {
-        segments.push(cur)
-        cur = ''
-        continue
-      }
-      if (c === '&' && cmd[i + 1] === '&') {
-        segments.push(cur)
-        cur = ''
-        i++
-        continue
-      }
-      if (c === '|' && cmd[i + 1] === '|') {
-        segments.push(cur)
-        cur = ''
-        i++
-        continue
-      }
-      if (c === '|') {
-        segments.push(cur)
-        cur = ''
-        continue
-      }
-    }
-    cur += c
-  }
-  if (cur.trim()) segments.push(cur)
-  return segments
-}
-
-// 按空白切分 token，引号内的空白不切（保留引号字符本身，交给 stripQuotes 处理）
-function tokenize(segment) {
-  const tokens = []
-  let cur = ''
-  let inDouble = false
-  let inSingle = false
-  for (let i = 0; i < segment.length; i++) {
-    const c = segment[i]
-    if (!inSingle && c === '"') {
-      inDouble = !inDouble
-      cur += c
-      continue
-    }
-    if (!inDouble && c === "'") {
-      inSingle = !inSingle
-      cur += c
-      continue
-    }
-    if (!inDouble && !inSingle && /\s/.test(c)) {
-      if (cur) {
-        tokens.push(cur)
-        cur = ''
-      }
-      continue
-    }
-    cur += c
-  }
-  if (cur) tokens.push(cur)
-  return tokens
-}
-
-function stripQuotes(token) {
-  if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
-    return token.slice(1, -1)
-  }
-  return token
-}
 
 // 在某个顶层片段里定位 agent-browser / npx agent-browser 调用，
 // 返回该调用之后（同片段内）的 token 数组；未找到返回 null。

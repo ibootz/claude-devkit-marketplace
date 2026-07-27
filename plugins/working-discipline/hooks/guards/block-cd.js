@@ -21,10 +21,27 @@
 //   就是当前目录，对 cwd 无任何影响。
 //
 // 【阻塞行为】
-// 命令链中存在任意一个会改变 cwd 的 cd 时 exit 2 阻断，
-// stderr 输出引导：
-//   - 用绝对路径替代相对路径 + cd
-//   - 必须临时切换目录时用子 shell 形式 `(cd /path && cmd)`
+// 命令链中存在任意一个会改变 cwd 的 cd 时 exit 2 阻断，stderr 给出三条处置
+// （绝对路径 / 子 shell / git 用 `git -C`）+ 违规片段回显，**控制在 300 字符内**。
+//
+// 【为什么 stderr 必须短】（2026-07-26 精简，原文约 1500 字符）
+// stderr 会作为附加上下文注入 Claude，每次拦截都灌进 1500 字符，本身就构成上下文膨胀
+// 与注意力抢占——本插件存在的目的正是避免这件事。详细背景挪到下面的注释里给维护者读，
+// 不再进 AI 的上下文。
+//
+// 【背景：为什么第 3 条处置要专门推荐 `git -C`】
+// 真实事故（2026-07-20，D-001-feat-job-sequence-model 会话）：AI 用
+//   (cd /path/to/claude-devkit-marketplace && git push origin main)
+// 推送一个与当前项目完全无关的第三方仓库，却被 sdlc 插件的
+// `hooks/lib/worktree-utils.js` 里 `resolveGitCwd()` 误拦，报
+// 「BLOCKED: ontology 正向同步未收口 for D-001-feat-job-sequence-model」。
+// 根因：`resolveGitCwd()` 用正则 `/^cd\s+.../` 识别 `cd` 前缀来判定一条 git 命令实际
+// 作用于哪个仓库；子 shell 语法 `(cd /path && cmd)` 带括号、不以 `cd` 开头，那个正则
+// 匹配不上，于是它 fall back 到当前会话所在的 worktree cwd，把发往无关第三方仓库的
+// push 误判成当前项目 delivery 分支的 push，触发了不相关的门禁拦截。
+// `git -C <path> <cmd>` 是 git 官方支持的全局选项，语义等价但不含 `cd` token、不进
+// 子 shell，各类插件的 cwd 探测正则通常会显式支持 `-C`，能同时躲开本 hook 与此类
+// 跨插件误伤。
 //
 // Input: JSON on stdin with tool_input.command 和 cwd
 // Exit 0 = 放行; Exit 2 = 阻断
@@ -33,78 +50,11 @@
 
 const fs = require('fs')
 const path = require('path')
+const { splitSegments, stripSubshells } = require('../lib/shell-parse')
 
 // 独立 cd 命令的锚点：行首 / 命令分隔符之后
 // 分隔符: ; && || | 换行
 const CD_PATTERN = /(^|[;&|\n])\s*cd(\s|$)/
-
-// 剥离所有子 shell（递归处理嵌套）：
-//   $(...)   命令替换
-//   `...`    反引号命令替换
-//   (...)    子 shell（含 (cd && cmd) 这种）
-function stripSubshells(cmd) {
-  let prev
-  let result = cmd
-  do {
-    prev = result
-    // 反引号：成对剥离
-    result = result.replace(/`[^`]*`/g, '')
-    // $(...)：最内层优先
-    result = result.replace(/\$\([^()]*\)/g, '')
-    // (...)：最内层优先（在 $() 之后处理，避免吃掉 $）
-    result = result.replace(/\([^()]*\)/g, '')
-  } while (result !== prev)
-  return result
-}
-
-// 按命令分隔符（; && || | 换行）切分顶层片段，引号内的分隔符不参与切分。
-function splitSegments(cmd) {
-  const segments = []
-  let cur = ''
-  let inDouble = false
-  let inSingle = false
-  for (let i = 0; i < cmd.length; i++) {
-    const c = cmd[i]
-    const prev = cmd[i - 1]
-    if (!inSingle && c === '"' && prev !== '\\') {
-      inDouble = !inDouble
-      cur += c
-      continue
-    }
-    if (!inDouble && c === "'") {
-      inSingle = !inSingle
-      cur += c
-      continue
-    }
-    if (!inDouble && !inSingle) {
-      if (c === '\n' || c === ';') {
-        segments.push(cur)
-        cur = ''
-        continue
-      }
-      if (c === '&' && cmd[i + 1] === '&') {
-        segments.push(cur)
-        cur = ''
-        i++
-        continue
-      }
-      if (c === '|' && cmd[i + 1] === '|') {
-        segments.push(cur)
-        cur = ''
-        i++
-        continue
-      }
-      if (c === '|') {
-        segments.push(cur)
-        cur = ''
-        continue
-      }
-    }
-    cur += c
-  }
-  if (cur.trim()) segments.push(cur)
-  return segments
-}
 
 // 如果 segment 是 cd 命令，返回其目标字符串（去引号）；
 // 否则返回 undefined。`cd` 不带参数时返回空串（代表 home）。
@@ -178,46 +128,13 @@ function main() {
 
   if (!blockingSegment) process.exit(0)
 
+  // stderr 会注入 Claude 上下文，控制在 300 字符内；详细背景见文件头注释
   const msg = [
-    'BLOCK-CD: 独立 `cd` 命令被拦截',
-    '',
-    'Bash 工具的 cwd 在多次调用之间持久保留，单独执行 `cd` 会让后续',
-    '相对路径全部失准。请改用以下任一方式：',
-    '',
-    '  1. 直接用绝对路径，不切换目录：',
-    '       grep -r "foo" /abs/path/to/dir',
-    '',
-    '  2. 必须临时切目录时用子 shell（cwd 不回流父进程）：',
-    '       (cd /abs/path && some-command)',
-    '',
-    '  3. 命令替换里的 cd 也是安全的：',
-    '       result=$(cd /abs/path && pwd)',
-    '',
-    '  4. 目标等于当前 cwd 的 no-op cd 会放行（例如 `cd .` 或',
-    '     `cd <当前目录绝对路径> && cmd`）。如果你看到此提示，',
-    '     说明目标和 cwd 不一致——核对路径是否拼错。',
-    '',
-    '  5. 如果原命令是 `git` 命令，强烈推荐直接用 `git -C <path> <cmd>`，',
-    '     而不是 `(cd /path && git ...)` 子 shell 语法。真实事故',
-    '     （2026-07-20 D-001-feat-job-sequence-model 会话）：AI 用',
-    '     `(cd /path/to/claude-devkit-marketplace && git push origin main)`',
-    '     推送一个与当前项目完全无关的第三方仓库，却被 sdlc 插件的',
-    '     `hooks/lib/worktree-utils.js` 里 `resolveGitCwd()` 误拦，报',
-    '     「BLOCKED: ontology 正向同步未收口 for D-001-feat-job-sequence-model」。',
-    '     根因：`resolveGitCwd()` 用正则 `/^cd\\s+.../` 识别 `cd` 前缀来判定',
-    '     一条 git 命令实际作用于哪个仓库；子 shell 语法 `(cd /path && cmd)`',
-    '     带括号、不以 `cd` 开头，那个正则匹配不上，于是它 fall back 到',
-    '     当前 Claude 会话所在的 worktree cwd，把发往无关第三方仓库的 push',
-    '     误判成当前项目 delivery 分支的 push，触发不相关的门禁拦截。',
-    '     `git -C <path> <cmd>` 是 git 官方支持的全局选项，语义等价但不含',
-    '     `cd` token、不进子 shell，各类插件的 cwd 探测正则通常会显式支持',
-    '     `-C`，能同时躲开本 hook 与此类跨插件误伤。',
-    '',
-    `当前 cwd：${cwd}`,
-    '违规命令：',
-    `  ${command}`,
-    '违规片段：',
-    `  ${blockingSegment}`,
+    'BLOCK-CD: 独立 `cd` 会污染后续所有 Bash 调用的 cwd。三种改法：',
+    '  1. 直接用绝对路径，不切目录',
+    '  2. 必须切目录时用子 shell：`(cd /abs/path && cmd)`',
+    '  3. git 命令优先 `git -C <path> <cmd>`（避免被其他插件的 cwd 探测正则误判）',
+    `cwd=${cwd}  违规片段：${blockingSegment}`,
   ]
 
   process.stderr.write(msg.join('\n') + '\n')

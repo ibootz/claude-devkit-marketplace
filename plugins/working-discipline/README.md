@@ -1,11 +1,28 @@
 # Working Discipline
 
-一个纯 hook 插件，用两种方式把「AI 工作纪律」落到 Claude Code 上：
+一个纯 hook 插件，用三种方式把「AI 工作纪律」落到 Claude Code 上：
 
-1. **注入**：每轮往主会话、以及每次子代理启动时的 context 里，塞入一份可审计、可复用的行为准则
-2. **拦截**：Bash 工具执行前硬拦截污染 cwd 的独立 `cd` 命令、缺 `--headed`/缺 `--profile` 的 `agent-browser` 启动类命令；Write/Edit 工具写入完成后硬拦截超 1000 行的单一源码文件、超 200 行的 CLAUDE.md
+1. **常驻注入**：每轮往主会话、以及每次子代理启动时的 context 里，塞入一份可审计、可复用的行为准则
+2. **硬拦截**（`PreToolUse` deny）：派发 subagent 时命名/档位/回执/截图不合规、写 `.md` 前没声明受众判定、污染 cwd 的独立 `cd`、缺 `--headed`/`--profile` 的 `agent-browser` 启动、非 ASCII 路径探测命令挂 `2>/dev/null`；以及写入完成后（`PostToolUse`）拦超 1000 行源码文件、超 200 行 CLAUDE.md
+3. **条件注入**（`additionalContext`）：只在真的执行了外部系统写操作之后才讲回读核验要求，只在真的用中文路径检索时才讲 NFC/NFD 规避法
 
 零 skill、零命令、零子代理，装了就生效。不修改用户文件（拦截类 hook 只阻断"继续往下走"，不撤销已完成的写入），无副作用。
+
+### 核心设计原则：常驻 vs 按需，别错配
+
+2.0.0 是一次大幅瘦身：主会话每轮注入从实测 **13632 字符压到约 5900**（-57%）。起因是一个反直觉的观察——**注入的规则越多，AI 的整体遵从度反而越低**，连那些写得很清楚的规则也开始被跳过。
+
+根因不是规则写得不好，而是**常驻与按需错配**。原注入里有一大半属于「只在某个具体工具调用时刻才有用」的细则：写操作后怎么回读、派发时 `description` 该长什么样、md 的三类受众各查什么、NFC/NFD 怎么绕。它们每一轮都在跟真正只能靠自觉的语义规则（求真、思维模式、等齐再总结）抢同一份注意力预算。
+
+所以 2.0.0 的判据是：**一条规则若能被机械判定，就不该常驻**。它有三档去处，按优先级——
+
+| 档 | 机制 | 适用 | 成本特征 |
+|---|---|---|---|
+| ① 硬拦截 | `PreToolUse` 的 `permissionDecision: "deny"`，`permissionDecisionReason` **是给 Claude 看的**（官方文档明确） | 判据 100% 机械（字段缺失、前缀不符、字符串是否出现） | **做对时零开销**，只有做错才付细则的 token |
+| ② 条件注入 | `PreToolUse`/`PostToolUse` 的 `hookSpecificOutput.additionalContext` | 判据机械但不该阻断（提醒性质），或时机点比内容更重要 | 只在触发时付费，且同轮去重 |
+| ③ 常驻注入 | `UserPromptSubmit` / `SubagentStart` | **只能靠自觉**的语义规则：求真、表达约束、思维模式、协作节奏 | 每轮全额 |
+
+留在常驻里的每一条，都是因为它无法被机械判定——这也是判断某条规则该不该继续常驻的唯一标准。反过来，把已经硬化的规则再留一份完整副本在常驻里，是纯粹的浪费：AI 做对时白付，做错时 hook 会原样给出。所以下沉的章节在常驻里只剩一行索引（第六章 `SECTION_HOOK_ENFORCED`，约 680 字符），告诉 AI「这些有硬门禁，别在这儿花注意力」。
 
 ---
 
@@ -26,20 +43,22 @@
 
 | 维度 | 关键约束 | 主会话 | 子代理 |
 |------|---------|:---:|:---:|
-| 一、上下文纪律 | 精确路径读文件、子代理优先、bash 输出限流、macOS 中文路径防漏检（NFC/NFD） | ✅ | ✅ |
+| 一、上下文纪律 | 精确路径读文件、子代理优先、bash 输出限流、macOS 中文路径「空结果不得判无」（NFC/NFD 细则已下沉第九章） | ✅ | ✅ |
 | 二、子代理协作 | 在飞≤16（靠自记账盘点，明确禁用 `TaskList` 统计——它是任务板不是在飞 agent 列表）、嵌套≤2、共享骨架文件、结构化回执 | ✅ | ✅ |
 | 三、表达约束 | 关键对象点名、待确认四要素、行号引用、简体中文、列表编号 | ✅ | ✅ |
-| 四、思维模式 | 举一反三 / 整体 / 第一性 / 逆向 / 自查自纠 / 读者视角 / 写 md 前受众分辨 | ✅ | — |
-| 五、Agent 派发 | subagent_type × model 路由表、显式 model、成本意识、图片/截图核验规范、派发命名规范（`name` 与 `description` 双必填；`description` 用 `[haiku]/[sonnet]/[opus]/[fable]` 方括号前缀，`name` 用 `haiku-/sonnet-/opus-/fable-` 连字符前缀；禁止把 prompt 原文灌进 `description`；同批并发名字必须互相可辨；同规覆盖 teammate 与 `Workflow`）便于在飞 agent 面板一眼识别档次与各自任务、多 subagent 并发时等齐再总结（收执时机·仅主会话适用·等齐判据是各 agent 的完成通知到齐而非查 `TaskList`·防主对话上下文膨胀·让用户一次拍板省切换成本） | ✅ | 仅 5.5 |
-| 六、外部写操作授权 | dws 钉钉 CLI 默认只读；写操作（发消息/写删文档/写表格等）须逐批出示内容清单获用户当次明确许可；上游放行不算授权；叫停即冻结 | ✅ | ✅ |
+| 四、思维模式 | 举一反三 / 整体 / 第一性 / 逆向 / 自查自纠 / 读者视角 / 写 md 前受众分辨（细则已下沉第七章，此处只剩一行） | ✅ | — |
+| 五、Agent 派发 | 5.1 `subagent_type` 类型选择、5.2 四档 model 判定标尺、5.3 调用范式（并发发同一条消息里）、5.4 派发命名要点索引、5.5 多 subagent 并发时等齐再总结（收执时机·仅主会话适用·等齐判据是各 agent 的完成通知到齐而非查 `TaskList`·防主对话上下文膨胀·让用户一次拍板省切换成本） | ✅ | 仅 5.4 |
+| 六、hook 已硬化清单 | 一份索引：哪些规则由 hook 在时机点强制、被拦时会拿到什么。**不复述细则** | ✅ | ✅ |
 
-子代理版带一~三节、五节的 5.5 派发命名规范、六节。四节与五节其余部分主要是指导父代理如何选 `subagent_type` × `model`，对子代理自身价值低，故省 token 略去；六节必须进子代理版——`general-purpose` 子代理带 Bash 权限，同样能执行 `dws` 写命令。
+子代理版带一~三节、五节的 5.4 派发命名规范（**完整版**）、六节索引。四节与五节其余部分主要是指导父代理如何选 `subagent_type` × `model`，对子代理自身价值低，故省 token 略去。
 
-**5.5 为什么单独进子代理版**（1.11.0 起）：第 1 层子代理可以再派第 2 层（受二节的嵌套 2 层上限约束），派发时同样要给 `name` / `description` 命名，而下面第六节的 `agent-naming` 硬门禁对**子代理发起的** `Agent` 调用一样生效——不注入的话，子代理会在完全不知道规范的情况下被 exit 2 硬拦，只能靠读 stderr 反推规则。代价是每次子代理启动多约 2.5k 字符注入，换取命名合规与"被拦时知道为什么"。章节编号与主版严格一致（子代理版为一、二、三、五、六，缺四），同一条规则不出现两套编号。
+**外部写操作授权（原第六章 dws）已从本插件移出**（2.0.0）：钉钉 dws CLI 的写授权改由 `radnove-core` 插件的 `hooks/pre-tool-use-dws-write.sh` 承担，`PreToolUse` 命中写子命令时输出 `permissionDecision: "ask"`，把「须获用户当次明确许可」这个语义要求变成 harness 强制的确认弹窗——比每轮注入 918 字符的自觉约束强得多。radnove-core 的 `user-prompt-submit.sh` 里还保留一条语义兜底，删掉本插件这章不会留下空档。
 
-> 完整注入文本见 `hooks/working-discipline.js` 里的 `SECTION_*` 数组。
+**5.4 为什么在子代理版保留完整版、主会话只留索引**：这是一处**有意的例外**。第 1 层子代理可以再派第 2 层（受二节的嵌套上限约束），派发时同样要给 `name` / `description`，而第六章的 `agent-dispatch` 硬门禁对**子代理发起的** `Agent` 调用一样生效。但两者处境不同——主会话每轮注入，被拦一次就学会了，索引足够；子代理**只在启动时注入一次**、且更可能对规范一无所知，被拦后只能靠 deny reason 反推。所以主会话走「索引 + 硬门禁」，子代理付这 2.5k 字符换「一次就写对」。章节编号与主版严格一致（子代理版为一、二、三、五、六，缺四），同一条规则不出现两套编号。
 
-### 派发命名规范：为什么禁止把 prompt 灌进 `description`（注入文本 5.5 节）
+> 完整注入文本见 `hooks/working-discipline.js` 里的 `SECTION_*` 数组。实测体积：主会话 6845 字符，子代理 6854 字符。
+
+### 派发命名规范：为什么禁止把 prompt 灌进 `description`（注入文本 5.4 节）
 
 **事故来源（2026-07-25）**：用户截图的在飞 agent 面板上，5 个子代理是这样显示的——
 
@@ -58,7 +77,7 @@
 2. 这四个的右列全是 `prompt` 原文的开头「你是第 1 层子代理，可派…」——一方面把内部提示词（角色设定句、嵌套层级约束这类纪律条款）暴露到 UI 上，另一方面四行描述文字完全同质，面板彻底失去"谁在做什么"的信息量
 3. 唯一合规的 `[sonnet] 映射 16 个 spe…` 那行反过来没给 `name`，左列回落成裸的 `general-purpose`——一旦同批并发多个 `general-purpose`，左列同样退化成若干行相同文字
 
-对应的注入规则（`SECTION_DISPATCH` 的 5.5 节）分四条：`name` 必填、同会话内不重名、格式 `模型名-任务语义`（`name` 受正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` 约束，只能写 ASCII 字母数字与 `-` `_`，中文和方括号会被直接拒绝，这也是 `name` 用连字符前缀而 `description` 用方括号前缀的原因）；`description` 必填、`[模型名]` 前缀 + 3-5 词任务摘要，`prompt` 与 `description` **禁止共用同一段文字**（`prompt` 给子代理读，长、含约束与上下文；`description` 给面板显示，短、只讲任务是什么）；同批并发的名字必须互相可辨，光加数字后缀不算合格（`verdict-part1/2/3` 应改成把分片依据写进名字的 `sonnet-verdict-spec-01-05` 这类，或在 `description` 里点明范围 `[sonnet] 判定 spec 01-05`）；`Workflow` 的 `meta.name` / `meta.description` / `meta.phases[].title` / `meta.phases[].detail` / `agent(prompt, {label})` 的 `label` 同规，其中 `meta.description` 会出现在权限确认弹窗里，粘 prompt 等于让用户在弹窗里读一段内部指令。
+对应的注入规则（子代理版 `SECTION_NAMING` 的 5.4 节完整版；主会话 `SECTION_DISPATCH` 5.4 只留要点索引）分四条：`name` 必填、同会话内不重名、格式 `模型名-任务语义`（`name` 受正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` 约束，只能写 ASCII 字母数字与 `-` `_`，中文和方括号会被直接拒绝，这也是 `name` 用连字符前缀而 `description` 用方括号前缀的原因）；`description` 必填、`[模型名]` 前缀 + 3-5 词任务摘要，`prompt` 与 `description` **禁止共用同一段文字**（`prompt` 给子代理读，长、含约束与上下文；`description` 给面板显示，短、只讲任务是什么）；同批并发的名字必须互相可辨，光加数字后缀不算合格（`verdict-part1/2/3` 应改成把分片依据写进名字的 `sonnet-verdict-spec-01-05` 这类，或在 `description` 里点明范围 `[sonnet] 判定 spec 01-05`）；`Workflow` 的 `meta.name` / `meta.description` / `meta.phases[].title` / `meta.phases[].detail` / `agent(prompt, {label})` 的 `label` 同规，其中 `meta.description` 会出现在权限确认弹窗里，粘 prompt 等于让用户在弹窗里读一段内部指令。
 
 #### 「面板显示提示词」的成因：字段抄错，还是字段留空后的 UI 回落？
 
@@ -68,11 +87,11 @@
 - **成因 a：把 prompt 原文抄进了显示字段**。`Agent` 工具的 `description` 是 **required** 字段（schema 里 `required: ["description", "prompt"]`），不可能因为"没给值"而被系统拿 prompt 顶替——所以经 `Agent` 工具派发的子代理，右列出现 prompt 文字只能是 `description` 被主动填成了 prompt 开头。
 - **成因 b：可选的显示字段留空，UI 回落到 prompt 摘要**。`Workflow` 的 `agent(prompt, {label})` 里 `label` 是**可选**参数，文档原文写的是「`opts.label` **overrides** the display label」——`override`（覆盖）一词意味着不传 `label` 时存在一个系统默认显示名，而这个默认名极可能就是 prompt 的开头截断。
 
-第三条属于**依据文档措辞的推断，未做实测确认**（要确证需跑一个最小 workflow，一个 `agent()` 不给 `label`、一个给 `label`，对比 `/workflows` 进度树的显示）。因此 5.5 节的规则不去赌单一成因，而是两条都堵：显示字段禁止与 `prompt` 共用文字（防 a），同时把所有**可选**的显示字段一律当必填处理、显式给值（防 b）。
+第三条属于**依据文档措辞的推断，未做实测确认**（要确证需跑一个最小 workflow，一个 `agent()` 不给 `label`、一个给 `label`，对比 `/workflows` 进度树的显示）。因此 5.4 节的规则不去赌单一成因，而是两条都堵：显示字段禁止与 `prompt` 共用文字（防 a），同时把所有**可选**的显示字段一律当必填处理、显式给值（防 b）。
 
 另外提醒一处易混：`TaskList` 工具返回的是**任务板**字段（`id` / `subject` / `status` / `owner` / `blockedBy`），与上面这张 agent 面板不是同一个数据源，`TaskList` 里并不存在 `name` / `subagent_type` / `model` 字段，也**不能**用来统计在飞子代理数（详见下方「深入话题 → 「在飞≤16」和「嵌套≤2」是纪律软约束」，1.10.1 修掉了旧规则里这处误用）。
 
-1.11.0 起这一节**有了配套硬门禁**：`hooks/guards/agent-naming.js` 在 `PreToolUse` 拦 `Agent` 工具调用，违规即 exit 2 阻断并把 finding 回灌给 AI，详见下方「六、拦截：`agent-naming`」。注入纪律负责"让 AI 知道该怎么命名"，硬门禁负责"AI 没照做时拦下来"，两者配套。
+1.11.0 起这一节**有了配套硬门禁**，2.0.0 起该门禁已并入 `hooks/guards/agent-dispatch.js`：在 `PreToolUse` 拦 `Agent` 工具调用，违规即 `deny` 并把 finding 回灌给 AI，详见下方「六、拦截：`agent-dispatch`」。注入纪律负责"让 AI 知道该怎么命名"，硬门禁负责"AI 没照做时拦下来"，两者配套——这也是主会话敢把这一节压成索引的前提。
 
 ## 二、拦截：`block-cd` 挡住污染 cwd 的独立 `cd`
 
@@ -86,6 +105,10 @@ Bash 工具的 cwd 在多次调用之间**持久保留**。AI 中间执行一次
   - 命令替换：`$(cd /path && pwd)`、`` `cd /path && pwd` ``
   - 字符串内的 `cd`：`echo "cd /tmp"`、`git commit -m "cd fix"`
   - **no-op cd**：目标解析后等于当前 cwd（`cd .`、`cd ./`、`cd <当前目录绝对路径>`）
+
+**2.0.0 的改动**：拦截时的 stderr 从约 1500 字符压到 130 字符。原文里那段 2026-07-20 跨插件误伤事故的完整复盘（就是下面这一节）每次拦截都被灌进上下文——**这本身就是本次要治的"注意力抢占"的一个实例**，而且是最讽刺的一种：一个用来纠正行为的提示，自己占掉了比被纠正的行为更多的注意力。复盘搬进了 `block-cd.js` 的文件头注释（给维护者读），stderr 只留「用绝对路径 / 用子 shell / git 用 `git -C`」三条处置加违规片段回显。命令解析逻辑也抽到了 `hooks/lib/shell-parse.js` 共享（原先 `block-cd.js` 与 `agent-browser-launch.js` 各有一份完全相同的 `splitSegments` 实现）。
+
+**已知误报**：shell 函数定义 `cd() { ...; }` 会被判成独立 `cd`——tokenizer 只看到段首的 `cd` token，不区分「调用」与「定义」。真实触发过一次（2026-07-26 本插件自身的开发会话）。这类写法本就罕见且没有必要，未做特判：加一条「后跟 `()` 则跳过」的规则会让解析器为一个近乎不存在的场景变复杂，而绕开的成本只是删掉那行。
 
 ### Known Limitation：跨插件 cd 探测差异
 
@@ -103,7 +126,7 @@ git -C /abs/path/to/repo status
 git -C /abs/path/to/repo log --oneline -5
 ```
 
-非 git 命令（如任意 shell 命令）仍然只能走 `(cd /path && cmd)` 子 shell 语法——`-C` 是 git 专有选项，不是通用 shell 机制。本节仅描述现象与规避方法，`block-cd.js` 本身的核心拦截逻辑（识别独立 `cd`）未改动，只在拦截时的 stderr 提示里追加了这段教育文字（见 `hooks/guards/block-cd.js` 第 5 条指引）。
+非 git 命令（如任意 shell 命令）仍然只能走 `(cd /path && cmd)` 子 shell 语法——`-C` 是 git 专有选项，不是通用 shell 机制。本节仅描述现象与规避方法，`block-cd.js` 的核心拦截逻辑（识别独立 `cd`）从未改动。2.0.0 之前，这段事故复盘作为第 5 条指引写在 stderr 里；现在它只保留在 `block-cd.js` 的文件头注释和本节中，stderr 只剩一句「git 命令用 `git -C <path>`」。
 
 ---
 
@@ -218,33 +241,48 @@ agent-browser --headed open "http://localhost:8084/#/"
 
 ---
 
-## 六、拦截：`agent-naming` 挡住命名不规范的 subagent 派发
+## 六、拦截：`agent-dispatch` 把派发 subagent 的全部机械要求挡在派发前
 
-注入纪律 5.5 节靠 AI 自觉，命中率不足——截图事故里 4 个子代理全违规就是证据。这道 `PreToolUse` 门禁把 5.5 的要求变成硬约束：违规的 `Agent` 调用直接 exit 2 阻断，AI 收到 stderr 里的 finding 后修正重派。
+**本章是两个 guard 合并的产物（2.0.0）**：1.11.0 引入的 `agent-naming.js` 负责命名与 `model` 的 8 项校验，2.0.0 新增的 `agent-dispatch.js` 负责派发质量的 4 项校验。两者都挂 `PreToolUse` + matcher `Agent`，且有三项重叠（`model` 必填 / `description` 的 `[模型名]` 前缀 / `name` 的 `模型名-` 前缀），不合并会重复拦截、输出两份 finding。合并后 `agent-naming.js` 已删除，全部校验在 `hooks/guards/agent-dispatch.js`。
 
 **触发条件**：`tool_name` 是 `Agent`。注意**不匹配旧工具名 `Task`**——旧名环境下的 `tool_input` 可能压根没有 `name` / `model` 字段，强制校验会造成永久性误拦，fail-open 优于误伤。
 
-**校验项**（命中任意一条即拦，多条时 finding 里全部列出）：
+### 两层校验，形态不同是有意的
+
+**第一层「命名与 model」多条一并列出**，因为这类问题往往同时出现好几个（缺 `name` + `description` 抄 prompt + 超长），一次报清才能一次改对：
 
 | # | 校验 | 为什么 |
 |---|------|--------|
-| 1 | `model` 缺失或不在 `haiku`/`sonnet`/`opus`/`fable` | 纪律要求显式指定，禁止默认回落 |
+| 1 | `model` 缺失或不在 `haiku`/`sonnet`/`opus`/`fable` | 纪律要求显式指定，禁止默认回落。**这一条命中时额外附完整路由表**帮助选档 |
 | 2 | `name` 缺失 | 省略后面板左列只能回落显示裸 `subagent_type`，同批多个无法分辨 |
 | 3 | `name` 不以 `{model}-` 开头 | 前缀必须与实际 `model` 一致，不许写不符的档次 |
 | 4 | `name` 不满足 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` | Agent 工具的原生约束，提前拦下来并给清楚提示（写中文会被工具直接拒） |
 | 5 | `description` 缺失或不以 `[{model}] ` 开头 | 同上，且方括号内档次要与 `model` 一致 |
 | 6 | `description` 正文以角色设定句开头（`你是` / `You are` / `【` / `#` / `作为一名` 等） | 把 prompt 原文抄进 `description` 的高置信特征 |
-| 7 | `description` 正文长度 ≥ 20 且正好是 `prompt` 的开头 | 抄袭特征。20 字符门槛是为了避免误报——3-5 词摘要与 prompt 开头偶然重合的概率不低，短文本不判 |
+| 7 | `description` 正文长度 ≥ 20 且正好是 `prompt` 的开头 | 抄袭特征。20 字符门槛用来避免误报——3-5 词摘要与 prompt 开头偶然重合的概率不低，短文本不判 |
 | 8 | `description` 正文超过 60 字符 | 纪律要求 3-5 词摘要，超长说明塞了 prompt 内容 |
 
-**放行场景**：`tool_name` 不是 `Agent` / `subagent_type` 属于豁免名单 / stdin 读取或 JSON 解析失败 / `tool_input` 缺失 / 全部校验通过。
+**第二层「派发质量」取第一个命中**，每条给一段长细则。这类问题一次一个就够，同时倒出多段长文本会重演常驻注入的老问题——**只有第一层全过才进第二层**，命名都没写对时谈档位选择为时过早：
+
+| 校验 | 判定条件 | deny reason 给什么 |
+|---|---|---|
+| 档位错配 | ① 只读意图 prompt 用了 `general-purpose`；② prompt 含高复杂度信号（安全/并发/竞态/泄漏/性能/根因/架构/一致性）却选 `haiku`；③ `Plan` 类型用 `haiku` | 对应改法 + 完整 `subagent_type × model` 路由表（约 1900 字符，这是路由表唯一的出场时机） |
+| 回执要求 | prompt 不含「回执」「改了哪些文件」「阻塞点」任一 | 回执四要件模板 |
+| 截图附带 | 本轮用户给过截图，而 prompt 里无任何图片路径 | 说明「子代理无主会话截图记忆、文字转述丢像素细节」+ **自动列出本轮所有图片路径** |
+| 写操作传染 | prompt 含外部写意图（`curl -X POST/PUT/PATCH/DELETE`、发布 / 授权 / 建对象 / INSERT 等）却不含「回读」 | 完整回读要求 + 2026-07-26 `orderIndex` 静默丢弃事故 |
+
+**档位错配这条是刻意保守的**。判定「只读」用的是「命中只读意图词 **且** 不含写意图词」，而中文里 `实现` / `测试` / `执行` 这些写意图词同时是常用名词——「定位登录流程**实现**」是纯只读任务，却会命中写意图词表而被放行。这是**有意的 fail-open**：让判定更激进（比如给 `实现` 加名词上下文排除）会把误报引进来，而误报的代价是挡住合法派发，远高于漏掉几个本可以拦的。开发时另外核对过一处潜在冲突：强制要求的回执措辞「改了哪些文件」不会被写意图词表命中（词表里是 `修改` 不是 `改`），否则「必须写回执」和「档位检查」这两条规则会互相抵消。
+
+**两个逃生舱**（档位与截图两类的语义边界无法被正则完全覆盖，硬拦死会挡住合法场景）：prompt 里写 `档位已确认：<理由>` 跳过档位检查；写 `豁免图片：<理由>` 跳过截图检查（对应原纪律明列的豁免：纯后端 5xx/DB/MQ、纯 spec 矛盾、纯 CI 问题）。
+
+**放行场景**：`tool_name` 不是 `Agent` / `subagent_type` 属于豁免名单 / stdin 读取或 JSON 解析失败 / `tool_input` 缺失 / 两层校验全过。
 
 **豁免名单**（`EXEMPT_SUBAGENT_TYPES`）：`fork`、`statusline-setup`、`output-style-setup`。其中 `fork` 是必须豁免的——Agent 工具文档明确写它「always inherit the parent model」，`model` 覆盖会被忽略，强制模型前缀自相矛盾。
 
-命中拦截时 `stderr` 输出（示例为截图里那个真实违规）：
+**输出通道**：本 guard 输出 JSON `permissionDecision: "deny"`（不是 exit 2）。官方文档明确 `permissionDecisionReason` 是展示给 Claude 的，语义比 exit code 约定更明确。第一层的 reason 沿用本仓库 guard 的 `[L1-BLOCKER] ... finding= hint=` 格式便于统一识别：
 
 ```text
-[L1-BLOCKER] tool=Agent check=agent-naming finding="name="verdict-part1" 缺模型档次前缀;用户无法从面板判断在飞任务烧的是哪一档模型;description="你是第 1 层子代理，可派发第 2 层" 缺 [模型名] 方括号前缀" hint="name 改成 "sonnet-verdict-part1";description 改成 "[sonnet] <3-5 词任务摘要>";完整规范见注入纪律 5.5 节;确需临时关闭本门禁用 AGENT_NAMING_GUARD=off"
+[L1-BLOCKER] tool=Agent check=agent-dispatch finding="name="verdict-part1" 缺模型档次前缀;description="你是第 1 层子代理..." 缺 [模型名] 方括号前缀" hint="name 改成 "sonnet-verdict-part1";description 改成 "[sonnet] <3-5 词任务摘要>";完整规范见注入纪律 5.4 节;确需临时关闭本门禁用 AGENT_DISPATCH_GUARD=off"
 ```
 
 ### 误拦风险与总开关
@@ -252,14 +290,55 @@ agent-browser --headed open "http://localhost:8084/#/"
 这道门禁**默认开启且全局生效**，需要清楚它的影响面：其他插件或 skill 内部派发 subagent 时（如 `omp` 的强制委派、各类 spec 工作流），若它们不遵守本插件的命名规范，同样会被拦下来。这是**预期行为**——规范要统一才有意义——但如果它挡住了你必须跑的既有工作流，用环境变量关闭：
 
 ```bash
-AGENT_NAMING_GUARD=off   # 大小写不敏感，设为 off 即整条门禁放行
+AGENT_DISPATCH_GUARD=off   # 大小写不敏感，设为 off 即整条门禁放行
+AGENT_NAMING_GUARD=off     # 1.11.0 起沿用的旧名，继续有效
 ```
 
-想永久关闭就从 `.claude-plugin/plugin.json` 的 `PreToolUse` 里删掉这条 hook 注册；想放宽某类 agent，把它的 `subagent_type` 加进 `agent-naming.js` 的 `EXEMPT_SUBAGENT_TYPES`。
+想永久关闭就从 `.claude-plugin/plugin.json` 的 `PreToolUse` 里删掉这条 hook 注册；想放宽某类 agent，把它的 `subagent_type` 加进 `agent-dispatch.js` 的 `EXEMPT_SUBAGENT_TYPES`。
 
 ### Known Limitation：`Workflow` 内部的 `label` 拦不到
 
-本 hook 只覆盖 `Agent` 工具的直接派发。`Workflow` 脚本内部 `agent(prompt, {label})` 的调用**不经过 `PreToolUse`**（它发生在 workflow 运行时的脚本执行层），因此 `label` 缺失或抄 prompt 都拦不到，只能靠注入纪律 5.5.4 约束。理论上可以拦 `Workflow` 工具本身、对 `script` 字符串做正则提取来校验 `meta.name` 与各 `agent()` 的 `label`，但正则解析 JS 源码的可靠性太低（易误判模板字符串、嵌套括号、注释里的调用），故未实现。
+本 hook 只覆盖 `Agent` 工具的直接派发。`Workflow` 脚本内部 `agent(prompt, {label})` 的调用**不经过 `PreToolUse`**（它发生在 workflow 运行时的脚本执行层），因此 `label` 缺失或抄 prompt 都拦不到，只能靠注入纪律 5.4.4 约束。理论上可以拦 `Workflow` 工具本身、对 `script` 字符串做正则提取来校验 `meta.name` 与各 `agent()` 的 `label`，但正则解析 JS 源码的可靠性太低（易误判模板字符串、嵌套括号、注释里的调用），故未实现。
+
+---
+
+## 七、拦截：`md-audience-declaration` 逼出写 md 前的受众判定
+
+`PreToolUse` + matcher `Write|Edit`，目标文件扩展名为 `.md` / `.markdown` 时生效。
+
+原纪律自己就写着「防止 AI 心里想过就跳过」——这句话恰好证明它靠自觉守不住：约 900 字符的三分支准则常驻注入，却仍然经常被跳过。而「是否留过痕」是 100% 机械的字符串检查，所以这条最适合硬化。
+
+- **阻断**：本轮（按 `prompt_id` 界定）assistant 文本里不含「受众判定」字样 → deny，reason 给出完整三分支准则（偏人读 / 偏 AI 读 / 人机混合，各带必检项）
+- **放行**：非 md 文件；本轮已声明；**transcript 读不到或解析失败**（基础设施异常不该表现为纪律违规）
+
+**为什么不豁免小改动**：「大改 md」与「小改 md」无法从 `tool_input` 机械区分，而声明本身只要一句话。只改错别字时声明「本次 md 受众判定：<沿用原判定>，理由：仅修正错别字」即可通过——这句话本身也提醒了 AI 别顺手扩大改动范围。
+
+---
+
+## 八、条件注入：`external-write-readback` 在写操作之后才讲回读
+
+`PostToolUse` + matcher `Bash`。
+
+**为什么必须是 `PostToolUse`**：回读的对象是「刚写进去的值」，只有写操作执行完才存在；注入时机恰好落在「AI 刚拿到写接口的成功响应、正要判定这步成功」的那一刻，比提前一整轮注入更有效。官方文档明确 `PostToolUse` 的 exit code 2 **不能阻断**（工具已执行完），所以本 hook 只注入、不拦截——在这里拦截也没有意义。
+
+两档强度，避免制造新的上下文膨胀：
+
+- **外部系统写**（`curl` 写方法或带 `--data`、`mysql`/`psql` 的 DML、`redis-cli` 写命令、`dbops`/`ymcas`/`dws`/`gh`/`kubectl`/`aws` 等平台 CLI 的写子命令）→ 注入**完整**回读要求（约 1030 字符）：三类静默失败（静默忽略字段 / 静默降级 / 部分成功）、判定基线（写 N 个回读 N 次、必须走读接口、层级关系从父对象侧确认）、2026-07-26 `orderIndex: 15` 返回 204 却存成默认值 `1` 的真实事故
+- **Bash 本地写**（`sed -i`、重定向、`tee`、`mv`/`cp`/`rm`）→ 注入**精简**提醒（约 160 字符）：`Write`/`Edit` 有 harness 的落盘保证，Bash 写入没有，继续之前先 `Read` 或 `git diff` 确认。这类命令频率极高，若也注入 1000+ 字符就会造出新的膨胀
+
+`curl -X GET/HEAD/OPTIONS` 显式只读方法一律放行。**同一轮内同一档位只注入一次**（一轮里连续跑 5 条 curl 写命令是常态，每次都注入同一段长文本会把上下文重新撑大）。
+
+---
+
+## 九、拦截 + 条件注入：`nonascii-path` 管 macOS 中文路径的静默漏检
+
+`PreToolUse` + matcher `Bash`。macOS 下 git 输出的路径是 NFC 归一形态（`core.precomposeunicode`），磁盘上实际文件名则常是 NFD 分解形态——两种形态字节不同、肉眼完全相同。
+
+- **阻断**：探测/统计类命令（`grep`/`rg`/`find`/`ls`/`wc`/`stat`/`git grep` 等）同时满足「命令含非 ASCII 字符」与「挂了 `2>/dev/null`」。这是原纪律明列的禁止项：形态不一致导致的 No such file 报错会被 `2>/dev/null` 吞掉，空结果随即被误读成「确实没有」，错误结论从此一路传递
+- **条件注入**：命令含非 ASCII 且用了检索/比对类命令（`grep`/`find`/`diff`/`comm`/`xargs`/`git diff` 等）→ 注入完整规避法（git 单源闭环、`iconv -f UTF-8-MAC -t UTF-8`、非 ASCII 段换 glob 通配）。同一轮只注入一次
+- **放行**：命令不含非 ASCII；命令不属于检索/探测类（`git commit -m 修复登录` 这类里的中文是内容不是路径，与 NFC/NFD 无关）
+
+两种处置都要求「命令属于检索/探测类」这个前置条件，把误报压到可接受范围——宁可漏掉少数场景，也不要让每条带中文的命令都被打扰。
 
 ---
 
@@ -288,8 +367,8 @@ UserPromptSubmit（主会话每轮） 或 SubagentStart（子代理启动时）
    ↓
 node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js
    ↓  读 stdin 的 hook_event_name 分流：
-   ↓    UserPromptSubmit → 完整纪律（一~六节）
-   ↓    SubagentStart    → 精简纪律（一~三、六节）
+   ↓    UserPromptSubmit → 一、二、三、四、五（含 5.4 要点索引）、六（hook 硬化清单）
+   ↓    SubagentStart    → 一、二、三、5.4 命名规范完整版、六（缺四；缺 5.1-5.3、5.5）
    ↓
 stdout 输出 { hookSpecificOutput: { hookEventName, additionalContext } }
    ↓
@@ -309,21 +388,75 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/block-cd.js
    ↓    全部是子 shell cd 或 no-op cd → exit 0 放行
 ```
 
-**拦截 hook**（`hooks/guards/agent-naming.js`）
+**拦截 hook**（`hooks/guards/agent-dispatch.js`）
 
 ```text
 PreToolUse（Agent 工具调用前）
    ↓
-node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-naming.js
-   ↓  读 stdin 的 tool_name 与 tool_input：
-   ↓    AGENT_NAMING_GUARD=off → exit 0 放行（总开关）
-   ↓    tool_name 不是 Agent（含旧名 Task）→ exit 0 放行
-   ↓    subagent_type ∈ {fork, statusline-setup, output-style-setup} → exit 0 放行
-   ↓    校验 model 显式 → name 必填/前缀符 model/满足原生正则
-   ↓    校验 description 必填/[模型名] 前缀符 model
-   ↓    校验 description 正文非 prompt 角色句 / 非 prompt 开头逐字重合 / ≤60 字符
-   ↓    有 finding → exit 2 阻断（stderr 一并列出所有违规与改法）
-   ↓    无 finding → exit 0 放行
+node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-dispatch.js
+   ↓  读 stdin 的 tool_name / tool_input / transcript_path / prompt_id：
+   ↓    AGENT_DISPATCH_GUARD=off 或 AGENT_NAMING_GUARD=off → 放行（总开关）
+   ↓    tool_name 不是 Agent → 放行（不匹配旧名 Task，避免永久误拦）
+   ↓    subagent_type ∈ {fork, statusline-setup, output-style-setup} → 放行
+   ↓  第一层【命名与 model】——聚合所有 finding，一次报清：
+   ↓    model 显式且合法 / name 必填·前缀符 model·满足原生正则
+   ↓    description 必填·[模型名] 前缀符 model
+   ↓    description 正文非 prompt 角色句 / 非 prompt 开头逐字重合 / ≤60 字符
+   ↓    有 finding → deny（model 本身非法时额外附完整路由表）
+   ↓  第二层【派发质量】——第一层全过才进，取第一个命中：
+   ↓    档位错配（只读用 general-purpose / 高复杂度用 haiku / Plan 用 haiku）
+   ↓      → deny + 完整 subagent_type × model 路由表   〔逃生舱：prompt 写「档位已确认：…」〕
+   ↓    prompt 无回执要求 → deny + 回执四要件模板
+   ↓    本轮有截图而 prompt 无图片路径 → deny + 自动列出本轮图片路径
+   ↓                                     〔逃生舱：prompt 写「豁免图片：…」〕
+   ↓    prompt 含外部写意图而无「回读」 → deny + 完整回读要求
+   ↓    全过 → 放行
+```
+
+**拦截 hook**（`hooks/guards/md-audience-declaration.js`）
+
+```text
+PreToolUse（Write / Edit 工具调用前）
+   ↓
+node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/md-audience-declaration.js
+   ↓  读 stdin 的 tool_input.file_path / transcript_path / prompt_id：
+   ↓    扩展名不是 .md / .markdown → 放行
+   ↓    经 hooks/lib/transcript.js 取本轮 assistant 文本
+   ↓      （从后往前找最后一个 promptId == payload.prompt_id 的 user 行，取其后所有行）
+   ↓    读不到 / 解析失败 → 放行（基础设施异常不表现为纪律违规）
+   ↓    文本含「受众判定」→ 放行
+   ↓    不含 → deny + 三分支准则（偏人读 / 偏 AI 读 / 人机混合）
+```
+
+**条件注入 hook**（`hooks/guards/external-write-readback.js`）
+
+```text
+PostToolUse（Bash 工具执行完成后 —— 此处 exit 2 无法阻断，只能注入）
+   ↓
+node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/external-write-readback.js
+   ↓  读 stdin 的 tool_input.command：
+   ↓    curl -X GET/HEAD/OPTIONS 等显式只读方法 → 放行
+   ↓    命中外部系统写（curl 写方法/--data、SQL DML、redis 写、平台 CLI 写子命令）
+   ↓      → additionalContext 注入完整回读要求（约 1030 字符，含 orderIndex 事故）
+   ↓    命中本地写（sed -i / tee / 重定向 / mv / cp / rm）
+   ↓      → additionalContext 注入精简提醒（约 160 字符）
+   ↓    经 hooks/lib/notify-once.js 按 (scope, session_id, prompt_id, 档位) 去重
+   ↓      → 同一轮同一档位只注入一次
+```
+
+**拦截 + 条件注入 hook**（`hooks/guards/nonascii-path.js`）
+
+```text
+PreToolUse（Bash 工具调用前）
+   ↓
+node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/nonascii-path.js
+   ↓  读 stdin 的 tool_input.command：
+   ↓    命令不含非 ASCII 字符 → 放行
+   ↓    探测/统计类命令（grep/rg/find/ls/wc/stat/git grep）且挂 2>/dev/null
+   ↓      → deny（空结果会被误读成「确实没有」）
+   ↓    检索/比对类命令（grep/find/diff/comm/xargs/git diff）
+   ↓      → additionalContext 注入 NFC/NFD 规避法（同轮去重）
+   ↓    其余（如 git commit -m 修复登录，中文是内容不是路径）→ 放行
 ```
 
 **拦截 hook**（`hooks/guards/max-source-lines.js`）
@@ -385,6 +518,29 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-browser-launch.js
   另外两点边界要清楚：`TaskOutput` 虽然能按 `task_id` 查后台任务状态，但它已被标记 DEPRECATED，且只接受**单个已知的** `task_id`，无法枚举；能列出全系统在飞任务的入口是用户侧的 `/tasks` 斜杠命令，**AI 无法自行调用**。所以规则同时收窄了口径——自查范围只限本会话自己派发的子代理，禁止 AI 声称统计过"全系统在飞总量"，跨会话口径需请用户用 `/tasks` 核对；长会话 auto-compact 压掉早期派发记录导致记账失准时，按保守口径分批派或请用户报数，不许凭印象估。
 - **嵌套≤2**：Claude Code 原生嵌套硬上限是 **5 层且不可配置**，`SubagentStart` 也无法拦截派发行为。所以 2 层限制只能由各层自觉传递——第 1 层子代理在给第 2 层写 prompt 时，须明确写「你是第 2 层子代理，禁止再派任何 subagent」。
 
+### 怎么可靠地界定「本轮」
+
+第七章（md 受众判定）和第六章的截图检查都依赖一个判据：**AI 在本轮说过什么 / 用户在本轮给过什么**。这没法从 `tool_input` 得出，必须回看 `transcript_path` 指向的 JSONL。实现在 `hooks/lib/transcript.js`，2026-07-26 在真实会话文件上实测确认了三件事：
+
+1. **只有 `type=='user'` 的行带 `promptId`**，`assistant` 行的 `promptId` 恒为 `null`。所以不能用「筛出 `promptId == payload.prompt_id` 的所有行」——那样一条 assistant 文本都拿不到。正确做法是**从后往前找最后一个 `promptId` 匹配的 user 行，取它之后的全部行**。
+2. **落盘足够及时**。官方文档提到 transcript 是异步写入，但在「AI 刚输出文本 → 同一轮下一次工具调用触发 hook」这个时间尺度上实测无问题（本插件开发时就是这样自测的：先输出受众判定声明，下一次 Bash 调用时已能 grep 到）。
+3. `prompt_id` 匹配不上时**降级为「最后一个 user 行之后」**，读文件或 JSON 解析失败则返回 `null`/`[]`，调用方一律放行。宁可漏拦，不可因为读不到 transcript 就误拦——基础设施异常不该表现为纪律违规。
+
+同一个 lib 也用来提取本轮的图片路径（匹配 `image-cache/` 路径与 `.png`/`.jpg`/`.webp`/`.gif` 绝对路径，只看用户侧的行）。
+
+### 为什么有四项机械规则没有下沉
+
+设计时评估过、最终**决定不实现**的四项，它们的注入文本因此仍然常驻：
+
+| 候选 | 本可以怎么做 | 为什么不做 |
+|---|---|---|
+| 在飞 subagent ≤16 的计数拦截 | `PreToolUse` 拦 `Agent`，用状态文件记账，超 16 则 deny | 状态文件的崩溃残留会造成**永久性误拦**——会话异常退出时计数不归零，下次开会话直接被拦死，而用户很难猜到原因 |
+| `Stop` hook 校验输出语言与列表编号 | `Stop` 的 exit 2 可以「阻止停止、让对话继续」，读 transcript 校验 AI 自己的输出 | 误报的代价是**强行多跑一轮**（比 deny 一次工具调用贵得多）；且繁简判定极易误伤引用的繁体原文 |
+| 大输出命令 `PreToolUse` 拦截 | 识别 `cat` 大文件、无 `head` 的 `find /` 等 | 误报多，且用户明确要求看全量输出时会碍事——这条本来就有合理的例外 |
+| 嵌套深度 ≤2 的记账拦截 | 派发时按父子链累加深度 | **官方 payload 里没有 parent 信息**，父子链只能靠时序推断，并发派发时有竞态；判据本身不可靠就不该做成硬拦截 |
+
+共同的取舍是：**硬拦截的误报成本远高于漏报**。一条规则做成 deny 之前，判据必须机械且几乎无歧义；只要判据要靠推断、状态或时序，就宁可留在常驻注入里靠自觉。第六章那两个逃生舱（`档位已确认：` / `豁免图片：`）是同一个原则的另一种形态——判据大体可靠但边界模糊时，给一条留痕即可通过的出口，而不是硬拦死。
+
 ### 与其他插件的关系
 
 - 与 `omp` 插件互补：`omp` 的 `orchestrator-protocol-remind.js` 注入 omp 编排协议（强制委派 omp 子代理），本插件注入通用工作纪律（覆盖 Claude 原生 Agent 工具）——二者可并行启用。
@@ -398,27 +554,44 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-browser-launch.js
 
 ```text
 plugins/working-discipline/
-├── .claude-plugin/plugin.json      # hook 注册（注入 + 拦截）
+├── .claude-plugin/plugin.json          # hook 注册（注入 + 拦截 + 条件注入）
 ├── hooks/
-│   ├── working-discipline.js       # UserPromptSubmit / SubagentStart 注入
+│   ├── working-discipline.js           # UserPromptSubmit / SubagentStart 常驻注入
+│   ├── lib/                            # guard 之间共享的工具（2.0.0 新增）
+│   │   ├── shell-parse.js              #   命令切分/分词/剥引号剥子 shell（block-cd 与
+│   │   │                               #   agent-browser-launch 原先各有一份重复实现）
+│   │   ├── transcript.js               #   按 prompt_id 读「本轮」assistant 文本与图片路径
+│   │   └── notify-once.js              #   同轮同档位去重，状态文件在 TMPDIR，失败降级为照常注入
 │   └── guards/
-│       ├── block-cd.js             # PreToolUse 拦截（阻断污染 cwd 的独立 cd；git 命令额外指引 git -C）
-│       ├── agent-browser-launch.js # PreToolUse 拦截（agent-browser 启动类命令缺 --headed 或缺 --profile）
-│       ├── agent-naming.js         # PreToolUse 拦截（Agent 派发缺 name/model、前缀不符 model、description 泄露 prompt）
-│       ├── max-source-lines.js     # PostToolUse 拦截（单一源码文件超 1000 行）
-│       └── claude-md-max-lines.js  # PostToolUse 拦截（CLAUDE.md 超 200 行，指路拆到 .claude/rules/）
+│       ├── agent-dispatch.js           # PreToolUse 拦截（Agent 派发：第一层命名与 model 聚合报错，
+│       │                               #   第二层档位/回执/截图/写传染取首个命中）
+│       ├── md-audience-declaration.js  # PreToolUse 拦截（写 .md 前本轮未声明「受众判定」）
+│       ├── block-cd.js                 # PreToolUse 拦截（污染 cwd 的独立 cd；git 命令指引 git -C）
+│       ├── agent-browser-launch.js     # PreToolUse 拦截（agent-browser 启动缺 --headed 或 --profile）
+│       ├── nonascii-path.js            # PreToolUse 拦截 + 条件注入（非 ASCII 路径挂 2>/dev/null；
+│       │                               #   检索类命令注入 NFC/NFD 规避法）
+│       ├── external-write-readback.js  # PostToolUse 条件注入（外部写→完整回读要求；本地写→精简提醒）
+│       ├── max-source-lines.js         # PostToolUse 拦截（单一源码文件超 1000 行）
+│       └── claude-md-max-lines.js      # PostToolUse 拦截（CLAUDE.md 超 200 行，指路拆 .claude/rules/）
 └── README.md
 ```
+
+`agent-naming.js`（1.11.0）已在 2.0.0 删除，其 8 项校验并入 `agent-dispatch.js`。
 
 ## 自定义
 
 - 增删注入条款 / 切换风格 → 编辑 `hooks/working-discipline.js` 里的 `SECTION_*` 数组，每行是 markdown 一行
 - 调整 `cd` 拦截行为（阈值、放行场景、git -C 教育提示文案） → 编辑 `hooks/guards/block-cd.js`
 - 调整 agent-browser 启动类子命令 / 白名单子命令 / `--headed`、`--profile` 硬要求 → 编辑 `hooks/guards/agent-browser-launch.js` 里的 `LAUNCH_SUBCOMMANDS` / `ALLOWLIST_SUBCOMMANDS`
-- 调整 subagent 命名门禁（豁免的 `subagent_type`、`description` 正文长度上限、提示词泄露句式清单） → 编辑 `hooks/guards/agent-naming.js` 里的 `EXEMPT_SUBAGENT_TYPES` / `DESC_BODY_MAX` / `PROMPT_LEAK_PREFIXES` / `LEAK_MATCH_MIN`；临时整体关闭用环境变量 `AGENT_NAMING_GUARD=off`
+- 调整 subagent 派发门禁 → 编辑 `hooks/guards/agent-dispatch.js`：第一层改 `EXEMPT_SUBAGENT_TYPES` / `DESC_BODY_MAX` / `PROMPT_LEAK_PREFIXES` / `LEAK_MATCH_MIN` / `NAME_PATTERN`，第二层改 `ROUTING_TABLE` / `RECEIPT_TEMPLATE` / `READBACK_REQUIREMENT` / `IMAGE_REQUIREMENT` 及各自的判定词表；临时整体关闭用环境变量 `AGENT_DISPATCH_GUARD=off`（旧名 `AGENT_NAMING_GUARD=off` 同样有效）
+- 调整 md 受众判定门禁（判定关键词、deny 时给的三分支准则文案） → 编辑 `hooks/guards/md-audience-declaration.js`
+- 调整写后回读的触发范围与两档文案 → 编辑 `hooks/guards/external-write-readback.js` 里的 `EXTERNAL_WRITE_PATTERNS` / `LOCAL_WRITE_PATTERNS` / `EXPLICIT_READ_METHOD` / `FULL_READBACK` / `BRIEF_READBACK`
+- 调整 NFC/NFD 门禁的命令范围 → 编辑 `hooks/guards/nonascii-path.js` 里的 `PROBE_COMMANDS` / `SEARCH_OR_DIFF_COMMANDS` / `SILENCE_STDERR` / `NFC_NFD_GUIDE`
 - 调整源码文件行数阈值 / 扩展名列表 → 编辑 `hooks/guards/max-source-lines.js` 里的 `LINE_LIMIT` / `SOURCE_EXTENSIONS`
 - 调整 CLAUDE.md 行数阈值 / 排除目录 → 编辑 `hooks/guards/claude-md-max-lines.js` 里的 `LINE_LIMIT` / `EXCLUDED_SEGMENT_PATTERN`
 
+> 改注入文本时留一句自检：**这条规则能被机械判定吗？** 能，就该做成 guard 而不是加进 `SECTION_*`——否则又会一步步回到「注入越多、遵从度越低」的老路。
+
 ---
 
-版本 1.11.0 · 作者 zhangq · MIT
+版本 2.0.0 · 作者 zhangq · MIT
