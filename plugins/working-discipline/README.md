@@ -312,6 +312,13 @@ AGENT_NAMING_GUARD=off     # 1.11.0 起沿用的旧名，继续有效
 
 - **阻断**：本轮（按 `prompt_id` 界定）assistant 文本里不含「受众判定」字样 → deny，reason 给出完整三分支准则（偏人读 / 偏 AI 读 / 人机混合，各带必检项）
 - **放行**：非 md 文件；本轮已声明；**transcript 读不到或解析失败**（基础设施异常不该表现为纪律违规）
+- **转 `ask`**（2.2.0 起的熔断）：同一 `(prompt_id, file_path)` 连续 deny 达到 3 次后，第 4 次起不再 deny，改为 `permissionDecision: 'ask'` 交用户拍板
+
+**首次必然 deny 一次，这是设计上接受的代价**：`PreToolUse` 触发时，同一条 assistant message 里的 text 块**还没落盘**（详见第十二章「怎么可靠地界定本轮」的落盘时序一节），所以「声明一句 + 紧接着调 `Write`」这种最自然的写法，hook 结构上看不到那句声明。代价是 deny 一次——而 deny 一次正好把完整三分支准则灌给 AI，与本 hook 的意图一致。AI 重试时上一条 message 已落盘，即可通过。
+
+**deny / ask 文案带判据诊断**（2.2.0 起）：reason 末尾附一行「本轮起点 = transcript 第 N 行 / 全文 M 行，定位方式 `promptId` \| `lastUserRow` \| `wholeTranscript`，本轮读到 assistant 文本 X 字符；本文件本轮第 K 次拦截」。这不是调试残留而是必要的可观测性——判据不可见时 AI 只能猜 hook 凭什么说「没声明」，2026-07-28 的事故里它猜错后的下一步就是用 heredoc 绕开 `Write` 工具直接写文件。
+
+**熔断为什么用 `ask` 而不是 `allow`**：`allow` 会绕过用户自己的权限确认直接放行写入，等于 hook 替用户批准了一次文件写操作，属于越权；`ask` 只把「判据可能失灵、要不要放它写」这个决定交回给人。阈值取 3 是因为正常情况下第 2 次尝试就会带上声明，连撞 3 次说明判据本身可疑，而不是 AI 不听话。
 
 **为什么不豁免小改动**：「大改 md」与「小改 md」无法从 `tool_input` 机械区分，而声明本身只要一句话。只改错别字时声明「本次 md 受众判定：<沿用原判定>，理由：仅修正错别字」即可通过——这句话本身也提醒了 AI 别顺手扩大改动范围。
 
@@ -424,10 +431,13 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/md-audience-declaration.js
    ↓  读 stdin 的 tool_input.file_path / transcript_path / prompt_id：
    ↓    扩展名不是 .md / .markdown → 放行
    ↓    经 hooks/lib/transcript.js 取本轮 assistant 文本
-   ↓      （从后往前找最后一个 promptId == payload.prompt_id 的 user 行，取其后所有行）
+   ↓      （从后往前找最后一个「promptId 匹配且不含 tool_result 块」的 user 行，取其后所有行；
+   ↓        tool_result 行的 type 也是 'user' 且带同一 promptId，必须排除，否则起点会被
+   ↓        推到最近一次工具结果之后，把已落盘的声明切出窗口——2.2.0 修的就是这个）
    ↓    读不到 / 解析失败 → 放行（基础设施异常不表现为纪律违规）
    ↓    文本含「受众判定」→ 放行
-   ↓    不含 → deny + 三分支准则（偏人读 / 偏 AI 读 / 人机混合）
+   ↓    不含 + 本文件本轮累计 deny < 3 → deny + 三分支准则 + 判据诊断行
+   ↓    不含 + 本文件本轮累计 deny ≥ 3 → ask（判据可能失灵，交用户拍板）
 ```
 
 **条件注入 hook**（`hooks/guards/external-write-readback.js`）
@@ -522,13 +532,22 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-browser-launch.js
 
 ### 怎么可靠地界定「本轮」
 
-第七章（md 受众判定）和第六章的截图检查都依赖一个判据：**AI 在本轮说过什么 / 用户在本轮给过什么**。这没法从 `tool_input` 得出，必须回看 `transcript_path` 指向的 JSONL。实现在 `hooks/lib/transcript.js`，2026-07-26 在真实会话文件上实测确认了三件事：
+第七章（md 受众判定）和第六章的截图检查都依赖一个判据：**AI 在本轮说过什么 / 用户在本轮给过什么**。这没法从 `tool_input` 得出，必须回看 `transcript_path` 指向的 JSONL。实现在 `hooks/lib/transcript.js`。
 
-1. **只有 `type=='user'` 的行带 `promptId`**，`assistant` 行的 `promptId` 恒为 `null`。所以不能用「筛出 `promptId == payload.prompt_id` 的所有行」——那样一条 assistant 文本都拿不到。正确做法是**从后往前找最后一个 `promptId` 匹配的 user 行，取它之后的全部行**。
-2. **落盘足够及时**。官方文档提到 transcript 是异步写入，但在「AI 刚输出文本 → 同一轮下一次工具调用触发 hook」这个时间尺度上实测无问题（本插件开发时就是这样自测的：先输出受众判定声明，下一次 Bash 调用时已能 grep 到）。
-3. `prompt_id` 匹配不上时**降级为「最后一个 user 行之后」**，读文件或 JSON 解析失败则返回 `null`/`[]`，调用方一律放行。宁可漏拦，不可因为读不到 transcript 就误拦——基础设施异常不该表现为纪律违规。
+**2026-07-28 的事故先摆在前面**：这一节原来写着三条「2026-07-26 实测确认」的结论，其中两条是错的，导致 `md-audience-declaration` 对 `.md` 的 `Write`/`Edit` 构成**永久拒绝**——不是偶发死循环，是任何重试都过不去。事故现场是一个正在写 `merge-notes-v2.68.md` 的会话：AI 按格式输出了受众判定声明、被 deny、重新声明、又被 deny，两次之后它判断「这是个失灵的时机检查」，转而用 heredoc 绕开 `Write` 工具直接写文件。下面按「哪条错了、真相是什么」重写。
 
-同一个 lib 也用来提取本轮的图片路径（匹配 `image-cache/` 路径与 `.png`/`.jpg`/`.webp`/`.gif` 绝对路径，只看用户侧的行）。
+1. **只有 `type=='user'` 的行带 `promptId`**，`assistant` 行的 `promptId` 恒为 `null`。这条是对的：不能用「筛出 `promptId == payload.prompt_id` 的所有行」，那样一条 assistant 文本都拿不到。
+2. **（原结论错误）「从后往前找最后一个 `promptId` 匹配的 user 行」不是轮起点。** 真相是：**工具结果也是 `type: 'user'` 的行**（`message.content[].type === 'tool_result'`），而且带着和真实用户消息**完全相同的 `promptId`**。所以那个查找必然命中**最近一次工具结果**，起点被推到它之后，AI 在那之前说过的话全被切掉。实证：session `13db234b`，本轮 `promptId=b54341c4`，旧算法 `startIdx=54`（该行是 tool_result），切出的 assistant 文本长度 **0 字符**。正确判据是**从后往前找最后一个「不含 tool_result 块」的 user 行**。另外注意真实用户消息行的 `message.content` 可能是 **string** 而不是数组（同一份 transcript 的行 40 就是），判 tool_result 时必须容忍这种形态。
+3. **（原结论错误）落盘并不「足够及时」。** 一条 assistant message（thinking + text + tool_use）在 API 响应结束后才整体写盘，而 `PreToolUse` 发生在那之前——**同一条 message 里的 text 块，在该 message 的 tool_use 触发 hook 时读不到**。实证：session `13db234b` 行 178 = `assistant[text]`（含受众判定声明）、行 179 = `assistant[tool_use]` Edit、行 180 = 该 Edit 被 deny 的 tool_result；最终行序里 text 明明在 Edit 之前，hook 却判定「本轮没有声明」。原结论的自测方式（「声明后下一次 Bash 调用时已能 grep 到」）验证的是「文本最终可被 grep」，**不等于**「hook 触发那一刻可读」——拿历史行的最终排列去推实时可读性，是这次踩空的方法论根源。
+4. `prompt_id` 匹配不上时**降级为「最后一个真实用户消息行之后」**，读文件或 JSON 解析失败则返回 `null`/`[]`，调用方一律放行。宁可漏拦，不可因为读不到 transcript 就误拦——基础设施异常不该表现为纪律违规。
+
+**两条错误叠加才成了永久拒绝**：落盘时序决定「首次必然读不到、必然 deny 一次」；起点算错决定「重试时那条已落盘的旧声明又被最新 tool_result 切出窗口」。单独任一条都只是让门控多拦一次，合起来才是死局——每次重新声明都会再造一个 tool_result 把声明推走。修好第 2 条后的稳态是：**首次 deny 一次（正好灌准则），重试即通过**。
+
+**顺带修正的历史误解**：`prompt_id` 也不能改成「从前往后找第一个匹配的 user 行」。用户按 Esc 中断时，上一轮未完成工具的 tool_result 会被打上**新一轮**的 `promptId`，且行序排在真实用户消息**之前**（同一份 transcript：行 37 = `user[tool_result]` pid=b54341c4，行 38 = `[Request interrupted by user]`，行 40 才是真正的用户消息）。取第一个匹配会把起点定到上一轮尾部，让上一轮的文本和图片被误算进本轮。
+
+同一个 lib 也用来提取本轮的图片路径（匹配 `image-cache/` 路径与 `.png`/`.jpg`/`.webp`/`.gif` 绝对路径，只看用户侧的行）。第六章的截图检查此前受同一个 bug 影响，只是失败方向是**漏拦**（读不到图片 → 不要求 prompt 附路径），不像 md 门控那样表现为死循环，所以一直没被发现。
+
+**这次留下的工程教训**：判据依赖外部数据结构（transcript 行格式）的门控 hook，必须做两件事——把判据本身写进 deny 文案（否则 AI 只能猜，猜错就是绕过），以及给一个次数熔断（否则格式一变就是永久拒绝）。两者都已落在 `md-audience-declaration.js` 里，计数用 `hooks/lib/notify-once.js` 的 `bumpCounter`。
 
 ### 为什么有四项机械规则没有下沉
 
@@ -563,6 +582,7 @@ plugins/working-discipline/
 │   │   ├── shell-parse.js              #   命令切分/分词/剥引号剥子 shell（block-cd 与
 │   │   │                               #   agent-browser-launch 原先各有一份重复实现）
 │   │   ├── transcript.js               #   按 prompt_id 读「本轮」assistant 文本与图片路径
+│   │   │                               #   （轮起点须排除 tool_result 行：它的 type 也是 'user'）
 │   │   └── notify-once.js              #   同轮同档位去重，状态文件在 TMPDIR，失败降级为照常注入
 │   └── guards/
 │       ├── agent-dispatch.js           # PreToolUse 拦截（Agent 派发：第一层命名与 model 聚合报错，
@@ -596,4 +616,4 @@ plugins/working-discipline/
 
 ---
 
-版本 2.0.0 · 作者 zhangq · MIT
+版本 2.2.0 · 作者 zhangq · MIT

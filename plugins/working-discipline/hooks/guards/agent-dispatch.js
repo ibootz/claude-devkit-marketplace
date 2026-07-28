@@ -335,7 +335,8 @@ function checkDispatchQuality(ti, payload) {
   // 纯 spec 矛盾 / 纯 CI 问题、用户明确说不用附图片——这些无法用正则可靠区分，
   // 故给逃生舱：prompt 里写「豁免图片：<理由>」即放行。
   if (!/豁免图片/.test(prompt)) {
-    const images = currentTurnImagePaths(payload.transcript_path, payload.prompt_id)
+    // 字段名两种写法都接受（详见 md-audience-declaration.js 同处理）
+    const images = currentTurnImagePaths(payload.transcript_path, payload.prompt_id || payload.promptId)
     if (images.length && !/image-cache|\.png|\.jpg|\.jpeg|\.webp|\.gif/i.test(prompt)) {
       return [IMAGE_REQUIREMENT, ...images.map((p) => `  ${p}`)].join('\n')
     }
