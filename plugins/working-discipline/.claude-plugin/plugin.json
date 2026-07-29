@@ -1,7 +1,7 @@
 {
   "name": "working-discipline",
-  "version": "2.3.0",
-  "description": "AI 工作纪律：常驻注入只留靠自觉才成立的语义规则，机械可判定的全部下沉 hook 在时机点强制。主会话每轮注入实测 13632 → 6992 字符（-49%），解决「注入越多遵从度越低」——保留的是上下文纪律 / 子代理协作（在飞≤16 靠自记账盘点·明确禁用 TaskList 统计在飞数（它是任务板、status 枚举无 running）·嵌套≤2）/ 表达约束（求真·简体中文·列表编号·待确认内容三要求）/ 思维模式 / Agent 派发的类型与模型选择 / 多 subagent 并发时等齐再总结。下沉到 hook：PreToolUse 的 agent-dispatch 两层校验派发（第一层命名与 model，多条一并列出：model 必填、name 与 description 双必填且带模型档次前缀并与 model 一致、name 合原生正则、description 正文禁 prompt 角色设定句·禁与 prompt 开头逐字重合·禁超 60 字符；第二层派发质量，取第一个命中：档位错配给完整 subagent_type×model 路由表、prompt 必须索要结构化回执、本轮有截图必须附路径、含外部写必须传染回读要求；豁免 fork/statusline-setup/output-style-setup，总开关 AGENT_DISPATCH_GUARD=off 兼容旧名 AGENT_NAMING_GUARD=off。本 guard 由 1.11.0 的 agent-naming.js 与本次 agent-dispatch.js 合并而成，消除三项重叠校验）、污染 cwd 的独立 cd（block-cd，改推 git -C，stderr 从 1500 压到 130 字符）、缺 --headed/--profile 的 agent-browser 启动（agent-browser-launch）、非 ASCII 路径的探测命令挂 2>/dev/null（nonascii-path，检索类命令则注入 NFC/NFD 规避法）；PostToolUse 在外部系统写操作后注入回读核验要求（external-write-readback：2xx 只证明请求被接受、不证明字段生效，须走读接口逐字段回读、写 N 个回读 N 次；Bash 本地写只给精简提醒）、拦超 1000 行源码文件（max-source-lines）与超 200 行 CLAUDE.md（claude-md-max-lines，指路拆到 .claude/rules/）。派发命名规范完整版仍注入子代理版（子代理只在启动时注入一次、且比主会话更可能不知规范），主会话压成 5.4 要点索引。dws 钉钉 CLI 写授权已移交 radnove-core 插件的 pre-tool-use-dws-write.sh（permissionDecision ask），此处不再重复注入。UserPromptSubmit 覆盖主会话每轮，SubagentStart 覆盖子代理。2.3.0 摘除了 md 受众判定门控 md-audience-declaration 的挂载（guard 文件保留、含 2026-07-28 判据事故记录）：它在 subagent 上下文里读的是子代理自己的 transcript，子代理不知规则时必然先撞 deny，撞满 DENY_LIMIT=3 后熔断转 ask，于是每次让子代理写 md 都要打断用户确认一次；而 hook 的 permissionDecision 独立于权限模式，用户配了 bypassPermissions 也拦不住，表现为「subagent 莫名丢了 bypass 权限」极难归因。摘除同时把三分支准则压缩成要点带回第 4.7 条常驻注入（约 150 字符，非原 900 字符版），避免 hook 摘了而注入里只剩「由 hook 强制拦截」导致纪律两头落空。零 skill，适合全局开启",
+  "version": "3.0.0",
+  "description": "AI 工作纪律：常驻注入只留靠自觉才成立的语义规则，机械可判定的下沉 hook 在时机点强制。3.0.0 三处结构性变更——(1) **删掉所有靠关键词猜语义的 guard**：external-write-readback（扫命令里的 create/update/delete/发布 等词）、nonascii-path（把命令行里任何非 ASCII 字节都当成\"路径含非 ASCII\"，连 echo 的中文提示语都算）、md-audience-declaration（回读 transcript 找声明句）、agent-dispatch 第二层四条（档位错配/索要回执/截图附路径/写操作传染回读）。共同缺陷是判据为正则猜语义而 deny 不可绕过，失败模式变成「AI 做对了却过不去」（实证：排查「点发布按钮报错」的 bug 时 prompt 里十几个\"发布\"全是被排查对象的业务语义，而 Explore 类型物理上没有 Edit/Write；截图那条回读 transcript 而工具结果行 type 也是 user，AI 自己 Read 过一张图就让本轮后续所有派发被拦）。对应纪律全部回迁注入侧：回执/截图/写后回读 → 5.6，档位 → 5.1/5.2，md 受众判定 → 第 4.7 条，NFC/NFD → 第一章末条。(2) **挂载拓扑按拦截对象收敛成 3 个 guard**：Agent → agent-dispatch（结构校验：model 必填且在 sonnet/opus/fable 内、name 模型前缀与 model 一致且合原生正则、description 带 [模型名] 前缀且正文非 prompt 原文且 ≤60 字符，多条违规一次报清）；Bash → bash-guard（合并原 block-cd + agent-browser-launch，判据是 shell token 与参数存在性）；Write|Edit → write-guard（合并原 max-source-lines 1000 行 + claude-md-max-lines 200 行，纯行数计数）。原先多个 guard 串行挂同一 matcher 有结构性缺陷——一批只报最前面那道闸，改完第一处才看见第二处，多轮往返是拓扑的产物而非 AI 每轮新犯一个错。(3) **缺 name 不再 deny，改用 PreToolUse 的 updatedInput 自动补名放行**：Agent 工具的 JSON Schema 只声明六个 properties 且 additionalProperties:false、其中没有 name，但运行时接受它并落盘进 subagent 元数据（agent-<id>.meta.json），AI 照字段表生成调用必然漏掉——属结构性必然而非疏忽，deny 只是把必然的返工固化。自动名形如 <model>-<语义>-<prompt 短哈希>；字段存在但格式错（前缀不符/含中文/description 抄 prompt）仍 deny，因为 AI 既然写出了值就说明它知道字段存在。截图路径改由 UserPromptSubmit 条件注入（lib/prompt-images.js 纯函数，[Image: source: <path>] 标记优先 + 裸路径要求至少两级路径段，杜绝 /1.png 这类残片）。保留在注入的：上下文纪律 / 子代理协作（在飞≤16 靠自记账盘点、明确禁用 TaskList 统计在飞数、嵌套≤2）/ 表达约束（求真·简体中文·列表编号·待确认内容三要求）/ 思维模式含 md 受众三分支 / Agent 派发的类型与模型选择 / 多 subagent 并发等齐再总结 / 5.6 派发 prompt 必含三项。派发命名规范完整版仍只注入子代理版。dws 钉钉 CLI 写授权由 radnove-core 插件强制。UserPromptSubmit 覆盖主会话每轮，SubagentStart 覆盖子代理。零 skill，适合全局开启",
   "author": {
     "name": "zhangq"
   },
@@ -21,15 +21,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/block-cd.js"
-          },
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-browser-launch.js"
-          },
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/nonascii-path.js"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/bash-guard.js"
           }
         ]
       }
@@ -40,20 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/max-source-lines.js"
-          },
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/claude-md-max-lines.js"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/external-write-readback.js"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/write-guard.js"
           }
         ]
       }

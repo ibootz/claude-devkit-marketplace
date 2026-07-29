@@ -1,22 +1,52 @@
 // agent-dispatch.js — PreToolUse 门控钩子（matcher: Agent）
 //
 // 【用途】
-// 派发 subagent 的所有机械可判定要求都在这里硬拦。这些要求常驻注入的话，只会跟
-// 「求真」「说明详细」这类无法硬拦截的语义规则抢注意力预算；改成命中时拦截并在
-// reason 里给对应细则，选对时零开销、选错时才付细则成本。
+// 派发 subagent 时**结构层面**机械可判定的要求在这里处理：model 是否显式给了且在三档内、
+// name / description 是否齐备、前缀是否与 model 一致、description 是否把 prompt 原文灌了
+// 进去。判据全部取自 tool_input 的确定字段，不猜语义、不回读 transcript。
 //
-// 【本文件是两个 guard 合并的产物（2026-07-26）】
-// 原 hooks/guards/agent-naming.js（1.11.0 引入）负责命名与 model 的 8 项校验，
-// 原 agent-dispatch.js（本次引入）负责派发质量的 4 项校验，两者都挂 PreToolUse(Agent)、
-// 有三项重叠（model 必填 / description 的 [模型名] 前缀 / name 的 模型名- 前缀），
-// 不合并会重复拦截并输出两份 finding。合并后 agent-naming.js 删除。
+// 【本文件是「针对 Agent 这一个对象的唯一 hook」】
+// 3.0.0 起本插件的挂载拓扑按**拦截对象**收敛：Agent → 本文件，Bash → bash-guard.js，
+// Write|Edit → write-guard.js。同一对象只过一道闸，一次报清所有问题。原先"多个 guard
+// 分层串行挂同一个 matcher"的拓扑有个结构性缺陷：**一批只报最前面那道闸**，AI 补完
+// 第一道才看见第二道，多轮往返是拓扑的产物而不是 AI 每轮新犯一个错。
 //
-// 【两层校验，形态不同是有意的】
-// 第一层「命名与 model」：多条违规**一并列出**（findings 聚合），因为这类问题往往
-//   同时出现好几个（缺 name + description 抄 prompt + 超长），一次报清才能一次改对。
-// 第二层「派发质量」：**取第一个命中**，每条给一段长细则（路由表 / 回执模板 / 回读要求）。
-//   这类问题一次一个就够，同时倒出多段长文本会重演常驻注入的老问题。
-//   只有第一层全过才进第二层——命名都没写对时，谈档位选择为时过早。
+// 【3.0.0 之二：缺 name 改为自动补全，不再 deny】
+// 根因不是 AI 注意力不够，而是**两套约束不同源**：`Agent` 工具的 JSON Schema 里
+// `properties` 只声明了 description / prompt / subagent_type / model / run_in_background /
+// isolation 六项，还写着 `additionalProperties: false`——`name` 是 schema 外但运行时真实
+// 消费的字段（实证：<project>/subagents/agent-<id>.meta.json 里存着
+// {"agentType":"Explore","description":"[sonnet] …","name":"sonnet-dbops-translate-weight-ids",
+// "model":"sonnet"}）。AI 构造工具调用时照 schema 的字段表生成，字段表里不存在的字段不会
+// 被"想起来"，所以「缺 name」是结构性必然、不是偶发疏忽；用 deny 打回只是把这次必然的
+// 返工固化下来。现在改为用 `hookSpecificOutput.updatedInput` 补一个合规名并放行。
+//
+// 边界（为什么不是"所有命名问题都自动修"）：
+//   - **字段缺失**（name 压根没给）→ 自动补。AI 看不见这个字段，罚它没有教育意义。
+//   - **字段存在但格式错**（前缀与 model 不符 / 含中文 / description 抄 prompt）→ 仍 deny。
+//     AI 既然产出了这个值，就说明它知道字段存在，此时 finding 能真正教会它规则。
+//   - **model 缺失/非法** → 仍 deny，且不顺手补 name。档位是语义决策（这个任务值不值得
+//     上高档模型），自动填一个默认值等于把决策悄悄替 AI 做了，还会让 name 前缀跟着错。
+//
+// 【3.0.0 之三：所有靠关键词猜语义的校验已删除】
+// 2.0.0 曾有第二层「派发质量」四条（档位错配 / 索要回执 / 截图附路径 / 写操作传染回读），
+// 判据是**正则扫 prompt 词表**，配上不可绕过的 deny 后失败模式变成「AI 做对了却过不去」。
+// 实证三条：
+//   (a) 写后回读那条扫 create/update/delete/发布/提交 等词。排查一个「点发布按钮报错」的
+//       bug 时，`发布`/`publish` 在 prompt 里出现十几次全是**被排查对象的业务语义**，不是
+//       要执行的动作；而 Explore 类型物理上没有 Edit/Write 工具、改不了任何文件，守卫却
+//       只读 prompt 文本、没把 subagent_type 的权限面纳入判据。
+//   (b) 截图那条回读 transcript 取图片路径，而工具结果行的 type 也是 'user'——AI 自己
+//       Read 过一张图、grep 输出里带一个 .png 路径，本轮后续**所有** Agent 派发全被拦。
+//       它读自己的源码就会自我触发：源码里的正则字面量完全符合旧路径正则的形状。
+//   (c) 档位那条因 prompt 里出现「不变量」「根因」就要求升 opus，而那里的"不变量"只是
+//       spec 里名为 INV-xx 的条目字段名。
+// 逃生舱（`档位已确认：` / `豁免图片：`）不算解法：它要求 AI 先撞一次 deny、再回头往
+// prompt 里塞一句咒语，而 deny 不给用户"点一下就过"的入口。这四条已改为 working-discipline.js
+// 在 UserPromptSubmit 侧的软约束注入（5.6 与 buildImageEvidence）。
+//
+// 判断标准因此固化为一条：**判据取自 tool_input 的确定字段** → 可以写成 guard；
+// **判据要靠正则猜语义或回读 transcript** → 留在注入里靠自觉，别做成 deny。
 //
 // 【触发条件】
 // - 工具名为 Agent。**不匹配旧名 Task**：旧工具名的 tool_input 可能没有 name / model
@@ -30,33 +60,34 @@
 // - subagent_type 属于 EXEMPT_SUBAGENT_TYPES（系统内建类型，model / 命名语义不适用；
 //   fork 明确「always inherit the parent model」，强制 model 前缀会自相矛盾）
 // - stdin 读取失败 / JSON 解析失败 / tool_input 缺失 —— 基础设施异常不误拦
-// - 两层校验全过
-// - 逃生舱：档位与截图两类允许 prompt 里显式声明理由后放行（正则无法覆盖全部合法场景）
+// - 只缺 name（其余全过）→ 自动补名后放行，不是拦截
+// - 校验全过
 //
 // 【阻塞行为】
-// 输出 JSON permissionDecision: "deny"。按官方文档，Claude Code 读取该 JSON 后阻断
-// 工具调用并把 permissionDecisionReason 展示给 Claude。命名类 reason 沿用本仓库
-// guard 的 [L1-BLOCKER] ... finding= hint= 格式，便于与其他 guard 的输出统一识别。
+// 格式错时输出 JSON permissionDecision: "deny"，reason 沿用本仓库 guard 的
+// [L1-BLOCKER] ... finding= hint= 格式。缺 name 时输出 updatedInput（不带
+// permissionDecision，让正常权限流继续走），并用 additionalContext 告知已自动补名。
 //
 // 【已知局限】
 // 只覆盖 Agent 工具的直接派发。Workflow 脚本内部 agent(prompt, {label}) 不经 PreToolUse，
 // label 缺失或抄 prompt 拦不到，只能靠注入纪律 5.4.4 约束。
 //
-// Input: JSON on stdin with tool_name / tool_input / transcript_path / prompt_id
-// Exit 0（始终）——放行与 deny 都走 exit 0，靠 stdout 的 JSON 表达决定
+// Input: JSON on stdin with tool_name / tool_input
+// Exit 0（始终）——放行、补名、deny 都走 exit 0，靠 stdout 的 JSON 表达决定
 
 'use strict'
 
 const fs = require('fs')
-const { currentTurnImagePaths } = require('../lib/transcript')
+const crypto = require('crypto')
 
 // 可选模型三档。**不含 haiku**（2026-07-27 起）：haiku 在机械任务上省下的那点
 // 成本，抵不过它读错文件结构、漏掉边界条件后父代理返工重派的开销——最低档一律
-// 从 sonnet 起步。写了 haiku 会在第一层被拦并回灌路由表。
+// 从 sonnet 起步。写了 haiku 会被拦下并回灌路由表。
 const MODELS = ['sonnet', 'opus', 'fable']
 
 // Agent 工具 name 字段的原生正则约束（只接受 ASCII 字母数字与 - _）
 const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
+const NAME_MAX = 64
 
 // 系统内建 subagent_type：model 覆盖被忽略或命名语义不适用，一律放行。
 const EXEMPT_SUBAGENT_TYPES = new Set(['fork', 'statusline-setup', 'output-style-setup'])
@@ -76,7 +107,8 @@ const DESC_BODY_MAX = 60
 // 短摘要与 prompt 开头偶然重合的概率高，会误报。
 const LEAK_MATCH_MIN = 20
 
-// 完整场景路由表：只在「model 缺失/非法」与「档位错配」两类命中时才注入
+// 完整场景路由表：只在「model 缺失/非法」时才注入（档位错配的语义判定已删除，
+// 这张表现在只用于"你没给 model，这是选档依据"这一个场景）
 const ROUTING_TABLE = [
   '## subagent_type × model 场景路由表',
   '',
@@ -115,46 +147,6 @@ const ROUTING_TABLE = [
   '- 禁止预防性堆模型：没有 opus 触发信号就留在 sonnet，不确定时一档一档升，别一步跳顶',
 ].join('\n')
 
-const RECEIPT_TEMPLATE = [
-  '派发 prompt 必须明确索要结构化回执，否则子代理只回「已完成」，父代理无法审计、',
-  '也无法在主对话向用户复述要点。在 prompt 的【期望输出】里写明要求返回：',
-  '  1. 改了哪些文件（逐个列出路径）',
-  '  2. 关键决策（为什么这样做，放弃了什么方案）',
-  '  3. 阻塞点（没做完的、卡住的）',
-  '  4. 需要父代理跟进的事项',
-].join('\n')
-
-const READBACK_REQUIREMENT = [
-  '这个 prompt 含外部系统写操作（API / CLI / SDK / DB 的 create / update / delete /',
-  '提交 / 改配置 / 授权 / 发布），但没有要求子代理做写后回读核验。',
-  '',
-  '写操作返回成功（HTTP 2xx / 退出码 0 / 无 error 字段）**只证明请求被接受，不证明',
-  '意图被实现**。服务端有三类静默失败，响应里没有任何消极信号：(a) 静默忽略字段——',
-  '字段服务端不认，既不报错也不警告直接丢弃，落默认值；(b) 静默降级——值超范围被截断',
-  '或替换为默认值；(c) 部分成功——批量写入个别条目失败，整体仍返回成功。',
-  '真实事故（2026-07-26）：向平台导航创建接口传 orderIndex: 15，返回 HTTP 204 无警告，',
-  '回读发现实际存储值是默认的 1，字段被静默丢弃，菜单排到错误位置。',
-  '',
-  '父代理看不见子代理的写调用细节，回读要求写不进 prompt 就等于没有。请在 prompt 里',
-  '显式写入：',
-  '  - 每步写操作后立即用**读接口**（get / list / describe / SELECT）回读，逐字段比对',
-  '    「以为写进去的值」与「服务端实际存储的值」；禁止把写接口自己的响应体当回读结果',
-  '  - 写 N 个对象就回读 N 次，禁止抽查、禁止只查列表看总数',
-  '  - 涉及层级/归属（parentId / 外键 / 所属分组）要额外从父对象侧确认能看到新成员',
-  '  - 回执中必须给出**回读到的实际值**；只报「N 个全部创建成功」的回执一律不接受',
-  '  - 确实没有读接口的项，明确标注「此项无法回读验证」，不得默认成功',
-].join('\n')
-
-const IMAGE_REQUIREMENT = [
-  '本轮用户提供了截图，但派发 prompt 里没有任何图片路径。',
-  '',
-  '子代理有独立上下文，没有主会话的截图记忆。文字转述会丢失颜色、间距、UI 元素相对',
-  '位置、文本换行方式等像素级细节——不附路径等于让子代理盲跑。一手证据（图片）优先于',
-  '二手描述（文字转述）。',
-  '',
-  '把下列路径原样写进 prompt，让子代理用 Read 工具直接读取图片：',
-].join('\n')
-
 function deny(reason) {
   process.stdout.write(
     JSON.stringify({
@@ -162,6 +154,23 @@ function deny(reason) {
         hookEventName: 'PreToolUse',
         permissionDecision: 'deny',
         permissionDecisionReason: reason,
+      },
+    }) + '\n'
+  )
+  process.exit(0)
+}
+
+// 补全 name 后放行。**不带 permissionDecision**：本 hook 只负责改参数，权限判定交回
+// 正常流程（给 "allow" 会连带跳过其他权限检查，越权）。additionalContext 告知 AI
+// 已自动补名，让它下次自己起有语义的名字——自动名只有 subagent_type 和哈希，
+// 可辨性弱于 AI 自己写的任务语义。
+function allowWithName(ti, name, note) {
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        updatedInput: Object.assign({}, ti, { name: name }),
+        additionalContext: note,
       },
     }) + '\n'
   )
@@ -177,8 +186,46 @@ function guardDisabled() {
   return off(process.env.AGENT_DISPATCH_GUARD) || off(process.env.AGENT_NAMING_GUARD)
 }
 
-// ── 第一层：命名与 model 的机械校验（多条一并列出）────────────────────
-// 返回 { findings: [], hints: [], modelOk: bool }
+// ── 自动补名 ────────────────────────────────────────────────────────
+//
+// 语义来源优先级：description 正文里的 ASCII 词 > subagent_type。
+// description 常是中文（纪律要求它写中文任务摘要），抽不出 ASCII 词时退回
+// subagent_type——中文转写（拼音/翻译）在 hook 里不可靠，宁可给个语义弱但绝不出错的名。
+
+// 从 description 正文抽 ASCII 语义片段：'[sonnet] grep auth refs' → 'grep-auth-refs'
+function deriveSlug(ti) {
+  const desc = typeof ti.description === 'string' ? ti.description : ''
+  const body = desc.replace(/^\[(sonnet|opus|fable|haiku)\]\s*/, '')
+  const words = (body.match(/[A-Za-z0-9]+/g) || [])
+    .map((w) => w.toLowerCase())
+    .filter((w) => w.length >= 2)
+    .slice(0, 4)
+  if (words.length) return words.join('-')
+
+  const st = typeof ti.subagent_type === 'string' ? ti.subagent_type : ''
+  const fromType = st.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  return fromType || 'agent'
+}
+
+// 同批并发的多个 subagent 必须拿到不同的 name（同名会让 SendMessage 的 latest-wins
+// 寻址把先派的那个弄丢）。用 prompt 的短哈希做区分符：纯函数、无需持久状态，
+// 同一会话里两个 prompt 不同的派发几乎不可能撞。
+function shortHash(s) {
+  return crypto.createHash('sha1').update(s).digest('hex').slice(0, 4)
+}
+
+function autoName(ti, model) {
+  const slug = deriveSlug(ti)
+  const hash = shortHash(String(ti.prompt || '') + '|' + slug)
+  const budget = NAME_MAX - model.length - 1 - 1 - hash.length // model + '-' + slug + '-' + hash
+  const safeSlug = slug.slice(0, Math.max(1, budget))
+  const name = `${model}-${safeSlug}-${hash}`
+  // 兜底：任何原因导致不合正则时，退回一个必然合法的形态
+  return NAME_PATTERN.test(name) ? name : `${model}-agent-${hash}`
+}
+
+// ── 命名与 model 的结构校验（多条一并列出）──────────────────────────
+// 返回 { findings, hints, modelOk, nameMissing }
 function checkNaming(ti) {
   const model = typeof ti.model === 'string' ? ti.model.trim() : ''
   const name = typeof ti.name === 'string' ? ti.name.trim() : ''
@@ -188,6 +235,7 @@ function checkNaming(ti) {
   const findings = []
   const hints = []
   const modelOk = MODELS.indexOf(model) !== -1
+  const nameMissing = !name
 
   // 1. model 必须显式指定且在三档之内
   if (!model) {
@@ -203,11 +251,15 @@ function checkNaming(ti) {
     hints.push('model 只能填 sonnet|opus|fable')
   }
 
-  // 2~4. name 必填 + 模型前缀 + 字符集合法
-  if (!name) {
-    findings.push('缺 name;省略后面板左列只能回落显示裸 subagent_type,同批并发无法分辨各自任务')
-    hints.push(`name 填 "${modelOk ? model : '<模型名>'}-<任务语义-kebab-case>"(如 sonnet-review-login-flow)`)
-  } else {
+  // 2. name 缺失**不进 findings**——它是 schema 外字段、AI 看不见，由 main() 自动补。
+  //    但 model 也有问题时要顺带提醒：那种情况会走 deny，补名的时机已经错过，
+  //    且补名需要合法的 model 做前缀。
+  if (nameMissing && !modelOk) {
+    hints.push('重派时顺带给 name:"<model>-<任务语义-kebab>"(schema 里查不到这个字段,但运行时接受并会存进 subagent 元数据)')
+  }
+
+  // 3~4. name 存在时校验字符集与模型前缀（存在即说明 AI 知道这个字段，格式错要教）
+  if (!nameMissing) {
     if (!NAME_PATTERN.test(name)) {
       findings.push(`name="${name}" 不满足 Agent 工具正则 ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$;只接受 ASCII 字母数字与 - _`)
       hints.push('name 用英文 kebab-case,不能含中文/空格/方括号')
@@ -219,7 +271,7 @@ function checkNaming(ti) {
       findings.push(`name="${name}" 用了已移除的 haiku 档前缀`)
       hints.push(`name 改成 "${modelOk ? model : 'sonnet'}-${name.slice(6) || '<任务语义>'}"`)
     } else if (!namePrefix) {
-      findings.push(`name="${name}" 缺模型档次前缀;用户无法从面板判断在飞任务烧的是哪一档模型`)
+      findings.push(`name="${name}" 缺模型档次前缀;用户无法从在飞 agent 面板判断这批任务烧的是哪一档模型`)
       hints.push(`name 改成 "${modelOk ? model : '<模型名>'}-${name.replace(/^[^A-Za-z0-9]+/, '') || '<任务语义>'}"`)
     } else if (modelOk && namePrefix !== model) {
       findings.push(`name 前缀 "${namePrefix}-" 与实际 model="${model}" 不一致;面板会显示错误的模型档次`)
@@ -227,7 +279,8 @@ function checkNaming(ti) {
     }
   }
 
-  // 5. description 必填 + 方括号模型前缀
+  // 5. description 必填 + 方括号模型前缀（description 是 schema 里的必填字段，
+  //    缺失基本由工具层拦掉，这里仍留判定以防 harness 放宽）
   let descBody = ''
   if (!description) {
     findings.push('缺 description')
@@ -273,83 +326,7 @@ function checkNaming(ti) {
     }
   }
 
-  return { findings, hints, modelOk }
-}
-
-// ── 第二层：派发质量校验（取第一个命中，各给长细则）──────────────────
-function checkDispatchQuality(ti, payload) {
-  const model = typeof ti.model === 'string' ? ti.model.trim() : ''
-  const prompt = typeof ti.prompt === 'string' ? ti.prompt : ''
-  const subagentType = typeof ti.subagent_type === 'string' ? ti.subagent_type : ''
-
-  // 逃生舱：prompt 里显式写「档位已确认」即跳过档位检查——正则无法覆盖全部
-  // 合法场景（例如只读措辞但确实需要写权限），硬拦死会挡住真实需求。
-  const routingConfirmed = /档位已确认/.test(prompt)
-  const READ_ONLY_INTENT = /分析|调查|查找|定位|梳理|检索|阅读|审查|评估|理解|探索|统计|列出|盘点/
-  const WRITE_INTENT = /修改|新增|删除|重构|实现|修复|写入|创建|编辑|提交|安装|生成|补充|更新|执行|运行|跑一?下|测试|构建|npm |mvn |yarn |git commit/
-  // 「最低档别干必须 opus 的活」。haiku 移除后最低档变成 sonnet，这条由原来的
-  // 「haiku + 高复杂度」平移而来，但词表**必须同步收窄**，原因有二：
-  //   (a) sonnet 是默认档，绝大多数派发都走它，宽词表的误拦面比作用于 haiku 时大得多；
-  //   (b) 旧词表里「架构设计」「一致性」与路由表自相矛盾——路由表明写「常规架构设计
-  //       → sonnet / 重大架构设计 → opus」，留着就会把常规设计任务拦死。
-  // 同理「安全」「注入」这类单字词也换成限定写法：本仓库语境里「注入」几乎都指
-  // 依赖注入 / 上下文注入，裸词会天天误拦。
-  const OPUS_REQUIRED =
-    /安全审计|安全漏洞|安全风险|安全加固|越权|提权|SQL\s*注入|注入漏洞|注入攻击|反序列化|SSRF|并发|竞态|死锁|内存泄漏|资源泄漏|性能瓶颈|性能回退|根因|深度审查|深度调研|数据一致性|协议一致性|不变量|时序问题/
-
-  if (!routingConfirmed) {
-    if (subagentType === 'general-purpose' && READ_ONLY_INTENT.test(prompt) && !WRITE_INTENT.test(prompt)) {
-      return [
-        '这是只读任务（prompt 只含检索/分析类意图，无修改类意图），却用了 `general-purpose`——',
-        '它默认携带 Edit / Write / Bash 全权限，存在误改文件的风险。',
-        '改用 `Explore`（只读，但仍有 Bash / Grep / Read，足够做检索与分析）。',
-        '若这个任务确实需要写权限，在 prompt 里写明「档位已确认：<理由>」再派发。',
-        '',
-        ROUTING_TABLE,
-      ].join('\n')
-    }
-    if (model === 'sonnet' && OPUS_REQUIRED.test(prompt)) {
-      return [
-        'prompt 命中必须起 `opus` 的信号（安全审计·漏洞 / 越权·提权 / 并发·竞态·死锁 /',
-        '内存·资源泄漏 / 性能瓶颈·回退 / 根因 / 深度审查·调研 / 数据·协议一致性 / 不变量 /',
-        '时序问题 等）。这类任务要么需要跨层因果链推理，要么对正确性要求极高，`sonnet`',
-        '作为**最低档**不足以胜任（haiku 已从档次表移除，sonnet 就是地板，不能再往下让）。',
-        '请升到 `opus`，并同步改 name / description 的模型前缀。',
-        '',
-        '若判断这其实是常规任务、只是 prompt 里恰好出现了这些词（例如「依赖注入」「上下文',
-        '注入」这类与安全无关的用法），在 prompt 里写明「档位已确认：<理由>」再派发。',
-        '',
-        ROUTING_TABLE,
-      ].join('\n')
-    }
-    // 原「`Plan` + haiku」检查已删除：haiku 不再是合法档次，第一层就会拦下，
-    // 这条在第二层永远不可能命中。Plan 最低 sonnet 现由 MODELS 的地板天然保证。
-  }
-
-  // prompt 必须索要结构化回执
-  if (!/回执|改了哪些文件|阻塞点/.test(prompt)) {
-    return RECEIPT_TEMPLATE
-  }
-
-  // 本轮有截图则必须附路径。豁免（原纪律明列）：纯后端 5xx / DB / MQ 问题、
-  // 纯 spec 矛盾 / 纯 CI 问题、用户明确说不用附图片——这些无法用正则可靠区分，
-  // 故给逃生舱：prompt 里写「豁免图片：<理由>」即放行。
-  if (!/豁免图片/.test(prompt)) {
-    // 字段名两种写法都接受（详见 md-audience-declaration.js 同处理）
-    const images = currentTurnImagePaths(payload.transcript_path, payload.prompt_id || payload.promptId)
-    if (images.length && !/image-cache|\.png|\.jpg|\.jpeg|\.webp|\.gif/i.test(prompt)) {
-      return [IMAGE_REQUIREMENT, ...images.map((p) => `  ${p}`)].join('\n')
-    }
-  }
-
-  // 含外部写操作则必须传染回读要求
-  const EXTERNAL_WRITE_INTENT =
-    /curl\s+[^|]*-X\s*(POST|PUT|PATCH|DELETE)|发布|publish|上线|授权|开通|建对象|建实体|提工单|发消息|推送|下发|入库|导入|批量创建|批量更新|INSERT\s+INTO|UPDATE\s+\S+\s+SET|DELETE\s+FROM/i
-  if (EXTERNAL_WRITE_INTENT.test(prompt) && !/回读/.test(prompt)) {
-    return READBACK_REQUIREMENT
-  }
-
-  return null
+  return { findings, hints, modelOk, nameMissing }
 }
 
 function main() {
@@ -379,8 +356,9 @@ function main() {
   const subagentType = typeof ti.subagent_type === 'string' ? ti.subagent_type : ''
   if (EXEMPT_SUBAGENT_TYPES.has(subagentType)) process.exit(0)
 
-  // 第一层：命名与 model（多条一并列出）
-  const { findings, hints, modelOk } = checkNaming(ti)
+  const { findings, hints, modelOk, nameMissing } = checkNaming(ti)
+
+  // 格式错 → deny（一次报清全部）
   if (findings.length) {
     let reason =
       `[L1-BLOCKER] tool=Agent check=agent-dispatch ` +
@@ -391,9 +369,20 @@ function main() {
     deny(reason)
   }
 
-  // 第二层：派发质量（取第一个命中）
-  const qualityReason = checkDispatchQuality(ti, payload)
-  if (qualityReason) deny(qualityReason)
+  // 只缺 name（其余全过）→ 自动补名放行
+  if (nameMissing) {
+    const model = ti.model.trim()
+    const generated = autoName(ti, model)
+    allowWithName(
+      ti,
+      generated,
+      `[agent-dispatch] 本次派发没给 name（Agent 工具的 JSON Schema 未声明该字段，` +
+        `但运行时接受并会存进 subagent 元数据），已自动补为 "${generated}" 并放行。` +
+        `自动名只有 subagent_type + prompt 哈希，在飞面板上看不出任务差异——` +
+        `下次派发请自己给 "${model}-<任务语义-kebab>"（如 ${model}-review-login-flow），` +
+        `同批并发时把分片依据写进名字。`
+    )
+  }
 
   process.exit(0)
 }

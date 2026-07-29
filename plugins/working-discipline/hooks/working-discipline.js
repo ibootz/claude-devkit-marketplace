@@ -16,20 +16,36 @@
 // 本文件曾注入 13632 字符（主会话每轮）。问题不是规则写得不好，而是常驻与按需错配：
 // 其中大半只在某个具体工具调用时刻才有用，却每轮都在跟无法硬拦截的语义规则
 // （求真 / 说明详细 / 思维模式 / 等齐再总结）抢同一份注意力预算，结果整体遵从度下降。
-// 这些内容已下沉到 hooks/guards/ 下的 guard，在恰当时刻拦截或注入：
-//   - 派发 subagent 的全部机械校验（model 必填 / name 与 description 必填且带模型前缀 /
-//     提示词泄露检测 / 档位错配 / 回执要求 / 截图附路径 / 写操作传染回读 / 完整场景
-//     路由表）                                     → guards/agent-dispatch.js
-//   - 写 md 前的受众判定留痕                        → 2.3.0 已摘除挂载，见下方【2026-07-29
-//     摘除 md 受众判定门控】；三分支要点已压缩回第 4.7 条常驻注入，纯自觉约束
-//   - 写操作后回读核验（外部写完整版 / 本地写精简版）→ guards/external-write-readback.js
-//   - macOS NFC/NFD 路径静默漏检的完整规避法        → guards/nonascii-path.js
-//   - dws 钉钉 CLI 写操作授权（原第六章整章）        → 移交 radnove-core 插件的
+// 仍然下沉在 hooks/guards/ 的只剩三条，判据都是确定字段或纯行数计数：
+//   - 派发 subagent 的**结构**校验（model 必填 / name 与 description 的前缀一致性 /
+//     name 合原生正则 / 提示词泄露 / 完整场景路由表）→ guards/agent-dispatch.js
+//   - 独立 cd 污染 cwd + agent-browser 启动参数        → guards/bash-guard.js
+//   - 源码 >1000 行 + CLAUDE.md >200 行               → guards/write-guard.js
+//   - dws 钉钉 CLI 写操作授权（原第六章整章）          → 移交 radnove-core 插件的
 //     hooks/pre-tool-use-dws-write.sh（走 permissionDecision: "ask" 强制用户确认），
 //     那边的 user-prompt-submit.sh 每轮红线已有一份语义兜底，此处不再重复注入
 //
-// 【2026-07-29 摘除 md 受众判定门控（2.2.0 → 2.3.0）】
-// guards/md-audience-declaration.js 不再挂载（文件保留，含 2026-07-28 的判据事故记录）。
+// 【2026-07-29（3.0.0）两件事：删掉所有关键词判定的 guard + 按对象收敛挂载拓扑】
+// (1) **靠关键词猜语义的 guard 全部删除**（用户拍板：准确率太低）。删的是
+//     external-write-readback.js（扫命令里的 create/update/delete/发布 等词）、
+//     nonascii-path.js（把命令行里任何非 ASCII 字节都当成"路径含非 ASCII"，连 echo 的中文
+//     提示语都算）、md-audience-declaration.js（回读 transcript 找声明句），以及
+//     agent-dispatch.js 的第二层四条（档位错配 / 索要回执 / 截图附路径 / 写操作传染回读）。
+//     共同缺陷：判据是正则猜语义，而 deny 是不可绕过的硬阻断，组合出的失败模式是
+//     「AI 做对了却过不去」。判断标准因此固化为——**判据取自工具输入的确定字段或纯计数**
+//     → 可以写成 guard；**判据要靠正则猜语义或回读 transcript** → 留在注入里靠自觉。
+//     对应的纪律没有丢：回执 / 截图 / 写后回读进了 5.6，档位在 5.1 / 5.2，md 受众判定在
+//     第 4.7 条，NFC/NFD 在第一章末条。
+// (2) **挂载拓扑按拦截对象收敛**：Agent → agent-dispatch.js，Bash → bash-guard.js
+//     （合并原 block-cd.js + agent-browser-launch.js），Write|Edit → write-guard.js
+//     （合并原 max-source-lines.js + claude-md-max-lines.js）。原先多个 guard 串行挂同一
+//     matcher 有个结构性缺陷：**一批只报最前面那道闸**，AI 补完第一处才看见第二处，多轮
+//     往返是拓扑的产物而不是 AI 每轮新犯一个错。收敛后一次解析、一次报清全部 finding。
+// (3) 截图路径改为**注入侧条件注入**（buildImageEvidence）：那一刻本轮尚无工具输出、判据
+//     天然干净；提取逻辑在 lib/prompt-images.js，纯函数、不回读 transcript。
+//
+// 【2026-07-29 摘除 md 受众判定门控（2.2.0 → 2.3.0 摘挂载，3.0.0 删文件）】
+// guards/md-audience-declaration.js 已删除；它的判据事故记录见 git 历史 2.3.0 的该文件头注释。
 // 摘除原因是它在 subagent 上下文里代价与收益倒挂：判定依据是「本轮 assistant 文本里出现过
 // 『受众判定』」，读的是子代理自己的 transcript——子代理不知道这条规则时必然先撞 deny，撞满
 // DENY_LIMIT=3 后熔断转 'ask'，于是每次让子代理写 md 都要打断用户点一次确认框。而 hook 的
@@ -54,6 +70,7 @@
 'use strict'
 
 const fs = require('fs')
+const { extractImagePaths } = require('./lib/prompt-images')
 
 // 读取 hook 从 stdin 传入的事件 JSON；解析失败时回退为 UserPromptSubmit。
 function readEvent() {
@@ -156,9 +173,12 @@ const SECTION_NAMING = [
   '',
   '**适用对象**：`Agent` 工具的 `name` 与 `description`、`TaskCreate` 的任务名、长期在飞 teammate 的 `name`、`Workflow` 的 `meta.name` / `meta.description` / `meta.phases[].title` / `meta.phases[].detail` / `agent(prompt, {label})` 的 `label`。下面四条对每一个字段都成立。',
   '',
-  '**5.4.1 `name` 必填，禁止省略**',
-  '派发 subagent / teammate 时 `name` 不是可选项，必须显式给值，且**同一会话内不得复用同名**（`SendMessage` 的寻址规则是 latest wins——新 agent 占用同名后，旧 agent 就只能靠 spawn 结果里的 raw `agentId`（形如 `a...-...`）寻址，等于把先派的 agent 弄丢）。省略 `name` 的后果：在飞 agent 列表面板左列只能回落显示裸的 `subagent_type`，同批派 3 个 `general-purpose` 就是三行一模一样的 `general-purpose`，用户和父代理都分不出谁在做什么。',
+  '**5.4.1 `name` 必填 —— 注意它是 `Agent` 工具 schema 里查不到的字段**',
+  '`Agent` 工具的 JSON Schema 只声明了六个 `properties`：`description` / `prompt` / `subagent_type` / `model` / `run_in_background` / `isolation`，并且写着 `additionalProperties: false`——**里面没有 `name`**。但运行时确实接受它、并把它落盘进 subagent 元数据（`<项目 transcript 目录>/subagents/agent-<id>.meta.json` 里存着形如 `{"agentType":"Explore","description":"[sonnet] …","name":"sonnet-dbops-translate-weight-ids","model":"sonnet"}` 的记录）。',
+  '这意味着：**照 schema 的字段表构造工具调用必然漏掉 `name`**——它对你不是"忘了填的必填项"，而是"字段表里不存在的东西"。所以不要期待从 schema 里发现它，把下面这条当项目级硬编码前置来记：**凡调 `Agent`，先写 `name`，再写其余字段**。',
+  '`name` 的两个真实用途：(a) 在飞 agent 面板左列显示它——缺失时回落成裸的 `subagent_type`，同批派 3 个 `general-purpose` 就是三行一模一样的字，用户和父代理都分不出谁在做什么；(b) `SendMessage({to: name})` 的寻址键——**同一会话内不得复用同名**，寻址规则是 latest wins，新 agent 占用同名后旧 agent 就只能靠 spawn 结果里的 raw `agentId`（形如 `a...-...`）寻址，等于把先派的 agent 弄丢。',
   '格式 `模型名-任务语义`：`模型名` 取 `sonnet` / `opus` / `fable` 之一（与实际传入的 `model` 一致，不许写不符的档次；`haiku-` 已废弃，写了会被拦），`任务语义` 用英文 kebab-case——`name` 受正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` 约束，只接受 ASCII 字母数字与 `-` `_`，写中文或方括号会被直接拒绝。示例：`sonnet-review-login-flow` / `sonnet-grep-auth-refs` / `opus-debug-order-race` / `fable-hunt-memleak`。',
+  '**漏了不会被拦截，但会拿到一个语义很弱的名字**：`hooks/guards/agent-dispatch.js` 判定"只缺 `name`、其余全过"时不再 deny，而是用 `hookSpecificOutput.updatedInput` 自动补成 `<model>-<description 里的 ASCII 词，没有就用 subagent_type>-<prompt 短哈希>`（如 `sonnet-explore-a3f1`）后放行。自动名不含任务语义、同批之间只有哈希不同，面板上依然看不出各自在做什么——所以这条自动补全是兜底，不是替代。',
   '',
   '**5.4.2 `description` 必须是任务摘要，禁止灌 prompt 原文**',
   '`description` 只写"这个子代理在做什么"的 3-5 词摘要，并以 `[模型名]` 方括号前缀开头（`[sonnet]` / `[opus]` / `[fable]`，同样与实际 `model` 一致；`[haiku]` 已废弃）。合规示例：`[sonnet] 审查登录流程` / `[sonnet] grep auth 引用` / `[opus] 修 order race condition`。',
@@ -171,7 +191,10 @@ const SECTION_NAMING = [
   '**5.4.4 `Workflow` 的命名**',
   '`agent(prompt, {label})` 的 `label` 虽是可选参数但**必须显式给**（省略时 workflow 进度树会回落用 prompt 开头当显示名，正是提示词泄露到 UI 的直接成因），按 5.4.2 同样带 `[模型名]` 前缀 + 任务语义（`label` 无字符集限制，可用中文任务语义）。`meta.name` 用 kebab-case 任务语义：整个 workflow 统一走某一档模型时同样加 `模型名-` 前缀（`sonnet-migrate-auth-calls`），跨档混用时不加前缀（`migrate-auth-calls`），档次由各 `agent()` 的 `label` 逐个体现。`meta.description`、`meta.phases[].title`、`meta.phases[].detail` 写这个 workflow / 阶段做什么，**同样禁止粘贴 prompt 原文**——`meta.description` 会出现在权限确认弹窗里，粘 prompt 等于让用户在弹窗里读一段内部指令。',
   '',
-  '**本节有硬门禁**：`hooks/guards/agent-dispatch.js` 在 `PreToolUse` 拦 `Agent` 工具调用——缺 `name` / 缺 `model` / `name` 前缀与 `model` 不一致 / `name` 不满足原生正则 / `description` 缺 `[模型名]` 前缀 / `description` 正文是 prompt 角色设定句或与 prompt 开头逐字重合 / 正文超 60 字符，任一命中即阻断并把 finding 回灌给你。被拦后按 finding 修正 `name` / `description` / `model` 重新派发，不要试图绕过。',
+  '**本节有硬门禁**（`hooks/guards/agent-dispatch.js`，`PreToolUse` matcher `Agent`，是针对 `Agent` 的唯一 hook、多条违规一次报清）：',
+  '- **拦**：缺 `model` / `model` 不在 `sonnet`·`opus`·`fable` 三档 / `name` 缺模型前缀或前缀与 `model` 不一致 / `name` 不满足原生正则 / `description` 缺 `[模型名]` 前缀 / `description` 正文是 prompt 角色设定句或与 prompt 开头逐字重合 / 正文超 60 字符。被拦后按 finding 一次改全，不要试图绕过。',
+  '- **不拦**：只缺 `name` 时自动补名放行（见 5.4.1）。判定边界是「字段缺失 vs 格式错」——`name` 是 schema 外字段、你看不见它，罚你没有教育意义；而你既然写出了一个值，就说明你知道字段存在，格式错时给 finding 才教得会。',
+  '- **已删除**：靠正则猜 prompt 语义的校验（档位错配 / 是否索要回执 / 是否附截图路径 / 是否要求写后回读）3.0.0 起全部移除，判据不可靠、误拦面过大。这些要求改由 5.6 靠自觉遵守。',
 ].join('\n')
 
 const SECTION_DISPATCH = [
@@ -202,7 +225,9 @@ const SECTION_DISPATCH = [
   '',
   '### 5.4 派发命名规范（要点索引 · 细则由 hook 强制）',
   '',
-  '`name` 与 `description` **两个都必填**，且都带模型档次前缀（`name` 用 `sonnet-` 连字符、`description` 用 `[sonnet]` 方括号，均须与实际 `model` 一致）；`description` 只写 3-5 词任务摘要，**禁止**把 `prompt` 原文或角色设定句灌进去（会把内部提示词暴露到在飞 agent 面板，且同批描述全同质）；同批并发的名字必须互相可辨（把分片依据写进名字）；`Workflow` 的 `label` / `meta.*` 同规。违反任一条会被 `hooks/guards/agent-dispatch.js` 在 `PreToolUse` 拦下并回灌完整规范，照 finding 改正即可。',
+  '`name` 与 `description` **两个都必填**。特别注意 `name`：**`Agent` 工具的 JSON Schema 里没有这个字段**（`properties` 只有 `description` / `prompt` / `subagent_type` / `model` / `run_in_background` / `isolation`，且 `additionalProperties: false`），但运行时接受它并落盘进 subagent 元数据——照 schema 的字段表生成调用必然漏掉它，所以**凡调 `Agent`，先写 `name`，再写其余字段**，当硬编码前置记，别指望从 schema 发现它。',
+  '两个字段都带模型档次前缀（`name` 用 `sonnet-` 连字符、`description` 用 `[sonnet]` 方括号，均须与实际 `model` 一致）；`description` 只写 3-5 词任务摘要，**禁止**把 `prompt` 原文或角色设定句灌进去（会把内部提示词暴露到在飞 agent 面板，且同批描述全同质）；同批并发的名字必须互相可辨（把分片依据写进名字）；`Workflow` 的 `label` / `meta.*` 同规。',
+  '只缺 `name` 时 `hooks/guards/agent-dispatch.js` **不拦**，会自动补一个 `<model>-<语义>-<哈希>` 的弱语义名放行（面板上看不出任务差异，所以仍要自己给）；其余格式问题一次报清全部 finding，照着改即可。',
   '',
   '### 5.5 多 subagent 并发时等齐再总结（收执时机 · 仅主会话适用）',
   '',
@@ -215,6 +240,14 @@ const SECTION_DISPATCH = [
   '**理由**：逐条总结会过早撑大用户可见的对话窗口，后到的关键回执容易被 auto-compact 挤走；且拍板事项集中一次，**用户一次拍板显著快于逐条拍板**（逐条拍板要反复重装上下文，切换成本高、墙钟时间更长）。',
   '',
   '**例外**：某个 subagent 汇报了必须立即处置的严重阻塞（产线告警、密钥泄漏、明显破坏性错误、Human 会话正被阻塞等待的关键信号），可即时告知用户并同步冻结剩余任务——但打断后要明确告知「剩余 N 个 subagent 已冻结 / 继续跑」由用户拍板。',
+  '',
+  '### 5.6 派发 prompt 必须包含的三项内容（**没有 hook 兜底，漏了不会有人拦你**）',
+  '',
+  '这三项在 3.0.0 之前由 `hooks/guards/agent-dispatch.js` 硬拦（`PreToolUse` deny），现已全部删除——判据是正则扫 prompt 词表，与任务的真实读写边界脱节。三个实证：(a) 排查一个「点发布按钮报错」的 bug 时，`发布` / `publish` 在 prompt 里出现十几次全是**被排查对象的业务语义**，不是要执行的动作，而 `Explore` 类型物理上没有 `Edit` / `Write` 工具、改不了任何文件，守卫却只读 prompt 文本、没把 `subagent_type` 的权限面纳入判据；(b) 截图那条回读 transcript 取图片路径，而工具结果行的 type 也是 `user`，于是你自己 `Read` 过一张图、或某次 grep 输出里带一个 `.png` 路径，都会让本轮后续**所有** `Agent` 派发被拦；(c) 档位那条因 prompt 里出现「不变量」就要求升 `opus`，而那里的"不变量"只是 spec 里名为 `INV-xx` 的条目字段名。现在这三项靠你自己判断：',
+  '',
+  '1. **结构化回执**：在【期望输出】里明确要求子代理返回四件事——改了哪些文件（逐个列路径）/ 关键决策（为什么这样做、放弃了什么方案）/ 阻塞点（没做完的、卡住的）/ 需要父代理跟进的事项。不索要就只会收到一句「已完成」，父代理既无法审计也无法按"二、"的要求向用户复述要点。',
+  '2. **一手图片证据**：本轮用户给过截图、且任务与截图呈现的现象相关时，把图片**绝对路径原样写进 prompt**，并要求子代理先用 `Read` 读图再动手。子代理有独立上下文、没有主会话的截图记忆，文字转述会丢掉颜色、间距、UI 元素相对位置、文本换行方式等像素级细节。**路径必须是本轮真实存在的完整绝对路径，禁止凭记忆拼接或截断**；本轮真有图时，注入末尾会附上可直接复制的路径清单。豁免：纯后端 5xx / DB / MQ 问题、纯 spec 矛盾、纯 CI 问题，以及用户明确说了不用附图。',
+  '3. **写后回读传染**：判断标准不是"prompt 里有没有出现写操作的词"，而是**这个子代理是否真的要去执行外部系统写操作**（API / CLI / SDK / DB 的 create·update·delete、提交、改配置、授权、发布）。真要写就在 prompt 里要求它每步写完立刻用**读接口**（get / list / describe / SELECT）回读、逐字段比对「以为写进去的值」与「服务端实际存储的值」，写 N 个就回读 N 次、禁止抽查，回执里给出回读到的实际值。依据：写操作返回 HTTP 2xx / 退出码 0 只证明请求被接受、不证明字段生效——2026-07-26 向平台导航创建接口传 `orderIndex: 15`，返回 HTTP 204 无任何警告，回读发现实际存储的是默认值 `1`，字段被静默丢弃、菜单排到错误位置。反过来，只是"读代码搞清楚某个发布流程为什么报错"的任务不需要这段——`Explore` 连写工具都没有。',
 ].join('\n')
 
 // 由 guard 硬拦截的规则，这里只留一行索引：让 AI 知道边界存在（别把撞拦截当异常、
@@ -222,17 +255,54 @@ const SECTION_DISPATCH = [
 const SECTION_HOOK_ENFORCED = [
   '## 六、由 hook 在时机点强制的规则（撞到时会给出完整细则）',
   '',
-  '以下规则**不必记细节**——hook 会在恰当时刻拦截并给出完整要求。列在这里只是让你知道边界存在，撞到拦截不是异常，照提示改正即可：',
+  '本插件的 hook 按**拦截对象**收敛：一个对象只有一道闸，同一次调用的多条违规**一次报清**。判据全部取自工具输入的确定字段或纯行数计数——**靠关键词猜命令 / prompt 语义的 guard 已在 3.0.0 全部删除**（准确率太低，典型失败模式是"你做对了却过不去"）。所以撞到拦截时不必怀疑是不是误判，照 finding 一次改全即可：',
   '',
-  '- **派发 `Agent` 前**：`model` 必填（`sonnet`/`opus`/`fable` 三档之一，`haiku` 已废弃）；`name` 与 `description` 双必填且带模型前缀（详见 5.4）；`description` 正文禁止是 prompt 原文/角色设定句、禁止超 60 字符；档位不得明显错配（只读任务用 `general-purpose`、命中安全·并发·根因等强信号却停在最低档 `sonnet`，都会被拦）；prompt 必须索要结构化回执；本轮用户给过截图时 prompt 必须附图片路径；prompt 含外部系统写操作时必须要求写后回读',
-  '- **外部系统写操作后**（curl 写类 / DB 写 / 平台 CLI 写）：必须走**读接口**逐字段回读比对，写 N 个回读 N 次——「返回 2xx / 退出码 0」只证明请求被接受，不证明字段生效',
-  '- **Bash 命令**：禁止污染 cwd 的独立 `cd`（用绝对路径 / 子 shell / `git -C`）；非 ASCII 路径的探测类命令禁挂 `2>/dev/null`；`agent-browser` 启动类命令必须带 `--headed` 与 `--profile`；`dws` 写子命令会弹确认框（由 radnove-core 插件强制）',
-  '- **写文件后**：单一源码文件 >1000 行、`CLAUDE.md` >200 行会被拦（后者应拆到 `.claude/rules/{topic}.md` 而非压缩正文）',
+  '- **`Agent`（`PreToolUse` → `guards/agent-dispatch.js`）**：`model` 必填且在 `sonnet`·`opus`·`fable` 内；`name` 的模型前缀与 `model` 一致、满足原生正则；`description` 带 `[模型名]` 前缀、正文不是 prompt 原文、≤60 字符。**只缺 `name` 时自动补名放行、不拦**（详见 5.4.1）',
+  '- **`Bash`（`PreToolUse` → `guards/bash-guard.js`）**：禁止污染 cwd 的独立 `cd`（改用绝对路径 / 子 shell `(cd /abs && cmd)` / `git -C <path>`）；`agent-browser` 的启动类子命令（`open` / `connect` / 带 URL 的 `chat`）必须带 `--headed` 与 `--profile`',
+  '- **`Write` / `Edit`（`PostToolUse` → `guards/write-guard.js`）**：单一源码文件 >1000 行、`CLAUDE.md` >200 行会被拦（后者应拆到 `.claude/rules/{topic}.md`，而不是压缩正文导致约束丢失）',
+  '',
+  '**已删除、现在没有任何 hook 兜底的规则**（依然有效，只是从"撞墙才知道"变成"没人提醒你"，漏了后果自负）：派发档位选择（见 5.1 / 5.2）、prompt 索要回执 / 附截图路径 / 写后回读传染（见 5.6）、写 md 前的受众判定留痕（见四、第 7 项）、非 ASCII 路径的 NFC/NFD 静默漏检（见一、末条）、外部写操作后的逐字段回读核验（自己写完自己回读，判据同 5.6 第 3 项）。',
+  '另注：`dws` 钉钉 CLI 的写子命令仍会弹确认框，那由 radnove-core 插件强制，不属于本插件。',
 ].join('\n')
+
+// ── 条件注入：本轮用户给了截图 ──────────────────────────────────────
+//
+// 【判据为什么在 UserPromptSubmit，而不是派发时的 PreToolUse】
+// 3.0.0 之前的做法是在 PreToolUse(Agent) 里回读 transcript 找本轮图片，命中就 deny。
+// 那个判据被 AI 自己的工具输出污染：工具结果行的 type 也是 'user'，于是 AI 自己 Read 过
+// 一张图、甚至某次 grep 输出里带一个 .png 路径，都会被算成"用户提供了截图"，让本轮后续
+// 所有 Agent 派发被拦。UserPromptSubmit 触发时本轮还没有任何工具输出，判据天然干净。
+//
+// 【为什么整体序列化 event，而不只看 event.prompt】
+// 图片可能不在 prompt 字符串里，而落在未文档化的 attachment 类字段。UserPromptSubmit 的
+// payload 只含本轮用户输入、不含工具输出，整体扫不会引入污染，比赌具体字段名稳。
+//
+// 【为什么这一段不编章节号】
+// 它只在有图的轮次出现，编号会让"六、"之后的序号随轮次漂移，破坏 AI 按固定锚点检索的
+// 前提（见文件头维护提示第 3 条）。改用稳定标题。
+function buildImageEvidence(event) {
+  let paths = []
+  try {
+    paths = extractImagePaths(JSON.stringify(event))
+  } catch (_) {
+    return ''
+  }
+  if (!paths.length) return ''
+  return [
+    '## 本轮证据：用户提供了截图（仅本轮有效）',
+    '',
+    `本轮用户消息里有 ${paths.length} 张图片，绝对路径如下（从事件 payload 直接提取，可原样复制）：`,
+    '',
+    ...paths.map((p) => `- \`${p}\``),
+    '',
+    '你自己要看图就用这些路径 `Read`。派发 subagent 时，若任务与这些图片呈现的现象相关，按 5.6 第 2 项把对应路径**原样**写进 prompt 并要求子代理先 `Read` 再动手；与图片无关的派发（例如纯代码检索）不必附。**禁止凭记忆改写或截断这些路径**。',
+  ].join('\n')
+}
 
 // ── 按事件组合注入内容 ────────────────────────────────────────────
 
-function buildMainPrompt() {
+function buildMainPrompt(event) {
+  const imageEvidence = buildImageEvidence(event)
   return [
     '# AI 工作纪律（每轮注入）',
     '',
@@ -247,6 +317,8 @@ function buildMainPrompt() {
     SECTION_DISPATCH,
     '',
     SECTION_HOOK_ENFORCED,
+    // 有图才追加；无图轮次一个字符都不多注入
+    ...(imageEvidence ? ['', imageEvidence] : []),
   ].join('\n')
 }
 
@@ -290,7 +362,7 @@ function main() {
 
   const isSubagent = name === 'SubagentStart'
   const hookEventName = isSubagent ? 'SubagentStart' : 'UserPromptSubmit'
-  const additionalContext = isSubagent ? buildSubagentPrompt() : buildMainPrompt()
+  const additionalContext = isSubagent ? buildSubagentPrompt() : buildMainPrompt(event)
 
   const output = {
     hookSpecificOutput: {
