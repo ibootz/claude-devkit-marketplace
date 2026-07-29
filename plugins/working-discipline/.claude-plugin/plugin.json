@@ -1,7 +1,7 @@
 {
   "name": "working-discipline",
-  "version": "2.2.0",
-  "description": "AI 工作纪律：常驻注入只留靠自觉才成立的语义规则，机械可判定的全部下沉 hook 在时机点强制。主会话每轮注入实测 13632 → 6992 字符（-49%），解决「注入越多遵从度越低」——保留的是上下文纪律 / 子代理协作（在飞≤16 靠自记账盘点·明确禁用 TaskList 统计在飞数（它是任务板、status 枚举无 running）·嵌套≤2）/ 表达约束（求真·简体中文·列表编号·待确认内容三要求）/ 思维模式 / Agent 派发的类型与模型选择 / 多 subagent 并发时等齐再总结。下沉到 hook：PreToolUse 的 agent-dispatch 两层校验派发（第一层命名与 model，多条一并列出：model 必填、name 与 description 双必填且带模型档次前缀并与 model 一致、name 合原生正则、description 正文禁 prompt 角色设定句·禁与 prompt 开头逐字重合·禁超 60 字符；第二层派发质量，取第一个命中：档位错配给完整 subagent_type×model 路由表、prompt 必须索要结构化回执、本轮有截图必须附路径、含外部写必须传染回读要求；豁免 fork/statusline-setup/output-style-setup，总开关 AGENT_DISPATCH_GUARD=off 兼容旧名 AGENT_NAMING_GUARD=off。本 guard 由 1.11.0 的 agent-naming.js 与本次 agent-dispatch.js 合并而成，消除三项重叠校验）、写 .md 前必须已声明受众判定（md-audience-declaration，deny 时给三分支准则；2.2.0 修掉一个把 .md 写操作变成永久拒绝的判据 bug——tool_result 行的 type 也是 'user' 且带本轮 promptId，旧轮次界定把起点推到最近一次工具结果之后，AI 每次重新声明都被自己新产生的 tool_result 挤出判定窗口，叠加「同一条 message 内 text 在 PreToolUse 时尚未落盘」后无论怎么重试都过不去；同时补熔断：同一(轮次,文件)连撞 3 次后转 ask 交人拍板，deny 文案附判据诊断行）、污染 cwd 的独立 cd（block-cd，改推 git -C，stderr 从 1500 压到 130 字符）、缺 --headed/--profile 的 agent-browser 启动（agent-browser-launch）、非 ASCII 路径的探测命令挂 2>/dev/null（nonascii-path，检索类命令则注入 NFC/NFD 规避法）；PostToolUse 在外部系统写操作后注入回读核验要求（external-write-readback：2xx 只证明请求被接受、不证明字段生效，须走读接口逐字段回读、写 N 个回读 N 次；Bash 本地写只给精简提醒）、拦超 1000 行源码文件（max-source-lines）与超 200 行 CLAUDE.md（claude-md-max-lines，指路拆到 .claude/rules/）。派发命名规范完整版仍注入子代理版（子代理只在启动时注入一次、且比主会话更可能不知规范），主会话压成 5.4 要点索引。dws 钉钉 CLI 写授权已移交 radnove-core 插件的 pre-tool-use-dws-write.sh（permissionDecision ask），此处不再重复注入。UserPromptSubmit 覆盖主会话每轮，SubagentStart 覆盖子代理。零 skill，适合全局开启",
+  "version": "2.3.0",
+  "description": "AI 工作纪律：常驻注入只留靠自觉才成立的语义规则，机械可判定的全部下沉 hook 在时机点强制。主会话每轮注入实测 13632 → 6992 字符（-49%），解决「注入越多遵从度越低」——保留的是上下文纪律 / 子代理协作（在飞≤16 靠自记账盘点·明确禁用 TaskList 统计在飞数（它是任务板、status 枚举无 running）·嵌套≤2）/ 表达约束（求真·简体中文·列表编号·待确认内容三要求）/ 思维模式 / Agent 派发的类型与模型选择 / 多 subagent 并发时等齐再总结。下沉到 hook：PreToolUse 的 agent-dispatch 两层校验派发（第一层命名与 model，多条一并列出：model 必填、name 与 description 双必填且带模型档次前缀并与 model 一致、name 合原生正则、description 正文禁 prompt 角色设定句·禁与 prompt 开头逐字重合·禁超 60 字符；第二层派发质量，取第一个命中：档位错配给完整 subagent_type×model 路由表、prompt 必须索要结构化回执、本轮有截图必须附路径、含外部写必须传染回读要求；豁免 fork/statusline-setup/output-style-setup，总开关 AGENT_DISPATCH_GUARD=off 兼容旧名 AGENT_NAMING_GUARD=off。本 guard 由 1.11.0 的 agent-naming.js 与本次 agent-dispatch.js 合并而成，消除三项重叠校验）、污染 cwd 的独立 cd（block-cd，改推 git -C，stderr 从 1500 压到 130 字符）、缺 --headed/--profile 的 agent-browser 启动（agent-browser-launch）、非 ASCII 路径的探测命令挂 2>/dev/null（nonascii-path，检索类命令则注入 NFC/NFD 规避法）；PostToolUse 在外部系统写操作后注入回读核验要求（external-write-readback：2xx 只证明请求被接受、不证明字段生效，须走读接口逐字段回读、写 N 个回读 N 次；Bash 本地写只给精简提醒）、拦超 1000 行源码文件（max-source-lines）与超 200 行 CLAUDE.md（claude-md-max-lines，指路拆到 .claude/rules/）。派发命名规范完整版仍注入子代理版（子代理只在启动时注入一次、且比主会话更可能不知规范），主会话压成 5.4 要点索引。dws 钉钉 CLI 写授权已移交 radnove-core 插件的 pre-tool-use-dws-write.sh（permissionDecision ask），此处不再重复注入。UserPromptSubmit 覆盖主会话每轮，SubagentStart 覆盖子代理。2.3.0 摘除了 md 受众判定门控 md-audience-declaration 的挂载（guard 文件保留、含 2026-07-28 判据事故记录）：它在 subagent 上下文里读的是子代理自己的 transcript，子代理不知规则时必然先撞 deny，撞满 DENY_LIMIT=3 后熔断转 ask，于是每次让子代理写 md 都要打断用户确认一次；而 hook 的 permissionDecision 独立于权限模式，用户配了 bypassPermissions 也拦不住，表现为「subagent 莫名丢了 bypass 权限」极难归因。摘除同时把三分支准则压缩成要点带回第 4.7 条常驻注入（约 150 字符，非原 900 字符版），避免 hook 摘了而注入里只剩「由 hook 强制拦截」导致纪律两头落空。零 skill，适合全局开启",
   "author": {
     "name": "zhangq"
   },
@@ -30,15 +30,6 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/nonascii-path.js"
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/md-audience-declaration.js"
           }
         ]
       }
