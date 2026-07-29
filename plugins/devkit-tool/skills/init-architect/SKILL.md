@@ -1,6 +1,6 @@
 ---
 name: init-architect
-description: 初始化项目、分析代码库、生成 CLAUDE.md - 自适应初始化：根级简明 + 模块级详尽；分阶段遍历并回报覆盖率
+description: 初始化项目、分析代码库、生成 CLAUDE.md 与 .claude/rules/ - 自适应初始化：根级简明（守 200 行）+ .claude/rules/{topic}.md 承载横切规则（自动加载，用 paths frontmatter 条件生效）+ 模块级详尽；分阶段遍历并回报覆盖率。Use when：用户说"初始化项目"、"生成 CLAUDE.md"、"分析这个代码库"、"补一份项目文档给 AI 看"、"CLAUDE.md 太长了要拆"、"怎么组织 .claude/rules"、"规则要不要按路径生效"。
 tools: Read, Write, Glob, Grep
 color: orange
 ---
@@ -73,11 +73,38 @@ color: orange
       - 编码规范
       - AI 使用指引
       - 变更记录 (Changelog)
+    - **体积纪律**：根级 `CLAUDE.md` 是**每会话无条件全量注入**的，控制在 200 行以内。逼近上限时**把细节拆到 `.claude/rules/`（见第 2 步），不要靠压缩正文腾行数**——压缩会丢掉因果链、`file:行号` 引用与边界示例，表面合规但作为纪律文档已失效。装了 `working-discipline` 插件的项目里，写超 200 行会被 `write-guard` 直接阻断。
+    - 上面 8 个小节里，「测试策略」「编码规范」这两节最容易膨胀，且往往只对特定目录成立——它们是首选的拆分对象。
 
-2.  **写入模块级 `CLAUDE.md`**
+2.  **写入 `.claude/rules/{topic}.md`（多关注点项目必做，单一关注点小项目跳过）**
+    - **触发条件**：项目存在 2 个以上彼此独立的规则关注点（如代码风格、测试约定、安全约束、提交规范、某个子系统的专有约定），或根级 `CLAUDE.md` 已逼近 200 行。只有一个关注点的小项目**不要**建 rules 目录，直接写在根 `CLAUDE.md` 里即可。
+    - **落点**：项目根的 `.claude/rules/{topic}.md`，一个关注点一个文件，文件名用小写英文 kebab-case（如 `code-style.md`、`testing.md`、`security.md`、`db-migration.md`）。允许嵌套子目录（`.claude/rules/sdlc/routing.md` 同样会被加载）。
+    - **这些文件由 Claude Code 自动加载，与 `CLAUDE.md` 并列。因此：禁止在 `CLAUDE.md` 里用 `@.claude/rules/x.md` 导入它们，也不要加 markdown 链接指过去。** 前者会让同一份内容被「目录自动加载 + import」注入两次，后者纯属冗余。根级 `CLAUDE.md` 里**连"详见 rules 目录"这类指引都不需要写**——AI 拿到的上下文里本来就有这些规则的全文。
+    - **用 `paths` frontmatter 做条件加载**（这是拆分相对 `CLAUDE.md` 的核心收益：`CLAUDE.md` 无条件常驻，带 `paths` 的 rule 只在改动命中这些路径时才进上下文）。语法与两个必须避开的边界：
+
+      ```markdown
+      ---
+      paths:
+        - src/api/**
+        - src/services/**
+      ---
+
+      # API 层约定
+
+      （正文：只在改动 src/api 或 src/services 下的文件时才会被加载）
+      ```
+
+      - **不写 `paths` 字段 = 无条件加载**（等同于常驻在 `CLAUDE.md` 里，不省任何上下文）。所以只对真正全局的规则省略 `paths`。
+      - **`paths` 只写 `**` 会退化成无条件加载**（Claude Code 检测到全部模式都是 `**` 时视为无条件）。想省上下文却写了 `**`，等于什么都没做。
+      - 模式是 gitignore 风格；尾部的 `/**` 会被自动剥掉（`src/**` 与 `src` 等价），不必纠结这个后缀。
+    - **内容纪律**：拆过去的文件**不受 200 行限制**，正是要在这里保留完整因果链、`path/to/file.ext:行号` 引用、以及典型与边界两类示例。拆分是为了"细节写得更全"，不是"把长文本挪个地方"。
+
+3.  **写入模块级 `CLAUDE.md`**
+    - **与 `.claude/rules/` 的分工**（别把同一条规则写两遍）：模块级 `CLAUDE.md` 在 Claude 于该目录下工作时自动加载，写的是**这个模块是什么**（职责、入口、接口、数据模型）；`.claude/rules/{topic}.md` 写的是**跨模块的横切规则**（风格、测试、安全约定），用 `paths` 限定生效范围。判断标准：内容是在描述某个具体模块 → 模块级 `CLAUDE.md`；是在规定"改这类文件时该怎么做" → rules。
     - 放在每个模块目录下，结构建议：
       - **✨ 新增：相对路径面包屑**
         - 在每个模块 `CLAUDE.md` 的**最顶部**，插入一行相对路径面包屑，链接到各级父目录及根 `CLAUDE.md`。
+        - 该面包屑与根级那张 Mermaid 图一样，**只服务人类读者**在编辑器/GitHub 里跳转，不承担加载职责——模块级 `CLAUDE.md` 的加载条件是"Claude 正在该目录下工作"，与有没有链接无关。
         - 示例（位于 `packages/auth/CLAUDE.md`）：
           `[根目录](../../CLAUDE.md) > [packages](../) > **auth**`
       - 模块职责
@@ -89,8 +116,9 @@ color: orange
       - 常见问题 (FAQ)
       - 相关文件清单
       - 变更记录 (Changelog)
-3.  **`.claude/index.json`**
+4.  **`.claude/index.json`**
     - 记录：当前时间戳（通过参数提供）、根/模块列表、每个模块的入口/接口/测试/重要路径、**扫描覆盖率**、忽略统计、是否因上限被截断（`truncated: true`）。
+    - 若第 2 步产出了 rules，另记 `rules` 数组：每项含 `file`（相对路径）、`paths`（该文件 frontmatter 里的模式数组，无条件加载的写 `null`）、`topic`（一句话说明管什么）。下次增量运行时据此判断是补写已有 rule 还是新建。
 
 ## 四、覆盖率与可续跑
 
@@ -102,7 +130,8 @@ color: orange
 
 ## 五、结果摘要（打印到主对话）
 
-- 根/模块 `CLAUDE.md` 新建或更新状态；
+- 根/模块 `CLAUDE.md` 新建或更新状态，根级实际行数（对照 200 行上限）；
+- `.claude/rules/` 产出清单：每个文件的 `topic` 与 `paths`，并显式标出哪些是无条件加载（无 `paths`）——让用户一眼看出常驻上下文的规则有多少；若本次判定为"单一关注点、不建 rules"，说明该判定；
 - 模块列表（路径+一句话职责）；
 - 覆盖率与主要缺口；
 - 若未读全：说明"为何到此为止"，并列出**推荐的下一步**（例如"建议优先补扫：packages/auth/src/controllers、services/audit/migrations"）。

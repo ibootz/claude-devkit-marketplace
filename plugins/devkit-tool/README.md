@@ -20,7 +20,9 @@
 
 ### 分析与诊断
 
-- `init-architect`
+- `init-architect` — 初始化项目、生成 `CLAUDE.md` 与 `.claude/rules/`。6.2.0 起产物分三层：根级 `CLAUDE.md`（全局必知，守 200 行）／`.claude/rules/{topic}.md`（跨模块横切规则）／模块级 `CLAUDE.md`（该模块是什么）。
+
+  `.claude/rules/**` 由 Claude Code 自动加载、与 `CLAUDE.md` 并列，**不要**在 `CLAUDE.md` 里 `@import` 它们或加链接引用（前者会让同一份内容注入两次，后者纯冗余）。拆分的核心收益是 `paths` frontmatter 条件加载——只在改动命中这些路径时才进上下文。三个必须避开的边界：不写 `paths` 字段等于无条件加载（省不下任何上下文）；`paths` 只写 `**` 会被判定为全通配而**退化成无条件加载**；尾部 `/**` 会被自动剥掉，`src/**` 与 `src` 等价。模式是 gitignore 风格。
 - `key-module-analysis`
 - `deps-investigator`
 
