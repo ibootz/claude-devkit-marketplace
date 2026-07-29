@@ -47,17 +47,23 @@
 
 ---
 
-## 一、注入：主会话与子代理各注入什么
+## 一、注入：三层各注入什么
 
-| 维度 | 关键约束 | 主会话 | 子代理 |
-|------|---------|:---:|:---:|
-| 一、上下文纪律 | 精确路径读文件、子代理优先、bash 输出限流、macOS 中文路径「空结果不得判无」 | ✅ | ✅ |
-| 二、子代理协作 | 在飞≤16（靠自记账盘点，明确禁用 `TaskList` 统计——它是任务板不是在飞 agent 列表）、嵌套≤2、共享骨架文件、结构化回执 | ✅ | ✅ |
-| 三、表达约束 | 关键对象点名、待确认四要素、行号引用、简体中文、列表编号 | ✅ | ✅ |
-| 四、思维模式 | 举一反三 / 整体 / 第一性 / 逆向 / 自查自纠 / 读者视角 / 写 md 前受众分辨（含三分支要点） | ✅ | — |
-| 五、Agent 派发 | 5.1 `subagent_type` 选择、5.2 三档 model 判定标尺（`sonnet` / `opus` / `fable`，**无 `haiku`**）、5.3 调用范式、5.4 派发命名要点索引、5.5 多 subagent 并发时等齐再总结、5.6 派发 prompt 必含三项 | ✅ | 仅 5.4 |
-| 六、hook 边界清单 | 一份索引：三个 guard 各拦什么、哪些规则已删除因而没有兜底。**不复述细则** | ✅ | ✅ |
-| 本轮证据（条件） | 本轮用户贴了截图时，附图片绝对路径清单；无图轮次一个字符都不注入 | ✅ | — |
+3.2.0 起按**投放时机**分三层。「会话级」是 `SessionStart`（会话开始 + 每次 auto-compact 后各一次），「每轮」是 `UserPromptSubmit`，「子代理」是 `SubagentStart`。
+
+| 维度 | 关键约束 | 会话级 | 每轮 | 子代理 |
+|------|---------|:---:|:---:|:---:|
+| 零、并行优先 | 常驻授权声明（对冲 system prompt 的 AgentTool 禁令）、独立性盘点、三档并行按成本排序、三类正当串行理由 | — | ✅ | ✅(精简) |
+| 一、上下文纪律 | 精确路径读文件、子代理优先、bash 输出限流、macOS 中文路径「空结果不得判无」 | ✅ | — | ✅ |
+| 二、子代理协作 | 在飞≤16（靠自记账盘点，明确禁用 `TaskList` 统计——它是任务板不是在飞 agent 列表）、嵌套≤2、共享骨架文件、结构化回执 | ✅ | — | ✅ |
+| 三、表达约束 | 关键对象点名、待确认四要素、行号引用、简体中文、列表编号 | ✅ | — | ✅ |
+| 四、思维模式 | 举一反三 / 整体 / 第一性 / 逆向 / 自查自纠 / 读者视角 / 写 md 前受众分辨（含三分支要点） | ✅ | — | — |
+| 五、Agent 派发 | 5.1 `subagent_type` 选择、5.2 三档 model 判定标尺（`sonnet` / `opus` / `fable`，**无 `haiku`**）、5.3 调用范式、5.4 派发命名要点索引、5.5 多 subagent 并发时等齐再总结、5.6 派发 prompt 必含三项 | ✅ | — | 仅 5.4（完整版） |
+| 六、hook 边界清单 | 一份索引：三个 guard 各拦什么、哪些规则已删除因而没有兜底。**不复述细则** | ✅ | — | ✅ |
+| 每轮自查 3 条 | 只列指针不复述细则：`Agent` 先写 `name` / 写 md 前输出受众判定句 / 待确认内容用完整段落 + 行号引用 | — | ✅ | — |
+| 本轮证据（条件） | 本轮用户贴了截图时，附图片绝对路径清单；无图轮次一个字符都不注入 | — | ✅ | — |
+
+**每轮层的选条判据**（新增前先过这两问，两个都"是"才加，否则放会话级）：这条**无 hook 兜底**吗？在真实 session 里**实测被忘过**吗？现有 3 条的依据分别是——`name` 在 `Agent` 的 JSON Schema 里根本不存在（照字段表生成必漏，某 session 实测漏 4 次且第二次距第一次 52 分钟）；受众判定的 `md-audience-declaration.js` 已在 3.0.0 删除、现在毫无兜底；待确认内容三要求违反后用户要反复追问才能拿到可决策信息，返工成本最高。
 
 子代理版带一~三节、五节的 5.4 派发命名规范（**完整版**）、六节索引。四节与五节其余部分主要是指导父代理如何选 `subagent_type` × `model`，对子代理自身价值低，故省 token 略去。
 
@@ -65,7 +71,15 @@
 
 **外部写操作授权（原 dws 章）已从本插件移出**（2.0.0）：钉钉 dws CLI 的写授权改由 `radnove-core` 插件的 `hooks/pre-tool-use-dws-write.sh` 承担，`PreToolUse` 命中写子命令时输出 `permissionDecision: "ask"`，把「须获用户当次明确许可」这个语义要求变成 harness 强制的确认弹窗——比每轮注入 918 字符的自觉约束强得多。
 
-> 完整注入文本见 `hooks/working-discipline.js` 里的 `SECTION_*` 数组。实测体积：主会话 9165 字符，子代理 8161 字符（3.0.0 把回执 / 截图 / 写后回读三条从 hook 搬回注入后的值）。
+> 完整注入文本见 `hooks/working-discipline.js` 里的 `SECTION_*` 数组。实测体积（3.2.0）：`SessionStart` 5985 字符、`UserPromptSubmit` 1163（无图轮）/ 1425（有图轮）、`SubagentStart` 6018。三者各自独立受 hook 输出硬上限 10000 约束。历史值：3.1.0 主会话每轮 6717、3.0.0 每轮 9165。
+>
+> 改完必跑三条 verify（长度不达标就别提交）：
+> ```bash
+> for E in SessionStart UserPromptSubmit SubagentStart; do
+>   echo "{\"hook_event_name\":\"$E\"}" | node hooks/working-discipline.js \
+>     | python3 -c "import sys,json;d=json.load(sys.stdin)['hookSpecificOutput'];print(d['hookEventName'],len(d['additionalContext']))"
+> done
+> ```
 
 ### 派发命名规范：`name` 是 schema 里查不到的字段（注入文本 5.4 节）
 
@@ -283,11 +297,15 @@ agent-browser --headed --profile "$(mktemp -d)" open https://example.com        
 
 ### 检查二：CLAUDE.md > 200 行
 
-这条要解决的不是"CLAUDE.md 不许长"，而是**"不许靠压缩正文来规避长"**。真实事故：某项目的 CLAUDE.md 逼近阈值后，AI 把原本 3 段独立的踩坑记录（症状 / 根因 / 解法三段式）硬压成 1 段紧凑文字塞进 200 行以内——压缩过程中丢掉了完整因果链、具体的 `file:行号` 引用、以及未来 AI 需要的典型与边界场景示例，表面"合规"了，但作为纪律文档的可用性被严重削弱。正确做法是拆分结构：CLAUDE.md 只保留"一览目录 + 短标题 + 相对路径引用"，细节各自落成 `.claude/rules/{topic}.md`（不受 200 行限制），CLAUDE.md 里用 markdown 相对链接指过去。
+这条要解决的不是"CLAUDE.md 不许长"，而是**"不许靠压缩正文来规避长"**。真实事故：某项目的 CLAUDE.md 逼近阈值后，AI 把原本 3 段独立的踩坑记录（症状 / 根因 / 解法三段式）硬压成 1 段紧凑文字塞进 200 行以内——压缩过程中丢掉了完整因果链、具体的 `file:行号` 引用、以及未来 AI 需要的典型与边界场景示例，表面"合规"了，但作为纪律文档的可用性被严重削弱。正确做法是拆分结构：细节各自落成 `.claude/rules/{topic}.md`（不受 200 行限制），CLAUDE.md 只留全局必知的部分。
+
+**拆过去的文件不需要在 CLAUDE.md 里引用。** 3.1.0 之前这里写的是"CLAUDE.md 里用 markdown 相对链接指过去"，那句话基于「不引用就读不到」的错误前提。实证（Claude Code 2.1.220 二进制）：memory 装配链上 `.claude/rules/` 的加载调用 `ZPt({rulesDir: <cwd>/.claude/rules, type:"Project", conditionalRule})` 与 CLAUDE.md 自身的 `Lpe()` 并列，用户级 `~/.claude/rules/` 走 `gfo(){return join(fn(),"rules")}`；内置 `/init` 指令的原文同样写明「These are loaded automatically alongside CLAUDE.md and can be scoped to specific file paths using `paths` frontmatter」。冗余之外还有实害——AI 读到"引用"会倾向改用 Claude Code 真正的 import 语法 `@.claude/rules/x.md`，那会让同一份内容被「目录自动加载 + import」注入两次（官方未声明两者之间会去重）。
+
+拆分真正的额外收益是 `paths` frontmatter：rules 文件可声明只在改动匹配某些路径时才加载，比无条件常驻的 CLAUDE.md 更省上下文。
 
 - **命中文件**：`basename` 不区分大小写等于 `claude.md`（`CLAUDE.md` / `claude.md` / `Claude.Md` 均命中），且不限于仓库根——多 CLAUDE.md 项目里子目录下的同名文件同样受约束
 - **排除**：路径含 `.claude/rules/` 目录段的文件不受限——这正是拆分后应当落脚的地方
-- **阻断**：`hint` 明确指路 `拆到 .claude/rules/{topic}.md 用相对链接引用,禁止压缩正文导致约束丢失`，不是只报一个数字让 AI 自己瞎猜怎么合规
+- **阻断**：`hint` 明确指路 `拆到 .claude/rules/{topic}.md(自动加载,不要在 CLAUDE.md 里 @import 或加链接引用;可用 paths frontmatter 限定生效路径),禁止压缩正文导致约束丢失`，不是只报一个数字让 AI 自己瞎猜怎么合规
 
 **两条共用的放行场景**：`tool_name` 不是 `Write`/`Edit` / 两条检查都不适用（此时不读盘）/ `file_path` 缺失 / 文件读取失败（竞态删除等基础设施异常不误拦）。
 
@@ -349,19 +367,27 @@ node scripts/install-codex.js --plugins=working-discipline --scope=user
 **注入 hook**（`hooks/working-discipline.js`）
 
 ```text
-UserPromptSubmit（主会话每轮） 或 SubagentStart（子代理启动时）
+SessionStart（会话开始 + 每次 auto-compact 后） / UserPromptSubmit（每轮） / SubagentStart（子代理启动）
    ↓
 node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js
-   ↓  读 stdin 的 hook_event_name 分流：
-   ↓    UserPromptSubmit → 一、二、三、四、五（含 5.4 索引、5.6 三项）、六（hook 边界清单）
-   ↓                       + 经 lib/prompt-images.js 扫 payload：有图才追加图片路径清单
-   ↓    SubagentStart    → 一、二、三、5.4 命名规范完整版、六（缺四；缺 5.1-5.3、5.5-5.6）
+   ↓  读 stdin 的 hook_event_name 分流（3.2.0 起三层）：
+   ↓    SessionStart     → 一、二、三、四、五（含 5.4 索引、5.6 三项）、六        实测 5985 字符
+   ↓    UserPromptSubmit → 零（并行优先）+ 每轮自查 3 条                          实测 1163 字符
+   ↓                       + 经 lib/prompt-images.js 扫 payload：有图才追加路径清单（有图轮 1425）
+   ↓    SubagentStart    → 零(精简)、一、二、三、5.4 命名规范完整版、六（缺四）    实测 6018 字符
+   ↓    未识别事件        → 回退 UserPromptSubmit（三者中最小的一份，回退错了只多注入 1.1k）
    ↓
 stdout 输出 { hookSpecificOutput: { hookEventName, additionalContext } }
    ↓
 Claude Code 把 additionalContext 拼进对应 context
 （SubagentStart 的注入只进子代理自己的 transcript，不入主会话）
 ```
+
+**为什么静态主体能只在 SessionStart 投放一次**：`matcher: "*"` 同时覆盖 `startup` / `resume` / `clear` / `compact` 四种触发。实测一个 20 轮 session 里 `SessionStart` 共触发 4 次——1 次 `SessionStart:startup` 加 **3 次 `SessionStart:compact`**，与 3 次 `compact_boundary` 一一对应、时间戳还早约 1 秒，没有空窗。也就是说 auto-compact 把上下文压掉之后静态纪律会立即重新注入，不需要每轮重发来"续命"。
+
+**为什么零章偏偏留在每轮**：它对抗的是 harness 硬编码进 **system prompt** 的 `Do not call the AgentTool unless the user requested it`。system prompt 每轮完整在场、且不被 auto-compact 挤走；而 SessionStart 注入只是对话早期的一条消息，随轮次增长被推远。用一份会衰减的文本去对抗一句永在最前的硬禁令，距离只会越拉越大，所以授权声明必须每轮重申。
+
+**分层收益**：改前每轮全量重发 6717 字符，在那个 20 轮 session 里累计 142,800 字符、占全部 hook 注入（270,506）的 52.8%，期间触发 3 次 auto-compact。分层后同形态为 `5985 × 4 + 1163 × 20 = 47,200`，降幅 65%。作为对照，同机 `radnove-core` 把会话约定放 SessionStart，同类内容只花了 `4170 × 4 = 16,680`。
 
 **拦截 hook**（`hooks/guards/agent-dispatch.js`）
 

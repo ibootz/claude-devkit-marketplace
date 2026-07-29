@@ -19,8 +19,22 @@
 //
 // 【检查二：CLAUDE.md > 200 行】
 // 目的**不是**"文件不许长"，而是"不许靠压缩正文规避长"——命中后应把细节拆到
-// `.claude/rules/{topic}.md`，CLAUDE.md 里用相对路径链接引用，保留完整的因果链 /
-// file:行号 / 边界示例，而不是把 3 段紧凑压成 1 段导致关键约束在压缩中丢失。
+// `.claude/rules/{topic}.md`，保留完整的因果链 / file:行号 / 边界示例，而不是把
+// 3 段紧凑压成 1 段导致关键约束在压缩中丢失。
+//
+// 拆过去的文件**不需要**在 CLAUDE.md 里引用——`.claude/rules/**` 由 Claude Code
+// 自动加载。实证（2.1.220 二进制）：加载调用是
+// `ZPt({rulesDir: <cwd>/.claude/rules, type:"Project", conditionalRule})`，与
+// CLAUDE.md 自身的加载函数 `Lpe()` 并列挂在同一条 memory 装配链上；用户级
+// `~/.claude/rules/` 同理（`gfo(){return join(fn(),"rules")}`）。内置 `/init`
+// 指令的原文也写明「These are loaded automatically alongside CLAUDE.md and can be
+// scoped to specific file paths using `paths` frontmatter」。
+// 因此 3.1.0 起本 hint 不再要求"用相对链接引用"：那句话基于「不引用就读不到」的
+// 错误前提，冗余之外还有实害——AI 读到"引用"会倾向改用 Claude Code 真正的 import
+// 语法 `@.claude/rules/x.md`，那会让同一份内容被「目录自动加载 + import」注入两次
+// （官方未声明 import 与目录加载之间会去重）。
+// 真正值得写进 hint 的是拆分带来的额外能力：rules 文件可用 `paths` frontmatter
+// 限定只在改动匹配路径时才加载，比无条件常驻的 CLAUDE.md 更省上下文。
 // 命中文件：basename 不区分大小写等于 claude.md（CLAUDE.md / claude.md / Claude.Md），
 //           且不限于仓库根——多 CLAUDE.md 项目里子目录下的同名文件同样受约束
 // 放行：basename 不是 claude.md / 路径落在 `.claude/rules/**` 下（拆分后的细节页天然可以长）
@@ -129,7 +143,8 @@ function main() {
     process.stderr.write(
       `[L1-BLOCKER] file=${relPath} check=write-guard ` +
         `finding="${lineCount} lines exceeds CLAUDE.md limit ${CLAUDE_MD_LINE_LIMIT}" ` +
-        `hint="拆到 .claude/rules/{topic}.md 用相对链接引用,禁止压缩正文导致约束丢失"\n`
+        `hint="拆到 .claude/rules/{topic}.md(自动加载,不要在 CLAUDE.md 里 @import 或加链接引用;` +
+        `可用 paths frontmatter 限定生效路径),禁止压缩正文导致约束丢失"\n`
     )
     process.exit(2)
   }
