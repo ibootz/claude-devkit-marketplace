@@ -17,35 +17,35 @@
       "name": "devkit-tool",
       "source": "./plugins/devkit-tool",
       "category": "Development",
-      "description": "工具技能集 - 代码库分析、依赖排查、多模型协作与 Claude Code 自身运维辅助工具（5个技能）",
-      "version": "6.1.0"
+      "description": "工具技能集 - 代码库分析、依赖排查、CLAUDE.md 与 rules 初始化、CC 自身运维（5 技能）",
+      "version": "6.2.0"
     },
     {
       "name": "devkit-spec",
       "source": "./plugins/devkit-spec",
       "category": "Development",
-      "description": "规范驱动开发工具集 - Spec 分析、任务拆解、实施、审查与缺陷修复（5个技能）",
+      "description": "规范驱动开发 - Spec 分析、任务拆解、实施、审查与缺陷修复（5 技能）",
       "version": "2.0.0"
     },
     {
       "name": "heal",
       "source": "./plugins/heal",
       "category": "Productivity",
-      "description": "技能修复工具 - 根据执行中发现的问题更新 SKILL.md 及相关文件，支持审批工作流。",
+      "description": "技能修复 - 按执行中发现的问题更新 SKILL.md 及相关文件，带审批流",
       "version": "1.0.0"
     },
     {
       "name": "prompt-engineering",
       "source": "./plugins/prompt-engineering",
       "category": "Productivity",
-      "description": "提示词工程专家 - 优化 LLM 提示词、设计命令/钩子/技能、提升 AI 输出质量，基于 Anthropic 官方最佳实践。",
+      "description": "提示词工程专家 - 优化 LLM 提示词、设计命令/钩子/技能",
       "version": "1.0.0"
     },
     {
       "name": "content-research-writer",
       "source": "./plugins/content-research-writer",
       "category": "Productivity",
-      "description": "内容研究写作助手 - 协助研究、引用、改进钩子、迭代大纲、提供实时反馈的写作伙伴，支持 Web 搜索。",
+      "description": "内容研究写作助手 - 研究、引用、迭代大纲、实时反馈，支持 Web 搜索",
       "version": "1.0.0"
     },
     {
@@ -55,42 +55,42 @@
         "repo": "mattpocock/skills"
       },
       "category": "Development",
-      "description": "Matt Pocock 工程技能集（远程引用上游 github.com/mattpocock/skills，随 /plugin marketplace update 拉取最新）- 含 engineering/productivity 两大类实战技能：TDD、诊断 bug、架构改进、问题分类、to-spec/to-tickets、code-review、prototype、research 等",
+      "description": "Matt Pocock 工程技能集（远程引用上游）- TDD、诊断 bug、code-review、research 等",
       "version": "2.0.0"
     },
     {
       "name": "omp",
       "source": "./plugins/omp",
       "category": "Development",
-      "description": "Oh my pi (omp) CLI 工具集成 - 在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务（1个技能 + 3个子代理 + 2个强制委派 hook，含假委派识别）",
+      "description": "Oh my pi (omp) CLI 集成 - 在 CC/Codex 里用 omp 做编码、审查、搜索",
       "version": "2.3.0"
     },
     {
       "name": "find-skills",
       "source": "./plugins/find-skills",
       "category": "Productivity",
-      "description": "帮助发现和安装 agent 技能 - 基于 skills.sh 生态系统，使用 npx skills CLI 搜索和安装技能。",
+      "description": "发现和安装 agent 技能 - 基于 skills.sh 生态，用 npx skills CLI 搜索安装",
       "version": "1.0.0"
     },
     {
       "name": "working-discipline",
       "source": "./plugins/working-discipline",
       "category": "Productivity",
-      "description": "AI 工作纪律：常驻注入只留靠自觉才成立的语义规则，机械可判定的下沉 hook 在时机点强制（主会话每轮注入实测 9165 字符，子代理版 8161）。3.0.0 是一次门禁瘦身。**删掉所有靠关键词猜语义的 guard**：external-write-readback（扫命令里的 create/update/delete/发布 等词）、nonascii-path（把命令行里任何非 ASCII 字节都当成\"路径\"，连 echo 的中文提示语都算）、md-audience-declaration（回读 transcript 找声明句）、agent-dispatch 第二层四条（档位错配/索要回执/截图附路径/写操作传染回读）——判据是正则猜语义而 deny 不可绕过，失败模式是「AI 做对了却过不去」；这些纪律全部回迁常驻注入靠自觉。**挂载拓扑按拦截对象收敛成 3 个 guard**：Agent → agent-dispatch（结构校验：model 必填且在三档内、name 前缀与 model 一致且合原生正则、description 带 [模型名] 前缀且正文非 prompt 原文，多条违规一次报清）；Bash → bash-guard（独立 cd 污染 cwd + agent-browser 启动缺 --headed/--profile，合并原两个 guard）；Write|Edit → write-guard（源码 >1000 行 / CLAUDE.md >200 行，合并原两个 guard）。原先多个 guard 串行挂同一 matcher 会「一批只报最前面那道闸」，改完第一处才看见第二处。**缺 name 不再拦**：改用 PreToolUse 的 updatedInput 自动补 <model>-<语义>-<哈希> 后放行——Agent 工具的 JSON Schema 只声明六个 properties 且没有 name，但运行时接受它并落盘进 subagent 元数据，AI 照字段表生成调用必然漏掉，属结构性必然而非疏忽；字段存在但格式错仍 deny。常驻注入保留：上下文纪律 / 子代理协作（在飞≤16 靠自记账盘点、禁用 TaskList 统计在飞数、嵌套≤2）/ 表达约束（求真·简体中文·列表编号·待确认内容三要求）/ 思维模式含 md 受众三分支 / Agent 派发的类型与三档 model（sonnet/opus/fable，无 haiku）/ 多 subagent 并发等齐再总结 / 派发 prompt 必含三项（结构化回执·截图绝对路径·写后回读）。零 skill，适合全局开启",
-      "version": "3.0.0"
+      "description": "AI 工作纪律 - 语义规则分三层注入 + 3 个 guard 机械强制。零 skill，适合全局开启",
+      "version": "3.2.0"
     },
     {
       "name": "discover-unknowns",
       "source": "./plugins/discover-unknowns",
       "category": "Productivity",
-      "description": "发现你的未知 - 与 Claude 协作挖掘未知的方法论：动手前用盲点扫描/头脑风暴/访谈/参考暴露未知，合并前用测验确认理解。3个 SKILL（统领/brainstorm/quiz，brainstorm 优先委派 superpowers）+ 1个 UserPromptSubmit 未知雷达 hook，源自 Anthropic 官方博客",
+      "description": "发现你的未知 - 动手前用盲点扫描/头脑风暴/访谈挖未知，合并前用测验确认理解",
       "version": "2.0.0"
     },
     {
       "name": "portable-shell",
       "source": "./plugins/portable-shell",
       "category": "Development",
-      "description": "跨平台 shell 脚本强制 lint - AI 通过 Write/Edit/MultiEdit 生成 shell 脚本时，PostToolUse hook 自动扫描 GNU(Linux) 与 BSD(macOS) 不可移植写法（sed -i/readlink -f/date -d/find -printf/grep -P/stat -c/declare -A/mapfile/${var^^}/mktemp 模板 等），命中即回灌违规点与可移植改法促其修正，确保同时兼容 Linux 与 macOS。零 skill，可用 PORTABLE_SHELL_LINT=off 关闭",
+      "description": "跨平台 shell lint - 自动拦 GNU/BSD 不可移植写法并回灌可移植改法",
       "version": "1.0.0"
     }
   ]
