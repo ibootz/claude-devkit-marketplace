@@ -1,6 +1,6 @@
 # DevKit-Tool
 
-**版本**: 6.0.0
+**版本**: 6.2.1
 **作者**: zhangq
 **许可证**: MIT
 
@@ -29,7 +29,7 @@
 ### 协作与辅助
 
 - `orphan-process-cleaner`
-- `marketplace-cache-sync`
+- `marketplace-cache-sync` — 市场源 + 已启用插件缓存两层同步，含缓存清理。6.2.1 起修正了「让新版本生效」的判据：默认 `/reload-plugins` 即可（实测能热载 skill / agent / hook 脚本与新增的 `PreToolUse` / `PostToolUse` / `UserPromptSubmit` 挂载点），**只有** `SessionStart` / `SessionEnd` / `PreCompact` 这类生命周期挂载点变动才必须重启会话——`/reload-plugins` 不重放生命周期事件，否则会出现「每轮注入已是新版指针、它引用的静态主体却从未投放」的割裂状态。
 
 ## 典型用法
 
