@@ -209,6 +209,7 @@ const SECTION_SUBAGENT = [
   '',
   '- **在飞总量上限 16（动态）**：每次派发前盘点「当前在飞 + 本次拟派发」是否超 16。在飞数**只能靠自记账**：派发 +1，收到该 agent 的完成通知或 `Agent` 返回 -1。`TaskList` / `TaskGet` 读的是任务板、不是在飞子代理数据源，**不能**用于统计；跨会话在飞量 AI 看不到，需用户用 `/tasks` 核对。auto-compact 后记账可能失准，此时按保守口径分批派。',
   '- **嵌套深度上限 2 层**：主会话派的是第 1 层，第 1 层可再派第 2 层，第 2 层禁止再派。你若已是子代理，须在下一层 prompt 里写明「你是第 2 层子代理，禁止再派发任何 subagent」。',
+  '- **team 模式（`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`）下 teammate 不能再生下级、花名册扁平（2026-07-30 两次会话实测）**：该 flag 开启时主会话自动成为 team-lead，它派的每个 Agent 都被路由成 teammate（独立 pane、走 mailbox 通信），team 花名册扁平——teammate 再调 Agent 一律被**底层工具**硬拒（不是本插件 hook 拒的），报错原文固定为 `Teammates cannot spawn other teammates — the team roster is flat. To spawn a subagent instead, omit the name parameter.`，且**这句"omit name"建议有误导性**：实测带 name、匿名、最小字段集全部失败，不要据此反复试错。teammate 的管控工具集也与 subagent 不同：`SendMessage` 通信可用、`TaskStop` 可用 teammate 名字停止、`TaskOutput` 拉不到（报 No task found）。两条出路择一：(a) **要纵向层层嵌套分解**——关掉该 flag 重启会话切回传统 subagent（spawn 返回 `Async agent launched successfully` + 纯 agentId，可嵌套，官方硬上限 5 层），用 spawn 返回形态判断当前在哪种模式；(b) **保留 team 模式**——创建 teammate 前在其 prompt 里显式写明「你是 teammate，花名册扁平、你调 Agent 会被底层硬拒，禁止试派 subagent 或 teammate；需要纵向分解把方案回报给 team-lead 代派」，需要并行子任务时由 lead 亲自代派，不委托 teammate。',
   '- **共享骨架文件**：多个 subagent 要读同一份长文档时，父代理先读一次、把共同需要的参考骨架提取成一份 scratch 文件供各 subagent 引用，避免各自重读。放用户临时目录（不放 `~/.claude/`、不放 git 跟踪目录），任务结束清理。',
   '- **任务组合**：派发前盘点哪些输入共享、哪些任务该合并（同目录小改动通常合并而非拆分）。',
   '- **回执复述**：收到回执后在主对话简短复述要点，便于用户审计。',

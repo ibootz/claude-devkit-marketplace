@@ -71,7 +71,7 @@
 
 **外部写操作授权（原 dws 章）已从本插件移出**（2.0.0）：钉钉 dws CLI 的写授权改由 `radnove-core` 插件的 `hooks/pre-tool-use-dws-write.sh` 承担，`PreToolUse` 命中写子命令时输出 `permissionDecision: "ask"`，把「须获用户当次明确许可」这个语义要求变成 harness 强制的确认弹窗——比每轮注入 918 字符的自觉约束强得多。
 
-> 完整注入文本见 `hooks/working-discipline.js` 里的 `SECTION_*` 数组。实测体积（3.2.0）：`SessionStart` 5985 字符、`UserPromptSubmit` 1163（无图轮）/ 1425（有图轮）、`SubagentStart` 6018。三者各自独立受 hook 输出硬上限 10000 约束。历史值：3.1.0 主会话每轮 6717、3.0.0 每轮 9165。
+> 完整注入文本见 `hooks/working-discipline.js` 里的 `SECTION_*` 数组。实测体积（3.3.1）：`SessionStart` 6832 字符、`UserPromptSubmit` 1163（无图轮）/ 1425（有图轮）、`SubagentStart` 6865。三者各自独立受 hook 输出硬上限 10000 约束。历史值：3.3.0 `SessionStart` 6328 / `SubagentStart` 6361、3.2.0 `SessionStart` 5985 / `SubagentStart` 6018、3.1.0 主会话每轮 6717、3.0.0 每轮 9165。
 >
 > 改完必跑三条 verify（长度不达标就别提交）：
 > ```bash
