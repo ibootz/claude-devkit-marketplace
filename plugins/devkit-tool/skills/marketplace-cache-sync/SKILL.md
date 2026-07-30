@@ -1,6 +1,6 @@
 ---
 name: marketplace-cache-sync
-description: 拉取 Claude Code 已配置的插件市场(marketplace)最新代码，刷新已启用插件(enabled plugin)的本地缓存版本，并在刷新后回收缓存磁盘占用。Use when：用户说"更新一下插件市场"、"拉取 marketplace 最新代码"、"刷新插件缓存"、"plugin 装的新版本怎么不生效"、"skill 改了但没同步过来"、"市场 lastUpdated 变了/没变是不是真的更新了"、"marketplace update 之后要不要重启"、"插件缓存占了多少空间"、"清理插件缓存"、"cache 目录太大"、"temp_git_ 开头的目录能删吗"、"历史版本缓存能不能删"、"reload-plugins 够不够还是必须重启"、"reload 完 hook 还是旧的"。内容基于两次真实全量执行(17 个 marketplace + 25 个 enabled plugin，2026-07-29 复跑)验证过，覆盖两层模型(marketplace 源 vs 已启用插件缓存)、批量刷新写法、缓存清理的白名单差集算法，以及非纯 git 市场 / lastUpdated 语义不可作判据 / zsh 分词导致循环失效 / zsh 绑定变量名覆写 PATH / reload-plugins 不重放 SessionStart 等已复现的坑。
+description: 拉取 Claude Code 已配置的插件市场(marketplace)最新代码，刷新已启用插件(enabled plugin)的本地缓存版本(含 user scope 与 project/local scope 两种安装范围)，并在刷新后回收缓存磁盘占用。Use when：用户说"更新一下插件市场"、"拉取 marketplace 最新代码"、"刷新插件缓存"、"plugin 装的新版本怎么不生效"、"skill 改了但没同步过来"、"市场 lastUpdated 变了/没变是不是真的更新了"、"marketplace update 之后要不要重启"、"插件缓存占了多少空间"、"清理插件缓存"、"cache 目录太大"、"temp_git_ 开头的目录能删吗"、"历史版本缓存能不能删"、"reload-plugins 够不够还是必须重启"、"reload 完 hook 还是旧的"、"某个项目里装的插件版本没跟着更新"、"project scope 的插件怎么刷新"、"这个插件只在某个项目里装了，全局刷新覆盖不到"。内容基于两次真实全量执行(17 个 marketplace + 25 个 enabled plugin，2026-07-29 复跑)以及一次 project/local scope 专项验证(2026-07-30，8 个仅装在 project/local scope、从未装过 user scope 的插件 id)验证过，覆盖两层模型(marketplace 源 vs 已启用插件缓存)、批量刷新写法、project/local scope 插件的按 (id, projectPath) 逐条刷新、缓存清理的白名单差集算法，以及非纯 git 市场 / lastUpdated 语义不可作判据 / zsh 分词导致循环失效 / zsh 绑定变量名覆写 PATH / reload-plugins 不重放 SessionStart / `--scope project` 靠 cwd 隐式定位且不匹配时静默假成功 等已复现的坑。
 ---
 
 # Marketplace Cache Sync（插件市场与插件缓存刷新）
@@ -13,6 +13,8 @@ Claude Code 的插件系统有两层独立状态，都在 `~/.claude/plugins/` �
 
 1. **Marketplace（插件市场，"源"）**：`known_marketplaces.json` 登记每个市场的 git/github 源地址与 `installLocation`，实际内容克隆在 `marketplaces/<name>/`。`claude plugin marketplace update [name]` 拉取的是这一层——市场仓库本身的最新代码，相当于所有插件定义的"上游"。
 2. **Installed/enabled plugin（已启用插件，"缓存"）**：`installed_plugins.json` 登记每个 `<plugin>@<marketplace>` 具体钉住的版本号/commit sha，实际内容缓存在 `cache/<marketplace>/<plugin>/<version>/`。`claude plugin update <plugin>@<marketplace>` 刷新的才是这一层——把某个已启用插件的缓存副本，从（已经更新过的）市场源里重新拉一份下来。
+
+第 2 层内部还分**两种互相独立的安装范围（scope）**，`installed_plugins.json` 里同一个 `<plugin>@<marketplace>` id 下的 `plugins[id]` 是一个**数组**，每个元素各带一个 `scope` 字段（`user` / `project` / `local`）：`user` scope 是当前用户全局共用的一份钉版，跨项目共享；`project` / `local` scope 是**某一个具体项目目录**（`projectPath` 字段）单独钉住的版本，同一个 id 在不同项目目录下可以各自钉着不同版本号——例如 `sdlc@ai-sdlc` 在 12 个不同项目目录下横跨 `3.3.0`/`3.3.3`/`3.3.18`/`3.8.0` 四个版本互不影响。**第二步 `claude plugin list --json` 里 `enabled` 字段也是按 (id, projectPath) 各自独立的**——同一个 id 在 A 项目可能 `enabled: true`、在 B 项目 `enabled: false`，不是插件级的单一开关。第三步的常规刷新流程默认只处理 `user` scope（原因见下面的补充小节），`project`/`local` scope 需要单独一轮，见「第三步补充」。
 
 **第 1 层更新了不代表第 2 层跟着更新**：市场仓库拉到最新 commit 后，已启用插件的缓存副本仍然钉在旧版本号/旧 commit，除非显式对每个启用中的插件跑一次 `claude plugin update`。两层都做才算一次完整同步，只做第 1 层是最常见的"以为更新了其实没生效"的原因。
 
@@ -58,6 +60,47 @@ echo a | while IFS= read -r ipath; do jq --version; done   # jq-1.7.1
 **必须串行执行，不能并发派发**：`claude plugin update` 会读改写共享的单个文件 `~/.claude/plugins/installed_plugins.json`，多个进程同时跑存在写竞态——后写完的会覆盖先写完的那条记录，可能导致某些插件的刷新结果丢失。`claude plugin update` 没有 `--all`/批量参数，一次只能指定一个 `<plugin>@<marketplace>`，只能像上面这样自己拼循环。
 
 插件数量多（25 个左右）时整个循环耗时数分钟，同样用 `run_in_background` 起后台任务。
+
+### 第三步补充：project/local scope 插件的刷新——常规流程覆盖不到的缺口
+
+**这是一个第三步天然会漏掉、且漏掉时完全没有任何报错提示的缺口，必须单独跑一轮。**
+
+第三步的循环对 `claude plugin list --json` 里 `enabled==true` 的条目按 `.id` 去重后，逐个执行 `claude plugin update "$p"`（不带 `--scope` 参数）。查 `claude plugin update --help` 可知这个参数有默认值——`-s, --scope <scope>  Installation scope: user, project, local, managed (default: user)`——所以第三步等价于对每个 id 只尝试刷新它的 `user` scope 记录。**如果某个 id 从来没有 `user` scope 记录、只在一个或多个项目目录下以 `project`/`local` scope 装过**，这条命令会报错退出（`exit=1`）：
+
+```
+$ claude plugin update cskl-dev@curatedskills-dev
+Checking for updates for plugin "cskl-dev@curatedskills-dev" at user scope…
+✘ Failed to update plugin "cskl-dev@curatedskills-dev": Plugin "cskl-dev" is not installed at scope user
+```
+
+第三步给出的循环写法本身不检查每条命令的退出码，这类失败会和其它插件的成功回执一起滚屏而过，**看起来像是流程正常跑完了，实际上这个插件从未被刷新过**。2026-07-30 在本机实测复现了 8 个这样的 id：`aisdlc-cust-extension@aisdlc-cust-extension`、`aisdlc-saas-extension@aisdlc-saas-extension`、`cctx-dev-xxv2-base@codifiedcontext-dev`、`cskl-dev@curatedskills-dev`、`dc@curatedskills-dev`、`fusion@aisdlc-fusion`、`prod@xxstar-prod-ai`、`sdlc@ai-sdlc`——判定方法是 `jq -r '.plugins | to_entries[] | select(.value | map(.scope) | index("user") | not) | .key' ~/.claude/plugins/installed_plugins.json`，凡是数组里所有元素的 `scope` 都不含 `"user"` 的 id 就属于这一类。
+
+#### 枚举需要刷新的 (id, projectPath, scope) 组合
+
+不能按 id 去重后刷一次就完事——同一个 id 在不同项目目录可能各自钉着不同版本，且 `enabled` 状态也是按项目各自独立的（见上一节）。直接用 `claude plugin list --json` 现成算好的 `enabled` 字段筛，不要回退去读 `installed_plugins.json` 原始数组自己判断：
+
+```bash
+claude plugin list --json | jq -r '.[] | select((.scope=="project" or .scope=="local") and .enabled==true) | "\(.id)|\(.projectPath)|\(.scope)"' | sort -u > /tmp/project_scope_plugins.txt
+echo "待刷新的项目级组合数: $(wc -l < /tmp/project_scope_plugins.txt | tr -d ' ')"
+```
+
+#### 逐条 cd 进目标项目目录再刷新
+
+```bash
+while IFS='|' read -r pid ppath pscope; do
+  [ -z "$pid" ] && continue
+  if [ ! -d "$ppath" ]; then
+    echo "跳过（目录已不存在）: $pid @ $ppath"
+    continue
+  fi
+  echo "=== $pid @ $ppath (scope=$pscope) ==="
+  (cd "$ppath" && claude plugin update --scope "$pscope" "$pid") 2>&1
+done < /tmp/project_scope_plugins.txt
+```
+
+用子 shell `(cd "$ppath" && ...)` 而不是裸 `cd`，避免污染当前 Bash 调用之后的 cwd（同一坑见本仓 `.claude/rules/` 里 bash-guard 的判定）。和第三步一样必须**串行**执行——`claude plugin update` 无论哪个 scope 都在读改写同一个共享文件 `~/.claude/plugins/installed_plugins.json`，并发跑仍然存在后写覆盖先写的竞态。目录缺失（项目已删除但配置残留）不算错误，跳过并报告即可，不要让整批失败。
+
+**关键陷阱：`--scope project` / `--scope local` 靠当前工作目录隐式定位目标项目，不接受任何显式路径参数；且 cwd 不匹配时不会报错，而是打印看似成功的回执、对配置零改动。** 2026-07-30 实测：在与 `cskl-dev@curatedskills-dev` 完全无关的目录（本仓 `claude-devkit-marketplace`，从未装过这个插件的任何 project scope 记录）下执行 `claude plugin update --scope project cskl-dev@curatedskills-dev`，回执是 `✔ cskl-dev is already at the latest version (1.5.1)`，但更新前后 `diff <(jq -S . 快照) <(jq -S . ~/.claude/plugins/installed_plugins.json)` 是 **0 行差异**——这句"已是最新"完全没有对应到任何真实的项目记录，纯粹是误导性的假成功。所以上面的循环必须先 `cd` 进 `/tmp/project_scope_plugins.txt` 里那条记录**自己的** `projectPath`，不能图省事随便挑一个当前目录跑；核实同样要靠**写后回读**——刷新前后各存一份 `installed_plugins.json` 快照，diff 应显示该 (id, projectPath) 对应记录的 `version`/`gitCommitSha`/`lastUpdated` 三者都变了，而不是只看命令回执的文字。
 
 ### 第四步：告知如何让新版本生效（`/reload-plugins` 通常够用，但有一类注入不会追补）
 
@@ -143,6 +186,8 @@ xargs rm -rf < /tmp/cache_orphan.txt
 | 跑完 `/reload-plugins` 后，每轮 hook 注入已经是新版的"指针"文本，但它引用的那份静态主体内容压根不在上下文里 | 新版本把静态内容下沉到了 `SessionStart`，而 `/reload-plugins` **不重放**会话生命周期事件，旧版本又没有这个挂载点——于是每轮层已换新、会话层从未投放，形成割裂状态。实测 `working-discipline` 3.0.0 → 3.2.0 就是这个形态：新版每轮那句"一～六章已在会话开始注入"在 reload 后的本会话里**不成立** | 涉及 `SessionStart` 类挂载点变动时直接重启会话；或等一次 auto-compact，`SessionStart:compact` 会把它补上。判断依据是**看新版本 `plugin.json` 的 `hooks` 里有没有生命周期事件**，不是看 reload 回执 |
 | 核验循环里所有 `jq` / `sort` / `wc` / `comm` 突然 `command not found`，但循环之前同样的命令刚跑成功过 | 循环变量取名 `path`，撞上 zsh 的 `typeset -T PATH path` 绑定，第一次迭代就把 `$PATH` 覆盖成了一个目录字符串。`fpath` / `cdpath` / `manpath` / `fignore` / `mailpath` / `module_path` 同理。第三步与第五步的核验循环都要读 `installPath`，是高发位置 | 改用带语义前缀的变量名（`ipath` / `_p` / `orphan_dir`）。复现：`echo a \| while IFS= read -r path; do jq --version; done` 报 not found，换成 `ipath` 正常。这类失败**无副作用**（PATH 只在该 Bash 调用的子 shell 内被破坏，不影响后续调用），改名重跑即可 |
 | 第三步的循环只跑了一次就整体失败，报 `Plugin "<第一个插件名>" not found`，可那个插件明明装着 | 用了 `for p in $plugins` 这种依赖单词分割的写法。macOS 上 Claude Code 的 Bash 工具走 zsh，zsh 默认**不对未加引号的变量做单词分割**，25 行的插件清单被当成一个 token 传给 CLI | 改成落地临时文件后 `while IFS= read -r p` 逐行读（见第三步）。这类失败**无副作用**——CLI 在 id 校验阶段就退出，没有写 `installed_plugins.json`、没有刷新任何插件，修好写法直接重跑即可 |
+| 第三步的循环整体跑完、回执看着都正常滚过去了，但某个只在项目目录里装过的插件（从未在 `user` scope 装过）实际上完全没被刷新 | 第三步 `claude plugin update "$p"` 没带 `--scope`，CLI 默认 `--scope user`（见 `claude plugin update --help`）。对只有 `project`/`local` scope 记录的 id，这条命令会 `exit=1` 并报 `Plugin "<name>" is not installed at scope user`，但循环本身不检查退出码，失败和成功一起滚屏而过。2026-07-30 实测复现 8 个这样的 id（`aisdlc-cust-extension@aisdlc-cust-extension` 等，见「第三步补充」） | 判定式 `jq -r '.plugins \| to_entries[] \| select(.value \| map(.scope) \| index("user") \| not) \| .key' ~/.claude/plugins/installed_plugins.json`，命中的 id 都要走「第三步补充」的 project/local scope 专项刷新，不能指望第三步的常规循环覆盖到 |
+| 对某个 project scope 插件跑 `claude plugin update --scope project <id>`，回执 `already at the latest version`，但其实完全没有更新到真正需要的那个项目 | `--scope project`/`--scope local` 靠**当前工作目录**隐式定位目标项目，不接受显式路径参数；当 cwd 不匹配任何该 id 的 project/local scope 记录时，命令**不报错**，只是打印看似成功的回执、对 `installed_plugins.json` 零改动。2026-07-30 实测：在与目标插件完全无关的目录下跑这条命令，回执"已是最新"，但更新前后 `installed_plugins.json` 的 diff 是 0 行 | 必须先 `cd` 进该 (id, projectPath) 记录**自己的** `projectPath` 再执行（见「第三步补充」的 `(cd "$ppath" && claude plugin update --scope "$pscope" "$pid")` 写法），核实靠写后回读——diff 刷新前后的快照，确认该记录的 `version`/`gitCommitSha`/`lastUpdated` 三者都变了，而不是只看命令回执文字 |
 | `cache/` 目录体积远大于所有已启用插件之和（实测 2.9G） | 存在 `temp_git_<毫秒时间戳>_<随机后缀>` 形态的临时克隆残留目录，是安装/更新过程的中间产物没被清掉。实测 13 个占 1.8G，接近总量一半；它们在 `known_marketplaces.json` 与 `installed_plugins.json` 里都是 0 处引用 | `grep -c 'temp_git' ~/.claude/plugins/known_marketplaces.json ~/.claude/plugins/installed_plugins.json` 两处都为 0 即确认孤立，可整批删除（见第五步 (a)） |
 | 清理历史版本缓存后，某个项目下的插件失效或被迫重新下载 | 按"每个插件只保留最新版本"删了。同一插件在不同项目目录（`scope: project`）会各自钉不同版本——实测 `sdlc@ai-sdlc` 有 12 条 project 记录横跨 4 个版本（`3.3.0`/`3.3.3`/`3.3.18`/`3.7.3`），"最新"只对当前项目成立 | 必须以 `installed_plugins.json` 里 `.plugins[][].installPath` 的**全集**为白名单做差集（见第五步 (b)）。jq 要展开两层 `.plugins[][]`，`.plugins` 的每个值是数组、每个 scope 一条记录，只取第一条会把在用版本误判成垃圾 |
 
@@ -151,6 +196,8 @@ xargs rm -rf < /tmp/cache_orphan.txt
 - [ ] 判断市场是否真的拉到新代码时用的是 HEAD 对比，**没有**拿 `lastUpdated` 当判据（它变了 / 没变都不能证明任何一个方向）
 - [ ] `claude plugin list --json` 筛出的全部 `enabled: true` 插件 id 都刷新过一次（按 id 去重后的数量，不是原始条目数）
 - [ ] 第三步用的是 `while IFS= read -r` 逐行读，不是 `for p in $plugins`（zsh 下后者必坏）
+- [ ] 已单独跑过「第三步补充」：`jq` 判定式找出所有数组里不含 `"user"` scope 的 id，逐个确认它们在本轮的 project/local scope 循环里被刷新过，不是只看第三步的常规回执滚屏正常就当作已覆盖
+- [ ] project/local scope 的刷新循环里，每条命令执行前都真的 `cd` 进了该记录**自己的** `projectPath`（不是随手挑的当前目录），且刷新后用快照 diff 核实了该记录的 `version`/`gitCommitSha`/`lastUpdated` 确实变化，而不是只信"already at the latest version"这句回执文字
 - [ ] 所有循环 / 临时变量都**没有**取名 `path` / `fpath` / `cdpath` / `manpath` 等 zsh 绑定变量名（会静默覆写 `$PATH`，表象是"jq 没装"）
 - [ ] 每条 `claude plugin update` 的输出都在预期的三种正常结束态之一：`already at the latest version`、`updated from X to Y`、`refreshed from source`
 - [ ] 关键插件已走**写后回读**核实：`installed_plugins.json` 的 `installPath`、磁盘上该缓存目录、目录内 `.claude-plugin/plugin.json` 的 `version` 三处一致（只看 CLI 回执不足以证明落盘）

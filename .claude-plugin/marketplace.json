@@ -18,7 +18,7 @@
       "source": "./plugins/devkit-tool",
       "category": "Development",
       "description": "工具技能集 - 代码库分析、依赖排查、CLAUDE.md 与 rules 初始化、CC 自身运维（5 技能）",
-      "version": "6.2.1"
+      "version": "6.2.2"
     },
     {
       "name": "devkit-spec",
