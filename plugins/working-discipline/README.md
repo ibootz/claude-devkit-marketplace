@@ -94,9 +94,9 @@
   ○ verdict-part3      你是第 1 层子代理，可派...
 ```
 
-面板左列显示 `Agent` 工具的 `name`（未指定时回落显示 `subagent_type`），右列显示 `description`。这一屏同时暴露三个问题：四个 `name` 都不带模型档次前缀，用户看不出这批在飞任务烧的是 `sonnet` 还是 `opus`；这四个的右列全是 `prompt` 原文的开头「你是第 1 层子代理，可派…」，既把内部提示词暴露到 UI 上，又让四行描述完全同质、面板彻底失去"谁在做什么"的信息量；唯一合规的 `[sonnet] 映射 16 个 spe…` 那行反过来没给 `name`，左列回落成裸的 `general-purpose`。
+面板左列显示 `Agent` 工具的 `name`（未指定时回落显示 `subagent_type`），右列显示 `description`。这一屏同时暴露三个问题：四个 `name` 都不带模型档次前缀，用户看不出这批在飞任务烧的是 `sonnet` 还是 `opus`；这四个的右列全是 `prompt` 原文的开头「你是第 1 层子代理，可派…」，既把内部提示词暴露到 UI 上，又让四行描述完全同质、面板彻底失去"谁在做什么"的信息量；唯一 `description` 没抄 prompt 的那行（`[sonnet] 映射 16 个 spe…`——前缀在 3.4.0 前是硬要求、现已软放宽不要求）反过来没给 `name`，左列回落成裸的 `general-purpose`。
 
-对应的注入规则分四条：`name` 必填且同会话内不重名、格式 `模型名-任务语义`；`description` 必填、`[模型名]` 前缀 + 3-5 词任务摘要且**禁止与 `prompt` 共用同一段文字**；同批并发的名字必须互相可辨（`verdict-part1/2/3` 应改成把分片依据写进名字的 `sonnet-verdict-spec-01-05`）；`Workflow` 的 `meta.name` / `meta.description` / `meta.phases[].*` / `agent(prompt, {label})` 的 `label` 同规，其中 `meta.description` 会出现在权限确认弹窗里，粘 prompt 等于让用户在弹窗里读一段内部指令。
+对应的注入规则分四条：`name` 必填且同会话内不重名、格式 `模型名-任务语义`；`description` 必填、3-5 词任务摘要（3.4.0 起不带 `[模型名]` 前缀，模型档次由 `name` 体现）且**禁止与 `prompt` 共用同一段文字**；同批并发的名字必须互相可辨（`verdict-part1/2/3` 应改成把分片依据写进名字的 `sonnet-verdict-spec-01-05`）；`Workflow` 的 `meta.name` / `meta.description` / `meta.phases[].*` / `agent(prompt, {label})` 的 `label` 同规，其中 `meta.description` 会出现在权限确认弹窗里，粘 prompt 等于让用户在弹窗里读一段内部指令。
 
 #### 为什么 AI「总是忘记传 `name`」：两套约束不同源
 
@@ -112,7 +112,7 @@
 但 `name` 确实是运行时的一等公民，只是 schema 声明漏了。实证（2026-07-29）：一次带 `name` 的 `Explore` 派发，其元数据文件 `<项目 transcript 目录>/subagents/agent-a89132b5b2d9d0f67.meta.json` 内容是
 
 ```json
-{"agentType":"Explore","description":"[sonnet] dbops 翻译 dimId/nodeId 并核权重",
+{"agentType":"Explore","description":"dbops 翻译 dimId/nodeId 并核权重",
  "name":"sonnet-dbops-translate-weight-ids","toolUseId":"toolu_01LFRkf1uMvs9RwnMpcoU9ca",
  "spawnDepth":1,"model":"sonnet"}
 ```
@@ -129,7 +129,7 @@
 
 **触发条件**：`tool_name` 是 `Agent`。注意**不匹配旧工具名 `Task`**——旧名环境下的 `tool_input` 可能压根没有 `name` / `model` 字段，强制校验会造成永久性误拦，fail-open 优于误伤。
 
-### 拦什么：8 项结构校验，多条一并列出
+### 拦什么：7 项结构校验，多条一并列出
 
 这类问题往往同时出现好几个（`name` 前缀不符 + `description` 抄 prompt + 超长），`findings` 聚合成一条 reason 一次报清，才能一次改对：
 
@@ -138,11 +138,10 @@
 | 1 | `model` 缺失或不在 `sonnet`/`opus`/`fable` | 纪律要求显式指定，禁止默认回落。**这一条命中时额外附完整路由表**帮助选档。`model: "haiku"` 单独给一条 finding（「已从可选档次中移除，最低档是 sonnet」）而不是泛泛报「不在三档之内」——它是旧纪律下的合法档，是最高频的误填 |
 | 2 | `name` 不以 `{model}-` 开头 | 前缀必须与实际 `model` 一致。`haiku-` 开头单独识别并给「改成 `sonnet-<原任务语义>`」的精确改法，避免回落到泛化分支后建议出 `sonnet-haiku-grep-refs` 这种把废弃档次名留在任务语义里的错名 |
 | 3 | `name` 不满足 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` | Agent 工具的原生约束，提前拦下来并给清楚提示（写中文会被工具直接拒） |
-| 4 | `description` 缺失或不以 `[{model}] ` 开头 | 方括号内档次要与 `model` 一致。前缀正则里**仍保留 `haiku` 分支专供识别**（`^\[(sonnet\|opus\|fable\|haiku)\]`）：命中即报「用了已移除的档次」，若直接删掉这个分支，`[haiku] xxx` 会掉进「缺前缀」判定，连带解析不出正文、跳过后面三条泄露检测 |
-| 5 | `description` 只有前缀没有正文 | 前缀后必须有 3-5 词任务摘要 |
-| 6 | `description` 正文以角色设定句开头（`你是` / `You are` / `【` / `#` / `作为一名` 等） | 把 prompt 原文抄进 `description` 的高置信特征 |
-| 7 | `description` 正文长度 ≥ 20 且正好是 `prompt` 的开头 | 抄袭特征。20 字符门槛用来避免误报——3-5 词摘要与 prompt 开头偶然重合的概率不低，短文本不判 |
-| 8 | `description` 正文超过 60 字符 | 纪律要求 3-5 词摘要，超长说明塞了 prompt 内容 |
+| 4 | `description` 缺失，或 strip 掉可选的 `[模型名]` 前缀后没有正文 | 必填且必须有 3-5 词任务摘要正文。**3.4.0 起不再要求 `[模型名]` 前缀**（软放宽）：name 的模型前缀已是第 2 项强制校验、在飞面板与 description 并排显示，模型档次由 name 一处表达即可，description 再带前缀是冗余（每行模型名出现两次）。仍带了前缀不拦，先 strip 再做正文/泄露检测。strip 正则 `^\[(sonnet\|opus\|fable\|haiku)\]\s*` 仍保留 `haiku` 分支，只为识别并剥除旧写法 |
+| 5 | `description` 正文以角色设定句开头（`你是` / `You are` / `【` / `#` / `作为一名` 等） | 把 prompt 原文抄进 `description` 的高置信特征 |
+| 6 | `description` 正文长度 ≥ 20 且正好是 `prompt` 的开头 | 抄袭特征。20 字符门槛用来避免误报——3-5 词摘要与 prompt 开头偶然重合的概率不低，短文本不判 |
+| 7 | `description` 正文超过 60 字符 | 纪律要求 3-5 词摘要，超长说明塞了 prompt 内容 |
 
 判据全部取自 `tool_input` 的确定字段，不猜语义、不回读 transcript，误判空间接近零——这是它在 3.0.0 的清理里被保留的唯一理由。
 
@@ -160,7 +159,7 @@
 }
 ```
 
-**自动名的构成**：`<model>-<语义>-<prompt 短哈希 4 位>`。语义来源优先级是「`description` 正文里的 ASCII 词（取前 4 个，≥2 字符）」→「`subagent_type` 转 kebab」。`description` 按纪律写的是中文任务摘要时抽不出 ASCII 词，就退回 `subagent_type`（`[opus] 修订单竞态` + `general-purpose` → `opus-general-purpose-7f2c`）——中文转写（拼音 / 翻译）在 hook 里不可靠，宁可给个语义弱但绝不出错的名。哈希以 `prompt` 为输入，保证同批并发的多个 agent 拿到不同的名（同名会让 `SendMessage` 的 latest-wins 寻址把先派的那个弄丢），且是纯函数、不需要持久状态。
+**自动名的构成**：`<model>-<语义>-<prompt 短哈希 4 位>`。语义来源优先级是「`description` 正文里的 ASCII 词（取前 4 个，≥2 字符）」→「`subagent_type` 转 kebab」。`description` 按纪律写的是中文任务摘要时抽不出 ASCII 词，就退回 `subagent_type`（`修订单竞态` + `general-purpose` → `opus-general-purpose-7f2c`；description 按新规不带 `[模型名]` 前缀，仍带前缀的旧写法会被 deriveSlug 先 strip）——中文转写（拼音 / 翻译）在 hook 里不可靠，宁可给个语义弱但绝不出错的名。哈希以 `prompt` 为输入，保证同批并发的多个 agent 拿到不同的名（同名会让 `SendMessage` 的 latest-wins 寻址把先派的那个弄丢），且是纯函数、不需要持久状态。
 
 **为什么不带 `permissionDecision`**：只改参数、不做权限判定。给 `"allow"` 会连带跳过用户自己的权限确认，等于 hook 替用户批准了一次工具调用，属于越权。
 
@@ -181,7 +180,7 @@
 **输出通道**：deny 走 JSON `permissionDecision: "deny"`（不是 exit 2）。官方文档明确 `permissionDecisionReason` 是展示给 Claude 的，语义比 exit code 约定更明确。reason 沿用本仓库 guard 的 `[L1-BLOCKER] ... finding= hint=` 格式便于统一识别：
 
 ```text
-[L1-BLOCKER] tool=Agent check=agent-dispatch finding="name="verdict-part1" 缺模型档次前缀;description="你是第 1 层子代理..." 缺 [模型名] 方括号前缀" hint="name 改成 "sonnet-verdict-part1";description 改成 "[sonnet] <3-5 词任务摘要>";完整规范见注入纪律 5.4 节;确需临时关闭本门禁用 AGENT_DISPATCH_GUARD=off"
+[L1-BLOCKER] tool=Agent check=agent-dispatch finding="name="verdict-part1" 缺模型档次前缀;description="你是第 1 层子代理..." 正文是 prompt 角色设定句" hint="name 改成 "sonnet-verdict-part1";description 改成 "<3-5 词任务摘要>（不带 [模型名] 前缀）";完整规范见注入纪律 5.4 节;确需临时关闭本门禁用 AGENT_DISPATCH_GUARD=off"
 ```
 
 这道门禁**默认开启且全局生效**：其他插件或 skill 内部派发 subagent 时（如 `omp` 的强制委派、各类 spec 工作流），若它们不遵守本插件的命名规范，同样会被拦下来。这是**预期行为**——规范要统一才有意义——但如果它挡住了你必须跑的既有工作流：
@@ -399,9 +398,9 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-dispatch.js
    ↓    AGENT_DISPATCH_GUARD=off 或 AGENT_NAMING_GUARD=off → 放行（总开关）
    ↓    tool_name 不是 Agent → 放行（不匹配旧名 Task，避免永久误拦）
    ↓    subagent_type ∈ {fork, statusline-setup, output-style-setup} → 放行
-   ↓  8 项结构校验，聚合所有 finding：
+   ↓  7 项结构校验，聚合所有 finding：
    ↓    model 显式且合法 / name 前缀符 model·满足原生正则
-   ↓    description [模型名] 前缀符 model·有正文
+   ↓    description 必填且有正文（不要求 [模型名] 前缀，3.4.0 起软放宽）
    ↓    description 正文非角色句 / 非 prompt 开头逐字重合 / ≤60 字符
    ↓    有 finding → deny（model 非法时额外附完整路由表）
    ↓  只缺 name（其余全过）：

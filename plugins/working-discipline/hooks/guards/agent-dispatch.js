@@ -16,7 +16,7 @@
 // `properties` 只声明了 description / prompt / subagent_type / model / run_in_background /
 // isolation 六项，还写着 `additionalProperties: false`——`name` 是 schema 外但运行时真实
 // 消费的字段（实证：<project>/subagents/agent-<id>.meta.json 里存着
-// {"agentType":"Explore","description":"[sonnet] …","name":"sonnet-dbops-translate-weight-ids",
+// {"agentType":"Explore","description":"翻译 dimId/nodeId 并核权重","name":"sonnet-dbops-translate-weight-ids",
 // "model":"sonnet"}）。AI 构造工具调用时照 schema 的字段表生成，字段表里不存在的字段不会
 // 被"想起来"，所以「缺 name」是结构性必然、不是偶发疏忽；用 deny 打回只是把这次必然的
 // 返工固化下来。现在改为用 `hookSpecificOutput.updatedInput` 补一个合规名并放行。
@@ -192,7 +192,8 @@ function guardDisabled() {
 // description 常是中文（纪律要求它写中文任务摘要），抽不出 ASCII 词时退回
 // subagent_type——中文转写（拼音/翻译）在 hook 里不可靠，宁可给个语义弱但绝不出错的名。
 
-// 从 description 正文抽 ASCII 语义片段：'[sonnet] grep auth refs' → 'grep-auth-refs'
+// 从 description 正文抽 ASCII 语义片段：'grep auth refs' → 'grep-auth-refs'
+// （description 按新规不带 [模型名] 前缀；若仍带了旧写法,下面 replace 会先 strip 掉）
 function deriveSlug(ti) {
   const desc = typeof ti.description === 'string' ? ti.description : ''
   const body = desc.replace(/^\[(sonnet|opus|fable|haiku)\]\s*/, '')
@@ -279,33 +280,21 @@ function checkNaming(ti) {
     }
   }
 
-  // 5. description 必填 + 方括号模型前缀（description 是 schema 里的必填字段，
-  //    缺失基本由工具层拦掉，这里仍留判定以防 harness 放宽）
+  // 5. description 必填且有正文（description 是 schema 里的必填字段，缺失基本由工具层
+  //    拦掉，这里仍留判定以防 harness 放宽）。**不再要求 [模型名] 前缀**：name 的模型
+  //    前缀已是强制校验（见上 check 3~4），在飞面板 name 与 description 并排显示，
+  //    模型档次由 name 一处表达即可，description 再带 [模型名] 前缀是冗余（每行模型名
+  //    出现两次）。AI 仍带了前缀（旧习惯）也不拦——这是**软放宽**口径：strip 掉再做
+  //    正文检测，避免「[sonnet] xxx」整体被当正文触发误判。模型档次一致性由 name 侧独担。
   let descBody = ''
   if (!description) {
     findings.push('缺 description')
-    hints.push(`description 填 "[${modelOk ? model : '<模型名>'}] <3-5 词任务摘要>"`)
+    hints.push('description 填 "<3-5 词任务摘要>"（模型档次由 name 前缀体现,description 不带 [模型名] 前缀）')
   } else {
-    // 正则里保留 haiku 只为**识别**旧档前缀并给出精确改法（否则会掉进「缺前缀」
-    // 分支，descBody 解析不出来，连带跳过后面的提示词泄露检测）；它已不是合法
-    // 档次，命中即报错，不会放行。
-    const m = description.match(/^\[(sonnet|opus|fable|haiku)\]\s*/)
-    if (!m) {
-      findings.push(`description="${truncate(description, 40)}" 缺 [模型名] 方括号前缀`)
-      hints.push(`description 改成 "[${modelOk ? model : '<模型名>'}] <3-5 词任务摘要>"`)
-    } else {
-      if (m[1] === 'haiku') {
-        findings.push('description 前缀 "[haiku]" 用了已移除的档次')
-        hints.push(`description 前缀改成 "[${modelOk ? model : 'sonnet'}]"`)
-      } else if (modelOk && m[1] !== model) {
-        findings.push(`description 前缀 "[${m[1]}]" 与实际 model="${model}" 不一致`)
-        hints.push(`description 前缀改成 "[${model}]"`)
-      }
-      descBody = description.slice(m[0].length).trim()
-      if (!descBody) {
-        findings.push('description 只有 [模型名] 前缀,没有任务摘要正文')
-        hints.push('前缀后补 3-5 词任务摘要')
-      }
+    descBody = description.replace(/^\[(sonnet|opus|fable|haiku)\]\s*/, '').trim()
+    if (!descBody) {
+      findings.push('description 没有任务摘要正文')
+      hints.push('description 填 3-5 词任务摘要（不带 [模型名] 前缀）')
     }
   }
 

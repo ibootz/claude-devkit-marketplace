@@ -77,7 +77,7 @@
       "source": "./plugins/working-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 3 个 guard 机械强制。零 skill，适合全局开启",
-      "version": "3.3.1"
+      "version": "3.4.0"
     },
     {
       "name": "discover-unknowns",

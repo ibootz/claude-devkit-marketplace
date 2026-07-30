@@ -26,7 +26,7 @@
 // 其中大半只在某个具体工具调用时刻才有用，却每轮都在跟无法硬拦截的语义规则
 // （求真 / 说明详细 / 思维模式 / 等齐再总结）抢同一份注意力预算，结果整体遵从度下降。
 // 仍然下沉在 hooks/guards/ 的只剩三条，判据都是确定字段或纯行数计数：
-//   - 派发 subagent 的**结构**校验（model 必填 / name 与 description 的前缀一致性 /
+//   - 派发 subagent 的**结构**校验（model 必填 / name 的模型前缀一致性（description 不再要求前缀，3.4.0 起软放宽） /
 //     name 合原生正则 / 提示词泄露 / 完整场景路由表）→ guards/agent-dispatch.js
 //   - 独立 cd 污染 cwd + agent-browser 启动参数        → guards/bash-guard.js
 //   - 源码 >1000 行 + CLAUDE.md >200 行               → guards/write-guard.js
@@ -261,18 +261,18 @@ const SECTION_NAMING = [
   '格式 `模型名-任务语义`：模型名取 `sonnet` / `opus` / `fable` 之一且与实际 `model` 一致（`haiku-` 已废弃，写了会被拦）；任务语义用英文 kebab-case——`name` 受正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` 约束，只接受 ASCII 字母数字与 `-` `_`，中文或方括号直接被拒。示例：`sonnet-review-login-flow` / `opus-debug-order-race` / `fable-hunt-memleak`。',
   '**漏了不拦，但会拿到 guard 自动补的弱语义名** `<model>-<语义>-<prompt 短哈希>`（如 `sonnet-explore-a3f1`）：不含任务语义、同批只差哈希，面板上看不出各自在做什么。这是兜底，不是替代。',
   '',
-  '**5.4.2 `description` 是任务摘要，禁止灌 prompt 原文**',
-  '只写 3-5 词任务摘要，以 `[模型名]` 方括号前缀开头（`[sonnet]` / `[opus]` / `[fable]`，与实际 `model` 一致；`[haiku]` 已废弃）。合规示例：`[sonnet] 审查登录流程` / `[opus] 修 order race condition`。',
+  '**5.4.2 `description` 是任务摘要，禁止灌 prompt 原文，也不带模型前缀**',
+  '只写 3-5 词任务摘要，**不带 `[模型名]` 前缀**——模型档次已由 `name` 的前缀体现（`name` 与 `description` 在在飞面板并排显示，前缀只写一次，避免每行模型名出现两次）。合规示例：`审查登录流程` / `修 order race condition`。仍带前缀不拦（软放宽），但 `Workflow` 的 `label` 是例外：它在进度树单独显示、没有配对的 `name`，按 5.4.4 仍带 `[模型名]` 前缀。',
   '**禁止**把 `prompt` 的开头文字、角色设定句、纪律条款、上下文铺陈复制进 `description`。典型错误是写成「你是第 1 层子代理，可派发……」这类 prompt 前缀——一整批面板描述完全同质，既把内部提示词暴露到 UI，又丢掉本该显示的任务信息。两者是独立字段，**不许共用同一段文字**。泄露有两条成因都要防：(a) 主动抄 prompt 原文进 `description` / `label`；(b) 显示字段**留空**导致 UI 回落用 prompt 开头当显示名——所以可选的显示字段（如 `Workflow` 的 `label`）一律**当必填处理**。',
   '',
   '**5.4.3 同批并发必须互相可辨**',
-  '同批在飞的多个子代理，`name` 与 `description` 必须能一眼区分各自负责什么。只靠数字后缀而看不出任务差异**不合格**——如 `verdict-part1` / `part2` / `part3` 既缺模型前缀又没说清各自判定哪部分。把分片依据写进名字（`sonnet-verdict-spec-01-05`），或在 `description` 里点明范围（`[sonnet] 判定 spec 01-05`）。',
+  '同批在飞的多个子代理，`name` 与 `description` 必须能一眼区分各自负责什么。只靠数字后缀而看不出任务差异**不合格**——如 `verdict-part1` / `part2` / `part3` 既缺模型前缀又没说清各自判定哪部分。把分片依据写进名字（`sonnet-verdict-spec-01-05`），或在 `description` 里点明范围（`判定 spec 01-05`）。',
   '',
   '**5.4.4 `Workflow` 的命名**',
-  '`agent(prompt, {label})` 的 `label` 虽可选但**必须显式给**（省略时进度树回落用 prompt 开头当显示名），按 5.4.2 带 `[模型名]` 前缀 + 任务语义（`label` 无字符集限制，可用中文）。`meta.name` 用 kebab-case：整个 workflow 统一走一档时加 `模型名-` 前缀（`sonnet-migrate-auth-calls`），跨档混用时不加、档次由各 `agent()` 的 `label` 体现。`meta.description` / `meta.phases[].title` / `meta.phases[].detail` 写做什么，**同样禁止粘 prompt 原文**——`meta.description` 会出现在权限弹窗里。',
+  '`agent(prompt, {label})` 的 `label` 虽可选但**必须显式给**（省略时进度树回落用 prompt 开头当显示名）；`label` 在进度树**单独显示**、没有配对的 `name`，所以与 `Agent` 的 `description`（5.4.2）不同——**仍带 `[模型名]` 前缀** + 任务语义（`label` 无字符集限制，可用中文）。`meta.name` 用 kebab-case：整个 workflow 统一走一档时加 `模型名-` 前缀（`sonnet-migrate-auth-calls`），跨档混用时不加、档次由各 `agent()` 的 `label` 体现。`meta.description` / `meta.phases[].title` / `meta.phases[].detail` 写做什么，**同样禁止粘 prompt 原文**——`meta.description` 会出现在权限弹窗里。',
   '',
   '**本节有硬门禁**（`guards/agent-dispatch.js`，`PreToolUse` matcher `Agent`，多条违规一次报清）：',
-  '- **拦**：缺 `model` / `model` 不在三档 / `name` 缺模型前缀或与 `model` 不一致 / `name` 不合正则 / `description` 缺 `[模型名]` 前缀 / 正文是 prompt 角色设定句或与 prompt 开头逐字重合 / 正文超 60 字符。被拦后按 finding 一次改全。',
+  '- **拦**：缺 `model` / `model` 不在三档 / `name` 缺模型前缀或与 `model` 不一致 / `name` 不合正则 / 缺 `description` 或 `description` 无正文 / 正文是 prompt 角色设定句或与 prompt 开头逐字重合 / 正文超 60 字符。被拦后按 finding 一次改全。`description` 带 `[模型名]` 前缀**不拦**（3.4.0 起软放宽：name 已带前缀，description 不再要求）。',
   '- **不拦**：只缺 `name` 时自动补名放行。边界是「字段缺失 vs 格式错」——`name` 是 schema 外字段、你看不见它；但你既然写出了值就说明知道它存在，格式错才给 finding。',
 ].join('\n')
 
@@ -296,7 +296,7 @@ const SECTION_DISPATCH = [
   '- **`sonnet`**：全局最低档兼默认档，一切任务的起点。机械执行（模式匹配、规整提取、批量改写、简短摘要）与常规语义任务（跨文件推理、常规设计权衡、多步骤编码与审查）**都用它**，没有更便宜的档可退',
   '- **`opus`**：命中任一即用——(a) 需严密因果链（跨层追根因）；(b) 极高正确性要求（安全/并发/协议/资金/权限）；(c) `sonnet` 已明显吃力（漏点多、方案有硬缺陷、修 A 又出 B）',
   '- **`fable`**：兜底升级不作首选——同一任务用 `opus` 完整跑过 ≥2 轮仍无进展才启用',
-  '- 写 `model: "haiku"`（或 `haiku-` / `[haiku]` 前缀）会被 hook 拦下。**禁止预防性堆模型**：没有 `opus` 触发信号就留在 `sonnet`，不确定时一档一档升',
+  '- 写 `model: "haiku"` 或 name 用 `haiku-` 前缀会被 hook 拦下（description 的 `[haiku]` 前缀 3.4.0 起不再拦——description 已不要求前缀）。**禁止预防性堆模型**：没有 `opus` 触发信号就留在 `sonnet`，不确定时一档一档升',
   '',
   '### 5.3 调用范式',
   '',
@@ -305,7 +305,7 @@ const SECTION_DISPATCH = [
   '### 5.4 命名（`name` 与 `description` 都必填 · 细则由 hook 拦截时给）',
   '',
   '**`Agent` 的 JSON Schema 里没有 `name` 字段**（只有 `description` / `prompt` / `subagent_type` / `model` / `run_in_background` / `isolation`，且 `additionalProperties: false`），但运行时接受它并落盘。照字段表生成调用必然漏掉——当硬编码前置记：**凡调 `Agent`，先写 `name`，再写其余字段**。',
-  '两字段都带模型前缀且与实际 `model` 一致（`name` 用 `sonnet-` 连字符、`description` 用 `[sonnet]` 方括号）；`description` 只写 3-5 词任务摘要，**禁止**灌 `prompt` 原文或角色设定句；同批并发的名字必须互相可辨（把分片依据写进名字）；`Workflow` 的 `label` / `meta.*` 同规。只缺 `name` 时 guard 自动补一个弱语义名放行，但面板上看不出任务差异，所以仍要自己给。',
+  '`name` 带模型前缀且与实际 `model` 一致（`name` 用 `sonnet-` 连字符）；`description` 只写 3-5 词任务摘要、**不带 `[模型名]` 前缀**（模型档次由 `name` 体现，两列并排显示前缀只写一次），**禁止**灌 `prompt` 原文或角色设定句；同批并发的名字必须互相可辨（把分片依据写进名字）；`Workflow` 的 `label` / `meta.*` 例外——进度树单独显示无配对 `name`，**仍带 `[模型名]` 前缀**。只缺 `name` 时 guard 自动补一个弱语义名放行，但面板上看不出任务差异，所以仍要自己给。',
   '',
   '### 5.5 多 subagent 并发时等齐再总结（仅约束主会话）',
   '',
@@ -326,7 +326,7 @@ const SECTION_HOOK_ENFORCED = [
   '',
   'hook 按**拦截对象**收敛：一个对象一道闸，多条违规**一次报清**。判据全部取自工具输入的确定字段或纯行数计数（靠关键词猜语义的 guard 已全部移除，准确率太低）。撞到拦截时不必怀疑误判，照 finding 一次改全：',
   '',
-  '- **`Agent`**（`PreToolUse` → `guards/agent-dispatch.js`）：`model` 必填且在 `sonnet`·`opus`·`fable` 内；`name` 的模型前缀与 `model` 一致且满足正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`；`description` 带 `[模型名]` 前缀、正文非 prompt 原文且 ≤60 字符。**只缺 `name` 时自动补名放行、不拦**',
+  '- **`Agent`**（`PreToolUse` → `guards/agent-dispatch.js`）：`model` 必填且在 `sonnet`·`opus`·`fable` 内；`name` 的模型前缀与 `model` 一致且满足正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`；`description` 必填有正文、**不要求 `[模型名]` 前缀**（3.4.0 起软放宽，档次由 name 体现）、正文非 prompt 原文且 ≤60 字符。**只缺 `name` 时自动补名放行、不拦**',
   '- **`Bash`**（`PreToolUse` → `guards/bash-guard.js`）：禁止污染 cwd 的独立 `cd`（改用绝对路径 / 子 shell `(cd /abs && cmd)` / `git -C <path>`）；`agent-browser` 的启动类子命令（`open` / `connect` / 带 URL 的 `chat`）必须带 `--headed` 与 `--profile`',
   '- **`Write` / `Edit`**（`PostToolUse` → `guards/write-guard.js`）：单一源码文件 >1000 行、`CLAUDE.md` >200 行会被拦（后者应拆到 `.claude/rules/{topic}.md`，而不是压缩正文导致约束丢失）',
   '',
