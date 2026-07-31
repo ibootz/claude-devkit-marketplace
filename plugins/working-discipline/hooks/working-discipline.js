@@ -196,7 +196,7 @@
 // 28 条），三条结论都指向同一个方向——**写 guard 的人会系统性高估自己判据的精度**：
 // (1) **write-guard 根本不是拦截器**。它挂 PostToolUse，文件已落盘、不回滚、本轮继续
 //     （2.1.220 二进制明文：`On PostToolUse, the reason is fed back to Claude and the turn
-//     continues.`；真能停住回合的是 JSON 字段 preventContinuation，本文件走 exit 2）。而
+//     continues.`；真能停住回合的是 JSON 顶层 `continue: false`，本文件走 exit 2）。而
 //     六章原文写的是"会被拦"——**注入文本骗了执行者整整一轮**：主代理据此以为超长文件有
 //     机械兜底。这是本次最值得记住的一条：hook 的自述与注入文案会一起漂移，且没人核对。
 // (2) **两个 guard 的源码自述被证伪**。write-guard 写着"误判空间为零"，实测三类误判：

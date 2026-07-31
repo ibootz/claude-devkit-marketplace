@@ -25,9 +25,33 @@ description: 适用于用户需要"优化提示词""改写 prompt/system prompt"
 现在处理："无法上传大于 10MB 的文件，超时"
 ```
 
-### 2. Chain-of-Thought（思维链）
+### 2. 推理：优先用模型内建 thinking，手动 CoT 仅作 fallback
 
-在最终答案前请求逐步推理：加一句"让我们一步步思考"（零样本），或给出带推理轨迹的示例（少样本）。
+> Anthropic 现行指南（2025-11 博客 + platform.claude.com 现行页）已把推理范式从
+> 「让模型一步步思考」转向模型内建的 **extended / adaptive thinking**：手动 CoT 降级为
+> 「thinking 关闭时」的 fallback，且「`think thoroughly` 这类一句话往往比手写的多步计划推理
+> 更好」。Claude 4.6 起 `budget_tokens` 弃用，4.7+ 直接 400。下面按"主推 → fallback"排序。
+
+**(主推) extended / adaptive thinking（面向 API / 支持 thinking 的载体）**
+
+让模型用内建 thinking 推理，而非手写步骤清单。API 侧用 `thinking: {type: "adaptive"}`
+（现行推荐）或 `{type: "enabled"}`；面向 Claude Code 的命令/技能/子代理，让模型"think
+thoroughly"即可，不必在 prompt 里替它列推理步骤：
+
+```markdown
+分析此错误报告并确定根本原因，think thoroughly。
+
+错误："昨天部署缓存更新后，用户无法保存草稿"
+```
+
+带工具调用的长链路用 **interleaved thinking**（工具调用之间穿插思考），让模型在每个工具结果
+返回后先推理再决定下一步——这是 agentic 流程的现行推荐形态，不要在 prompt 里写死线性步骤。
+
+**(fallback) 手动 Chain-of-Thought**
+
+仅当载体不支持内建 thinking（thinking 关闭）时，再请求逐步推理：加一句"让我们一步步思考"
+（零样本），或给出带推理轨迹的示例（少样本）。用 `<thinking>`/`<answer>` 这类结构化标签
+分隔推理与最终答案：
 
 ```markdown
 分析此错误报告并确定根本原因。

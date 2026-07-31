@@ -5,7 +5,7 @@ description: 与 Claude 协作时，在动手实现前系统性地发现并澄�
 
 # 发现你的未知（Discover Your Unknowns）
 
-一套与 Claude 协作的**发现未知**方法论。源自 Anthropic 官方博客 *A field guide to Claude Fable 5: Finding your unknowns*（Thariq Shihipar）。
+一套与 Claude 协作的**发现未知**方法论。源自 Anthropic 官方博客 [*A field guide to Claude Fable 5: Finding your unknowns*](https://claude.com/blog/a-field-guide-to-claude-fable-finding-your-unknowns)（Thariq Shihipar）。
 
 ## 核心心智模型
 

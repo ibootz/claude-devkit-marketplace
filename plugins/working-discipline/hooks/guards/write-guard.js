@@ -15,7 +15,7 @@
 //      不做也无法做回滚。审计连续 6 次拦同一个 12436 行文件后复核 md5 与 mtime 未变。
 //   2. Claude Code 2.1.220 二进制明文：`On PostToolUse, the reason is fed back to
 //      Claude and the turn continues.`
-//   3. 真能停住回合的是 JSON 输出字段 `preventContinuation`，而本文件走
+//   3. 真能停住回合的是 JSON 顶层 `continue: false`（配 stopReason），而本文件走
 //      stderr.write + exit(2)，不输出 JSON。
 // 净效果：超长文件已在盘上，本 hook 只是把一句话喂给 Claude，**这一轮继续往下走**。
 // 因此任何「会被拦下所以不用担心写出超长文件」的表述都是错的——注入纪律里的对应

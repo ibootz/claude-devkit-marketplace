@@ -15,7 +15,7 @@ If the user's own already-installed skill is erroring, outdated, or behaving wro
 
 - `npx skills find [query]` — search interactively or by keyword
 - `npx skills add <owner/repo@skill>` — install a skill from GitHub or other sources
-- `npx skills check` / `npx skills update` — check / apply updates for already-installed skills
+- `npx skills update [skills]` — apply updates for already-installed skills（上游 CLI 无 `check` 子命令，检测更新直接用 `update`）
 - Browse: https://skills.sh/
 
 ## Workflow

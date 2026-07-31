@@ -184,7 +184,7 @@
 
 **三个 guard 的自述全部被真 payload 证伪**，而且每一处自述当初写下时都是真诚的：`write-guard.js` 写着"误判空间为零"，实测三类误判（扩展名不能区分源码与数据/产物/依赖、行数带 `+1` 偏移、`basename` 不能区分本项目与第三方）；`bash-guard.js` 写着 `cd` 由 shell-parse "精确定位"，实测 19 类真污染写法放行、heredoc 正文被误杀且 hint 无解、`echo "(start" && cd /tmp && echo "end)"` 一个假括号配对就让真 `cd` 隐形，`--headed` 因全局字符串扫描退化成一个 `echo --headed;` 就能满足的口令；`agent-dispatch.js` 写着"判据全部取自确定字段、误判空间接近零"，而 `PROMPT_LEAK_PREFIXES` 是句式近似判定、`LEAK_MATCH_MIN` 那条 prompt 重合检查的前提根本不成立（合法 description 与 prompt 的 `【目标】` 段天然写同一件事）。
 
-**最值得记住的一条与判据精度无关，而与"文案漂移"有关。** `write-guard` 的**效力等级**在注入文本第六章里被错误升级成了"会被拦"——而它挂 `PostToolUse`，文件已落盘、不回滚、本轮继续（三条证据见第四章）。后果不是抽象的：**主代理据此以为"写出超长文件有机械兜底"，整整一轮都在这个错误前提下工作**。这里真正的教训是——hook 的**实际效力**（代码里挂哪个事件、走 stderr 还是 JSON、有没有 `preventContinuation`）与**描述它的文案**（源码注释、注入文本、README）会各自独立漂移，而**没有任何环节会自动核对两者**。判据可以靠测试用例守住，效力等级只能靠人定期回读代码确认。这也是本次同时改了源码注释、注入文本、本 README 三处的原因：三份都是"文案"，漏改任何一份都会重现同一类事故。
+**最值得记住的一条与判据精度无关，而与"文案漂移"有关。** `write-guard` 的**效力等级**在注入文本第六章里被错误升级成了"会被拦"——而它挂 `PostToolUse`，文件已落盘、不回滚、本轮继续（三条证据见第四章）。后果不是抽象的：**主代理据此以为"写出超长文件有机械兜底"，整整一轮都在这个错误前提下工作**。这里真正的教训是——hook 的**实际效力**（代码里挂哪个事件、走 stderr 还是 JSON、有没有输出 `continue: false`）与**描述它的文案**（源码注释、注入文本、README）会各自独立漂移，而**没有任何环节会自动核对两者**。判据可以靠测试用例守住，效力等级只能靠人定期回读代码确认。这也是本次同时改了源码注释、注入文本、本 README 三处的原因：三份都是"文案"，漏改任何一份都会重现同一类事故。
 
 **处置口径由用户逐条拍板，四项全选"修误杀 + 收窄，不删"**（依据 `hook-restraint.md` 第 4 条：判据影响硬阻断行为，AI 只报不改）。已落地的改动：`stripHeredocs()` 剥离 heredoc 正文、no-op `cd` 的 `realpath` 与 `$PWD` 识别、后台化片段放行、finding 违规片段截断 120 字符、`agent-browser` 判定收窄到单次调用的 tail、`--help` 放行、命令名位置判定、行数 `+1` 偏移修复、依赖与产物路径排除、源码扩展名补齐、CLAUDE.md 限定当前项目树内、`prompt-prefix-overlap` 检查整条移除、`autoName()` 哈希补 `description`。**43 条回归用例全绿**，两侧都覆盖——既验旧版误杀现在放行，也验旧版正确拦截的仍然拦得住。
 
@@ -437,7 +437,7 @@ agent-browser --headed --profile "$(mktemp -d)" open https://example.com        
 
 1. **它没有、也无法做回滚**。整份 `hooks/guards/write-guard.js` 只有两处 `readFileSync`（读 stdin、读目标文件），零个 `fs` 写操作。审计连续 6 次拦同一个 12436 行文件后复核该文件的 md5 与 mtime——**未变**。顺带说明 `finding` 里那个行数本身就是证据：它是**读落盘后的文件**数出来的（`write-guard.js:217`），能数出来就说明已经写进去了。
 2. **Claude Code 2.1.220 二进制里的明文**：`On PostToolUse, the reason is fed back to Claude and the turn continues.`
-3. **真能停住回合的是 JSON 输出字段 `preventContinuation`**，而本文件走的是 `process.stderr.write` + `process.exit(2)`，压根不输出 JSON。
+3. **真能停住回合的是 JSON 顶层 `continue: false`**（配 `stopReason`），而本文件走的是 `process.stderr.write` + `process.exit(2)`，压根不输出 JSON。
 
 所以正确的心智模型是：`Agent` 与 `Bash` 那两道是**闸**（`PreToolUse`，工具调用没发生），`Write`/`Edit` 这道是**回执单**（`PostToolUse`，事情已经做完了）。任何形如「反正超长了会被拦下所以不用提前判断」的推理都建立在错误前提上——动笔前就要判断该不该拆。注入文本六章的对应条目已在 3.6.0 改成「它挂 `PostToolUse`，触发时文件已经写完了……指望不上它兜底」。
 

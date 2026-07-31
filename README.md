@@ -101,7 +101,7 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 ### 10. discover-unknowns（发现你的未知）
 
-与 Claude 协作挖掘未知的方法论：把提示词/上下文当"地图"、真实代码库/约束当"疆域"，两者差距即"未知"，动手前暴露未知、合并前确认理解。源自 Anthropic 官方博客 *A field guide to Claude Fable 5: Finding your unknowns*。
+与 Claude 协作挖掘未知的方法论：把提示词/上下文当"地图"、真实代码库/约束当"疆域"，两者差距即"未知"，动手前暴露未知、合并前确认理解。源自 Anthropic 官方博客 [*A field guide to Claude Fable 5: Finding your unknowns*](https://claude.com/blog/a-field-guide-to-claude-fable-finding-your-unknowns)（Thariq Shihipar）。
 
 **组成**（3 个 Skill + 1 个 Hook，按"探索/收敛/合并"三个决策时刻拆分）：
 - `discover-unknowns` - 统领：心智模型 + 路由，内嵌盲点扫描与参考两个手法
