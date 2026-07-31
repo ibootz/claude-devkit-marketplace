@@ -1,6 +1,8 @@
 ---
 name: heal
-description: 适用于**已存在、已被调用过**的技能执行出错、说明过时或结果不符合预期时，例如“这个 skill 不工作”“修复 SKILL.md”“根据报错更新技能文档”“修正 references/scripts”“同步技能说明与实际行为”；用于分析失败原因，定位受影响的 SKILL.md、references、scripts 等文件，展示前后对比的修复方案，获批准后才应用。不同于 find-skills：本技能只修一个已装且已跑过的技能，不负责发现或安装新技能——用户想“找/装一个能处理 X 的 skill”时应触发 find-skills 而非本技能。
+description: 分析失败原因，定位受影响的 SKILL.md、references、scripts 等文件，展示前后对比的修复方案，获批准后才应用。适用于**已存在、已被调用过**的技能。不同于 find-skills：本技能只修一个已装且已跑过的技能，不负责发现或安装新技能。
+when_to_use: |
+  技能执行出错、说明过时或结果不符合预期，例如"这个 skill 不工作""修复 SKILL.md""根据报错更新技能文档""修正 references/scripts""同步技能说明与实际行为"。用户想"找/装一个能处理 X 的 skill"时应触发 find-skills 而非本技能。
 ---
 
 # Heal Skill - 技能修复工具

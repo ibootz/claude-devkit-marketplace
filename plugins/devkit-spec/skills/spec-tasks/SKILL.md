@@ -1,6 +1,8 @@
 ---
 name: spec-tasks
-description: 任务拆解 - 把已写好的 Spec 文档（spec.md）按数据层/核心逻辑层/接口层拆成有向无环图（DAG）任务清单 tasks.md，标注任务依赖与可并行的 Wave 分组。触发场景："帮我拆一下任务""按这份 spec 生成任务清单""这些任务谁先谁后""能并行开发吗""任务依赖关系是什么"。上承 spec-analyze 产出的 spec.md（spec.md 还不存在或需求本身不清晰，应先跑 spec-analyze），下接 spec-impl 按此 tasks.md 实施。
+description: 任务拆解 - 把已写好的 Spec 文档（spec.md）按数据层/核心逻辑层/接口层拆成有向无环图（DAG）任务清单 tasks.md，标注任务依赖与可并行的 Wave 分组。上承 spec-analyze 产出的 spec.md（spec.md 还不存在或需求本身不清晰，应先跑 spec-analyze），下接 spec-impl 按此 tasks.md 实施。
+when_to_use: |
+  触发场景："帮我拆一下任务""按这份 spec 生成任务清单""这些任务谁先谁后""能并行开发吗""任务依赖关系是什么"。
 tools: Read, Write, Bash
 color: blue
 ---

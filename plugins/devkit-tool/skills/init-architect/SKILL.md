@@ -1,6 +1,8 @@
 ---
 name: init-architect
-description: 初始化/更新**整个代码库**的 AI 上下文：生成根级 CLAUDE.md（守 200 行）+ .claude/rules/{topic}.md（横切规则，自动加载，用 paths frontmatter 条件生效）+ 模块级 CLAUDE.md；分阶段遍历并回报覆盖率，可增量续跑。Use when：用户说"初始化项目"、"生成 CLAUDE.md"、"分析这个代码库"、"补一份项目文档给 AI 看"、"CLAUDE.md 太长了要拆"、"怎么组织 .claude/rules"、"规则要不要按路径生效"。区别于 key-module-analysis（只深挖单个已锁定的关键模块出深度文档包，不生成 CLAUDE.md）。
+description: 初始化/更新**整个代码库**的 AI 上下文：生成根级 CLAUDE.md（守 200 行）+ .claude/rules/{topic}.md（横切规则，自动加载，用 paths frontmatter 条件生效）+ 模块级 CLAUDE.md；分阶段遍历并回报覆盖率，可增量续跑。区别于 key-module-analysis（只深挖单个已锁定的关键模块出深度文档包，不生成 CLAUDE.md）。
+when_to_use: |
+  用户说"初始化项目"、"生成 CLAUDE.md"、"分析这个代码库"、"补一份项目文档给 AI 看"、"CLAUDE.md 太长了要拆"、"怎么组织 .claude/rules"、"规则要不要按路径生效"。
 tools: Read, Write, Glob, Grep
 color: orange
 ---

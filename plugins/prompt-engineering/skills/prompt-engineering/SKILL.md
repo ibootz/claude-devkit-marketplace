@@ -1,6 +1,8 @@
 ---
 name: prompt-engineering
-description: 适用于用户需要"优化提示词""改写 prompt/system prompt""为命令、钩子、技能、子代理写提示词正文""提升 LLM 输出质量、稳定性与一致性""补 few-shot 示例""构建提示词模板""降低幻觉或跑偏"时；只管提示词的措辞与结构（示例、思维链、说服原则、上下文取舍），frontmatter 字段与目录结构等载体规范见 plugin-dev 对应 skill。
+description: 只管提示词的措辞与结构（示例、思维链、说服原则、上下文取舍）——为命令、钩子、技能、子代理设计、评审、迭代生产级提示词。frontmatter 字段与目录结构等载体规范见 plugin-dev 对应 skill。
+when_to_use: |
+  用户需要"优化提示词""改写 prompt/system prompt""为命令、钩子、技能、子代理写提示词正文""提升 LLM 输出质量、稳定性与一致性""补 few-shot 示例""构建提示词模板""降低幻觉或跑偏"时。
 ---
 
 # 提示词工程 - Prompt Engineering

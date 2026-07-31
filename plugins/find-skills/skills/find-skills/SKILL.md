@@ -1,6 +1,8 @@
 ---
 name: find-skills
-description: Discovers and installs new skills from the open agent skills ecosystem. Use when the user asks "how do I do X", "find a skill for X", "is there a skill that can...", "can you do X" for a specialized capability, wants to search for tools/templates/workflows, or names a domain they wish they had help with (design, testing, deployment, etc.) and no matching skill is installed yet. Not for an already-installed skill that errors, is outdated, or behaves wrong — that's the heal skill's job, not this one.
+description: Discovers and installs new skills from the open agent skills ecosystem. Not for an already-installed skill that errors, is outdated, or behaves wrong — that's the heal skill's job, not this one.
+when_to_use: |
+  The user asks "how do I do X", "find a skill for X", "is there a skill that can...", "can you do X" for a specialized capability, wants to search for tools/templates/workflows, or names a domain they wish they had help with (design, testing, deployment, etc.) and no matching skill is installed yet.
 ---
 
 # Find Skills

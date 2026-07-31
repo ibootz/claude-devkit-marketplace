@@ -1,6 +1,8 @@
 ---
 name: spec-impl
-description: 任务实施 - 读取 spec-tasks 产出的 tasks.md，按 DAG 依赖顺序、1-3 个任务并发实施代码、自测并写实现日志 impl.md。触发场景："开始按任务清单开发""实现这些任务""按 tasks.md 跑起来""继续下一批任务"。预设 tasks.md 已存在——没有则先跑 spec-tasks 生成；实施完成后可转 spec-review 核对代码与 spec/tasks 是否一致，本 skill 本身不做审查。
+description: 任务实施 - 读取 spec-tasks 产出的 tasks.md，按 DAG 依赖顺序、1-3 个任务并发实施代码、自测并写实现日志 impl.md。预设 tasks.md 已存在——没有则先跑 spec-tasks 生成；实施完成后可转 spec-review 核对代码与 spec/tasks 是否一致，本 skill 本身不做审查。
+when_to_use: |
+  触发场景："开始按任务清单开发""实现这些任务""按 tasks.md 跑起来""继续下一批任务"。
 tools: Read, Write, Bash
 color: blue
 ---

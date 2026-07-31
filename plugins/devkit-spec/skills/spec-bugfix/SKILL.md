@@ -1,6 +1,8 @@
 ---
 name: spec-bugfix
-description: 缺陷修复 - 触发短语：修 bug、排查问题、定位并修复 issue、线上报错、点了没反应；对已知或原因未知的缺陷做统一诊断、必要时用 git worktree 隔离修复、并验证收尾。与 spec-impl 的区别：spec-impl 是照 tasks.md 做新功能实现，本 skill 独立于该 DAG 流水线之外专修缺陷——仅当已有 Spec 文档时才对照它核对预期行为，没有 Spec 也能直接进入诊断。
+description: 缺陷修复 - 对已知或原因未知的缺陷做统一诊断、必要时用 git worktree 隔离修复、并验证收尾。与 spec-impl 的区别：spec-impl 是照 tasks.md 做新功能实现，本 skill 独立于该 DAG 流水线之外专修缺陷——仅当已有 Spec 文档时才对照它核对预期行为，没有 Spec 也能直接进入诊断。
+when_to_use: |
+  触发短语：修 bug、排查问题、定位并修复 issue、线上报错、点了没反应。
 tools: Read, Write, Bash
 color: red
 ---

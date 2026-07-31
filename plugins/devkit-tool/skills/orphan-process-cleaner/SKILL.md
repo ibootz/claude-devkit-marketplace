@@ -1,6 +1,8 @@
 ---
 name: orphan-process-cleaner
-description: "查找与清理游离的 Claude Code 子进程——用 run_in_background 启动、因会话压缩/清屏/重启丢失 Task 句柄但仍在运行的后台服务。Use when: 用户说\"有没有游离进程\"、\"清理孤儿进程\"、\"之前启动的服务还在跑\"、\"会话压缩后丢失了后台任务\"、\"背景任务引用丢失\"、\"TaskList 找不到但进程还在\"、\"cleanup orphan\"。仅适用于 Linux/WSL（GNU ps/pstree 语法）：macOS 上 `ps --ppid`、`ps -o cmd`、`pstree` 均实测不可用，macOS 场景不要套用本 skill。"
+description: "查找与清理游离的 Claude Code 子进程——用 run_in_background 启动、因会话压缩/清屏/重启丢失 Task 句柄但仍在运行的后台服务。仅适用于 Linux/WSL（GNU ps/pstree 语法）：macOS 上 `ps --ppid`、`ps -o cmd`、`pstree` 均实测不可用，macOS 场景不要套用本 skill。"
+when_to_use: |
+  用户说"有没有游离进程"、"清理孤儿进程"、"之前启动的服务还在跑"、"会话压缩后丢失了后台任务"、"背景任务引用丢失"、"TaskList 找不到但进程还在"、"cleanup orphan"。
 ---
 
 # Orphan Process Cleaner（游离进程清理）

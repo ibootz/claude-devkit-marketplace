@@ -1,6 +1,8 @@
 ---
 name: deps-investigator
-description: "查看/读取第三方依赖（Maven jar、node_modules）源码，定位版本差异或第三方行为导致的 bug；不分析本仓库自有代码。Use when: 用户需要\"看依赖源码\"、\"查第三方库实现\"、\"读 jar 包源码\"、\"看 node_modules 代码\"、\"查依赖版本差异\"、\"排查第三方库行为\"、\"定位依赖中的 bug\"、\"查某个类的实现\"。区别于 key-module-analysis（只分析本仓库自有模块）。"
+description: "查看/读取第三方依赖（Maven jar、node_modules）源码，定位版本差异或第三方行为导致的 bug；不分析本仓库自有代码。区别于 key-module-analysis（只分析本仓库自有模块）。"
+when_to_use: |
+  用户需要"看依赖源码"、"查第三方库实现"、"读 jar 包源码"、"看 node_modules 代码"、"查依赖版本差异"、"排查第三方库行为"、"定位依赖中的 bug"、"查某个类的实现"。
 ---
 
 # Deps Investigator Skill（依赖源码读取）

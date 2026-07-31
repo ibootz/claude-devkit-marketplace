@@ -1,6 +1,8 @@
 ---
 name: spec-review
-description: 一致性审查 - 对照 spec.md、tasks.md、impl.md 与实际实现代码，用多 LLM 并行审查规范完整性、实现一致性、代码质量与风险，产出带优先级的问题清单报告。触发场景："审查一下这次实现""代码跟 spec 对得上吗""review 一下这个 spec 目录""检查任务清单和代码是否一致"。通常跑在 spec-impl 完成之后，是流水线末端的质检环节，只出报告、不改代码。
+description: 一致性审查 - 对照 spec.md、tasks.md、impl.md 与实际实现代码，用多 LLM 并行审查规范完整性、实现一致性、代码质量与风险，产出带优先级的问题清单报告。通常跑在 spec-impl 完成之后，是流水线末端的质检环节，只出报告、不改代码。
+when_to_use: |
+  触发场景："审查一下这次实现""代码跟 spec 对得上吗""review 一下这个 spec 目录""检查任务清单和代码是否一致"。
 tools: Read, Write, Bash
 color: blue
 ---

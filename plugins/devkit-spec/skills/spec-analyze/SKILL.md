@@ -1,6 +1,8 @@
 ---
 name: spec-analyze
-description: 需求分析 - 把一句话/模糊想法，通过结构化提问、代码调研（现状扫描+历史教训+影响面）与多 LLM 并行分析，收敛成正式 Spec 文档（spec.md）。触发场景："我想做个 XXX 功能但还没想清楚""帮我理一下这个需求""这个功能的范围是什么""写一份需求文档/spec"，或需求边界、技术约束、优先级不明确需要先澄清时。是 spec 系列流水线的第一站，产出 spec.md 供 spec-tasks 拆解任务；若已有清晰 spec.md 只想拆任务，应转 spec-tasks 而非本 skill。
+description: 需求分析 - 把一句话/模糊想法，通过结构化提问、代码调研（现状扫描+历史教训+影响面）与多 LLM 并行分析，收敛成正式 Spec 文档（spec.md）。是 spec 系列流水线的第一站，产出 spec.md 供 spec-tasks 拆解任务；若已有清晰 spec.md 只想拆任务，应转 spec-tasks 而非本 skill。
+when_to_use: |
+  触发场景："我想做个 XXX 功能但还没想清楚""帮我理一下这个需求""这个功能的范围是什么""写一份需求文档/spec"，或需求边界、技术约束、优先级不明确需要先澄清时。
 tools: Read, Write, Bash
 color: blue
 ---

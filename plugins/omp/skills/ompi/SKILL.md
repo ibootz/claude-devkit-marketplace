@@ -1,10 +1,11 @@
 ---
 name: omp
 description: >
-  触发词：调用 omp、使用 omp 子代理、omp 编码、omp 探索、omp 规划、omp 重构、omp 实现。
   指挥 omp 命名子代理（omp-explore / omp-plan / omp-task）执行实际工作。
   你作为 Orchestrator 只负责理解需求、拆解任务、派发子代理、审阅结果；
   所有读文件、写代码、搜索、分析、规划等动手工作必须通过 Agent 工具委托给对应命名子代理。
+when_to_use: |
+  触发词：调用 omp、使用 omp 子代理、omp 编码、omp 探索、omp 规划、omp 重构、omp 实现。
 ---
 
 # 通过 omp 命名子代理完成任务
