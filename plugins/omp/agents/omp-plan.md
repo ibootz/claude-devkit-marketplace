@@ -32,5 +32,5 @@ omp -p --model "$(omp config get modelRoles | jq -r .plan)" --tools "task,read,w
 ## 约束
 
 - 侧重设计层面，不直接写实现代码
-- 建议先用 omp-explore 了解现有代码再规划
+- 若派发 prompt 未附现有代码的探索结论，先在自己的只读权限内摸清必要上下文再规划
 - 计划输出可直接作为 omp-task 子代理的输入

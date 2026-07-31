@@ -1,6 +1,6 @@
 ---
 name: spec-review
-description: 审查规范完整性、实现与规范的一致性，使用多 LLM 并行分析
+description: 一致性审查 - 对照 spec.md、tasks.md、impl.md 与实际实现代码，用多 LLM 并行审查规范完整性、实现一致性、代码质量与风险，产出带优先级的问题清单报告。触发场景："审查一下这次实现""代码跟 spec 对得上吗""review 一下这个 spec 目录""检查任务清单和代码是否一致"。通常跑在 spec-impl 完成之后，是流水线末端的质检环节，只出报告、不改代码。
 tools: Read, Write, Bash
 color: blue
 ---
@@ -22,6 +22,7 @@ color: blue
 2. 读取 tasks.md（任务清单，如有）
 3. 读取 impl.md（实现日志，如有）
 4. 收集实现代码（根据 tasks.md 和 impl.md 中的文件列表）
+5. 若 tasks.md 或 impl.md 尚不存在（如只完成了 spec 阶段），仅审查已具备的文件，并在报告"审查范围"里注明范围收窄的原因
 
 ### 阶段 2：多 LLM 并行审查
 
@@ -118,7 +119,7 @@ color: blue
 
 ## 输出
 
-综合审查报告（Markdown 格式，输出到聊天）
+综合审查报告（Markdown 格式，输出到聊天）。本 skill 只读代码与文档、只出报告，不直接改代码——审查发现的问题若需要修复，交给 `spec-impl`（功能/任务范围内）或 `spec-bugfix`（缺陷修复）处理。
 
 ## 使用示例
 

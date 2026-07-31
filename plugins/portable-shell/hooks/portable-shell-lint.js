@@ -1,14 +1,17 @@
 // portable-shell-lint.js — PostToolUse hook
-// 目的：当 AI 通过 Write/Edit/MultiEdit 生成 shell 脚本时，扫描其中在
-//       Linux(GNU coreutils) 与 macOS(BSD userland + 默认 bash 3.2) 之间
-//       不可移植的写法；命中即通过「stderr + exit 2」把违规点与可移植改法
-//       回灌给 Claude，促其立即修正，从而确保脚本同时兼容 Linux 与 macOS。
+// 目的：AI 用 Write/Edit/MultiEdit 生成 shell 脚本时，扫描 Linux(GNU coreutils)
+//       与 macOS(BSD userland + 默认 bash 3.2) 之间不可移植的写法；命中即把
+//       违规点与可移植改法通过 stderr + exit 2 回灌给 Claude，促其立即修正。
 //
 // Trigger: PostToolUse（matcher: Write|Edit|MultiEdit）
-// 反馈机理: 退出码 2 时 stderr 被喂回给 Claude（文件已写入，不回滚，仅促修正）
+// 反馈机理：exit 2 时 stderr 被喂回给 Claude；文件此时已写入、不会回滚，
+//           这不是拦截阻断，是「写完再改」的一次性提醒——不重试、不循环。
 // Opt-out: 环境变量 PORTABLE_SHELL_LINT=off（或 0 / false）时跳过检查
 //
 // 本 hook 只读取被写入的脚本文本做静态扫描，不修改任何用户文件，无副作用。
+// 已知局限（判据本身的问题，不在本次文本改写范围内，供后续跟进）：
+// RULES 的正则只做「去注释后的单行匹配」，不解析字符串/heredoc 上下文，
+// 例如 echo "grep -P ..." 这类把命中词写在字符串里的场景会被误判为真实调用。
 
 'use strict'
 
@@ -187,24 +190,24 @@ const SEV_ORDER = { high: 0, med: 1, low: 2 }
 function buildReport(filePath, findings) {
   findings.sort((a, b) => SEV_ORDER[a.sev] - SEV_ORDER[b.sev] || a.lineNo - b.lineNo)
   const head =
-    '[portable-shell] 检测到可能在 Linux 或 macOS 上不可移植的 shell 写法，请修正后再交付' +
-    '（本插件要求生成的脚本同时兼容 Linux 与 macOS）。\n' +
+    '[portable-shell] 检测到疑似跨平台不可移植写法（Linux/GNU 与 macOS/BSD 语义不同或缺失）。' +
+    '文件已写入、这条反馈不会回滚它——请按下面每条的「改法」直接用 Edit 改到位。\n' +
     '目标文件：' + (filePath || '(未知)') + '\n'
 
   const body = findings
     .map((f) => {
       return (
-        `【${SEV_LABEL[f.sev]}】${f.title}\n` +
-        `  ↳ 第 ${f.lineNo} 行命中：${f.snippet}\n` +
-        `  ↳ 可移植改法：${f.fix}`
+        `【${SEV_LABEL[f.sev]}｜第${f.lineNo}行】改法：${f.fix}\n` +
+        `  ↳ 命中：${f.snippet}\n` +
+        `  ↳ 判据：${f.title}`
       )
     })
     .join('\n\n')
 
   const tail =
-    '\n\n若确需使用某平台专有特性，请在脚本内用 ' +
-    '`case "$(uname -s)" in Darwin) ... ;; Linux) ... ;; esac` 分支处理并显式说明原因。\n' +
-    '关闭本检查：设置环境变量 PORTABLE_SHELL_LINT=off。'
+    '\n\n确需保留某个平台专有写法：用 ' +
+    '`case "$(uname -s)" in Darwin) ... ;; Linux) ... ;; esac` 分支处理并注释原因。\n' +
+    '本检查开关（需用户在自己环境设置，AI 不应替用户决定关闭）：环境变量 PORTABLE_SHELL_LINT=off。'
 
   return head + '\n' + body + tail
 }

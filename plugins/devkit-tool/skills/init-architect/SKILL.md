@@ -1,6 +1,6 @@
 ---
 name: init-architect
-description: 初始化项目、分析代码库、生成 CLAUDE.md 与 .claude/rules/ - 自适应初始化：根级简明（守 200 行）+ .claude/rules/{topic}.md 承载横切规则（自动加载，用 paths frontmatter 条件生效）+ 模块级详尽；分阶段遍历并回报覆盖率。Use when：用户说"初始化项目"、"生成 CLAUDE.md"、"分析这个代码库"、"补一份项目文档给 AI 看"、"CLAUDE.md 太长了要拆"、"怎么组织 .claude/rules"、"规则要不要按路径生效"。
+description: 初始化/更新**整个代码库**的 AI 上下文：生成根级 CLAUDE.md（守 200 行）+ .claude/rules/{topic}.md（横切规则，自动加载，用 paths frontmatter 条件生效）+ 模块级 CLAUDE.md；分阶段遍历并回报覆盖率，可增量续跑。Use when：用户说"初始化项目"、"生成 CLAUDE.md"、"分析这个代码库"、"补一份项目文档给 AI 看"、"CLAUDE.md 太长了要拆"、"怎么组织 .claude/rules"、"规则要不要按路径生效"。区别于 key-module-analysis（只深挖单个已锁定的关键模块出深度文档包，不生成 CLAUDE.md）。
 tools: Read, Write, Glob, Grep
 color: orange
 ---
@@ -49,7 +49,7 @@ color: orange
     - 根级结构（精简而全局）：
       - 项目愿景
       - 架构总览
-      - **✨ 新增：模块结构图（Mermaid）**
+      - **模块结构图（Mermaid）**
         - 在"模块索引"表格**上方**，根据识别出的模块路径，生成一个 Mermaid `graph TD` 树形图。
         - 每个节点应可点击，并链接到对应模块的 `CLAUDE.md` 文件。
         - 示例语法：
@@ -73,7 +73,7 @@ color: orange
       - 编码规范
       - AI 使用指引
       - 变更记录 (Changelog)
-    - **体积纪律**：根级 `CLAUDE.md` 是**每会话无条件全量注入**的，控制在 200 行以内。逼近上限时**把细节拆到 `.claude/rules/`（见第 2 步），不要靠压缩正文腾行数**——压缩会丢掉因果链、`file:行号` 引用与边界示例，表面合规但作为纪律文档已失效。装了 `working-discipline` 插件的项目里，写超 200 行会被 `write-guard` 直接阻断。
+    - **体积纪律**：根级 `CLAUDE.md` 每会话无条件全量注入，硬上限 200 行——装了 `working-discipline` 插件的项目里，写超 200 行会被 `write-guard` 直接阻断。逼近上限时**把细节拆到 `.claude/rules/`（见第 2 步），不要靠压缩正文腾行数**：压缩会丢掉因果链、`file:行号` 引用与边界示例，表面合规但纪律文档已失效。
     - 上面 8 个小节里，「测试策略」「编码规范」这两节最容易膨胀，且往往只对特定目录成立——它们是首选的拆分对象。
 
 2.  **写入 `.claude/rules/{topic}.md`（多关注点项目必做，单一关注点小项目跳过）**
@@ -102,7 +102,7 @@ color: orange
 3.  **写入模块级 `CLAUDE.md`**
     - **与 `.claude/rules/` 的分工**（别把同一条规则写两遍）：模块级 `CLAUDE.md` 在 Claude 于该目录下工作时自动加载，写的是**这个模块是什么**（职责、入口、接口、数据模型）；`.claude/rules/{topic}.md` 写的是**跨模块的横切规则**（风格、测试、安全约定），用 `paths` 限定生效范围。判断标准：内容是在描述某个具体模块 → 模块级 `CLAUDE.md`；是在规定"改这类文件时该怎么做" → rules。
     - 放在每个模块目录下，结构建议：
-      - **✨ 新增：相对路径面包屑**
+      - **相对路径面包屑**
         - 在每个模块 `CLAUDE.md` 的**最顶部**，插入一行相对路径面包屑，链接到各级父目录及根 `CLAUDE.md`。
         - 该面包屑与根级那张 Mermaid 图一样，**只服务人类读者**在编辑器/GitHub 里跳转，不承担加载职责——模块级 `CLAUDE.md` 的加载条件是"Claude 正在该目录下工作"，与有没有链接无关。
         - 示例（位于 `packages/auth/CLAUDE.md`）：
@@ -134,7 +134,7 @@ color: orange
 - `.claude/rules/` 产出清单：每个文件的 `topic` 与 `paths`，并显式标出哪些是无条件加载（无 `paths`）——让用户一眼看出常驻上下文的规则有多少；若本次判定为"单一关注点、不建 rules"，说明该判定；
 - 模块列表（路径+一句话职责）；
 - 覆盖率与主要缺口；
-- 若未读全：说明"为何到此为止"，并列出**推荐的下一步**（例如"建议优先补扫：packages/auth/src/controllers、services/audit/migrations"）。
+- 若未读全：按第二节阶段 C 的规则说明"为何到此为止"，并列出**推荐的下一步**（例如"建议优先补扫：packages/auth/src/controllers、services/audit/migrations"）。
 
 ## 六、时间格式与使用
 

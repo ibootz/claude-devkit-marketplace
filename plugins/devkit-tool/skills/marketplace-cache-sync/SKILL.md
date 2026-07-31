@@ -1,11 +1,13 @@
 ---
 name: marketplace-cache-sync
-description: 拉取 Claude Code 已配置的插件市场(marketplace)最新代码，刷新已启用插件(enabled plugin)的本地缓存版本(含 user scope 与 project/local scope 两种安装范围)，并在刷新后回收缓存磁盘占用。Use when：用户说"更新一下插件市场"、"拉取 marketplace 最新代码"、"刷新插件缓存"、"plugin 装的新版本怎么不生效"、"skill 改了但没同步过来"、"市场 lastUpdated 变了/没变是不是真的更新了"、"marketplace update 之后要不要重启"、"插件缓存占了多少空间"、"清理插件缓存"、"cache 目录太大"、"temp_git_ 开头的目录能删吗"、"历史版本缓存能不能删"、"reload-plugins 够不够还是必须重启"、"reload 完 hook 还是旧的"、"某个项目里装的插件版本没跟着更新"、"project scope 的插件怎么刷新"、"这个插件只在某个项目里装了，全局刷新覆盖不到"。内容基于两次真实全量执行(17 个 marketplace + 25 个 enabled plugin，2026-07-29 复跑)以及一次 project/local scope 专项验证(2026-07-30，8 个仅装在 project/local scope、从未装过 user scope 的插件 id)验证过，覆盖两层模型(marketplace 源 vs 已启用插件缓存)、批量刷新写法、project/local scope 插件的按 (id, projectPath) 逐条刷新、缓存清理的白名单差集算法，以及非纯 git 市场 / lastUpdated 语义不可作判据 / zsh 分词导致循环失效 / zsh 绑定变量名覆写 PATH / reload-plugins 不重放 SessionStart / `--scope project` 靠 cwd 隐式定位且不匹配时静默假成功 等已复现的坑。
+description: 拉取 Claude Code 已配置的插件市场(marketplace)最新代码，刷新已启用插件(enabled plugin)的本地缓存版本(含 user scope 与 project/local scope 两种安装范围)，并在刷新后回收缓存磁盘占用。Use when：用户说"更新一下插件市场"、"拉取 marketplace 最新代码"、"刷新插件缓存"、"plugin 装的新版本怎么不生效"、"skill 改了但没同步过来"、"市场 lastUpdated 变了/没变是不是真的更新了"、"marketplace update 之后要不要重启"、"插件缓存占了多少空间"、"清理插件缓存"、"cache 目录太大"、"temp_git_ 开头的目录能删吗"、"历史版本缓存能不能删"、"reload-plugins 够不够还是必须重启"、"reload 完 hook 还是旧的"、"某个项目里装的插件版本没跟着更新"、"project scope 的插件怎么刷新"、"这个插件只在某个项目里装了，全局刷新覆盖不到"。
 ---
 
 # Marketplace Cache Sync（插件市场与插件缓存刷新）
 
 把"更新插件市场"这件事拆成两层动作依次执行，并在核实每一层是否真的生效时避开已知的误判坑。
+
+**验证基础**：内容来自两次真实全量执行（17 个 marketplace + 25 个 enabled plugin，2026-07-29 复跑）+ 一次 project/local scope 专项验证（2026-07-30，8 个仅装在 project/local scope、从未装过 user scope 的插件 id），覆盖两层模型（marketplace 源 vs 已启用插件缓存）、批量刷新写法、project/local scope 按 (id, projectPath) 逐条刷新、缓存清理白名单差集算法，以及下方「已验证的坑」列出的各条已复现问题。
 
 ## 背景：两层状态，容易只做一半
 
@@ -57,7 +59,9 @@ echo a | while IFS= read -r path;  do jq --version; done   # command not found: 
 echo a | while IFS= read -r ipath; do jq --version; done   # jq-1.7.1
 ```
 
-**必须串行执行，不能并发派发**：`claude plugin update` 会读改写共享的单个文件 `~/.claude/plugins/installed_plugins.json`，多个进程同时跑存在写竞态——后写完的会覆盖先写完的那条记录，可能导致某些插件的刷新结果丢失。`claude plugin update` 没有 `--all`/批量参数，一次只能指定一个 `<plugin>@<marketplace>`，只能像上面这样自己拼循环。
+**必须串行执行，不能并发派发**：`claude plugin update` 会读改写共享的单个文件 `~/.claude/plugins/installed_plugins.json`，多个进程同时跑存在写竞态——后写完的会覆盖先写完的那条记录，可能导致某些插件的刷新结果丢失。
+
+（`claude plugin update` 没有 `--all`/批量参数，一次只能指定一个 `<plugin>@<marketplace>`，只能像上面这样自己拼循环。）
 
 插件数量多（25 个左右）时整个循环耗时数分钟，同样用 `run_in_background` 起后台任务。
 
@@ -180,16 +184,16 @@ xargs rm -rf < /tmp/cache_orphan.txt
 |------|----------|----------|
 | 想用 `known_marketplaces.json` 里的 `lastUpdated` 判断某个市场是否真的拉到了新代码 | **`lastUpdated` 两个变化方向都已观测到反例，不可作为判据。** 方向一（首次执行时记录）：回执 `✔ Successfully updated N marketplace(s)` 但某市场 `lastUpdated` 没变，当时结论是"该市场已是最新，字段语义为上次真正拉到新内容的时间"，在两个纯 GitHub 源市场稳定复现。方向二（2026-07-29 复跑时观测）：17 个市场的 `lastUpdated` **全部**前移到同一分钟区间（`01:21`~`01:23`），无一例外，但其中 `karpathy-skills` 的本地 HEAD 仍是 `2c60614`、提交日期 `2026-04-20`（三个月前），且前一天已经更新过一轮、本地早该到位——时间戳前移并未对应任何新内容。两次观测互相矛盾，最可能的解释是 CLI 版本之间改过写入语义（从"拉到新内容才写"变成"每次成功检查都写"），也不排除与市场源类型有关 | 只信 HEAD，不信时间戳。更新**前**先存一份快照：`git -C ~/.claude/plugins/marketplaces/<name> rev-parse HEAD`，更新后再取一次对比；或用 `git -C 同目录 ls-remote origin <branch>` 与本地 HEAD 比对。**既不要**因为 `lastUpdated` 变了就判定"拉到了新代码"，**也不要**因为它没变就判定失败——两种推断都已被实测推翻 |
 | 想用 `git -C ~/.claude/plugins/marketplaces/<name> log` 核实某市场是否最新，报错 `fatal: not a git repository` | 不是所有市场都是纯 git clone。例如官方 `claude-plugins-official`：即使 `known_marketplaces.json` 里登记的 `source` 字段写的是 `github`，其本地目录下实际没有 `.git`，只有一个 `.gcs-sha` 文件——它按内容哈希做整体快照同步，不是逐 commit 拉取 | 先 `ls -la ~/.claude/plugins/marketplaces/<name>` 看有没有 `.git` 目录；没有就别拿 git 命令去验真伪，直接看 CLI 回执，或对比 `installed_plugins.json` 里该市场旗下插件的 `gitCommitSha`/`lastUpdated` 字段变化 |
-| `claude plugin update <plugin>` 找不到批量刷新的写法 | CLI 本身没有 `--all` 之类的参数，设计上一次只处理一个 `<plugin>@<marketplace>` | 只能枚举 `claude plugin list --json` 里 `enabled: true` 的 id 后自己拼循环（见第三步） |
-| 同一插件在 `installed_plugins.json` 里出现好几条记录，`version`/`installPath` 都相同 | 同一个插件在不同项目目录分别 `enable` 过，每次 enable 会在对应 `scope`（`project`/`user`）各记一条，但共用同一份缓存目录 | 只需对这个 `<plugin>@<marketplace>` id 跑一次 `claude plugin update`，不用按出现的项目数重复刷 |
-| 刷新了缓存，当前会话里 skill/hook 行为却没有变化 | 缓存刷新不会热更新到正在运行的进程里 | 先跑 `/reload-plugins`（实测能让 skill / agent / hook 脚本、以及新增的 `PreToolUse` / `PostToolUse` / `UserPromptSubmit` 挂载点立即生效），再看下一轮的实际行为是否变了；只有涉及 `SessionStart` / `SessionEnd` / `PreCompact` 这类生命周期挂载点时才必须重启（见第四步表格） |
-| 跑完 `/reload-plugins` 后，每轮 hook 注入已经是新版的"指针"文本，但它引用的那份静态主体内容压根不在上下文里 | 新版本把静态内容下沉到了 `SessionStart`，而 `/reload-plugins` **不重放**会话生命周期事件，旧版本又没有这个挂载点——于是每轮层已换新、会话层从未投放，形成割裂状态。实测 `working-discipline` 3.0.0 → 3.2.0 就是这个形态：新版每轮那句"一～六章已在会话开始注入"在 reload 后的本会话里**不成立** | 涉及 `SessionStart` 类挂载点变动时直接重启会话；或等一次 auto-compact，`SessionStart:compact` 会把它补上。判断依据是**看新版本 `plugin.json` 的 `hooks` 里有没有生命周期事件**，不是看 reload 回执 |
-| 核验循环里所有 `jq` / `sort` / `wc` / `comm` 突然 `command not found`，但循环之前同样的命令刚跑成功过 | 循环变量取名 `path`，撞上 zsh 的 `typeset -T PATH path` 绑定，第一次迭代就把 `$PATH` 覆盖成了一个目录字符串。`fpath` / `cdpath` / `manpath` / `fignore` / `mailpath` / `module_path` 同理。第三步与第五步的核验循环都要读 `installPath`，是高发位置 | 改用带语义前缀的变量名（`ipath` / `_p` / `orphan_dir`）。复现：`echo a \| while IFS= read -r path; do jq --version; done` 报 not found，换成 `ipath` 正常。这类失败**无副作用**（PATH 只在该 Bash 调用的子 shell 内被破坏，不影响后续调用），改名重跑即可 |
-| 第三步的循环只跑了一次就整体失败，报 `Plugin "<第一个插件名>" not found`，可那个插件明明装着 | 用了 `for p in $plugins` 这种依赖单词分割的写法。macOS 上 Claude Code 的 Bash 工具走 zsh，zsh 默认**不对未加引号的变量做单词分割**，25 行的插件清单被当成一个 token 传给 CLI | 改成落地临时文件后 `while IFS= read -r p` 逐行读（见第三步）。这类失败**无副作用**——CLI 在 id 校验阶段就退出，没有写 `installed_plugins.json`、没有刷新任何插件，修好写法直接重跑即可 |
-| 第三步的循环整体跑完、回执看着都正常滚过去了，但某个只在项目目录里装过的插件（从未在 `user` scope 装过）实际上完全没被刷新 | 第三步 `claude plugin update "$p"` 没带 `--scope`，CLI 默认 `--scope user`（见 `claude plugin update --help`）。对只有 `project`/`local` scope 记录的 id，这条命令会 `exit=1` 并报 `Plugin "<name>" is not installed at scope user`，但循环本身不检查退出码，失败和成功一起滚屏而过。2026-07-30 实测复现 8 个这样的 id（`aisdlc-cust-extension@aisdlc-cust-extension` 等，见「第三步补充」） | 判定式 `jq -r '.plugins \| to_entries[] \| select(.value \| map(.scope) \| index("user") \| not) \| .key' ~/.claude/plugins/installed_plugins.json`，命中的 id 都要走「第三步补充」的 project/local scope 专项刷新，不能指望第三步的常规循环覆盖到 |
-| 对某个 project scope 插件跑 `claude plugin update --scope project <id>`，回执 `already at the latest version`，但其实完全没有更新到真正需要的那个项目 | `--scope project`/`--scope local` 靠**当前工作目录**隐式定位目标项目，不接受显式路径参数；当 cwd 不匹配任何该 id 的 project/local scope 记录时，命令**不报错**，只是打印看似成功的回执、对 `installed_plugins.json` 零改动。2026-07-30 实测：在与目标插件完全无关的目录下跑这条命令，回执"已是最新"，但更新前后 `installed_plugins.json` 的 diff 是 0 行 | 必须先 `cd` 进该 (id, projectPath) 记录**自己的** `projectPath` 再执行（见「第三步补充」的 `(cd "$ppath" && claude plugin update --scope "$pscope" "$pid")` 写法），核实靠写后回读——diff 刷新前后的快照，确认该记录的 `version`/`gitCommitSha`/`lastUpdated` 三者都变了，而不是只看命令回执文字 |
-| `cache/` 目录体积远大于所有已启用插件之和（实测 2.9G） | 存在 `temp_git_<毫秒时间戳>_<随机后缀>` 形态的临时克隆残留目录，是安装/更新过程的中间产物没被清掉。实测 13 个占 1.8G，接近总量一半；它们在 `known_marketplaces.json` 与 `installed_plugins.json` 里都是 0 处引用 | `grep -c 'temp_git' ~/.claude/plugins/known_marketplaces.json ~/.claude/plugins/installed_plugins.json` 两处都为 0 即确认孤立，可整批删除（见第五步 (a)） |
-| 清理历史版本缓存后，某个项目下的插件失效或被迫重新下载 | 按"每个插件只保留最新版本"删了。同一插件在不同项目目录（`scope: project`）会各自钉不同版本——实测 `sdlc@ai-sdlc` 有 12 条 project 记录横跨 4 个版本（`3.3.0`/`3.3.3`/`3.3.18`/`3.7.3`），"最新"只对当前项目成立 | 必须以 `installed_plugins.json` 里 `.plugins[][].installPath` 的**全集**为白名单做差集（见第五步 (b)）。jq 要展开两层 `.plugins[][]`，`.plugins` 的每个值是数组、每个 scope 一条记录，只取第一条会把在用版本误判成垃圾 |
+| `claude plugin update <plugin>` 找不到批量刷新的写法 | CLI 没有 `--all` 之类的参数（见 `--help`），设计上一次只处理一个 `<plugin>@<marketplace>` | 只能枚举 `enabled: true` 的 id 后自己拼循环（见第三步） |
+| 同一插件在 `installed_plugins.json` 里出现好几条记录，`version`/`installPath` 都相同 | 不同项目目录各 `enable` 过一次，各记一条 `scope` 记录，但共用同一份缓存目录（见第二步） | 只需跑一次 `claude plugin update`，不按项目数重复刷 |
+| 刷新了缓存，当前会话里 skill/hook 行为却没有变化 | 缓存刷新不热更新到运行中的进程里（见第四步） | 跑 `/reload-plugins`；只有涉及 `SessionStart` / `SessionEnd` / `PreCompact` 这类生命周期挂载点时才必须重启 |
+| 跑完 `/reload-plugins` 后，每轮 hook 注入已经是新版的"指针"文本，但它引用的那份静态主体内容压根不在上下文里 | 新版本把内容下沉到了 `SessionStart`，而 reload **不重放**生命周期事件（见第四步）。实测 `working-discipline` 3.0.0 → 3.2.0：reload 后本会话里那句"一～六章已在会话开始注入"**不成立** | 涉及 `SessionStart` 类挂载点变动必须重启会话，或等一次 auto-compact 补上；判据看新版 `plugin.json` 的 `hooks` 字段，不看 reload 回执 |
+| 核验循环里所有 `jq` / `sort` / `wc` / `comm` 突然 `command not found`，但循环之前同样的命令刚跑成功过 | 循环变量名撞上 zsh 的 `typeset -T PATH path` 绑定（见第三步「循环变量禁止命名为 `path`」） | 改用带语义前缀的变量名（`ipath` / `_p` / `orphan_dir`）改名重跑即可；PATH 只在该次 Bash 调用的子 shell 内被破坏，**不影响后续调用** |
+| 第三步的循环只跑了一次就整体失败，报 `Plugin "<第一个插件名>" not found`，可那个插件明明装着 | 用了 `for p in $plugins` 依赖单词分割的写法，zsh 默认不做单词分割（见第三步） | 改成 `while IFS= read -r p` 逐行读；这类失败**无副作用**——CLI 在 id 校验阶段就退出，没有写 `installed_plugins.json`、没有刷新任何插件，改好写法直接重跑即可 |
+| 第三步的循环整体跑完、回执看着都正常滚过去了，但某个只在项目目录里装过的插件（从未在 `user` scope 装过）实际上完全没被刷新 | `claude plugin update "$p"` 默认 `--scope user`，无 `user` scope 记录的 id 会 `exit=1` 但循环不检查退出码（机制与 8 个实测复现 id 见「第三步补充」） | 同一条 jq 判定式（见「第三步补充」），命中的 id 都要走 project/local scope 专项刷新，不能指望第三步的常规循环覆盖到 |
+| 对某个 project scope 插件跑 `claude plugin update --scope project <id>`，回执 `already at the latest version`，但其实完全没有更新到真正需要的那个项目 | `--scope project`/`--scope local` 靠 cwd 隐式定位、不接受路径参数，cwd 不匹配时不报错、只打印假成功回执（机制与 2026-07-30 实测 demo 见「第三步补充」） | 必须先 `cd` 进该记录**自己的** `projectPath` 再执行；核实靠写后回读 diff，确认 `version`/`gitCommitSha`/`lastUpdated` 三者都变了，而不是只信"already at the latest version"这句回执文字 |
+| `cache/` 目录体积远大于所有已启用插件之和（实测 2.9G） | `temp_git_*` 临时克隆残留没被清掉，13 个占 1.8G，在两份配置里都是 0 引用（见第五步 (a)） | `grep -c 'temp_git' ~/.claude/plugins/known_marketplaces.json ~/.claude/plugins/installed_plugins.json` 两处都为 0 即确认孤立，可整批删除 |
+| 清理历史版本缓存后，某个项目下的插件失效或被迫重新下载 | 按"每个插件只保留最新版本"删了。实测 `sdlc@ai-sdlc` 有 12 条 project 记录横跨 4 个版本（`3.3.0`/`3.3.3`/`3.3.18`/`3.7.3`），"最新"只对当前项目成立（见第五步 (b)） | 必须以 `.plugins[][].installPath` 的全集为白名单做差集，`.plugins[][]` 要展开两层，只取第一条会把在用版本误判成垃圾 |
 
 ## 验证清单
 

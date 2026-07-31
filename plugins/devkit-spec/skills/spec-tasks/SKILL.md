@@ -1,6 +1,6 @@
 ---
 name: spec-tasks
-description: 将 Spec 拆解为有向无环图（DAG）结构的任务清单，支持并行开发
+description: 任务拆解 - 把已写好的 Spec 文档（spec.md）按数据层/核心逻辑层/接口层拆成有向无环图（DAG）任务清单 tasks.md，标注任务依赖与可并行的 Wave 分组。触发场景："帮我拆一下任务""按这份 spec 生成任务清单""这些任务谁先谁后""能并行开发吗""任务依赖关系是什么"。上承 spec-analyze 产出的 spec.md（spec.md 还不存在或需求本身不清晰，应先跑 spec-analyze），下接 spec-impl 按此 tasks.md 实施。
 tools: Read, Write, Bash
 color: blue
 ---
@@ -23,6 +23,8 @@ color: blue
 1. **数据层**：数据库表结构、类型定义
 2. **核心逻辑层**：Repository、Service、业务逻辑
 3. **接口/交互层**：API 端点、UI 组件、外部接口
+
+若某层本次需求不涉及（如纯前端改动无数据层变更），直接省略该层任务，不必为凑够三层而硬拆。
 
 ### 阶段 3：DAG 依赖构建
 
@@ -92,6 +94,8 @@ color: blue
 ## 输出路径
 
 `<spec_dir>/tasks.md`（与 spec.md 同目录）
+
+上游：spec.md 由 `spec-analyze` 产出。下一步：交给 `spec-impl` 按此 tasks.md 实施。
 
 ## 使用示例
 

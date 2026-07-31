@@ -1,6 +1,6 @@
 ---
 name: orphan-process-cleaner
-description: "查找与清理游离的 Claude Code 子进程。Use when: 用户说\"有没有游离进程\"、\"清理孤儿进程\"、\"之前启动的服务还在跑\"、\"会话压缩后丢失了后台任务\"、\"背景任务引用丢失\"、\"TaskList 找不到但进程还在\"、\"cleanup orphan\"。适用于 Linux/WSL 环境，自动识别 claude 发起但已失去 Task 句柄的后台进程并安全终止。"
+description: "查找与清理游离的 Claude Code 子进程——用 run_in_background 启动、因会话压缩/清屏/重启丢失 Task 句柄但仍在运行的后台服务。Use when: 用户说\"有没有游离进程\"、\"清理孤儿进程\"、\"之前启动的服务还在跑\"、\"会话压缩后丢失了后台任务\"、\"背景任务引用丢失\"、\"TaskList 找不到但进程还在\"、\"cleanup orphan\"。仅适用于 Linux/WSL（GNU ps/pstree 语法）：macOS 上 `ps --ppid`、`ps -o cmd`、`pstree` 均实测不可用，macOS 场景不要套用本 skill。"
 ---
 
 # Orphan Process Cleaner（游离进程清理）
@@ -23,6 +23,8 @@ Claude Code 通过 `run_in_background: true` 启动 Bash 任务时，会创建�
 - 进程成为"孤儿"，占用端口和内存
 
 ## 执行工作流
+
+> **平台边界（已验证）**：以下命令是 GNU `ps`/`pstree` 语法，只适用于 Linux/WSL。macOS 自带 BSD `ps` 不支持 `--ppid` 过滤、不认 `-o cmd` 关键字，且默认不装 `pstree`——本机 macOS 25.5.0 实测三者均报错或未找到命令。macOS 上不要套用本节命令。
 
 ### 第一阶段：识别 Claude Code 进程树
 
@@ -75,7 +77,7 @@ ps -p <service_pid> 2>/dev/null || echo "已退出"
 kill -9 <service_pid>
 ```
 
-> **注意**：终止 zsh 壳（父进程）或直接终止服务进程（子进程）均可。推荐终止服务进程本身（java/node），更精准。
+> 优先终止服务进程本身（java/node），而不是父 zsh 壳：`kill <pid>` 只对目标 PID 生效，杀父 zsh 不保证子进程随之退出（除非改用进程组信号 `kill -- -<pgid>`，本流程未采用）；直接杀服务 PID 才能用 `ps -p <service_pid>` 立即核验结果。
 
 ## 快速诊断命令（一键扫描）
 
@@ -123,7 +125,7 @@ ps aux | grep "\bclaude\b" | grep -v grep | awk '{print $2, $11, $12}'
 
 | 错误 | 原因 | 修正 |
 |------|------|------|
-| kill 后进程仍存在 | Java/某些服务忽略 SIGTERM | 用 `kill -9` |
+| kill 后进程仍存在 | Java 类服务常见（见场景 1），忽略 SIGTERM | 用 `kill -9` |
 | 误杀在用服务 | 未确认是否仍在使用 | 终止前询问用户 |
 | 找不到游离进程 | claude 父进程已退出，孤儿被 init 接管 | `ps aux | grep "shell-snapshots"` |
 | PPID 对不上 | 多层进程嵌套 | 用 `pstree` 追溯根节点 |

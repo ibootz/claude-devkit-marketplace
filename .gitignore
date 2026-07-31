@@ -30,6 +30,7 @@ node_modules/
 **/__pycache__/
 .mypy_cache/
 .kiro/
-.claude
+.claude/*
+!.claude/rules/
 .gemini
 .qwen

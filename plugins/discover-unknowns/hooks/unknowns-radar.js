@@ -1,7 +1,8 @@
 // unknowns-radar.js — UserPromptSubmit hook
-// 每轮注入一段极短的"未知雷达"：只提醒"何时该想起发现未知的方法论"，
-// 具体执行细则全部留在 skill 里（/discover-unknowns、/brainstorm、/quiz）。
-// 刻意保持 4 条以内、路标级措辞，避免与 working-discipline 等每轮注入插件的指令重叠。
+// 每轮注入一段极短的"未知雷达"：4 条各给一个当轮可自检的触发条件（"没读过要改的
+// 模块""用户给了参考实现""长会话+要 merge/push"等），不用"任务含糊/领域陌生"这类
+// 无法自检的软提示；执行细则留在 skill 里（/discover-unknowns、/brainstorm、/quiz）。
+// 刻意保持 4 条以内，避免与 working-discipline 等每轮注入插件的指令重叠。
 //
 // Trigger: UserPromptSubmit
 // Output:  additionalContext → 注入到当前轮次 Claude 上下文
@@ -18,10 +19,10 @@ function main() {
   const prompt = [
     '# 未知雷达（discover-unknowns）',
     '',
-    '- 任务含糊、领域陌生或颗粒度过大时：先暴露未知再动手——按需进入 /discover-unknowns（盲点扫描/参考）或 /brainstorm（发散原型 + 一问一答收敛），不要抓起第一条相关命令就实现。',
-    '- 用户给出参考实现/样例（源代码最佳）时：先复述你理解到的语义与用户对齐，再复刻语义而非细节。',
-    '- 实现中撞上迫使偏离既定方案的边界情况：这是新暴露的未知——选保守方案、显式记录偏离并告知用户，不要静默变通。',
-    '- 长会话大量变更后用户要合并时：建议先 /quiz 确认理解再 merge。',
+    '- 写代码前，若没读过要改的模块、或用户没给验收标准：先跑 /discover-unknowns 或 /brainstorm，不要凭猜测开工。',
+    '- 用户给了参考实现/样例：先复述你理解的语义对齐，再复刻语义而非逐行抄——照抄会把参考的语言/框架差异当成行为差异搬进来。',
+    '- 编码中撞上想绕开既定方案、抄近路的边界情况：这就是新暴露的未知——选保守方案、显式告知用户偏离处，禁止悄悄变通。',
+    '- 长会话多处变更后用户要 merge/push 前：先跑 /quiz（硬性要求：未过测验不得 merge/push）。',
   ].join('\n')
 
   const output = {
