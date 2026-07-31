@@ -428,7 +428,7 @@ const SECTION_HOOK_ENFORCED = [
   'hook 按**拦截对象**收敛：一个对象一道闸，多条违规**一次报清**，撞到照 finding 一次改全。**判据是文本形态匹配而非语义判定**，三道闸都有实测过的误杀面：finding 明显对不上你的真实意图时按 hint 改一次，改完仍被拦而你确信无害就**报告用户拍板**，不要多轮试探正则边界。',
   '',
   '- **`Bash`** 里独立 `cd` 一律被拦（`guards/bash-guard.js`）。**写命令前先套模板**：`(cd /abs/path && cmd)` 或 `git -C <path> <cmd>` 或全用绝对路径。这道闸只认「裸 `cd` 开头」一种形态，`pushd` / `source` 含 cd 的脚本 / `eval "cd …"` 同样污染 cwd 却拦不住——要守的是 cwd 干净，不是躲过这道闸',
-  '- **`agent-browser`** 的启动类子命令（`open` / `connect` / 带 URL 的 `chat`）必须带 `--headed` 与 `--profile`（同一道闸）',
+  '- **`agent-browser`** 的启动类子命令（`open` / `connect` / 带 URL 的 `chat`）默认 headless 运行，受四道护栏约束（同一道闸）：①**启动前先备好鉴权**（带 `--profile` / `--headers` / `--state` / `--restore` 任一，headless 下人类无法中途登录）；②**全局实例上限 4**（启动前 `agent-browser session list`，≥4 先 `close`）；④**建议带安全边界**（`--allowed-domains` + `--content-boundaries`，缺失仅提醒不阻断）。完整工作流见 `agent-browser` 插件 SKILL.md',
   '- **`Agent`**（`guards/agent-dispatch.js`）：`model` 必填且在 `sonnet`·`opus`·`fable` 内；`name` 的模型前缀与 `model` 一致且满足正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`；`description` 必填有正文、正文非角色设定句、≤60 字符（`[模型名]` 前缀可省；写了也算进 60 字符，`[haiku]` 直接被拒）',
   '- **`Write` / `Edit`**（`guards/write-guard.js`）：单一源码文件 >1000 行、当前项目内 `CLAUDE.md` >200 行会给提示。**它挂 `PostToolUse`，触发时文件已经写完了**——不回滚这次写入、也不停住本轮，指望不上它兜底，动笔前就要判断该不该拆（`CLAUDE.md` 拆到 `.claude/rules/{topic}.md`，不要靠压缩正文过闸——那会丢约束）',
 ].join('\n')

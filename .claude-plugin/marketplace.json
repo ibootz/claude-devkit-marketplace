@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude DevKit Pro Marketplace - 精简后的 Claude Code / Codex 插件市场，聚焦核心开发、Spec 工作流与高价值生产力插件",
-    "version": "2.4.0"
+    "version": "2.5.0"
   },
   "renames": {
     "matt-pocock-skills": "mattpocock-skills",
@@ -77,7 +77,14 @@
       "source": "./plugins/working-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 2 道硬拦 1 道事后提醒。零 skill，适合全局开启",
-      "version": "3.6.0"
+      "version": "3.7.0"
+    },
+    {
+      "name": "agent-browser",
+      "source": "./plugins/agent-browser",
+      "category": "Productivity",
+      "description": "浏览器自动化最佳实践 - 用 agent-browser（Vercel）做网页操作/抓取/表单/截图；默认 headless，鉴权前置 + 实例上限 4 + 安全边界 + SessionEnd 强制清理",
+      "version": "1.1.0"
     },
     {
       "name": "discover-unknowns",

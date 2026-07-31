@@ -1,7 +1,7 @@
 {
   "metadata": {
     "description": "Claude DevKit Pro Marketplace - 精简后的 Claude Code / Codex 插件市场，聚焦核心开发、Spec 工作流与高价值生产力插件",
-    "version": "2.4.0"
+    "version": "2.5.0"
   },
   "name": "claude-devkit-marketplace",
   "interface": {
@@ -165,7 +165,25 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "3.6.0"
+      "version": "3.7.0"
+    },
+    {
+      "author": {
+        "name": "zhangq"
+      },
+      "category": "Productivity",
+      "description": "浏览器自动化最佳实践 - 用 agent-browser（Vercel）做网页操作/抓取/表单/截图；默认 headless，鉴权前置 + 实例上限 4 + 安全边界 + SessionEnd 强制清理",
+      "homepage": "https://github.com/vercel-labs/agent-browser",
+      "name": "agent-browser",
+      "source": {
+        "source": "local",
+        "path": "./plugins/agent-browser"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "version": "1.1.0"
     },
     {
       "author": {

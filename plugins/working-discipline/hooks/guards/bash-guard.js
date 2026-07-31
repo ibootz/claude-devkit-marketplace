@@ -57,38 +57,33 @@
 //      path.resolve 字符串归一，不 realpath。
 //   4. `cd $PWD` 与大小写等价路径（APFS 默认大小写不敏感），同上。
 //
-// 【检查二：agent-browser 启动缺 --headed / --profile】
-// 缺 --headed 的真实事故（2026-07-20 D-001 verify）：AI 用 headless 起 Chrome for Testing
-// 复现前端问题，用户看不到窗口、只看到权限申请弹窗，质疑"你现在是创建了一个 headless 的
-// chrome 实例吗？为啥我看还是在向我使用的 chrome 实例进行权限申请呢"。
-// 缺 --profile 的代价：AI 默认用一次性临时 profile 目录起 CFT，每次会话都要在浏览器里
-// 手动登录一次业务系统。硬要求 --profile 后可复用专门建的 "AI Testing" Chrome profile
-// （与用户日常 Default profile 物理隔离，不抢 SingletonLock），登录态跨会话持久。
-// 放行：子命令不在启动类集合（skills/doctor/close/snapshot/click/... 等）/ 未知子命令 /
-//       tail 里出现 --help / -h / --version / 两个参数都有 / `--headed false` 或
-//       `--headed=false` 显式选择 headless / 同片段内的环境变量前缀
-//       AGENT_BROWSER_HEADED=(true|1|yes|on) 与 AGENT_BROWSER_PROFILE=<非空值> 可分别
-//       替代 / `chat` 后没接 URL（纯 REPL 模式）
+// 【检查二：agent-browser 启动——headless 默认下的新四护栏】
+// 沿革：3.6.0 前本检查强制 --headed + --profile，起因是 2026-07-20 D-001 verify 事故——
+// AI 用 headless 起 Chrome for Testing 复现前端问题，用户看不到窗口、只看到权限申请弹窗，
+// 质疑"你现在是创建了一个 headless 的 chrome 实例吗？"。3.7.0 应产品要求**改为默认 headless**：
+// 用户接受 headless 作为常态，但要求用四道新机制替代"看到窗口"提供的监督——
+//   ①鉴权前置（headless 下人类无法中途授权，启动前必须备好登录态）
+//   ②实例上限 4（agent-browser 无内置并发上限，--session 只隔离不计数，须外部强制）
+//   ③登录态复用（保留原 --profile 硬要求，沿用 3.6.0 的判据）
+//   ④安全边界提醒（--allowed-domains / --content-boundaries，仅提醒级，不阻断）
+// 故删掉 --headed 强制，新增 ①②，③保留，④降为 hint。
 //
-// 3.6.0 修掉的四类误杀 + 一类退化（均为审计实测）：
-//   1. `--headed` / `AGENT_BROWSER_PROFILE=` 原本对**整条命令字符串**全局扫描一次、
-//      各片段共用结果，等于退化成一个**口令**——`echo --headed; agent-browser open ...`
-//      零成本满足，写在注释、JSON 参数、另一个片段里都算。现在只在该次调用自己的
-//      tail（与紧邻的环境变量前缀）里判定。
-//   2. `agent-browser open --help` 被判缺两个参数。查帮助不拉起任何实例，纯噪音，
-//      且为了过闸给 --help 硬加 --headed 拿到的仍是帮助文本。现在 tail 含
-//      --help/-h/--version 直接放行。
-//   3. `grep -rn agent-browser open /tmp` 被当成真实启动。原实现只要某个 token 字面
-//      等于 agent-browser 就认定是调用，不看它在不在命令名位置。现在要求它处于片段
-//      起始（跳过 VAR=值 前缀）或紧跟 npx/bunx/pnpm dlx。
-//   4. `AGENT_BROWSER_HEADED=1` 被判缺 --headed（原实现写死字面量 `=true`，而
-//      `--profile` 的环境变量判据只要求非空、松紧不一致）。现在接受 true|1|yes|on。
-//   5. `--profile=""` 原本按 token 长度 >10 判为"有值"，实际传给 CLI 的是空值。
-//   顺带：命令名改按 basename 匹配后，`/usr/local/bin/agent-browser open` 这类原本
-//   漏掉的绝对路径调用现在能识别（方向是收严，且那确实就是在调 agent-browser）。
-//   删掉死代码 `/--headed\s+false\b/`——它后面的 `/--headed\b/` 必然也命中同一串。
-//   **未采纳**：`--profile-dir` 与 `-H` 短别名是否真实存在于 CLI 未经验证，不基于
-//   未验证的假设放宽判据；要放宽先跑 `agent-browser --help` 拿到真实选项表。
+// 3.7.0 四护栏的判据（均只在该次调用自己的 tail + 紧邻环境变量前缀里判定，不跨片段共用）：
+//   - ①缺鉴权：启动类子命令且 tail/env 里无 --profile / --state / --headers / --restore
+//     任一持久化鉴权方式（也无对应 env 前缀 AGENT_BROWSER_PROFILE 等）→ BLOCK
+//   - ②实例超限：启动类子命令时同步 run `agent-browser session list`，活动实例 ≥4 → BLOCK；
+//     CLI 不存在 / 超时 / 解析失败 → 放行（不因工具未装而误拦，沿用"未知即放行"方向）
+//   - ③登录态复用：并入 ①——缺鉴权判据已覆盖"无 --profile"情形，不再单列
+//   - ④安全边界：tail 无 --allowed-domains 且无 --content-boundaries → 追加 hint，不阻断
+// 放行：子命令不在启动类集合（snapshot/click/... 白名单）/ 未知子命令 / tail 含
+//       --help / -h / --version / -V / `chat` 后没接 URL（纯 REPL 模式）
+//
+// 沿用 3.6.0 的工程改进（不再重复审计，仅记要点）：
+//   - 逐片段独立判定，不跨片段共用结果（修掉"口令退化"）
+//   - 命令名按 basename 匹配，认 npx/bunx/pnpm dlx 前缀与绝对路径
+//   - tail 含 --help/-h/--version/-V 直接放行；--profile="" 视为空值
+//   - 环境变量前缀 AGENT_BROWSER_PROFILE=<非空值> 等可替代对应 flag
+//   - 未知子命令一律放行（CLI 新增启动类子命令时本判据静默失效，已知代价，不改变方向）
 //
 // 【阻塞行为】
 // 任一检查命中即 exit 2 阻断，stderr 一次输出全部 findings（stderr 会作为附加上下文注入
@@ -206,7 +201,7 @@ function checkCd(command, cwd) {
   return null
 }
 
-// ── 检查二：agent-browser 启动参数 ───────────────────────────────────
+// ── 检查二：agent-browser 启动（headless 默认下的新四护栏）──────────
 
 // 启动类子命令：会真正拉起一个新 CFT 实例的子命令
 const LAUNCH_SUBCOMMANDS = new Set(['open', 'connect', 'chat'])
@@ -238,10 +233,25 @@ const URL_PATTERN = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//
 // 命令前的环境变量赋值前缀，如 `FOO=bar cmd`
 const ENV_ASSIGN_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*=/
 
-// 环境变量替代形态。HEADED 接受常见布尔真值（CLI 布尔量普遍不止认字面 true）；
-// PROFILE 只要求非空值。
-const HEADED_ENV_PATTERN = /^AGENT_BROWSER_HEADED=(true|1|yes|on)$/i
-const PROFILE_ENV_PATTERN = /^AGENT_BROWSER_PROFILE=.+$/
+// ── 护栏①：鉴权前置 ──
+// headless 下人类无法中途授权，启动前必须备好登录态。任一持久化鉴权方式存在即满足：
+//   --profile / --state / --headers / --restore（含 =值 与 空格分两 token 两种形态）。
+// flags 不含 --restore 的"无值"布尔形态也认（--restore 本身就是"启用恢复"的开关）。
+const AUTH_FLAGS = new Set(['--profile', '--state', '--headers', '--restore'])
+
+// 环境变量替代形态（紧邻命令的 VAR=值 前缀）。任一非空即算提供了鉴权机制。
+// 注意 PROFILE 只要求非空（--profile="" 实际传空值，已在 flag 判据里单独处理）。
+const AUTH_ENV_PATTERNS = [
+  /^AGENT_BROWSER_PROFILE=.+$/,
+  /^AGENT_BROWSER_HEADERS=.+$/,
+  /^AGENT_BROWSER_STATE=.+$/,
+]
+
+// ── 护栏②：实例上限 ──
+// agent-browser 无内置并发上限，--session 只隔离不计数；本 guard 在启动前查 session list。
+const INSTANCE_LIMIT = 4
+// daemon 输出形如 "Active sessions:\n-> default\n   agent1" —— 数顶层（-> 开头）条目数
+const SESSION_TOPLEVEL_PATTERN = /^->/m
 
 // 在某个顶层片段里定位处于**命令名位置**的 agent-browser 调用。
 // 命令名位置 = 跳过 `VAR=值` 前缀后的第一个 token，或其后紧跟的 npx / bunx / pnpm dlx。
@@ -281,26 +291,68 @@ function hasHelpFlag(tail) {
   return tail.some((t) => HELP_FLAGS.has(t))
 }
 
-// `--headed` / `--headed=false` / `--headed false` 都算显式表态（后两者是主动选 headless）
-function hasHeadedFlagInTail(tail) {
-  return tail.some((t) => t === '--headed' || t.startsWith('--headed='))
-}
+// 护栏①判据：tail 或紧邻 env 前缀里是否提供了任一持久化鉴权方式。
+// flag 形态分两种：
+//   (a) `--flag=<非空值>` —— --restore 是布尔开关，`--restore` 与 `--restore=true` 都认；
+//       --profile/--state/--headers 必须有非空值（空值视为没提供，见下方 stripQuotes 复剥）
+//   (b) `--flag <值>` —— 值是下一个 token，不能以 `-` 开头（否则那是另一个 flag）
+// env 前缀：AGENT_BROWSER_PROFILE/HEADERS/STATE 任一非空即满足
+function hasAuthMechanism(tail, envPrefix) {
+  if (envPrefix.some((t) => AUTH_ENV_PATTERNS.some((re) => re.test(t)))) return true
 
-// `--profile <值>` 或 `--profile=<非空值>`；值本身不做路径合法性校验（交给 CLI）。
-// 值要再剥一次引号：tokenize 后的 `--profile=""` 首字符是 `-`，外层 stripQuotes 不生效，
-// 直接取 slice 会拿到两个引号字符而误判为"有值"——实际传给 CLI 的是空值。
-function hasProfileFlagInTail(tail) {
   for (let i = 0; i < tail.length; i++) {
     const t = tail[i]
-    if (t === '--profile') {
+    // `--restore` 无值布尔开关：单独出现即满足
+    if (t === '--restore') return true
+    // `--profile` / `--state` / `--headers` 接下一个 token 当值
+    if (t === '--profile' || t === '--state' || t === '--headers') {
       const next = tail[i + 1]
-      return !!(next && !next.startsWith('-') && stripQuotes(next).length > 0)
+      if (next && !next.startsWith('-') && stripQuotes(next).length > 0) return true
+      continue
     }
-    if (t.startsWith('--profile=')) {
-      return stripQuotes(t.slice('--profile='.length)).length > 0
+    // `--flag=<值>` 形态
+    for (const flag of ['--profile=', '--state=', '--headers=', '--restore=']) {
+      if (t.startsWith(flag)) {
+        const val = stripQuotes(t.slice(flag.length))
+        // --restore=<bool> 任意非空都算启用；其余要非空真值
+        if (flag === '--restore=' ? val.length > 0 : val.length > 0) return true
+      }
     }
   }
   return false
+}
+
+// 护栏④判据（仅提醒级）：tail 里是否有 --allowed-domains 或 --content-boundaries
+function hasSafetyBoundary(tail) {
+  return tail.some(
+    (t) =>
+      t === '--allowed-domains' ||
+      t.startsWith('--allowed-domains=') ||
+      t === '--content-boundaries'
+  )
+}
+
+// 护栏②判据：run `agent-browser session list` 数当前活动实例数。
+// CLI 不存在 / 超时 / 输出无法解析 → 返回 -1（调用方据此放行，不因工具未装而误拦）。
+// 测试桩：设环境变量 WD_AB_INSTANCE_COUNT=<整数> 可绕过真实 CLI（仅用于回归测试）。
+function countActiveInstances() {
+  if (process.env.WD_AB_INSTANCE_COUNT !== undefined) {
+    const n = Number(process.env.WD_AB_INSTANCE_COUNT)
+    return Number.isFinite(n) ? n : -1
+  }
+  const { execSync } = require('child_process')
+  try {
+    const out = execSync('agent-browser session list', {
+      timeout: 3000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf8',
+    })
+    // 数顶层条目（-> 开头的行）；输出空或无 -> 视为 0 个
+    const matches = out.match(new RegExp(SESSION_TOPLEVEL_PATTERN.source, 'g'))
+    return matches ? matches.length : 0
+  } catch (_) {
+    return -1 // CLI 未装 / daemon 未起 / 超时 —— 放行
+  }
 }
 
 // chat 子命令：仅当后面接了 URL 位置参数才算"启动"，纯 REPL 模式不拦
@@ -315,7 +367,8 @@ function chatHasUrlArg(tail) {
   return false
 }
 
-// 返回 { subcommand, missingHeaded, missingProfile } 或 null
+// 返回 { subcommand, missingAuth, tooManyInstances, instanceCount, missingBoundary } 或 null
+//   missingAuth / tooManyInstances → 阻断（exit 2）；missingBoundary → 仅提醒（不阻断）
 function checkAgentBrowser(command) {
   if (!/\bagent-browser\b/.test(command)) return null
 
@@ -330,13 +383,28 @@ function checkAgentBrowser(command) {
     if (!subcommand || !LAUNCH_SUBCOMMANDS.has(subcommand)) continue
     if (subcommand === 'chat' && !chatHasUrlArg(tail)) continue // REPL 模式，不拦
 
-    const missingHeaded =
-      !hasHeadedFlagInTail(tail) && !envPrefix.some((t) => HEADED_ENV_PATTERN.test(t))
-    const missingProfile =
-      !hasProfileFlagInTail(tail) && !envPrefix.some((t) => PROFILE_ENV_PATTERN.test(t))
-    if (!missingHeaded && !missingProfile) continue
+    // 护栏①：缺鉴权 → 阻断
+    const missingAuth = !hasAuthMechanism(tail, envPrefix)
 
-    return { subcommand, missingHeaded, missingProfile }
+    // 护栏②：实例超限 → 阻断（CLI 不可用时 countActiveInstances 返回 -1，放行）
+    const instanceCount = countActiveInstances()
+    const tooManyInstances = instanceCount >= INSTANCE_LIMIT
+
+    // 护栏④：缺安全边界 → 仅提醒（不参与阻断决策，但带回给调用方拼 hint）
+    const missingBoundary = !hasSafetyBoundary(tail)
+
+    // 只有阻断类命中才提前 return；两者都没命中时仍要把 missingBoundary 带回去做提醒
+    if (!missingAuth && !tooManyInstances) {
+      return missingBoundary ? { subcommand, missingBoundary } : null
+    }
+
+    return {
+      subcommand,
+      missingAuth,
+      tooManyInstances,
+      instanceCount,
+      missingBoundary,
+    }
   }
   return null
 }
@@ -377,13 +445,31 @@ function main() {
 
   const ab = checkAgentBrowser(command)
   if (ab) {
-    if (ab.missingHeaded) {
-      findings.push(`agent-browser ${ab.subcommand} 缺 --headed;起 headless CFT 会让用户看不到 AI 操作过程`)
-      hints.push('加 --headed(确实要 headless 就显式加 --headed false 或前缀 AGENT_BROWSER_HEADED=true)')
+    // 护栏①缺鉴权 → 阻断
+    if (ab.missingAuth) {
+      findings.push(`agent-browser ${ab.subcommand} 缺鉴权机制;headless 下人类无法中途登录授权`)
+      hints.push('启动前先向用户索取账密/token/cookie 并注入:--headers {"Authorization":"Bearer <token>"} 注入 token(推荐,origin 作用域),或 --profile <持久化目录> 复用登录态(推荐建独立 AI Testing Chrome profile),或 --state <文件> 加载已保存凭据;详见 agent-browser 插件 SKILL.md')
     }
-    if (ab.missingProfile) {
-      findings.push(`agent-browser ${ab.subcommand} 缺 --profile;每次都要重新登录业务系统,无法复用登录态`)
-      hints.push('加 --profile <目录>(复用登录态用专门建的 "AI Testing" Chrome profile 目录;纯隔离场景可用 --profile "$(mktemp -d)";或前缀 AGENT_BROWSER_PROFILE=<目录>)')
+    // 护栏②实例超限 → 阻断
+    if (ab.tooManyInstances) {
+      findings.push(`agent-browser ${ab.subcommand} 实例已达上限 ${INSTANCE_LIMIT}(当前 ${ab.instanceCount} 个);无内置并发上限,须外部节制`)
+      hints.push(`先 \`agent-browser close\` 或 \`agent-browser close --all\` 释放实例,或等现有任务完成;全局上限 ${INSTANCE_LIMIT} 个并发实例`)
+    }
+    // 护栏④缺安全边界 → 仅提醒（不阻断；阻断类已命中时合并进 hint，未命中时也不 exit 2）
+    if (ab.missingBoundary) {
+      hints.push('headless 建议带 --allowed-domains "目标域" 限域 + 禁 WebRTC 防 DNS 旁路,--content-boundaries 隔开网页内容防 prompt 注入,--max-output 50000 防上下文洪泛')
+    }
+
+    // 仅护栏④命中（无阻断类）时不阻断，只把提醒作为附加上下文喂回，本轮继续
+    const hasBlocker = ab.missingAuth || ab.tooManyInstances
+    if (!hasBlocker) {
+      if (ab.missingBoundary) {
+        process.stderr.write(
+          `[L1-ADVISE] tool=Bash check=bash-guard hint="${hints[hints.length - 1]}"\n`
+        )
+      }
+      // 清掉这条 hint，避免它被拼进下面的 findings 输出
+      hints.pop()
     }
   }
 

@@ -3,7 +3,7 @@
 一个纯 hook 插件，用两种方式把「AI 工作纪律」落到 Claude Code 上：
 
 1. **常驻注入**：每轮往主会话、以及每次子代理启动时的 context 里，塞入一份可审计、可复用的行为准则；本轮用户贴了截图时，额外附一份可原样复制的图片绝对路径清单
-2. **硬拦截**：派发 subagent 时 `name` / `description` / `model` 等**结构字段**不合规（`PreToolUse` deny）、以裸 `cd` 开头污染 cwd 的独立命令、缺 `--headed`/`--profile` 的 `agent-browser` 启动（`PreToolUse` exit 2）
+2. **硬拦截**：派发 subagent 时 `name` / `description` / `model` 等**结构字段**不合规（`PreToolUse` deny）、以裸 `cd` 开头污染 cwd 的独立命令、缺鉴权或实例超限的 `agent-browser` 启动（`PreToolUse` exit 2）
 3. **事后提醒**：写入完成后，超 1000 行的源码文件、当前项目内超 200 行的 `CLAUDE.md` 会拿到一条 stderr 提示（`PostToolUse` exit 2）。**它不是拦截**——触发时文件已经落盘，既不回滚也不停住本轮，见第四章
 
 零 skill、零命令、零子代理，装了就生效。不修改用户文件：两道 `PreToolUse` 闸只阻断工具调用本身，`PostToolUse` 的 `write-guard` 连"继续往下走"都不阻断。唯一一处会改动工具调用的地方是**缺 `name` 时自动补名**，见第二章。
@@ -356,13 +356,20 @@ git -C /abs/path/to/repo status
 
 非 git 命令仍然只能走 `(cd /path && cmd)` 子 shell 语法——`-C` 是 git 专有选项，不是通用 shell 机制。
 
-### 检查二：`agent-browser` 启动缺 `--headed` / `--profile`
+### 检查二：`agent-browser` 启动——headless 默认下的新四护栏
 
-**`--headed` 的设计理由**：AI 用 agent-browser 时默认走 headless 起 Chrome for Testing（CFT）实例。虽然 CFT 与用户日常 Chrome 是两个不同的 app bundle、profile 可以完全隔离，但 headless 下**用户视角看不到 AI 在操作什么**——点了哪个按钮、填了什么表单、跳到哪个 URL、遇到什么弹窗，全是黑箱，用户会误以为 AI 没启动实例、或在动自己的 Chrome。真实事故：2026-07-20 D-001 verify 期间用户质疑"你现在是创建了一个 headless 的 chrome 浏览器实例吗？为啥我看还是在向我使用的 chrome 实例进行权限申请呢"。
+**沿革**：3.6.0 前本检查强制 `--headed` + `--profile`，起因是 2026-07-20 D-001 verify 事故——AI 用 headless 起 Chrome for Testing 复现前端问题，用户看不到窗口、只看到权限申请弹窗，质疑"你现在是创建了一个 headless 的 chrome 实例吗？"。**3.7.0 应产品要求改为默认 headless**：用户接受 headless 作为常态，但要求用四道新机制替代"看到窗口"提供的监督。
 
-**`--profile` 的设计理由**：同一会话里加了 `--headed` 之后暴露第二个问题——AI 默认用一次性临时 profile 目录起 CFT，目录里没有任何登录态，**每次会话都要在浏览器里重新登录一遍业务系统**。用户拍板方案：硬要求 `--profile`，引导 AI 复用一个专门建立、一次性登录好的 "AI Testing" profile 目录（与用户日常 `Default` profile 物理隔离，不会互相抢 `SingletonLock`），登录态跨会话持久化；纯隔离测试场景仍可用 `--profile "$(mktemp -d)"` 满足硬性要求。
+| 护栏 | 判据 | 处置 |
+|------|------|------|
+| ①鉴权前置 | 启动类子命令且 tail/env 无 `--profile`/`--state`/`--headers`/`--restore` 任一持久化鉴权方式 | **阻断**（headless 下人类无法中途授权） |
+| ②实例上限 4 | 启动类子命令时同步 `agent-browser session list`，活动实例 ≥4 | **阻断**（agent-browser 无内置并发上限，须外部节制） |
+| ③登录态复用 | 并入①——缺鉴权判据已覆盖"无 --profile"情形 | 同① |
+| ④安全边界 | tail 无 `--allowed-domains` 且无 `--content-boundaries` | **仅提醒**（不阻断，避免过度拦截纯公开页任务） |
 
-判定顺序（3.6.0 起逐片段独立走完，不再跨片段共用结果）：切出顶层片段 → 在片段的**命令名位置**认出 `agent-browser`（跳过 `VAR=值` 前缀，接受 `npx` / `bunx` / `pnpm dlx` 转发，命令名按 basename 比对因而 `/usr/local/bin/agent-browser` 也算）→ tail 里含 `--help` / `-h` / `--version` / `-V` 直接放行 → 取 tail 第一个位置参数当子命令，属于**启动类**才继续 → 两条独立检查，命中任意一条即拦（都缺时 finding / hint 各列两条）。
+> 完整使用指南（鉴权注入四法、AI Testing profile 创建、snapshot 工作流、反检测）见本市场独立插件 `agent-browser` 的 SKILL.md。本节只讲 guard 判据。
+
+判定顺序（沿用 3.6.0 的逐片段独立判定）：切出顶层片段 → 在片段的**命令名位置**认出 `agent-browser`（跳过 `VAR=值` 前缀，接受 `npx` / `bunx` / `pnpm dlx` 转发，命令名按 basename 比对因而 `/usr/local/bin/agent-browser` 也算）→ tail 里含 `--help` / `-h` / `--version` / `-V` 直接放行 → 取 tail 第一个位置参数当子命令，属于**启动类**才继续 → 四护栏逐一判定（①②阻断、④提醒）。
 
 | 启动类子命令 | 说明 |
 |--------|------|
@@ -372,56 +379,39 @@ git -C /abs/path/to/repo status
 
 **探测/后续操作类子命令一律放行**：只读探测（`skills` `doctor` `install` `upgrade`）、生命周期无关（`close` `mcp` `dashboard` `session` `plugin` `auth` `profiles` `confirm` `deny`）、后续操作类（`snapshot` `click` `fill` `type` `screenshot` `eval` `network` `tab` 等一整套）。
 
-子命令识别在 3.6.0 反向改过：现在取的是「tail 里**第一个位置参数**」（跳过 flag 及其值），命中词表才当子命令、**不在词表里一律返回 `null` 即放行**（`findSubcommand()`，`bash-guard.js:269-278`）。旧写法是"第一个与词表精确匹配的 token"，那会把 `--profile open` 这类 flag 值误当成子命令。
-
-正确调用示例：
+正确调用示例（3.7.0：默认 headless，无需 `--headed`）：
 
 ```bash
-agent-browser --headed --profile "/Users/<user>/Library/Application Support/Google/Chrome/Profile 1" open https://example.com
-AGENT_BROWSER_HEADED=true AGENT_BROWSER_PROFILE=/tmp/ab-profile agent-browser open https://example.com   # 环境变量等价
-agent-browser --headed false --profile /tmp/ab-profile open https://example.com   # 显式选择 headless，仍需带 --profile
-agent-browser --headed --profile "$(mktemp -d)" open https://example.com          # 纯隔离测试场景
+# 带持久化 profile（满足①③），默认 headless
+agent-browser --profile "/Users/<user>/Library/Application Support/Google/Chrome/Profile 1" open https://example.com
+# token 注入（满足①，origin 作用域）
+agent-browser open https://api.example.com --headers '{"Authorization":"Bearer <token>"}'
+# 环境变量等价
+AGENT_BROWSER_PROFILE=/tmp/ab-profile agent-browser open https://example.com
+# 纯隔离测试场景（临时 profile 满足硬要求）
+agent-browser --profile "$(mktemp -d)" open https://example.com
+# 推荐再带安全边界（满足④，消除提醒）
+agent-browser --profile /p --allowed-domains "example.com" --content-boundaries open https://example.com
 ```
 
-#### 3.6.0 修掉的四类误杀，外加一类把判据变成"口令"的退化
+#### 护栏②的实现：`session list` 计数
 
-**先说那类退化，它比误杀更严重**：`--headed` 与 `AGENT_BROWSER_PROFILE=` 原本对**整条命令字符串**全局扫描一次、各片段共用同一个结果。等于这道闸退化成一个**口令**——`echo --headed; agent-browser open https://x.com` 零成本满足，把 `--headed` 写在注释里、写在某个 JSON 参数里、写在另一个毫不相干的片段里，全都算数。现在两个参数都只在该次调用自己的 tail（与紧邻的环境变量前缀）里判定（`checkAgentBrowser()`，`bash-guard.js:319-342`）。
+agent-browser **无内置并发上限**（官方已确认），`--session` 只做隔离不做计数。guard 在每次启动类子命令时同步 run `agent-browser session list`，正则数顶层条目（`->` 开头的行），≥4 即拦。CLI 未装 / daemon 未起 / 超时 / 输出无法解析 → 返回 -1 → **放行**（不因工具未装而误拦，沿用"未知即放行"方向）。测试用环境变量 `WD_AB_INSTANCE_COUNT=<整数>` 桩注入确定值。
 
-四类误杀（均为审计实测的真实 BLOCK）：
+#### 沿用 3.6.0 的工程改进
 
-1. `grep -rn agent-browser open /tmp` 被当成真实启动。旧实现只要命令里某个 token 字面等于 `agent-browser` 就认定是调用，**不看它在不在命令名位置**。现在要求它处于片段起始（跳过 `VAR=值` 前缀）或紧跟 `npx` / `bunx` / `pnpm dlx`。
-2. `agent-browser open --help` 被判缺两个参数。查帮助不拉起任何实例，纯噪音；而且为了过闸给 `--help` 硬加 `--headed`，拿到的仍然只是帮助文本。现在 tail 含 `--help` / `-h` / `--version` / `-V` 直接放行。
-3. `AGENT_BROWSER_HEADED=1` 被判缺 `--headed`。旧实现写死字面量 `=true`，而同一处 `--profile` 的环境变量判据只要求非空——**两条松紧不一致**。现在接受 `true|1|yes|on`（`HEADED_ENV_PATTERN`，大小写不敏感）。
-4. `--profile=""` 被判为"有值"。旧实现按 token 长度 >10 粗判，而 `tokenize()` 后的 `--profile=""` 首字符是 `-`、外层 `stripQuotes()` 不生效，取 `slice` 拿到的是两个引号字符。实际传给 CLI 的是空值。现在对取出的值再剥一次引号后判非空。
+3.7.0 未改这些（仍生效，仅记要点）：
 
-顺带两处方向相反的调整：命令名改按 basename 匹配后，`/usr/local/bin/agent-browser open` 这类原本漏掉的绝对路径调用现在能识别（**收严**，且那确实就是在调 agent-browser）；删掉死代码 `/--headed\s+false\b/`——它后面紧跟的 `/--headed\b/` 必然也命中同一串。
-
-**明确未采纳的一项**：`--profile-dir` 与 `-H` 短别名是否真实存在于 CLI 未经验证，因此没有据此放宽判据。要放宽先跑一次 `agent-browser --help` 拿到真实选项表——不基于未验证的假设改判据，这也是 `.claude/rules/hook-restraint.md` 第 4 条（判据改动必须用户拍板）的一部分。
+- **逐片段独立判定**，不跨片段共用结果——修掉了"口令退化"（`echo --profile /p; agent-browser open https://x` 不再被另一片段的 `--profile` 满足）。
+- **命令名按 basename 匹配**，认 `npx`/`bunx`/`pnpm dlx` 前缀与绝对路径 `/usr/local/bin/agent-browser`。
+- tail 含 `--help`/`-h`/`--version`/`-V` 直接放行；`--profile=""` 视为空值（tokenize 后首字符是 `-`，需再剥一次引号）。
+- 环境变量前缀 `AGENT_BROWSER_PROFILE=<非空值>` 等可替代对应 flag（3.7.0 扩展为 `AGENT_BROWSER_PROFILE`/`HEADERS`/`STATE` 三者任一非空即满足①）。
 
 #### Known Limitation：间接调用与未知子命令一律放行
 
 三类已知不覆盖，写在 `hooks/guards/bash-guard.js:29-34`：
 
-命令替换与变量间接调用——`$(which agent-browser) open https://x.com`、`AB=agent-browser; $AB open https://x.com`，命令名位置上的 token 不字面等于 `agent-browser`，认不出来。**不在词表里的子命令一律放行**——这是有意选择的方向（未知即放行，避免把 CLI 新增的普通子命令误拦），代价是 agent-browser 日后新增启动类子命令时，本判据会**静默失效**、没有任何报错。白名单里的 `read <URL>` 等子命令在 daemon 不存在时会**自行拉起一个 headless 实例**，那正是 `--headed` 要防的情形，但它被归在"后续操作类"里放行了。
-
-#### AI Testing profile 创建与使用指南
-
-**一次性设置步骤（用户端操作，AI 不能代做）**：
-
-1. 打开 Google Chrome（用户日常在用的那个，不是 CFT）→ 点右上角头像 → 选"添加"/"Add" → 输入 profile 名字，比如 `AI Testing`（名字随意，只是 UI 显示名，不影响磁盘路径）→ 完成创建
-2. 在这个新窗口里手动登录一次目标业务系统
-3. 在同一个 `AI Testing` profile 窗口里（**不是** `Default` 窗口）打开 `chrome://version/`，找到 "个人资料路径" / "Profile Path"，复制绝对路径。macOS 上通常形如：
-
-   ```text
-   /Users/<user>/Library/Application Support/Google/Chrome/Profile 1
-   ```
-
-   注意：`AI Testing` 是 UI 显示名，磁盘上的实际目录名是 `Profile N`（`N` 取决于这是第几个非 Default profile），两者不是同一个字符串
-4. 把这个路径记到项目 `CLAUDE.md` 或个人 memory 里，后续所有 `--profile` 都指向它
-
-**关键坑警告**：macOS 上用户日常 Chrome 主实例只要正在运行，它当前打开的那个 profile 目录就会被 `SingletonLock` 独占——如果 CFT 用同一个 profile 目录起，会**强制关掉用户日常 Chrome 或者干脆起不来**。这正是为什么 `AI Testing` **必须是一个与用户日常主力 profile（通常是 `Default`）不同的独立 profile**。相应地，AI 用 CFT 跑 `AI Testing` 期间，用户不要手动把自己的 Chrome 窗口切到 `AI Testing`，否则会跟 CFT 抢锁。
-
-**豁免场景**：任务本身就是"隔离测试、完全不带登录态"（比如测一个匿名可访问的公开页面）时，用 `--profile "$(mktemp -d)"` 起一个全新干净的目录，同样满足硬性要求。不要误以为"任何时候都必须用 `AI Testing` 这一个固定 profile"。
+命令替换与变量间接调用——`$(which agent-browser) open https://x.com`、`AB=agent-browser; $AB open https://x.com`，命令名位置上的 token 不字面等于 `agent-browser`，认不出来。**不在词表里的子命令一律放行**——这是有意选择的方向（未知即放行，避免把 CLI 新增的普通子命令误拦），代价是 agent-browser 日后新增启动类子命令时，本判据会**静默失效**、没有任何报错。白名单里的 `read <URL>` 等子命令在 daemon 不存在时会**自行拉起一个 headless 实例**，3.7.0 后这不再是问题（默认就是 headless），但它仍绕过①②④三道护栏。
 
 ---
 
@@ -608,10 +598,10 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/bash-guard.js
    ↓  【检查二】逐片段在命令名位置定位 agent-browser（跳 VAR=值；npx/bunx/pnpm dlx；
    ↓            按 basename 比对）→ tail 含 --help/-h/--version/-V 则跳过
    ↓    tail 第一个位置参数不属于启动类（open/connect/带 URL 的 chat） → 跳过
-   ↓    该次调用 tail 内缺 --headed（非 --headed false / 前缀 AGENT_BROWSER_HEADED
-   ↓      =true|1|yes|on）→ 记 finding
-   ↓    该次调用 tail 内缺 --profile <非空值>（非前缀 AGENT_BROWSER_PROFILE=<值>）→ 记 finding
-   ↓  有 finding → exit 2 阻断（stderr 一次输出全部 finding + hint）
+   ↓    护栏①缺鉴权（tail/env 无 --profile/--state/--headers/--restore 任一）→ 记 finding
+   ↓    护栏②实例超限（agent-browser session list 数 ≥4；CLI 不可用则跳过）→ 记 finding
+   ↓    护栏④缺安全边界（无 --allowed-domains/--content-boundaries）→ 仅记 hint，不阻断
+   ↓  有阻断类 finding → exit 2 阻断（stderr 一次输出全部 finding + hint）
    ↓  无 finding → exit 0 放行
 ```
 
@@ -664,7 +654,7 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/write-guard.js
 - 与 `omp` 插件互补：`omp` 的 `orchestrator-protocol-remind.js` 注入 omp 编排协议（强制委派 omp 子代理），本插件注入通用工作纪律（覆盖 Claude 原生 Agent 工具）——二者可并行启用。
 - `bash-guard.js` 的 cd 检查原本在 `devkit-core`（现已更名 `devkit-tool`）的 `block-cd.js`，本插件 1.3.0 起迁入；`devkit-tool` 自 5.1.0 起不再内置任何 hook。同批删除的 `guard-full-read.js`（大文件全文读取拦截）因与「精确读文件」注入纪律重复，未一并迁入。
 - `write-guard.js` 与另一个插件 `quality-lint` 的 md 200 行检查是同类思路（`PostToolUse` 上挂 Write/Edit、`[L1-BLOCKER]` 输出格式）但各自独立实现——两个插件归属不同、不互相依赖。**关于两者效力等级是否相同，本仓无法核实**：2026-07-31 全盘检索时本机未安装 `quality-lint` 插件本体（只在若干项目里留下 `.quality-lint-state.json` 状态文件），既读不到它的源码也读不到它的 README。若那边的文案写的是"拦截"而实现同样挂在 `PostToolUse`，就与本插件 3.6.0 修掉的是同一类效力虚高，值得那边自己核一次——但这句只是推断，不是本仓验证过的结论。
-- `bash-guard.js` 的 agent-browser 检查只管两个启动参数（`--headed` 与 `--profile`），不涉及浏览器自动化能力本身；`--profile` 具体指向哪个目录走各会话的个人 memory / 全局 CLAUDE.md 约定，本插件只在缺参数时硬拦，不管值本身是否合法。
+- `bash-guard.js` 的 agent-browser 检查管四道护栏（①鉴权 ②实例上限 ④安全边界提醒），不涉及浏览器自动化能力本身；怎么用对见独立插件 `agent-browser` 的 SKILL.md。本插件只在缺鉴权 / 实例超限时硬拦，不管值本身是否合法（如 `--profile` 指向哪个目录走各会话 memory / CLAUDE.md 约定）。
 - 钉钉 dws CLI 写授权由 `radnove-core` 插件的 `pre-tool-use-dws-write.sh` 承担（`permissionDecision: "ask"`），本插件不再重复注入。
 
 ---
@@ -688,7 +678,7 @@ plugins/working-discipline/
 │       ├── agent-dispatch.js           # PreToolUse:Agent —— 6 项结构校验聚合报错；
 │       │                               #   只缺 name 时用 updatedInput 自动补名放行
 │       ├── bash-guard.js               # PreToolUse:Bash —— 裸 cd 开头污染 cwd + agent-browser
-│       │                               #   启动缺 --headed/--profile，两项一次报清
+│       │                               #   启动四护栏（①鉴权 ②实例上限 ④安全边界），一次报清
 │       └── write-guard.js              # PostToolUse:Write|Edit —— 源码 >1000 行 / 本项目内
 │                                       #   CLAUDE.md >200 行；事后提醒，不回滚也不停轮
 └── README.md
@@ -701,7 +691,7 @@ plugins/working-discipline/
 - 增删注入条款 / 切换风格 → 编辑 `hooks/working-discipline.js` 里的 `SECTION_*` 数组，每行是 markdown 一行
 - 调整 subagent 派发门禁 → 编辑 `hooks/guards/agent-dispatch.js`：`MODELS` / `EXEMPT_SUBAGENT_TYPES` / `NAME_PATTERN` / `NAME_MAX` / `NAME_PREFIX_SEPARATORS` / `PROMPT_LEAK_PREFIXES` / `DESC_BODY_MAX` / `ROUTING_TABLE`；自动补名的语义来源、哈希输入与长度预算在 `deriveSlug()` / `shortHash()` / `autoName()`，hint 里回显用户输入前先过 `toAsciiKebab()`；临时整体关闭用 `AGENT_DISPATCH_GUARD=off`（旧名 `AGENT_NAMING_GUARD=off` 同样有效）。**`LEAK_MATCH_MIN` 已在 3.6.0 随 prompt-prefix-overlap 检查整条删除**，不要再去找它
 - 调整 `cd` 判定 → 编辑 `hooks/guards/bash-guard.js` 里的 `CD_PATTERN` / `parseCdTarget()` / `isNoOpCd()`（含 `PWD_TARGETS`）/ `isBackgrounded()` / `SEGMENT_ECHO_LIMIT`（finding 里回灌的违规片段长度）；heredoc 与子 shell 的剥离在 `hooks/lib/shell-parse.js` 的 `stripHeredocs()` / `stripSubshells()`
-- 调整 agent-browser 启动类与白名单子命令 → 同文件的 `LAUNCH_SUBCOMMANDS` / `ALLOWLIST_SUBCOMMANDS`（两者并成 `ALL_KNOWN_SUBCOMMANDS`）/ `HELP_FLAGS` / `HEADED_ENV_PATTERN` / `PROFILE_ENV_PATTERN` / `URL_PATTERN` / `ENV_ASSIGN_PATTERN`
+- 调整 agent-browser 启动类与白名单子命令 → 同文件的 `LAUNCH_SUBCOMMANDS` / `ALLOWLIST_SUBCOMMANDS`（两者并成 `ALL_KNOWN_SUBCOMMANDS`）/ `HELP_FLAGS` / `URL_PATTERN` / `ENV_ASSIGN_PATTERN`；四护栏判据在 `AUTH_FLAGS` / `AUTH_ENV_PATTERNS`（①鉴权）、`INSTANCE_LIMIT` / `countActiveInstances()`（②实例上限，测试桩 `WD_AB_INSTANCE_COUNT`）、`hasSafetyBoundary()`（④安全边界）
 - 调整行数阈值 / 源码扩展名 / 排除路径 → 编辑 `hooks/guards/write-guard.js` 里的 `SOURCE_LINE_LIMIT` / `CLAUDE_MD_LINE_LIMIT` / `SOURCE_EXTENSIONS` / `GENERATED_PATH_PATTERN` / `GENERATED_NAME_PATTERN` / `RULES_DIR_PREFIX`（3.6.0 起 CLAUDE.md 的排除判据由旧常量 `EXCLUDED_SEGMENT_PATTERN` 那种"路径任意位置包含"改成了这个"项目内相对路径前缀"，旧常量已不存在）
 - 调整截图路径的提取与条件注入 → 改 `hooks/lib/prompt-images.js` 的 `IMAGE_TAG_PATTERN` / `BARE_IMAGE_PATH_PATTERN`，或 `hooks/working-discipline.js` 的 `buildImageEvidence()`
 

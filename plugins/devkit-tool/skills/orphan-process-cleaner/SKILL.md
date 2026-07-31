@@ -116,6 +116,30 @@ ps aux | grep "\bclaude\b" | grep -v grep | awk '{print $2, $11, $12}'
 - 询问用户："PID xxx 是 `java mix2api.jar`，启动于 16:28，确认终止吗？"
 - **永远不要静默终止用户可能关心的服务**
 
+### 场景 4：agent-browser / Chrome-for-Testing 僵尸实例（**跨平台，优先用 CLI**）
+
+headless 下用户看不到浏览器窗口，AI 忘记 `close`、或会话崩溃/压缩（SessionEnd 不在压缩时触发）残留的 agent-browser 守护进程与 Chrome-for-Testing（CFT）实例会持续吃内存。**这类僵尸不套用上面的 `ps --ppid` / `kill` 流程**——agent-browser 自带跨平台的清理 CLI，更安全也更彻底。
+
+```bash
+# 1. 列出活动实例（agent-browser 自带的实例视图，比 ps 数进程树准）
+agent-browser session list
+
+# 2. 关掉所有实例（cross-session 唯一手段；bare close 只关当前 session）
+agent-browser close --all
+
+# 3. 清理残留的 daemon sidecar 文件（stale socket/pid，doctor 会自动清）
+agent-browser doctor
+```
+
+**为什么不用 `kill`**：
+
+- agent-browser 是 client-daemon 架构，daemon 管着 CFT 子进程；直接 `kill -9` chrome 可能留下僵尸 daemon 与 sidecar 文件，下次启动冲突。`close --all` 让 daemon 自己优雅关 CFT，`doctor` 收尾 sidecar。
+- CFT 进程名不一定叫 `chrome`（Chrome for Testing 的 app bundle 与日常 Chrome 不同），`ps aux | grep chrome` 容易误伤用户日常浏览器。
+
+**仍需 `ps` 的场景**：`agent-browser` CLI 本身已不在（卸载了/换机器了），但之前残留的 CFT 进程还在跑。这时按上面的 GNU `ps` 流程定位，但**只 kill 明确属于 CFT 的进程**（看 cmd 含 `chrome-for-testing` 或 `agent-browser` 路径），绝不碰用户日常 Chrome。macOS 上 BSD `ps` 不支持 `--ppid`，改用 `pgrep -fl "chrome-for-testing\|agent-browser"` 定位。
+
+> 本市场的 `agent-browser` 插件已挂 SessionEnd 钩子（`hooks/session-end-cleanup.js`），会话正常退出时会自动 `close --all` + `doctor`。本场景处理的是钩子没覆盖到的：CLI 被卸载、会话被 `kill -9` 强杀、或压缩后长时间不用导致 daemon 1h idle 自停前用户就想清理。
+
 ## 操作约束（必须遵守）
 
 1. **只读扫描**：识别阶段只用 `ps`、`pstree`，不做任何写操作

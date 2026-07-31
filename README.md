@@ -4,7 +4,7 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 
 ## 概述
 
-本市场包含 11 个插件，覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、协作方法论等场景。
+本市场包含 12 个插件，覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论等场景。
 
 原 `devkit-git`、`devkit-dev`、`devkit-issue` 已从市场移除，不再作为独立插件提供。
 
@@ -90,7 +90,7 @@ CLI 工具集成，在 Claude Code/Codex 中调用 omp 实现编码、审查、�
 
 ### 9. working-discipline
 
-AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`SubagentStart` 注入子代理、`PreToolUse` 硬拦截污染 cwd 的独立 `cd`（block-cd）。零 skill、零命令，适合作为全局基线长期开启。
+AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`SubagentStart` 注入子代理、`PreToolUse` 硬拦截污染 cwd 的独立 `cd`、缺鉴权或实例超限的 `agent-browser` 启动。零 skill、零命令，适合作为全局基线长期开启。
 
 - 上下文纪律：精确读取、子代理优先、bash 输出限流、macOS 中文路径防漏检（NFC/NFD）
 - 子代理协作：在飞≤16 动态上限、嵌套≤2 软约束、共享骨架文件、结构化回执
@@ -120,6 +120,16 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - 机理：命中即通过 stderr + `exit 2` 把「违规点 + 可移植改法」回灌给 Claude 促其修正（文件已写入，不回滚）
 - 关闭：`PORTABLE_SHELL_LINT=off`
 - Hook 为 Claude Code 专有机制，Codex 侧不生效
+
+### 12. agent-browser（浏览器自动化最佳实践）
+
+基于 [Vercel agent-browser](https://github.com/vercel-labs/agent-browser)（headless 浏览器自动化 CLI，Rust + CDP 直连 Chrome-for-Testing）的使用指令。**默认 headless 运行**，用四道机制替代"看到浏览器窗口"的监督。1 个 Skill（`agent-browser`），零 hook——硬护栏由 `working-discipline` 的 `bash-guard` 承担（避免两插件抢同一道 Bash 闸）。
+
+- **鉴权前置**：首次 open 目标站点前必须先向用户索取账密/token/cookie 并注入（`--headers` / `--profile` / `--state` / `auth save`）；headless 下人类无法中途登录授权
+- **实例上限 4**：全局最多 4 个并发实例（agent-browser 无内置并发上限，guard 查 `session list` 强制）
+- **登录态复用**：持久化 `--profile`，跨会话不重登；推荐独立 AI Testing profile 防抢 SingletonLock
+- **snapshot + 标注截图**：headless 下靠 `snapshot -i`（拿 `@eN` refs）+ `screenshot --annotate` 回看每步，不靠肉眼盯窗口
+- **安全边界**：headless 必带 `--allowed-domains`（限域 + 禁 WebRTC）、`--content-boundaries`（防 prompt 注入）、`--max-output`（防上下文洪泛）
 
 ## 安装
 
@@ -224,7 +234,7 @@ node scripts/install-codex.js --all --dry-run
 - 用户级（`--scope=user`）：写入用户主目录的 `~/.codex/`、`~/.agents/skills/`
 
 **安装内容**：
-- **Skills**：所有 8 个插件的技能目录
+- **Skills**：所有 9 个插件的技能目录
 - **Hooks**：omp 的 SessionStart/UserPromptSubmit 钩子、working-discipline 与 discover-unknowns 的 UserPromptSubmit 注入钩子（portable-shell 的 PostToolUse lint 钩子为 Claude Code 专有，Codex 侧不生效；devkit-tool 自 5.1.0 起不再内置任何 hook）
 - **Agents**：omp 的 3 个子代理（omp-explore、omp-plan、omp-task）
 

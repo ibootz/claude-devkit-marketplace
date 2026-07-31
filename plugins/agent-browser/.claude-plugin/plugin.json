@@ -1,0 +1,22 @@
+{
+  "name": "agent-browser",
+  "version": "1.1.0",
+  "description": "浏览器自动化最佳实践 - 用 agent-browser（Vercel）做网页操作、数据抓取、表单填写、截图取证；默认 headless，鉴权前置 + 实例上限 4 + 安全边界 + SessionEnd 强制清理。用户说\"操作网页/抓页面/浏览器自动化/打开网站/agent-browser/headless\"时触发",
+  "author": {
+    "name": "zhangq"
+  },
+  "homepage": "https://github.com/vercel-labs/agent-browser",
+  "hooks": {
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.js"
+          }
+        ]
+      }
+    ]
+  }
+}

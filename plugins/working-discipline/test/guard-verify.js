@@ -72,8 +72,12 @@ const PLAIN_ESCAPE = path.join(PROJECT, 'docs/../../outside/CLAUDE.md')
 let pass = 0
 const failures = []
 
-function run(guard, payload) {
-  const r = spawnSync('node', [guard], { input: JSON.stringify(payload), encoding: 'utf8' })
+function run(guard, payload, env) {
+  const r = spawnSync('node', [guard], {
+    input: JSON.stringify(payload),
+    encoding: 'utf8',
+    env: env ? { ...process.env, ...env } : process.env,
+  })
   return { code: r.status, err: (r.stderr || '').trim() }
 }
 
@@ -85,8 +89,8 @@ function check(label, expect, actual, detail) {
   failures.push({ label, expect, actual, detail })
 }
 
-function bash(label, command, cwd, expect) {
-  const r = run(BASH_GUARD, { tool_name: 'Bash', tool_input: { command }, cwd })
+function bash(label, command, cwd, expect, env) {
+  const r = run(BASH_GUARD, { tool_name: 'Bash', tool_input: { command }, cwd }, env)
   check(label, expect, r.code, r.err)
   return r
 }
@@ -136,34 +140,73 @@ bash('cd .', 'cd .', PROJECT, PASS)
 bash('cd 当前目录绝对路径', `cd ${PROJECT}`, PROJECT, PASS)
 bash('here-string 不是 heredoc', 'bash <<< "echo hi"', PROJECT, PASS)
 
-// ── bash-guard / agent-browser ──────────────────────────────────────
-// 3.6.0 前误杀，现在应放行
+// ── bash-guard / agent-browser（3.7.0：默认 headless + 四护栏）─────────
+// 模型变更：3.6.0 强制 --headed + --profile；3.7.0 删 --headed，改为
+//   ①鉴权前置（缺 --profile/--state/--headers/--restore 任一即拦）
+//   ②实例上限 4（查 session list；测试用 WD_AB_INSTANCE_COUNT 注入）
+//   ④安全边界提醒（缺 --allowed-domains/--content-boundaries 仅提醒，不阻断）
+// 实例计数默认走真实 CLI，测试机通常未装 → countActiveInstances 返回 -1 → 放行，
+// 故护栏②的 BLOCK 用例统一用 WD_AB_INSTANCE_COUNT 桩注入确定值。
+
+// 仍应放行（沿用 3.6.0 修复）
 bash('open --help', 'agent-browser open --help', PROJECT, PASS)
 bash('connect --help', 'agent-browser connect --help', PROJECT, PASS)
 bash('open --version', 'agent-browser open --version', PROJECT, PASS)
 bash('grep 参数里的 agent-browser', 'grep -rn agent-browser open /tmp', PROJECT, PASS)
-bash('AGENT_BROWSER_HEADED=1', 'AGENT_BROWSER_HEADED=1 AGENT_BROWSER_PROFILE=/tmp/p agent-browser open https://x', PROJECT, PASS)
-bash('AGENT_BROWSER_HEADED=on', 'AGENT_BROWSER_HEADED=on AGENT_BROWSER_PROFILE=/tmp/p agent-browser open https://x', PROJECT, PASS)
-
-// 3.6.0 把全局口令收窄到单次调用的 tail 后，应新拦住
-bash('口令: 另一命令里 echo "--headed"', 'agent-browser open https://x --profile /tmp/p && echo "--headed"', PROJECT, BLOCK)
-bash('口令: 另一片段的 --headed', 'echo --headed; agent-browser open https://x --profile /tmp/p', PROJECT, BLOCK)
-bash('口令: JSON 参数里的 --headed', 'agent-browser open https://y --profile /p --json "{--headed}"', PROJECT, BLOCK)
-bash('口令: 另一片段的 PROFILE 环境变量', 'echo AGENT_BROWSER_PROFILE=/x; agent-browser open https://y --headed', PROJECT, BLOCK)
-bash('--profile= 空值', 'agent-browser open https://x --headed --profile=""', PROJECT, BLOCK)
-bash('--profile 分离空值', 'agent-browser open https://x --headed --profile ""', PROJECT, BLOCK)
-bash('绝对路径调用', '/usr/local/bin/agent-browser open https://x', PROJECT, BLOCK)
-
-// 回归：正常用法不得误拦
-bash('完整参数', 'agent-browser open https://x --headed --profile /tmp/p', PROJECT, PASS)
-bash('npx 前缀', 'npx agent-browser open https://x --headed --profile /p', PROJECT, PASS)
-bash('--headed=false 显式 headless', 'agent-browser open https://x --headed=false --profile /p', PROJECT, PASS)
-bash('--headed false 显式 headless', 'agent-browser open https://x --headed false --profile /p', PROJECT, PASS)
 bash('白名单子命令', 'agent-browser snapshot', PROJECT, PASS)
 bash('chat REPL 无 URL', 'agent-browser chat', PROJECT, PASS)
-bash('chat 带 URL 缺参数', 'agent-browser chat https://x', PROJECT, BLOCK)
 bash('未知子命令按设计放行', 'agent-browser goto https://x', PROJECT, PASS)
 bash('--profile 的值恰为 open', 'agent-browser --profile open snapshot', PROJECT, PASS)
+
+// ── 护栏①：缺鉴权 → 阻断（默认实例数 0，不会触发护栏②）──────────────
+bash('open 无任何鉴权', 'agent-browser open https://x', PROJECT, BLOCK)
+bash('connect 无任何鉴权', 'agent-browser connect 9222', PROJECT, BLOCK)
+bash('chat+URL 无任何鉴权', 'agent-browser chat https://x', PROJECT, BLOCK)
+bash('--profile= 空值视为缺鉴权', 'agent-browser open https://x --profile=""', PROJECT, BLOCK)
+bash('--profile 分离空值视为缺鉴权', 'agent-browser open https://x --profile ""', PROJECT, BLOCK)
+bash('绝对路径调用缺鉴权', '/usr/local/bin/agent-browser open https://x', PROJECT, BLOCK)
+// 口令退化回归：鉴权机制只在本次调用自己的 tail + 紧邻 env 前缀里判定，不跨片段
+bash('口令: 另一片段的 --profile', 'echo --profile /p; agent-browser open https://x', PROJECT, BLOCK)
+bash('口令: JSON 参数里的 --profile', 'agent-browser open https://y --json "{--profile}"', PROJECT, BLOCK)
+bash('口令: 另一片段的 PROFILE 环境变量', 'echo AGENT_BROWSER_PROFILE=/x; agent-browser open https://y', PROJECT, BLOCK)
+
+// 护栏①：带了任一鉴权机制即满足（不再要求 --headed）
+bash('--profile 满足鉴权', 'agent-browser open https://x --profile /tmp/p', PROJECT, PASS)
+bash('--profile= 带值满足', 'agent-browser open https://x --profile=/tmp/p', PROJECT, PASS)
+bash('--headers 注入 token 满足', 'agent-browser open https://x --headers \'{"Authorization":"Bearer t"}\'', PROJECT, PASS)
+bash('--state 满足', 'agent-browser open https://x --state ./auth.json', PROJECT, PASS)
+bash('--restore 布尔开关满足', 'agent-browser --session s1 --restore open https://x', PROJECT, PASS)
+bash('AGENT_BROWSER_PROFILE 环境变量满足', 'AGENT_BROWSER_PROFILE=/tmp/p agent-browser open https://x', PROJECT, PASS)
+bash('npx 前缀带 profile', 'npx agent-browser open https://x --profile /p', PROJECT, PASS)
+bash('显式 headless(无 --headed)带 profile', 'agent-browser open https://x --profile /p', PROJECT, PASS)
+
+// ── 护栏②：实例上限 4（WD_AB_INSTANCE_COUNT 注入计数）────────────────
+bash('实例 3 个(<上限)放行', 'agent-browser open https://x --profile /p', PROJECT, PASS, {
+  WD_AB_INSTANCE_COUNT: '3',
+})
+bash('实例 4 个(=上限)阻断', 'agent-browser open https://x --profile /p', PROJECT, BLOCK, {
+  WD_AB_INSTANCE_COUNT: '4',
+})
+bash('实例 5 个(>上限)阻断', 'agent-browser open https://x --profile /p', PROJECT, BLOCK, {
+  WD_AB_INSTANCE_COUNT: '5',
+})
+// 实例超限 + 缺鉴权同时命中：两者都报（阻断类合并）
+bash('超限且缺鉴权', 'agent-browser open https://x', PROJECT, BLOCK, {
+  WD_AB_INSTANCE_COUNT: '4',
+})
+// CLI 未装(count=-1)时护栏②放行，但护栏①仍独立生效
+bash('count=-1 时仅护栏①生效(缺鉴权仍拦)', 'agent-browser open https://x', PROJECT, BLOCK, {
+  WD_AB_INSTANCE_COUNT: '-1',
+})
+bash('count=-1 且带鉴权放行', 'agent-browser open https://x --profile /p', PROJECT, PASS, {
+  WD_AB_INSTANCE_COUNT: '-1',
+})
+
+// ── 护栏④：缺安全边界仅提醒（不阻断）────────────────────────────────
+// 带 profile 但缺 --allowed-domains/--content-boundaries → 不拦(exit 0)
+bash('缺安全边界不阻断(带 profile)', 'agent-browser open https://x --profile /p', PROJECT, PASS)
+bash('带 --allowed-domains 放行', 'agent-browser open https://x --profile /p --allowed-domains x.com', PROJECT, PASS)
+bash('带 --content-boundaries 放行', 'agent-browser open https://x --profile /p --content-boundaries', PROJECT, PASS)
 
 // ── write-guard ─────────────────────────────────────────────────────
 // 行数边界：3.6.0 修掉 +1 偏移，正好 1000 行且以换行结尾的文件不该被拦
