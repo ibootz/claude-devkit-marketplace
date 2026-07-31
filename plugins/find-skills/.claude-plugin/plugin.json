@@ -1,6 +1,6 @@
 {
   "name": "find-skills",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "发现和安装 agent 技能 - 基于 skills.sh 生态，用 npx skills CLI 搜索安装；用户问\"如何做X\"/\"找X的技能\"时触发",
   "author": {
     "name": "vercel-labs",

@@ -3,9 +3,10 @@
 一个纯 hook 插件，用两种方式把「AI 工作纪律」落到 Claude Code 上：
 
 1. **常驻注入**：每轮往主会话、以及每次子代理启动时的 context 里，塞入一份可审计、可复用的行为准则；本轮用户贴了截图时，额外附一份可原样复制的图片绝对路径清单
-2. **硬拦截**：派发 subagent 时 `name` / `description` / `model` 等**结构字段**不合规（`PreToolUse` deny）、污染 cwd 的独立 `cd`、缺 `--headed`/`--profile` 的 `agent-browser` 启动（`PreToolUse` exit 2）；以及写入完成后拦超 1000 行源码文件、超 200 行 CLAUDE.md（`PostToolUse` exit 2）
+2. **硬拦截**：派发 subagent 时 `name` / `description` / `model` 等**结构字段**不合规（`PreToolUse` deny）、以裸 `cd` 开头污染 cwd 的独立命令、缺 `--headed`/`--profile` 的 `agent-browser` 启动（`PreToolUse` exit 2）
+3. **事后提醒**：写入完成后，超 1000 行的源码文件、当前项目内超 200 行的 `CLAUDE.md` 会拿到一条 stderr 提示（`PostToolUse` exit 2）。**它不是拦截**——触发时文件已经落盘，既不回滚也不停住本轮，见第四章
 
-零 skill、零命令、零子代理，装了就生效。不修改用户文件（拦截类 hook 只阻断"继续往下走"，不撤销已完成的写入），无副作用。唯一一处会改动工具调用的地方是**缺 `name` 时自动补名**，见第二章。
+零 skill、零命令、零子代理，装了就生效。不修改用户文件：两道 `PreToolUse` 闸只阻断工具调用本身，`PostToolUse` 的 `write-guard` 连"继续往下走"都不阻断。唯一一处会改动工具调用的地方是**缺 `name` 时自动补名**，见第二章。
 
 ### 核心设计原则：判据必须真的机械，否则别做成 deny
 
@@ -23,6 +24,10 @@
 |---|---|
 | 取自 `tool_input` 的确定字段（存在性、前缀一致性、字符集、长度）或纯行数计数 | 可以做成 `deny` / `exit 2` |
 | 要靠正则猜命令 / prompt 的语义，或回读 transcript 推断状态 | 留在常驻注入里靠自觉，**别做成拦截** |
+
+**3.6.0 用这条标准回过头审判它自己，结论是三条判据里只有一条真的达标。** 起因是用户先在仓库根立了 `.claude/rules/hook-restraint.md`（"默认不加 hook，能 100% 机械判定才可以"），随即要求用它复核本插件已有的三个 guard。两个 opus 只读审计构造真实 payload 跑真 guard（`bash-guard` 103 条、`write-guard` 27 条、`agent-dispatch` 28 条），发现：**只有 `write-guard` 的行数计数是纯计数**；独立 `cd` 与 `agent-browser` 启动参数都是「对命令字符串做近似 shell 解析后的形态匹配」，与 3.0.0 删掉的关键词 guard 差别是**程度而非性质**（那批猜的是意图，这两条猜的是语法结构）；`agent-dispatch` 里的 `PROMPT_LEAK_PREFIXES`（`description` 正文以 `你是` / `You are` 等句式开头即判为抄了 prompt）也是句式近似判定，不是确定字段比较。
+
+这不意味着这三条该删——用户逐条拍板的结论是"修误杀 + 收窄，不删"（详见本文档「3.6.0 审计」一节）。它意味着**原表格那一行"取自确定字段"当初被读得太宽**：判据取自 `tool_input.command` 这个确定字段，不等于**判据本身**是确定的，因为中间隔着一层近似解析。仓库级规则 `.claude/rules/hook-restraint.md` 现在承担更严格的那份判据分级（能做 / 不能做各自的清单、强度阶梯 `什么都不做 → 注入提醒 → ask → deny`、新增 hook 前必须回答的五个问题、以及"判据改动必须用户拍板、AI 只报不改"），本插件是它的第一批实证来源。
 
 同时**挂载拓扑按拦截对象收敛**：一个对象只有一道闸。3.0.0 之前 `Bash` 上串行挂着三个 guard、`Write|Edit` 上挂着两个，其结构性缺陷是**一批只报最前面那道闸**——AI 补完第一处才看见第二处，多轮往返是拓扑的产物，而不是 AI 每轮新犯一个错。
 
@@ -58,12 +63,12 @@
 | 二、子代理协作 | 在飞≤16（靠自记账盘点，明确禁用 `TaskList` 统计——它是任务板不是在飞 agent 列表）、嵌套≤2、共享骨架文件、结构化回执 | ✅ | — | ✅ |
 | 三、表达约束 | 关键对象点名、待确认四要素、行号引用、简体中文、列表编号 | ✅ | — | ✅ |
 | 四、思维模式 | 举一反三 / 整体 / 第一性 / 逆向 / 自查自纠 / 读者视角 / 写 md 前受众分辨（含三分支要点） | ✅ | — | — |
-| 五、Agent 派发 | 5.1 `subagent_type` 选择、5.2 三档 model 判定标尺（`sonnet` / `opus` / `fable`，**无 `haiku`**）、5.3 调用范式、5.4 派发命名要点索引、5.5 多 subagent 并发时等齐再总结、5.6 派发 prompt 必含三项 | ✅ | — | 仅 5.4（完整版） |
-| 六、hook 边界清单 | 一份索引：三个 guard 各拦什么、哪些规则已删除因而没有兜底。**不复述细则** | ✅ | — | ✅ |
-| 每轮自查 3 条 | 只列指针不复述细则：`Agent` 先写 `name` / 写 md 前输出受众判定句 / 待确认内容用完整段落 + 行号引用 | — | ✅ | — |
+| 五、Agent 派发 | 5.1 `subagent_type` 选择、5.2 三档 model 判定标尺（`sonnet` / `opus` / `fable`，**无 `haiku`**）、5.3 调用范式、5.4 派发命名要点索引、5.5 多 subagent 并发时等齐再总结、5.6 派发 prompt 必含四项（回执 / 图片证据 / 写后回读 / **核实类任务的追踪停止条件**） | ✅ | — | 仅 5.4（完整版） |
+| 六、hook 边界清单 | 一份索引：三个 guard 各管什么、判据是文本形态匹配因而都有误杀面（撞到明显误判就报告用户拍板）、`write-guard` 挂 `PostToolUse` 指望不上它兜底、哪些规则已删除因而没有兜底。**不复述细则** | ✅ | — | ✅ |
+| 每轮自查 4 条 | 只列指针不复述细则：`Agent` 先写 `name` / 写 md 前输出受众判定句 / 待确认内容用完整段落 + 行号引用 / 核实类任务先定追踪停止条件、结论写明追到哪一层 | — | ✅ | — |
 | 本轮证据（条件） | 本轮用户贴了截图时，附图片绝对路径清单；无图轮次一个字符都不注入 | — | ✅ | — |
 
-**每轮层的选条判据**（新增前先过这两问，两个都"是"才加，否则放会话级）：这条**无 hook 兜底**吗？在真实 session 里**实测被忘过**吗？现有 3 条的依据分别是——`name` 在 `Agent` 的 JSON Schema 里根本不存在（照字段表生成必漏，某 session 实测漏 4 次且第二次距第一次 52 分钟）；受众判定的 `md-audience-declaration.js` 已在 3.0.0 删除、现在毫无兜底；待确认内容三要求违反后用户要反复追问才能拿到可决策信息，返工成本最高。
+**每轮层的选条判据**（新增前先过这两问，两个都"是"才加，否则放会话级）：这条**无 hook 兜底**吗？在真实 session 里**实测被忘过**吗？现有 4 条的依据分别是——`name` 在 `Agent` 的 JSON Schema 里根本不存在（照字段表生成必漏，某 session 实测漏 4 次且第二次距第一次 52 分钟）；受众判定的 `md-audience-declaration.js` 已在 3.0.0 删除、现在毫无兜底；待确认内容三要求违反后用户要反复追问才能拿到可决策信息，返工成本最高；核实类任务的停止条件判据只能猜语义因而不做成 guard（见下方「核实类任务」一节），2026-07-31 实测漏写后两个代理对同一处注释给出相反结论，且它**同时约束主会话自己做的核实**——5.6 只管派出去的那部分，留在会话级会漏掉主会话亲自核实的场景。
 
 子代理版带一~三节、五节的 5.4 派发命名规范（**完整版**）、六节索引。四节与五节其余部分主要是指导父代理如何选 `subagent_type` × `model`，对子代理自身价值低，故省 token 略去。
 
@@ -71,7 +76,11 @@
 
 **外部写操作授权（原 dws 章）已从本插件移出**（2.0.0）：钉钉 dws CLI 的写授权改由 `radnove-core` 插件的 `hooks/pre-tool-use-dws-write.sh` 承担，`PreToolUse` 命中写子命令时输出 `permissionDecision: "ask"`，把「须获用户当次明确许可」这个语义要求变成 harness 强制的确认弹窗——比每轮注入 918 字符的自觉约束强得多。
 
-> 完整注入文本见 `hooks/working-discipline.js` 里的 `SECTION_*` 数组。实测体积（3.3.1）：`SessionStart` 6832 字符、`UserPromptSubmit` 1163（无图轮）/ 1425（有图轮）、`SubagentStart` 6865。三者各自独立受 hook 输出硬上限 10000 约束。历史值：3.3.0 `SessionStart` 6328 / `SubagentStart` 6361、3.2.0 `SessionStart` 5985 / `SubagentStart` 6018、3.1.0 主会话每轮 6717、3.0.0 每轮 9165。
+> 完整注入文本见 `hooks/working-discipline.js` 里的 `SECTION_*` 数组。实测体积（3.6.0 guard 审计后）：`SessionStart` 7142 字符、`UserPromptSubmit` 1342（无图轮）、`SubagentStart` 7174。三者各自独立受 hook 输出硬上限 10000 约束。历史值：3.5.0 6886 / 1342 / 6918、3.5.0 改造前 7353 / 1401 / 7345、3.3.1 `SessionStart` 6832 / `UserPromptSubmit` 1163 / `SubagentStart` 6865、3.3.0 6328 / — / 6361、3.2.0 5985 / — / 6018、3.1.0 主会话每轮 6717、3.0.0 每轮 9165。
+>
+> 3.6.0 的净增是 **+256 / 0 / +256**，全部来自六章（hook 边界清单）的三处如实改写——总述加了「判据是文本形态匹配而非语义判定，撞到明显误判就报告用户拍板」、`cd` 条目点明「只认裸 `cd` 开头一种形态，`pushd` / `source` / `eval "cd …"` 同样污染却拦不住」、`Write`/`Edit` 条目点明「挂 `PostToolUse`，触发时文件已经写完了，指望不上它兜底」。用字符换准确性，不是没压到。
+>
+> **数的是字符（JS 的 `.length`），不是字节**——本文件正文以中文为主，UTF-8 下 `wc -c` 得到的数约为字符数的 2.1 倍。2026-07-31 曾据 `wc -c` 的 15138 误判"已超 10000 硬上限"，实际字符数只有 7167。下面的 verify 命令解析 JSON 后取 `len()`，别退回用 `wc -c` 估。
 >
 > 改完必跑三条 verify（长度不达标就别提交）：
 > ```bash
@@ -123,27 +132,86 @@
 
 **`subagent` 与 `teammate` 不必分两套规则**：是同一个 `name` 概念，差别只在用途权重。teammate 场景下 `name` 是 `SendMessage({to})` 的寻址键（没名字就只能用 raw `agentId`）；一次性 subagent 场景下它主要用于面板显示与事后追溯。两种场景的命名格式要求完全一致。
 
+### 核实类任务必须写明追踪停止条件（注入文本 5.6 第 4 项，3.5.0 加）
+
+**观察来源（2026-07-31）**：主会话派两个子代理核实**同一处注释**是否准确，拿回相反结论。前者 `grep` 到注释里提及的方法名不在本文件，报「疑点」；后者读了跨类调用链，确认「无碍」。
+
+复盘结论是**两者的停止条件不同，不是能力差异**。派发 prompt 只写了核实目标（"确认这处注释是否准确"），没写追到哪一层为止，于是两个代理各按自身成本感觉停下：一个的隐含停止条件是「符号在本文件内是否可解析」，另一个是「跨类调用链上是否仍然成立」。两个条件各自自洽，都能产出一份看起来完整的回执，而**两份回执都没交代自己停在哪一层**——所以"结论相反"这件事无法归因，只能重跑一遍才知道分歧出在深度而非事实。
+
+这类损失有个特征：它不出现在任何 diff 里。代码没改错、回执没写错、没有任何 guard 会命中，只是白烧了一轮 token 且一度以为共用发布线上真有问题。因此它以前从未被记录过。
+
+还有一半成因在被核实的对象上：那条注释把**跨类的语义写成了本地语义**。读者（人或 AI）在本文件内找不到闭环，就会把"找不到"当成"有问题"。这类注释的危害不是信息错误，而是把验证成本转嫁给每一个后来读它的人，且每次都以「疑点」形态冒出来——它正是决定大多数读者停在第一层的原因。所以注入文本把它写成**触发信号**：被核实的注释 / 文档 / 命名描述的是跨文件或跨类行为时，本文件内验证必然不闭环，停止条件至少要给到被调方。
+
+**为什么落三处而不是只加一段**（用户当轮的要求是"保证指令遵循度"）：
+
+| 落点 | 注入时机 | 约束谁 | 单独失效的场景 |
+|---|---|---|---|
+| 5.6 第 4 项 | `SessionStart` | **派发侧**：停止条件写进【约束】、交代深度写进【期望输出】 | 根治位置，但只在会话早期注入一次，随轮次被推远 |
+| 每轮自查第 4 条 | `UserPromptSubmit` | 派发侧 + **主会话自己做的核实**（5.6 只管派出去的那部分） | 每轮重申不会衰减，但仍是软约束，AI 可以读到而不执行 |
+| 子代理版开头 | `SubagentStart` | **执行侧**：不论父代理有没有给停止条件，都必须在回执里交代实际停在哪层、哪些边界没追 | — |
+
+第三处是遵循度的关键。前两处都作用在派发侧，一旦漏写就同时失效；而第三处让层级差异**暴露在回执里**——即使派发时忘了给停止条件，两份结论相反的回执也会各自带着"我追到哪层"，分歧当场可归因，不必重跑。它和已有的「回执只回『已完成』视为不合格」并列，放在子代理版正文第二、三句，位置刻意靠前。
+
+**为什么不做成 guard**：判据是"这个任务是不是核实类""prompt 里有没有给停止条件"，两者都只能靠正则猜语义，正撞本文档开头那条核心设计原则（判据靠猜 → 别做成 `deny`）。硬拦会复现 3.0.0 已经付过学费的失败模式——AI 做对了却过不去。漏提醒的代价远低于此。
+
+### 3.5.0 遵循度改造：为什么"加强措辞"没用，改结构才有用
+
+做法是派两个只读代理独立诊断同一份注入文本——一个查遵循度失效机制，一个做字符级冗余量化。两份结论互补、无冲突。
+
+**最有价值的证据是诊断代理自己违反了它正在分析的规则**。它整读了 518 行文件（违反当时的"禁止无目的全文件读取"）、三次超 20 行输出没派子代理、并写了独立 `cd` 被 `bash-guard.js` 当场拦回。它明确写道违反时"没有犹豫"——因为那两条规则**既没写违反后果、也没写例外条款**，而任务收益是明确的。所以纯禁令的真实后果不是引发权衡，是引发**无声跳过**。
+
+同一份报告里还有一个正向对照：同一条 `cd` 规则，以软文本注入时它读过却违反，被 `PreToolUse` 硬拦后**一次就改对了**——因为 finding 文案里给了 `(cd /abs && cmd)` 这个可照抄的模板。判据准 + 文案给模板 = 一次改对；这是 hook 值得存在的样子（另见仓库根 `.claude/rules/hook-restraint.md`）。
+
+本批改动按四类归因，不是逐句润色：
+
+**一是删掉"哪些违规不会被拦"的执行状态披露。** 同一份注入里"`name` 必填"被"漏了会自动补名放行"抵消了三次（5.4.1 末句、5.4 硬门禁的"不拦"bullet、5.4 索引末句、六章 Agent 条目末句）。按成本最小化行动的读者读完得到的净结论是"可以省"。这是整份纪律里最直接的自我削弱形态，改法统一为把"是否会被拦"换成"违反后你会拿到什么"。
+
+**二是删版本史。** `3.4.0 起软放宽`（4 处）、`[haiku] 前缀 3.4.0 起不再拦`、`靠关键词猜语义的 guard 已全部移除`、`2026-07-30 两次会话实测`、dws 归属交代，全部清掉。判据是：讲"规则从哪版变过"→ 删；讲"规则为什么成立"→ 留。所以 `orderIndex: 15` / HTTP 204 那个反例保留了——它是"2xx 不等于字段生效"唯一的说服力来源，删了那条规则就退回成无理由禁令。
+
+**三是给纯禁令补判据与边界。** 一章两条全改：`禁止无目的全文件读取` 补上"核对整份规范时直接整读、分片会漏跨段冲突"（原写法与 `Read` 工具自身"recommended to read the whole file"的建议正面冲突且没有压制）；`>20 行输出交子代理` 改为"先收窄再跑，>200 行且需逐条分析才派"——原阈值 20 行几乎任何 `grep` 都越线，与零章"同消息多调用最优先"的成本排序矛盾，而且对第 2 层子代理**根本不可执行**（它受嵌套上限约束不能再派），无法执行的指令会连带降低整章可信度。另外 3.3(b) 加了裁决句（用户或父代理明确要求清单时按其要求，禁止的是"用短语替代因果"而不是禁止编号本身），并删掉 `上限 16（动态）` 里那个凭两个字就取消阈值硬度的括号。
+
+**四是修三处自相矛盾或不可执行。** 5.1 表格把"大输出命令"从 `general-purpose` 移到 `Explore`（原表格指向 `general-purpose`，下一行却禁止只读任务用它，读者的低成本出路是干脆不派，正好抵消第一章的委派要求）；子代理版零章的授权声明**移到首段并去掉"可能"**（原来沉在章末且措辞软化，而主会话版明确标注"先读这段，再看下面的默认动作"，说明作者知道位置是关键变量）；子代理版"其余条款见主会话版"改为**自带信息**（子代理拿不到主会话版，原写法违反了同一份注入里 3.2 的"引用自带信息"）。
+
+另补两处子代理版的覆盖缺口：**无用户通道的转译总则**（本份凡要求"问用户 / 让用户核对 / 在主对话复述"的条款，改为写进回执交父代理转达——子代理遇到这类条款只能跳过，而"跳过一部分条款"一旦开始就没有边界规定跳到哪为止），以及 **md 受众判定要求**（子代理版不注入四章，这条此前对子代理完全缺失，而子代理正是产出 md 报告的主力）。
+
+压缩侧最大单笔是 `SECTION_NAMING` 的"本节有硬门禁"小节压成一句指针（它整段复述了六章的 `Agent` 条目，-395 字符），其次是 team 模式那条 846 → 约 380（该常量被 `SessionStart` 与 `SubagentStart` 共享，省下的字符按两份算）。
+
+净变化是 SessionStart -467、UserPromptSubmit -59、SubagentStart -427，**远小于冗余审计估算的可压空间**。差额是同批新增的判据、后果句与那两处覆盖缺口——属于"遵循度优先于压缩"的取舍，不是没压到。改后用双向核对验证：25 项应保留的规则锚点全部仍在，8 项应删除的旧表述全部清除。
+
+### 3.6.0 审计：用新立的仓库规则回过头审判本插件自己的三个 guard
+
+**方法本身是这次的主要产出**：先在仓库根立下 `.claude/rules/hook-restraint.md`（"默认不加 hook，能 100% 机械判定才可以"，含判据分级、强度阶梯、新增 hook 前必答的五个问题），然后**立刻拿它回溯审判已经上线的东西**，而不是只用来把关新增。派了两个 opus 只读审计构造真实 payload 打真 guard：`bash-guard` 103 条、`write-guard` 27 条、`agent-dispatch` 28 条。三份结论指向同一个方向——**写 guard 的人会系统性高估自己判据的精度**。
+
+**三个 guard 的自述全部被真 payload 证伪**，而且每一处自述当初写下时都是真诚的：`write-guard.js` 写着"误判空间为零"，实测三类误判（扩展名不能区分源码与数据/产物/依赖、行数带 `+1` 偏移、`basename` 不能区分本项目与第三方）；`bash-guard.js` 写着 `cd` 由 shell-parse "精确定位"，实测 19 类真污染写法放行、heredoc 正文被误杀且 hint 无解、`echo "(start" && cd /tmp && echo "end)"` 一个假括号配对就让真 `cd` 隐形，`--headed` 因全局字符串扫描退化成一个 `echo --headed;` 就能满足的口令；`agent-dispatch.js` 写着"判据全部取自确定字段、误判空间接近零"，而 `PROMPT_LEAK_PREFIXES` 是句式近似判定、`LEAK_MATCH_MIN` 那条 prompt 重合检查的前提根本不成立（合法 description 与 prompt 的 `【目标】` 段天然写同一件事）。
+
+**最值得记住的一条与判据精度无关，而与"文案漂移"有关。** `write-guard` 的**效力等级**在注入文本第六章里被错误升级成了"会被拦"——而它挂 `PostToolUse`，文件已落盘、不回滚、本轮继续（三条证据见第四章）。后果不是抽象的：**主代理据此以为"写出超长文件有机械兜底"，整整一轮都在这个错误前提下工作**。这里真正的教训是——hook 的**实际效力**（代码里挂哪个事件、走 stderr 还是 JSON、有没有 `preventContinuation`）与**描述它的文案**（源码注释、注入文本、README）会各自独立漂移，而**没有任何环节会自动核对两者**。判据可以靠测试用例守住，效力等级只能靠人定期回读代码确认。这也是本次同时改了源码注释、注入文本、本 README 三处的原因：三份都是"文案"，漏改任何一份都会重现同一类事故。
+
+**处置口径由用户逐条拍板，四项全选"修误杀 + 收窄，不删"**（依据 `hook-restraint.md` 第 4 条：判据影响硬阻断行为，AI 只报不改）。已落地的改动：`stripHeredocs()` 剥离 heredoc 正文、no-op `cd` 的 `realpath` 与 `$PWD` 识别、后台化片段放行、finding 违规片段截断 120 字符、`agent-browser` 判定收窄到单次调用的 tail、`--help` 放行、命令名位置判定、行数 `+1` 偏移修复、依赖与产物路径排除、源码扩展名补齐、CLAUDE.md 限定当前项目树内、`prompt-prefix-overlap` 检查整条移除、`autoName()` 哈希补 `description`。**43 条回归用例全绿**，两侧都覆盖——既验旧版误杀现在放行，也验旧版正确拦截的仍然拦得住。
+
+注入文本同步改了三处（六章总述、`cd` 条目、`Write`/`Edit` 条目），净增 `+256 / 0 / +256` 字符。这是**用字符换准确性**：一份把自己效力说大了的纪律文本，比一份短一点的更贵。
+
 ---
 
 ## 二、拦截：`agent-dispatch` 守 `Agent` 派发的结构字段
 
 **触发条件**：`tool_name` 是 `Agent`。注意**不匹配旧工具名 `Task`**——旧名环境下的 `tool_input` 可能压根没有 `name` / `model` 字段，强制校验会造成永久性误拦，fail-open 优于误伤。
 
-### 拦什么：7 项结构校验，多条一并列出
+### 拦什么：6 项结构校验，多条一并列出
 
 这类问题往往同时出现好几个（`name` 前缀不符 + `description` 抄 prompt + 超长），`findings` 聚合成一条 reason 一次报清，才能一次改对：
 
 | # | 校验 | 为什么 |
 |---|------|--------|
 | 1 | `model` 缺失或不在 `sonnet`/`opus`/`fable` | 纪律要求显式指定，禁止默认回落。**这一条命中时额外附完整路由表**帮助选档。`model: "haiku"` 单独给一条 finding（「已从可选档次中移除，最低档是 sonnet」）而不是泛泛报「不在三档之内」——它是旧纪律下的合法档，是最高频的误填 |
-| 2 | `name` 不以 `{model}-` 开头 | 前缀必须与实际 `model` 一致。`haiku-` 开头单独识别并给「改成 `sonnet-<原任务语义>`」的精确改法，避免回落到泛化分支后建议出 `sonnet-haiku-grep-refs` 这种把废弃档次名留在任务语义里的错名 |
-| 3 | `name` 不满足 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` | Agent 工具的原生约束，提前拦下来并给清楚提示（写中文会被工具直接拒） |
-| 4 | `description` 缺失，或 strip 掉可选的 `[模型名]` 前缀后没有正文 | 必填且必须有 3-5 词任务摘要正文。**3.4.0 起不再要求 `[模型名]` 前缀**（软放宽）：name 的模型前缀已是第 2 项强制校验、在飞面板与 description 并排显示，模型档次由 name 一处表达即可，description 再带前缀是冗余（每行模型名出现两次）。仍带了前缀不拦，先 strip 再做正文/泄露检测。strip 正则 `^\[(sonnet\|opus\|fable\|haiku)\]\s*` 仍保留 `haiku` 分支，只为识别并剥除旧写法 |
-| 5 | `description` 正文以角色设定句开头（`你是` / `You are` / `【` / `#` / `作为一名` 等） | 把 prompt 原文抄进 `description` 的高置信特征 |
-| 6 | `description` 正文长度 ≥ 20 且正好是 `prompt` 的开头 | 抄袭特征。20 字符门槛用来避免误报——3-5 词摘要与 prompt 开头偶然重合的概率不低，短文本不判 |
-| 7 | `description` 正文超过 60 字符 | 纪律要求 3-5 词摘要，超长说明塞了 prompt 内容 |
+| 2 | `name` 不以 `{model}-` 或 `{model}_` 开头 | 前缀必须与实际 `model` 一致。**分隔符 `-` 与 `_` 等价**（`NAME_PREFIX_SEPARATORS`，3.6.0 加）：第 3 项那条原生正则本来就允许下划线，只认连字符会把 `sonnet_review_login` 这种「照文档正则写出来的合法名」误拦。`haiku-` / `haiku_` 开头单独识别并给「改成 `sonnet-<原任务语义>`」的精确改法，避免回落到泛化分支后建议出 `sonnet-haiku-grep-refs` 这种把废弃档次名留在任务语义里的错名 |
+| 3 | `name` 不满足 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` | Agent 工具的原生约束，提前拦下来并给清楚提示（写中文会被工具直接拒）。3.6.0 起改法建议里的任务语义先过 `toAsciiKebab()`——旧实现把含中文的原 `name` 原样回显进「改成 xxx」，AI 照抄会再撞一次同一道闸 |
+| 4 | `description` 缺失，或 strip 掉可选的 `[模型名]` 前缀后没有正文 | 必填且必须有 3-5 词任务摘要正文。**3.4.0 起不再要求 `[模型名]` 前缀**（软放宽）：name 的模型前缀已是第 2 项强制校验、在飞面板与 description 并排显示，模型档次由 name 一处表达即可，description 再带前缀是冗余（每行模型名出现两次）。仍带了前缀不拦，先 strip 再做正文/句式检测。**但 `[haiku]` 是例外**：3.6.0 起不再静默剥离，而是单独给一条 finding（`description 前缀 "[haiku]" 用了已移除的档次;本插件无 haiku 档`）——静默吞掉会让人以为 haiku 仍是合法档 |
+| 5 | `description` 正文以角色设定句开头（`你是` / `您是` / `请你` / `作为一名` / `You are` / `Act as` 等 14 项） | 把 prompt 原文抄进 `description` 的高置信特征。**这是本 guard 唯一一条近似判据**（详见下方「判据精度」）。3.6.0 从词表里移除了 `#`、`【`、`Your task` 三项：前两个会命中任何以 markdown 标题或中文书名号开头的**合法**摘要，第三个与 `You are` 的角色设定语义不等价（`Your task summary…` 是合法摘要） |
+| 6 | `description` **原始串**超过 60 字符 | 纪律要求 3-5 词摘要，超长说明塞了 prompt 内容。**按原始串计长、不减去 `[模型名]` 前缀**（3.6.0 改）：旧实现拿 strip 后的正文比，等于给带前缀的写法白送 7-9 个字符额度，「容错接受的旧写法」反而变成收益 |
 
-判据全部取自 `tool_input` 的确定字段，不猜语义、不回读 transcript，误判空间接近零——这是它在 3.0.0 的清理里被保留的唯一理由。
+**判据精度：不要再写成"零误判"。** 3.6.0 前这里写的是「判据全部取自确定字段，误判空间接近零」，审计用 28 条真实 payload 证伪了后半句。六条里有五条确实是确定字段比较（`model` 在闭合枚举 `MODELS` 内、`name` 匹配完整锚定正则 `NAME_PATTERN`、`name` 以 `<model>-`/`<model>_` 开头、`description` 是否为空、`description.length > DESC_BODY_MAX`）——同一输入必得同一结论、可人工复核。**第 5 条不是**：它靠"正文以某个句式开头"近似判断"这是角色设定句而不是任务摘要"，本质在猜语义。已知边界写在 `hooks/guards/agent-dispatch.js:14-23`——假阴性是角色设定句不在开头（`本次请你扮演审计员…`）或换用未列举句式（`扮演` / `担任` / `Pretend you are`）；假阳性是任务摘要本身合法地以词表里的词开头。处置口径是**词表只减不增**：再出现真实误杀就继续收窄或整条降级为注入提醒，不是加更复杂的正则去猜。
+
+**3.6.0 整条移除的 prompt-prefix-overlap 检查**（原第 6 项，常量 `LEAK_MATCH_MIN = 20`：`description` 正文与 `prompt` 开头逐字重合 ≥20 字符即判抄袭）：移除原因不是"阈值不合适"，而是**判据前提不成立**。合法的 `description` 本来就写任务目标，而本仓派发 prompt 的第一段恰是 `【目标】` 且写的是同一件事，两者开头天然重合——它命中的是"写得规范"，不是"抄了 prompt"。真正要防的提示词泄露由第 5 项承担。
 
 ### 不拦什么：只缺 `name` 时自动补名放行
 
@@ -159,7 +227,20 @@
 }
 ```
 
-**自动名的构成**：`<model>-<语义>-<prompt 短哈希 4 位>`。语义来源优先级是「`description` 正文里的 ASCII 词（取前 4 个，≥2 字符）」→「`subagent_type` 转 kebab」。`description` 按纪律写的是中文任务摘要时抽不出 ASCII 词，就退回 `subagent_type`（`修订单竞态` + `general-purpose` → `opus-general-purpose-7f2c`；description 按新规不带 `[模型名]` 前缀，仍带前缀的旧写法会被 deriveSlug 先 strip）——中文转写（拼音 / 翻译）在 hook 里不可靠，宁可给个语义弱但绝不出错的名。哈希以 `prompt` 为输入，保证同批并发的多个 agent 拿到不同的名（同名会让 `SendMessage` 的 latest-wins 寻址把先派的那个弄丢），且是纯函数、不需要持久状态。
+**自动名的构成**：`<model>-<语义>-<短哈希 4 位>`。语义来源优先级是「`description` 正文里的 ASCII 词（取前 4 个，≥2 字符）」→「`subagent_type` 转 kebab」。`description` 按纪律写的是中文任务摘要时抽不出 ASCII 词，就退回 `subagent_type`（`修订单竞态` + `general-purpose` → `opus-general-purpose-7f2c`；description 按新规不带 `[模型名]` 前缀，仍带前缀的旧写法会被 `deriveSlug()` 先 strip）——中文转写（拼音 / 翻译）在 hook 里不可靠，宁可给个语义弱但绝不出错的名。哈希是纯函数、不需要持久状态。
+
+**3.6.0 修掉的哈希碰撞 bug：同批并发分片曾拿到完全相同的自动名。** 旧实现的哈希输入是 `prompt + '|' + slug`（`agent-dispatch.js:220`，3.4.0 版本），漏了 `description`。而本仓最常见的并发形态恰是**同一段 prompt + 不同的中文 description**（如「判定第一批规范」/「判定第二批规范」/「判定第三批规范」），中文 description 抽不出 ASCII 词、三个分片的 `slug` 一齐回落到同一个 `subagent_type`——于是哈希输入三者逐字相同，三个名字也逐字相同。用新旧两版对同一组 payload 实跑复现：
+
+```text
+旧版（HEAD:agent-dispatch.js）  判定第一批规范 → sonnet-explore-ebbd
+                                判定第二批规范 → sonnet-explore-ebbd   ← 三个一模一样
+                                判定第三批规范 → sonnet-explore-ebbd
+现版（3.6.0）                   判定第一批规范 → sonnet-explore-7449
+                                判定第二批规范 → sonnet-explore-3b76
+                                判定第三批规范 → sonnet-explore-2ced
+```
+
+后果正是自动补名本来要避免的那一个：`SendMessage({to: name})` 走 latest-wins 寻址，同名时先派的两个 agent 只能靠 raw `agentId` 找回，等于弄丢。现在哈希输入改为 `prompt + '|' + description + '|' + slug`（`agent-dispatch.js:257-267`）。注意哈希值本身依赖 prompt 原文，换一段 prompt 得到的四位十六进制数不同，上表只用于对照"三个是否相同"。
 
 **为什么不带 `permissionDecision`**：只改参数、不做权限判定。给 `"allow"` 会连带跳过用户自己的权限确认，等于 hook 替用户批准了一次工具调用，属于越权。
 
@@ -179,9 +260,13 @@
 
 **输出通道**：deny 走 JSON `permissionDecision: "deny"`（不是 exit 2）。官方文档明确 `permissionDecisionReason` 是展示给 Claude 的，语义比 exit code 约定更明确。reason 沿用本仓库 guard 的 `[L1-BLOCKER] ... finding= hint=` 格式便于统一识别：
 
+下面这条是拿 `{"model":"sonnet","name":"verdict-part1","description":"你是第 1 层子代理，可派发第 2 层","subagent_type":"general-purpose"}` 实跑 `hooks/guards/agent-dispatch.js` 得到的原样输出（两条 finding 一次报清）：
+
 ```text
-[L1-BLOCKER] tool=Agent check=agent-dispatch finding="name="verdict-part1" 缺模型档次前缀;description="你是第 1 层子代理..." 正文是 prompt 角色设定句" hint="name 改成 "sonnet-verdict-part1";description 改成 "<3-5 词任务摘要>（不带 [模型名] 前缀）";完整规范见注入纪律 5.4 节;确需临时关闭本门禁用 AGENT_DISPATCH_GUARD=off"
+[L1-BLOCKER] tool=Agent check=agent-dispatch finding="name="verdict-part1" 缺模型档次前缀;用户无法从在飞 agent 面板判断这批任务烧的是哪一档模型;description 正文以 "你是" 开头,是 prompt 角色设定/元指令句式而非任务摘要;提示词会暴露到在飞 agent 面板" hint="name 改成 "sonnet-verdict-part1"（任务语义只能用 ASCII 字母数字与 - _）;description 只写"这个子代理在做什么",prompt 与 description 禁止共用同一段文字;完整规范见注入纪律 5.4 节;确需临时关闭本门禁用 AGENT_DISPATCH_GUARD=off"
 ```
+
+注意 `description` 那条 hint 现在写的是「只写"这个子代理在做什么"」，**不再出现"不带 `[模型名]` 前缀"的措辞**（`agent-dispatch.js:369`）——3.4.0 起前缀是软放宽的：省略是推荐写法，写了也不拦，但会一并算进第 6 项那 60 字符的预算里。
 
 这道门禁**默认开启且全局生效**：其他插件或 skill 内部派发 subagent 时（如 `omp` 的强制委派、各类 spec 工作流），若它们不遵守本插件的命名规范，同样会被拦下来。这是**预期行为**——规范要统一才有意义——但如果它挡住了你必须跑的既有工作流：
 
@@ -198,7 +283,7 @@ AGENT_NAMING_GUARD=off     # 1.11.0 起沿用的旧名，继续有效
 
 ---
 
-## 三、拦截：`bash-guard` 守 Bash 命令的两条硬边界
+## 三、拦截：`bash-guard` 守 Bash 命令的两条边界
 
 `PreToolUse` + matcher `Bash`，合并自原 `block-cd.js` 与 `agent-browser-launch.js`。两者原本各自读一遍 stdin、各自解析一遍命令行，且**串行短路**——第一个 guard 拦下后第二个根本不执行。合并后一次解析、一次把所有问题报清：
 
@@ -206,18 +291,55 @@ AGENT_NAMING_GUARD=off     # 1.11.0 起沿用的旧名，继续有效
 [L1-BLOCKER] tool=Bash check=bash-guard finding="独立 `cd` 会污染后续所有 Bash 调用的 cwd(cwd=/x);违规片段：cd /var;agent-browser open 缺 --headed;起 headless CFT 会让用户看不到 AI 操作过程" hint="改用绝对路径,或子 shell `(cd /abs/path && cmd)`,git 命令优先 `git -C <path> <cmd>`;加 --headed(...)"
 ```
 
-两条判据都是命令行的确定结构：`cd` 是 shell 的确定 token（由 `hooks/lib/shell-parse.js` 逐字符切分后精确定位，引号内的、子 shell 里的、no-op 的都能准确排除）；`agent-browser` 是命令名精确匹配 + 子命令词表精确匹配 + 参数存在性判定。**没有"猜意图"的成分**，这是它们在 3.0.0 的清理里被保留的理由。
+### 两条判据的真实覆盖面（3.6.0 按 103 条实测 payload 如实改写）
+
+3.6.0 前这里写的是「`cd` 由 `hooks/lib/shell-parse.js` 逐字符切分后**精确定位**……没有"猜意图"的成分」。2026-07-31 的审计跑了 103 条真实 payload 打真 guard，**"精确"二字被证伪**。如实表述是：
+
+**独立 `cd` 的实际判据**是「剥掉 heredoc 正文与子 shell 后，由 `; && || | 换行` 切出的顶层片段、`trim()` 后以 `cd` 开头」（`bash-guard.js:125` 的 `CD_PATTERN` 与 `:193-207` 的 `checkCd()`）。它抓的是**文本形态**，不是"这条命令是否改变父 shell 的 cwd"这个语义。
+
+**`agent-browser` 的实际判据**是命令名按 basename 匹配（跳过 `VAR=值` 前缀，接受 `npx` / `bunx` / `pnpm dlx` 与 `/usr/local/bin/agent-browser` 这类绝对路径）、子命令取 tail 里第一个位置参数并在已知词表内匹配、`--headed` / `--profile` 在**该次调用自己的 tail 内**判定（`bash-guard.js:249-342`）。词表命中与参数存在性确实是确定判定，但"这条命令是不是在调 agent-browser"仍是形态推断。
+
+两条都是**提醒**，不是**保证**。它们仍然值得存在的理由不是判据完美，而是拦截文案里给了可照抄的模板（见下方 §3.5.0 那处正向对照）；未覆盖清单逐条列在下面两个 Known Limitation 里，别把"没被拦"读成"没问题"。
 
 ### 检查一：独立 `cd` 污染 cwd
 
 Bash 工具的 cwd 在多次调用之间**持久保留**。AI 中间执行一次 `cd /tmp`，后续所有相对路径操作都会失准——排查半天才发现是 cwd 被静默改掉了。
 
-- **阻断**（exit 2）：命令链里存在会真正改动 cwd 的独立 `cd`
-- **放行**：子 shell `(cd /path && cmd)`（cwd 不回流父进程）/ 命令替换 `$(cd /path && pwd)` / 字符串内的 `cd`（`echo "cd /tmp"`）/ **no-op cd**（目标解析后等于当前 cwd，如 `cd .`、`cd <当前目录绝对路径>`）
+- **阻断**（exit 2）：顶层片段以裸 `cd` 开头，且目标不是 no-op
+- **放行**：子 shell `(cd /path && cmd)` / 命令替换 `$(cd /path && pwd)` / 字符串内的 `cd`（`echo "cd /tmp"`）/ **heredoc 正文里的 `cd`**（3.6.0 加）/ **以单个 `&` 后台化的片段**（3.6.0 加）/ **no-op cd**（目标解析后等于当前 cwd：`cd .`、`cd $PWD`、`cd ${PWD}`、`cd <当前目录绝对路径>`，3.6.0 起还包括符号链接等价与大小写等价路径）
 
-**stderr 控制在 400 字符量级**。2.0.0 之前这里是约 1500 字符的完整事故复盘，每次拦截都灌进上下文——**这本身就是本插件要治的"注意力抢占"的一个实例**，而且是最讽刺的一种：一个用来纠正行为的提示，自己占掉了比被纠正的行为更多的注意力。复盘搬进了源码文件头注释（给维护者读）。
+#### 3.6.0 修掉的四类误杀（均为审计实测的真实 BLOCK）
+
+1. **heredoc 正文，最严重的一类**。`ssh prod bash -s <<'EOF' / cd /srv/app / git pull / EOF` 被判成本地 cwd 污染，而那个 `cd` 在**远程主机**执行；`python3 - <<'EOF' / print(1) / cd /tmp / EOF` 里的 `cd` 甚至根本不是 shell 命令。根因是 heredoc 正文里的换行被 `splitSegments()` 当成命令分隔符，于是正文每一行都被当作独立的本地命令判定。更糟的是 hint 给的两个模板（改绝对路径 / 套子 shell）对 heredoc 正文**完全无从下手**——AI 撞上去改不动。修法是 `checkCd()` 先调新增的 `stripHeredocs()` 剥离正文（`shell-parse.js:195-214`，只保留声明行本身，覆盖 `<<DELIM` / `<<-DELIM` / `<<'DELIM'` / `<<"DELIM"`，显式排除 here-string `<<<`）。
+2. **`cd /tmp &`**：`&` 结尾的命令在子 shell 异步执行，父 shell 的 cwd 不变（`isBackgrounded()`，`bash-guard.js:187-190`）。
+3. **符号链接等价**：macOS 上 cwd 为 `/private/tmp` 时 `cd /tmp` 实际是 no-op，而旧实现只做 `path.resolve` 的字符串归一、不 `realpath`。
+4. **`cd $PWD` 与大小写等价路径**（APFS 默认大小写不敏感），同上，旧实现按字面串比对判成"真的换目录"。
+
+**stderr 控制在 400 字符量级**。3.6.0 顺带修了一处反噬：违规片段原样回灌进 finding，曾把 20 多行测试数据整段塞回上下文（实测单条 900+ 字符）。现在片段截断到 `SEGMENT_ECHO_LIMIT`（120 字符）。2.0.0 之前这里是约 1500 字符的完整事故复盘，每次拦截都灌进上下文——**这本身就是本插件要治的"注意力抢占"的一个实例**，而且是最讽刺的一种：一个用来纠正行为的提示，自己占掉了比被纠正的行为更多的注意力。复盘搬进了源码文件头注释（给维护者读）。
 
 **已知误报**：shell 函数定义 `cd() { ...; }` 会被判成独立 `cd`——tokenizer 只看到段首的 `cd` token，不区分「调用」与「定义」。真实触发过两次（2026-07-26 与 2026-07-29 本插件自身的开发会话）。这类写法本就罕见且没有必要，未做特判：加一条「后跟 `()` 则跳过」的规则会让解析器为一个近乎不存在的场景变复杂，而绕开的成本只是删掉那行。
+
+#### Known Limitation：只认「裸 `cd` 开头」一种形态，19 类真污染写法放行
+
+审计清点出 **19 类同样污染父 shell cwd、但本 guard 实测全部放行**的写法，完整清单在 `hooks/guards/bash-guard.js:18-22`。分四组看：
+
+同义或改写过的调用——`pushd /tmp`、`source ./setup.sh` 或 `. ./setup.sh`（脚本正文里有 `cd`）、`eval 'cd /tmp'`、`\cd /tmp`、`builtin cd /tmp`、`command cd /tmp`、`"cd" /tmp`（引号让首 token 不再字面等于 `cd`）。前缀挡住了段首——`CDPATH=/ cd tmp`（环境变量赋值前缀）、`time cd /tmp`。分隔符不被识别——`git status & cd /tmp`：单个 `&` 在 `splitSegments()` 里没有语义（只切 `&&`），整段被当成一个片段，而它以 `git` 开头。复合结构里的分支标签排在 `cd` 之前——`if ...; then cd /tmp; fi`、`{ cd /tmp; }`、`for d in *; do cd $d; done`、`case $x in a) cd /tmp;; esac`，以及函数体内的 `cd`。
+
+对照之下，本 guard 拦得住的其实只有 `cd /x`、`foo && cd /x`、`foo; cd /x` 这一族。这正是仓库规则 `.claude/rules/hook-restraint.md` 里「判据抓的是文本形态而非真实风险」那条的实证来源，注入文本六章的 `cd` 条目因此改成了「要守的是 cwd 干净，不是躲过这道闸」。
+
+#### Known Limitation：`stripSubshells` 的括号匹配不感知引号，一个假括号就能让真 `cd` 隐形
+
+`hooks/lib/shell-parse.js:135` 剥子 shell 用的是 `/\([^()]*\)/g` 这个纯字符匹配，**不判断括号在不在引号里**。于是引号内一个不成对的 `(` 会跟后面某个 `)` 配对，把中间的真实命令一起吃掉。2026-07-31 的对照实测：
+
+```text
+echo "(start" && cd /tmp && echo "end)"   → exit 0 放行（cd 被整段剥离，checkCd 根本看不到它）
+echo "a)" && cd /tmp                      → exit 2 拦下（只有 ) 没有 (，剥不掉）
+(cd /tmp && ls) && cd /var                → exit 2 拦下（对照组：括号外的真 cd 仍在）
+```
+
+这条同时改写了一个此前的**因果误述**：README 与源码原本都说 `(cd /abs && cmd)` 放行是因为"cwd 不回流父进程"。实际机制是**括号里的文本被删掉了**，guard 压根没做那个语义判断——第三行那个对照组就是旁证。结论对同一件事仍然成立（子 shell 确实不污染父 shell），但**理由不同**，而理由决定了边界：既然靠的是字符剥离，第一行那种"假括号"就能让真 `cd` 一起消失。
+
+方向是**放行**（少看到东西 → 少拦），符合 `shell-parse.js` 文件头写明的"宁可放行也不误拦"取向；代价是调用方不能据此声称自己"精确"覆盖了某类语义。
 
 #### Known Limitation：跨插件 cd 探测差异
 
@@ -240,7 +362,7 @@ git -C /abs/path/to/repo status
 
 **`--profile` 的设计理由**：同一会话里加了 `--headed` 之后暴露第二个问题——AI 默认用一次性临时 profile 目录起 CFT，目录里没有任何登录态，**每次会话都要在浏览器里重新登录一遍业务系统**。用户拍板方案：硬要求 `--profile`，引导 AI 复用一个专门建立、一次性登录好的 "AI Testing" profile 目录（与用户日常 `Default` profile 物理隔离，不会互相抢 `SingletonLock`），登录态跨会话持久化；纯隔离测试场景仍可用 `--profile "$(mktemp -d)"` 满足硬性要求。
 
-判定顺序：命令里出现 `agent-browser` 或 `npx agent-browser` → 同一顶层片段内匹配到**启动类子命令** → 两条独立检查，命中任意一条即拦（都缺时 finding / hint 各列两条）。
+判定顺序（3.6.0 起逐片段独立走完，不再跨片段共用结果）：切出顶层片段 → 在片段的**命令名位置**认出 `agent-browser`（跳过 `VAR=值` 前缀，接受 `npx` / `bunx` / `pnpm dlx` 转发，命令名按 basename 比对因而 `/usr/local/bin/agent-browser` 也算）→ tail 里含 `--help` / `-h` / `--version` / `-V` 直接放行 → 取 tail 第一个位置参数当子命令，属于**启动类**才继续 → 两条独立检查，命中任意一条即拦（都缺时 finding / hint 各列两条）。
 
 | 启动类子命令 | 说明 |
 |--------|------|
@@ -248,7 +370,9 @@ git -C /abs/path/to/repo status
 | `connect` | 连接并拉起实例 |
 | `chat` | 仅当后面接了 URL 位置参数才算启动；纯 REPL 模式不拦 |
 
-**探测/后续操作类子命令一律放行**：只读探测（`skills` `doctor` `install` `upgrade`）、生命周期无关（`close` `mcp` `dashboard` `session` `plugin` `auth` `profiles` `confirm` `deny`）、后续操作类（`snapshot` `click` `fill` `type` `screenshot` `eval` `network` `tab` 等一整套）。子命令识别用的是「第一个与已知词表精确匹配的 token」，不是"第一个非 flag token"——`--profile /tmp/foo` 这类 flag 接值的写法，值本身不在词表里会被自然跳过。
+**探测/后续操作类子命令一律放行**：只读探测（`skills` `doctor` `install` `upgrade`）、生命周期无关（`close` `mcp` `dashboard` `session` `plugin` `auth` `profiles` `confirm` `deny`）、后续操作类（`snapshot` `click` `fill` `type` `screenshot` `eval` `network` `tab` 等一整套）。
+
+子命令识别在 3.6.0 反向改过：现在取的是「tail 里**第一个位置参数**」（跳过 flag 及其值），命中词表才当子命令、**不在词表里一律返回 `null` 即放行**（`findSubcommand()`，`bash-guard.js:269-278`）。旧写法是"第一个与词表精确匹配的 token"，那会把 `--profile open` 这类 flag 值误当成子命令。
 
 正确调用示例：
 
@@ -258,6 +382,27 @@ AGENT_BROWSER_HEADED=true AGENT_BROWSER_PROFILE=/tmp/ab-profile agent-browser op
 agent-browser --headed false --profile /tmp/ab-profile open https://example.com   # 显式选择 headless，仍需带 --profile
 agent-browser --headed --profile "$(mktemp -d)" open https://example.com          # 纯隔离测试场景
 ```
+
+#### 3.6.0 修掉的四类误杀，外加一类把判据变成"口令"的退化
+
+**先说那类退化，它比误杀更严重**：`--headed` 与 `AGENT_BROWSER_PROFILE=` 原本对**整条命令字符串**全局扫描一次、各片段共用同一个结果。等于这道闸退化成一个**口令**——`echo --headed; agent-browser open https://x.com` 零成本满足，把 `--headed` 写在注释里、写在某个 JSON 参数里、写在另一个毫不相干的片段里，全都算数。现在两个参数都只在该次调用自己的 tail（与紧邻的环境变量前缀）里判定（`checkAgentBrowser()`，`bash-guard.js:319-342`）。
+
+四类误杀（均为审计实测的真实 BLOCK）：
+
+1. `grep -rn agent-browser open /tmp` 被当成真实启动。旧实现只要命令里某个 token 字面等于 `agent-browser` 就认定是调用，**不看它在不在命令名位置**。现在要求它处于片段起始（跳过 `VAR=值` 前缀）或紧跟 `npx` / `bunx` / `pnpm dlx`。
+2. `agent-browser open --help` 被判缺两个参数。查帮助不拉起任何实例，纯噪音；而且为了过闸给 `--help` 硬加 `--headed`，拿到的仍然只是帮助文本。现在 tail 含 `--help` / `-h` / `--version` / `-V` 直接放行。
+3. `AGENT_BROWSER_HEADED=1` 被判缺 `--headed`。旧实现写死字面量 `=true`，而同一处 `--profile` 的环境变量判据只要求非空——**两条松紧不一致**。现在接受 `true|1|yes|on`（`HEADED_ENV_PATTERN`，大小写不敏感）。
+4. `--profile=""` 被判为"有值"。旧实现按 token 长度 >10 粗判，而 `tokenize()` 后的 `--profile=""` 首字符是 `-`、外层 `stripQuotes()` 不生效，取 `slice` 拿到的是两个引号字符。实际传给 CLI 的是空值。现在对取出的值再剥一次引号后判非空。
+
+顺带两处方向相反的调整：命令名改按 basename 匹配后，`/usr/local/bin/agent-browser open` 这类原本漏掉的绝对路径调用现在能识别（**收严**，且那确实就是在调 agent-browser）；删掉死代码 `/--headed\s+false\b/`——它后面紧跟的 `/--headed\b/` 必然也命中同一串。
+
+**明确未采纳的一项**：`--profile-dir` 与 `-H` 短别名是否真实存在于 CLI 未经验证，因此没有据此放宽判据。要放宽先跑一次 `agent-browser --help` 拿到真实选项表——不基于未验证的假设改判据，这也是 `.claude/rules/hook-restraint.md` 第 4 条（判据改动必须用户拍板）的一部分。
+
+#### Known Limitation：间接调用与未知子命令一律放行
+
+三类已知不覆盖，写在 `hooks/guards/bash-guard.js:29-34`：
+
+命令替换与变量间接调用——`$(which agent-browser) open https://x.com`、`AB=agent-browser; $AB open https://x.com`，命令名位置上的 token 不字面等于 `agent-browser`，认不出来。**不在词表里的子命令一律放行**——这是有意选择的方向（未知即放行，避免把 CLI 新增的普通子命令误拦），代价是 agent-browser 日后新增启动类子命令时，本判据会**静默失效**、没有任何报错。白名单里的 `read <URL>` 等子命令在 daemon 不存在时会**自行拉起一个 headless 实例**，那正是 `--headed` 要防的情形，但它被归在"后续操作类"里放行了。
 
 #### AI Testing profile 创建与使用指南
 
@@ -280,19 +425,44 @@ agent-browser --headed --profile "$(mktemp -d)" open https://example.com        
 
 ---
 
-## 四、拦截：`write-guard` 守文件行数
+## 四、事后提醒：`write-guard` 守文件行数（**它不是拦截器**）
 
 `PostToolUse` + matcher `Write|Edit`，合并自原 `max-source-lines.js` 与 `claude-md-max-lines.js`。两条检查互斥（一个文件不可能同时是 `.md` 和源码扩展名），合并的收益不在"一次报两条"，而在消除一次进程启动 + 一次重复的 `readFileSync`——`PostToolUse` 每次写文件都触发，这是热路径。
 
-**注意这是 `PostToolUse`**：文件已经写完，阻断的是"继续往下走"而非撤销这次写入。
+### 先修正一条被广泛误读的断言：它不拦，也不停
+
+3.6.0 之前，本章标题、注入文本六章、以及 `write-guard.js` 自己的注释都写着"会被拦"。**这是错的**，而且错得有代价（见本文档「3.6.0 审计」一节）。真实行为是：hook 挂在 `PostToolUse`，触发时**文件已经落盘**，本 guard 既不回滚这次写入、也不停住本轮，只是把一句 stderr 喂回给 Claude 当附加上下文，**这一轮继续往下走**。
+
+三条实测证据（`write-guard.js:11-22`）：
+
+1. **它没有、也无法做回滚**。整份 `hooks/guards/write-guard.js` 只有两处 `readFileSync`（读 stdin、读目标文件），零个 `fs` 写操作。审计连续 6 次拦同一个 12436 行文件后复核该文件的 md5 与 mtime——**未变**。顺带说明 `finding` 里那个行数本身就是证据：它是**读落盘后的文件**数出来的（`write-guard.js:217`），能数出来就说明已经写进去了。
+2. **Claude Code 2.1.220 二进制里的明文**：`On PostToolUse, the reason is fed back to Claude and the turn continues.`
+3. **真能停住回合的是 JSON 输出字段 `preventContinuation`**，而本文件走的是 `process.stderr.write` + `process.exit(2)`，压根不输出 JSON。
+
+所以正确的心智模型是：`Agent` 与 `Bash` 那两道是**闸**（`PreToolUse`，工具调用没发生），`Write`/`Edit` 这道是**回执单**（`PostToolUse`，事情已经做完了）。任何形如「反正超长了会被拦下所以不用提前判断」的推理都建立在错误前提上——动笔前就要判断该不该拆。注入文本六章的对应条目已在 3.6.0 改成「它挂 `PostToolUse`，触发时文件已经写完了……指望不上它兜底」。
 
 ### 检查一：单一源码文件 > 1000 行
 
 行数超硬阈值是"职责过大"的信号——该文件大概率在做不止一件事，继续往里堆代码只会让可读性、可测试性、review 成本一起变差。这条只管"行数"这一个维度，语法/风格交给 linter。
 
-- **命中扩展名**（小写比对）：`.java .js .ts .jsx .tsx .vue .py .go .rs .rb .php .cpp .cc .cxx .c .h .hpp .cs .kt .swift .m .mm .css .scss .sass .less .sql`——`.md .json .yaml .yml .toml .env .lock` 等非源码文件不受约束
-- **判定**：命中扩展名 AND 落盘后总行数（按 `\n` 分割，空文件计 0 行）> 1000
-- **阻断**：`[L1-BLOCKER] file={相对路径} check=write-guard finding="{N} lines exceeds source limit 1000" hint="按职责拆分模块,不要继续在同一文件堆代码"`
+- **命中扩展名**（小写比对，`SOURCE_EXTENSIONS`）：`.java .kt .kts .scala .groovy .gradle .js .mjs .cjs .ts .mts .cts .jsx .tsx .vue .svelte .astro .py .go .rs .rb .php .pl .lua .dart .cpp .cc .cxx .c .h .hpp .cs .swift .m .mm .hs .ex .exs .erl .clj .cljs .sh .bash .zsh`——`.md .json .yaml .yml .toml .env .lock` 等非源码文件不受约束
+- **排除路径**（3.6.0 加）：`GENERATED_PATH_PATTERN` 命中依赖 / 产物 / 虚拟环境目录段（`node_modules` `bower_components` `vendor` `third_party` `Pods` `dist` `build` `target` `out` `.next` `.nuxt` `.output` `coverage` `__pycache__` `.venv` `venv` `site-packages`），或 `GENERATED_NAME_PATTERN` 命中生成物命名约定（`.min.` `.generated.` `.g.` `.bundle.` `_pb2.` `.pb.`）
+- **判定**：命中扩展名 AND 未命中排除路径 AND 落盘后总行数 > 1000
+- **提醒**（exit 2 走 stderr，文件已落盘）：`[L1-BLOCKER] file={相对路径} check=write-guard finding="{N} lines exceeds source limit 1000" hint="按职责拆分模块,不要继续在同一文件堆代码"`
+
+#### 3.6.0 的三处收窄：扩展名不能区分"源码"，行数还差一
+
+3.6.0 前这里的注释写着"误判空间为零"。审计用 27 条真实文件跑真 guard 证伪了它——**扩展名不能区分源码与数据 / 产物 / 第三方依赖，`basename` 不能区分本项目与别人的项目，行数计数还带 `+1` 偏移**。三处已收窄，但**没有归零**：
+
+**一是 `.sql` 与样式表（`.css` / `.scss` / `.sass` / `.less`）整体移出源码集合。** 一个 3539 行的全库建表 DDL 被判"按职责拆分模块"毫无意义——拆成 4 个文件只会破坏可执行性；vendored 的 `animate.css`（4073 行）同理。行数与"职责过大"这个信号在这类文件上根本不成立。代价是**手写的超长样式表与 SQL 现在不再有任何约束**，这是换掉那批误判的自觉取舍。
+
+**二是依赖与产物路径排除。** 审计实测被误拦的真实样本：`node_modules/animate.css/animate.css`、`target/classes/db/schema.mysql.sql`、`dist/hooks/bridge.js`（2511 行的打包产物）。这些都不是"我们正在写的源码"，提示拆分毫无意义。
+
+**三是补齐扩展名黑洞——这处方向原本刚好是反的。** `.mjs` / `.cjs` / `.sh` 等**原本不在**集合里，审计实测 1710 行的 `keyword-detector.mjs` 与 2657 行的 `setup.sh` 全部放行。也就是说"AI 把 3000 行堆进一个文件"这件事，**换个扩展名就完全不受约束**，而真正该放行的 SQL / CSS 反倒被拦。
+
+**外加行数 `+1` 偏移修复。** 旧实现 `content.split('\n').length` 在文件以换行结尾时（POSIX 文本文件的常态）多算一行。审计两组实测：`wc -l` 得 12436、guard 报 12437；`wc -l` 得 685、guard 报 686；`tail -c 1 | xxd` 确认结尾就是 `0a`。后果是**阈值文案与实际行为差一**——正好 1000 行且以换行结尾的文件被算成 1001 行报出来，而 finding 告诉 Claude 的是 `limit 1000`，照 1000 行去卡会反复撞同一条提醒。现在 `countLines()`（`write-guard.js:143-147`）先去掉末尾那个换行再分割，空文件仍显式计 0 行。
+
+**仍然未覆盖**：`.ipynb` / `.tf` / `.json` 等按行数衡量无意义的类型没有纳入；手写超长 SQL 与样式表如上所述已无约束。
 
 ### 检查二：CLAUDE.md > 200 行
 
@@ -303,10 +473,25 @@ agent-browser --headed --profile "$(mktemp -d)" open https://example.com        
 拆分真正的额外收益是 `paths` frontmatter：rules 文件可声明只在改动匹配某些路径时才加载，比无条件常驻的 CLAUDE.md 更省上下文。
 
 - **命中文件**：`basename` 不区分大小写等于 `claude.md`（`CLAUDE.md` / `claude.md` / `Claude.Md` 均命中），且不限于仓库根——多 CLAUDE.md 项目里子目录下的同名文件同样受约束
-- **排除**：路径含 `.claude/rules/` 目录段的文件不受限——这正是拆分后应当落脚的地方
-- **阻断**：`hint` 明确指路 `拆到 .claude/rules/{topic}.md(自动加载,不要在 CLAUDE.md 里 @import 或加链接引用;可用 paths frontmatter 限定生效路径),禁止压缩正文导致约束丢失`，不是只报一个数字让 AI 自己瞎猜怎么合规
+- **限定当前项目树内**（3.6.0 加）：`path.relative(cwd, filePath)` 不以 `..` 开头、也不是绝对路径（win32 跨盘符），否则放行
+- **排除**：项目内相对路径**以 `.claude/rules/` 开头**（`RULES_DIR_PREFIX`）的文件不受限——这正是拆分后应当落脚的地方
+- **提醒**（exit 2 走 stderr，文件已落盘）：`hint` 明确指路 `拆到 .claude/rules/{topic}.md(自动加载,不要在 CLAUDE.md 里 @import 或加链接引用;可用 paths frontmatter 限定生效路径),禁止压缩正文导致约束丢失`，不是只报一个数字让 AI 自己瞎猜怎么合规
 
-**两条共用的放行场景**：`tool_name` 不是 `Write`/`Edit` / 两条检查都不适用（此时不读盘）/ `file_path` 缺失 / 文件读取失败（竞态删除等基础设施异常不误拦）。
+#### 3.6.0 的两处收窄：别人的 CLAUDE.md 不归你管，以及一个被实测出来的绕过点
+
+**一是必须落在当前项目树内。** 这条约束的**依据**是"该文件常驻当前会话上下文、吃上下文预算"，而那取决于它在不在当前 `cwd` 树里——`basename` 单独判定做不到这件事。审计实测被误拦的真实样本是两个插件市场缓存里**别人写的** CLAUDE.md：`~/.claude/plugins/marketplaces/context-engineering-kit/CLAUDE.md`（257 行）与同目录下 `xxstar-prod-ai/CLAUDE.md`（217 行）。维护插件市场缓存时改到它们，会被按"本项目上下文预算"这个根本不适用的理由拦下。
+
+**二是 `.claude/rules/` 排除从"路径任意位置包含"改为"项目内相对路径以此开头"。** 旧实现 `/(^|\/)\.claude\/rules\//` 是个**实测可用的绕过点**——只要让路径里出现这个目录段，任意位置都算：
+
+```text
+BLOCK | <别处>/ccg-workflow/CLAUDE.md                                （686 行）
+PASS  | <本仓>/.claude/rules/../../../../<别处>/ccg-workflow/CLAUDE.md（同一个文件，绕过）
+BLOCK | <本仓>/docs/research/../../../../<别处>/ccg-workflow/CLAUDE.md（对照组）
+```
+
+第三行那个对照组是关键：它证明放行是**那个特定路径段**导致的，不是 `..` 导致的。改用 `path.relative()` 归一化后再判断（`projectRelative()`，`write-guard.js:157-168`），`..` 爬出项目的场景先被"项目树内"那条挡掉，绕过点随之消失。
+
+**两条共用的放行场景**：`tool_name` 不是 `Write`/`Edit` / `file_path` 缺失 / 路径命中依赖·产物·生成物模式 / 两条检查都不适用（此时不读盘）/ 文件读取失败（竞态删除等基础设施异常不误拦）。
 
 ---
 
@@ -327,7 +512,7 @@ agent-browser --headed --profile "$(mktemp -d)" open https://example.com        
 
 | 原 hook 强制的规则 | 现在在哪 |
 |---|---|
-| 结构化回执 / 截图附绝对路径 / 写后回读传染 | 注入 5.6「派发 prompt 必须包含的三项内容」，标题里明写「没有 hook 兜底，漏了不会有人拦你」 |
+| 结构化回执 / 截图附绝对路径 / 写后回读传染 | 注入 5.6「派发 prompt 必含四项」的前三项（第 4 项是 3.5.0 新加的核实类停止条件），标题里明写「没有 hook 兜底，漏了没人拦你」 |
 | 派发档位选择 | 注入 5.1（`subagent_type` 权限边界）与 5.2（三档 model 判定标尺） |
 | 写 md 前的受众判定 | 注入四、第 7 项，含完整三分支要点 |
 | 非 ASCII 路径 NFC/NFD 漏检 | 注入一、末条「空结果不得直接判『没有』」 |
@@ -370,10 +555,11 @@ SessionStart（会话开始 + 每次 auto-compact 后） / UserPromptSubmit（�
    ↓
 node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js
    ↓  读 stdin 的 hook_event_name 分流（3.2.0 起三层）：
-   ↓    SessionStart     → 一、二、三、四、五（含 5.4 索引、5.6 三项）、六        实测 5985 字符
-   ↓    UserPromptSubmit → 零（并行优先）+ 每轮自查 3 条                          实测 1163 字符
-   ↓                       + 经 lib/prompt-images.js 扫 payload：有图才追加路径清单（有图轮 1425）
-   ↓    SubagentStart    → 零(精简)、一、二、三、5.4 命名规范完整版、六（缺四）    实测 6018 字符
+   ↓    SessionStart     → 一、二、三、四、五（含 5.4 索引、5.6 四项）、六        实测 7142 字符
+   ↓    UserPromptSubmit → 零（并行优先）+ 每轮自查 4 条                          实测 1342 字符
+   ↓                       + 经 lib/prompt-images.js 扫 payload：有图才追加路径清单
+   ↓    SubagentStart    → 零(精简)、一、二、三、5.4 命名规范完整版、六（缺四）    实测 7174 字符
+   ↓                       + 开头的执行侧要求：结构化回执 + 核实类任务交代追踪深度
    ↓    未识别事件        → 回退 UserPromptSubmit（三者中最小的一份，回退错了只多注入 1.1k）
    ↓
 stdout 输出 { hookSpecificOutput: { hookEventName, additionalContext } }
@@ -386,7 +572,7 @@ Claude Code 把 additionalContext 拼进对应 context
 
 **为什么零章偏偏留在每轮**：它对抗的是 harness 硬编码进 **system prompt** 的 `Do not call the AgentTool unless the user requested it`。system prompt 每轮完整在场、且不被 auto-compact 挤走；而 SessionStart 注入只是对话早期的一条消息，随轮次增长被推远。用一份会衰减的文本去对抗一句永在最前的硬禁令，距离只会越拉越大，所以授权声明必须每轮重申。
 
-**分层收益**：改前每轮全量重发 6717 字符，在那个 20 轮 session 里累计 142,800 字符、占全部 hook 注入（270,506）的 52.8%，期间触发 3 次 auto-compact。分层后同形态为 `5985 × 4 + 1163 × 20 = 47,200`，降幅 65%。作为对照，同机 `radnove-core` 把会话约定放 SessionStart，同类内容只花了 `4170 × 4 = 16,680`。
+**分层收益**：改前每轮全量重发 6717 字符，在那个 20 轮 session 里累计 142,800 字符、占全部 hook 注入（270,506）的 52.8%，期间触发 3 次 auto-compact。分层后同形态为 `5985 × 4 + 1163 × 20 = 47,200`，降幅 65%（该核算用 3.2.0 当时的体积；按 3.6.0 实测的 7142 / 1342 重算是 `7142 × 4 + 1342 × 20 = 55,408`，占改前的 38.8%、即降幅 61%——注入文本从 3.2.0 到 3.6.0 长了近 1200 字符，分层的收益仍在，只是被吃掉了一部分）。作为对照，同机 `radnove-core` 把会话约定放 SessionStart，同类内容只花了 `4170 × 4 = 16,680`。
 
 **拦截 hook**（`hooks/guards/agent-dispatch.js`）
 
@@ -398,13 +584,14 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-dispatch.js
    ↓    AGENT_DISPATCH_GUARD=off 或 AGENT_NAMING_GUARD=off → 放行（总开关）
    ↓    tool_name 不是 Agent → 放行（不匹配旧名 Task，避免永久误拦）
    ↓    subagent_type ∈ {fork, statusline-setup, output-style-setup} → 放行
-   ↓  7 项结构校验，聚合所有 finding：
-   ↓    model 显式且合法 / name 前缀符 model·满足原生正则
-   ↓    description 必填且有正文（不要求 [模型名] 前缀，3.4.0 起软放宽）
-   ↓    description 正文非角色句 / 非 prompt 开头逐字重合 / ≤60 字符
+   ↓  6 项结构校验，聚合所有 finding：
+   ↓    model 显式且合法 / name 前缀符 model（分隔符 - 或 _）·满足原生正则
+   ↓    description 必填且有正文（不要求 [模型名] 前缀，3.4.0 起软放宽；[haiku] 报错）
+   ↓    description 正文非角色设定句 / 原始串 ≤60 字符（前缀也算进去）
    ↓    有 finding → deny（model 非法时额外附完整路由表）
    ↓  只缺 name（其余全过）：
-   ↓    autoName() = <model>-<description ASCII 词或 subagent_type>-<prompt 哈希 4 位>
+   ↓    autoName() = <model>-<description ASCII 词或 subagent_type>-<短哈希 4 位>
+   ↓      短哈希输入 = prompt + '|' + description + '|' + slug（3.6.0 补 description）
    ↓    → 输出 updatedInput 补名 + additionalContext 告知，不带 permissionDecision
    ↓  全过 → 放行
 ```
@@ -416,26 +603,29 @@ PreToolUse（Bash 工具调用前）
    ↓
 node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/bash-guard.js
    ↓  读 stdin 的 tool_input.command 与 cwd，一次解析、两项检查全跑：
-   ↓  【检查一】剥离子 shell / 命令替换 → 切分顶层片段 → 逐个判定 cd
-   ↓    存在会改变 cwd 的独立 cd → 记 finding（附违规片段）
-   ↓  【检查二】定位 agent-browser（或 npx agent-browser）→ 匹配子命令
-   ↓    子命令不属于启动类（open/connect/带 URL 的 chat） → 跳过
-   ↓    缺 --headed（非 --headed false / AGENT_BROWSER_HEADED=true）→ 记 finding
-   ↓    缺 --profile <值>（非 AGENT_BROWSER_PROFILE=<值>）→ 记 finding
+   ↓  【检查一】剥 heredoc 正文 → 剥子 shell / 命令替换 → 切顶层片段 → 逐个判定 cd
+   ↓    片段以裸 cd 开头、非后台化(&)、目标非 no-op → 记 finding（片段截断 120 字符）
+   ↓  【检查二】逐片段在命令名位置定位 agent-browser（跳 VAR=值；npx/bunx/pnpm dlx；
+   ↓            按 basename 比对）→ tail 含 --help/-h/--version/-V 则跳过
+   ↓    tail 第一个位置参数不属于启动类（open/connect/带 URL 的 chat） → 跳过
+   ↓    该次调用 tail 内缺 --headed（非 --headed false / 前缀 AGENT_BROWSER_HEADED
+   ↓      =true|1|yes|on）→ 记 finding
+   ↓    该次调用 tail 内缺 --profile <非空值>（非前缀 AGENT_BROWSER_PROFILE=<值>）→ 记 finding
    ↓  有 finding → exit 2 阻断（stderr 一次输出全部 finding + hint）
    ↓  无 finding → exit 0 放行
 ```
 
-**拦截 hook**（`hooks/guards/write-guard.js`）
+**事后提醒 hook**（`hooks/guards/write-guard.js`）——注意 exit 2 在 `PostToolUse` 上**不回滚、不停轮**，只把 stderr 喂回给 Claude
 
 ```text
-PostToolUse（Write / Edit 工具写入完成后）
+PostToolUse（Write / Edit 工具写入完成后 —— 文件已经在盘上了）
    ↓
 node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/write-guard.js
    ↓  读 stdin 的 tool_input.file_path 与 cwd：
-   ↓    既不是源码扩展名、也不是 CLAUDE.md → exit 0 放行（不读盘）
-   ↓    路径含 .claude/rules/ 目录段的 claude.md → 不按 CLAUDE.md 判（拆分页不受限）
-   ↓    读落盘后文件内容，按 \n 分割计数行数
+   ↓    路径命中依赖/产物/生成物模式（node_modules、dist、target、.min. …）→ exit 0
+   ↓    既不是源码扩展名、也不是当前项目树内的 CLAUDE.md → exit 0 放行（不读盘）
+   ↓    项目内相对路径以 .claude/rules/ 开头的 claude.md → 不按 CLAUDE.md 判（拆分页不受限）
+   ↓    读落盘后文件内容计数行数（末尾换行不多算一行）
    ↓    源码 > 1000 行 → exit 2（hint：按职责拆分模块）
    ↓    CLAUDE.md > 200 行 → exit 2（hint：拆到 .claude/rules/{topic}.md）
    ↓    未超限 / 文件读取失败 → exit 0 放行
@@ -473,7 +663,7 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/write-guard.js
 
 - 与 `omp` 插件互补：`omp` 的 `orchestrator-protocol-remind.js` 注入 omp 编排协议（强制委派 omp 子代理），本插件注入通用工作纪律（覆盖 Claude 原生 Agent 工具）——二者可并行启用。
 - `bash-guard.js` 的 cd 检查原本在 `devkit-core`（现已更名 `devkit-tool`）的 `block-cd.js`，本插件 1.3.0 起迁入；`devkit-tool` 自 5.1.0 起不再内置任何 hook。同批删除的 `guard-full-read.js`（大文件全文读取拦截）因与「精确读文件」注入纪律重复，未一并迁入。
-- `write-guard.js` 与另一个插件 `quality-lint` 的 md 200 行拦截是同类思路（`PostToolUse` 拦 Write/Edit、`[L1-BLOCKER]` 输出格式）但各自独立实现——两个插件归属不同、不互相依赖。
+- `write-guard.js` 与另一个插件 `quality-lint` 的 md 200 行检查是同类思路（`PostToolUse` 上挂 Write/Edit、`[L1-BLOCKER]` 输出格式）但各自独立实现——两个插件归属不同、不互相依赖。**关于两者效力等级是否相同，本仓无法核实**：2026-07-31 全盘检索时本机未安装 `quality-lint` 插件本体（只在若干项目里留下 `.quality-lint-state.json` 状态文件），既读不到它的源码也读不到它的 README。若那边的文案写的是"拦截"而实现同样挂在 `PostToolUse`，就与本插件 3.6.0 修掉的是同一类效力虚高，值得那边自己核一次——但这句只是推断，不是本仓验证过的结论。
 - `bash-guard.js` 的 agent-browser 检查只管两个启动参数（`--headed` 与 `--profile`），不涉及浏览器自动化能力本身；`--profile` 具体指向哪个目录走各会话的个人 memory / 全局 CLAUDE.md 约定，本插件只在缺参数时硬拦，不管值本身是否合法。
 - 钉钉 dws CLI 写授权由 `radnove-core` 插件的 `pre-tool-use-dws-write.sh` 承担（`permissionDecision: "ask"`），本插件不再重复注入。
 
@@ -483,20 +673,24 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/write-guard.js
 
 ```text
 plugins/working-discipline/
-├── .claude-plugin/plugin.json          # hook 注册（1 个注入脚本 + 3 个 guard，共 5 处挂载）
+├── .claude-plugin/plugin.json          # hook 注册（1 个注入脚本 + 3 个 guard，共 6 处挂载：
+│                                       #   PreToolUse×2 + PostToolUse×1 + 三个注入时机×1）
 ├── hooks/
-│   ├── working-discipline.js           # UserPromptSubmit / SubagentStart 常驻注入
+│   ├── working-discipline.js           # SessionStart / UserPromptSubmit / SubagentStart 注入
 │   │                                   #   + 有图轮次条件注入图片路径清单
 │   ├── lib/
-│   │   ├── shell-parse.js              #   命令切分/分词/剥引号剥子 shell（bash-guard 两项检查共用）
+│   │   ├── shell-parse.js              #   命令切分/分词/剥引号/剥子 shell/剥 heredoc 正文
+│   │   │                               #   （bash-guard 两项检查共用；stripHeredocs 3.6.0 新增，
+│   │   │                               #   括号匹配不感知引号的已知边界写在文件头）
 │   │   └── prompt-images.js            #   从 UserPromptSubmit payload 提取图片绝对路径（纯函数，
 │   │                                   #   不回读 transcript —— 那是 3.0.0 删掉的误判根源）
 │   └── guards/
-│       ├── agent-dispatch.js           # PreToolUse:Agent —— 8 项结构校验聚合报错；
+│       ├── agent-dispatch.js           # PreToolUse:Agent —— 6 项结构校验聚合报错；
 │       │                               #   只缺 name 时用 updatedInput 自动补名放行
-│       ├── bash-guard.js               # PreToolUse:Bash —— 独立 cd 污染 cwd + agent-browser
+│       ├── bash-guard.js               # PreToolUse:Bash —— 裸 cd 开头污染 cwd + agent-browser
 │       │                               #   启动缺 --headed/--profile，两项一次报清
-│       └── write-guard.js              # PostToolUse:Write|Edit —— 源码 >1000 行 / CLAUDE.md >200 行
+│       └── write-guard.js              # PostToolUse:Write|Edit —— 源码 >1000 行 / 本项目内
+│                                       #   CLAUDE.md >200 行；事后提醒，不回滚也不停轮
 └── README.md
 ```
 
@@ -505,13 +699,16 @@ plugins/working-discipline/
 ## 自定义
 
 - 增删注入条款 / 切换风格 → 编辑 `hooks/working-discipline.js` 里的 `SECTION_*` 数组，每行是 markdown 一行
-- 调整 subagent 派发门禁 → 编辑 `hooks/guards/agent-dispatch.js`：`EXEMPT_SUBAGENT_TYPES` / `DESC_BODY_MAX` / `PROMPT_LEAK_PREFIXES` / `LEAK_MATCH_MIN` / `NAME_PATTERN` / `ROUTING_TABLE`；自动补名的语义来源与长度预算在 `deriveSlug()` / `autoName()`；临时整体关闭用 `AGENT_DISPATCH_GUARD=off`（旧名 `AGENT_NAMING_GUARD=off` 同样有效）
-- 调整 `cd` 拦截行为 / agent-browser 启动类与白名单子命令 → 编辑 `hooks/guards/bash-guard.js` 里的 `CD_PATTERN` / `isNoOpCd()` / `LAUNCH_SUBCOMMANDS` / `ALLOWLIST_SUBCOMMANDS`
-- 调整行数阈值 / 源码扩展名 / CLAUDE.md 排除目录 → 编辑 `hooks/guards/write-guard.js` 里的 `SOURCE_LINE_LIMIT` / `CLAUDE_MD_LINE_LIMIT` / `SOURCE_EXTENSIONS` / `EXCLUDED_SEGMENT_PATTERN`
+- 调整 subagent 派发门禁 → 编辑 `hooks/guards/agent-dispatch.js`：`MODELS` / `EXEMPT_SUBAGENT_TYPES` / `NAME_PATTERN` / `NAME_MAX` / `NAME_PREFIX_SEPARATORS` / `PROMPT_LEAK_PREFIXES` / `DESC_BODY_MAX` / `ROUTING_TABLE`；自动补名的语义来源、哈希输入与长度预算在 `deriveSlug()` / `shortHash()` / `autoName()`，hint 里回显用户输入前先过 `toAsciiKebab()`；临时整体关闭用 `AGENT_DISPATCH_GUARD=off`（旧名 `AGENT_NAMING_GUARD=off` 同样有效）。**`LEAK_MATCH_MIN` 已在 3.6.0 随 prompt-prefix-overlap 检查整条删除**，不要再去找它
+- 调整 `cd` 判定 → 编辑 `hooks/guards/bash-guard.js` 里的 `CD_PATTERN` / `parseCdTarget()` / `isNoOpCd()`（含 `PWD_TARGETS`）/ `isBackgrounded()` / `SEGMENT_ECHO_LIMIT`（finding 里回灌的违规片段长度）；heredoc 与子 shell 的剥离在 `hooks/lib/shell-parse.js` 的 `stripHeredocs()` / `stripSubshells()`
+- 调整 agent-browser 启动类与白名单子命令 → 同文件的 `LAUNCH_SUBCOMMANDS` / `ALLOWLIST_SUBCOMMANDS`（两者并成 `ALL_KNOWN_SUBCOMMANDS`）/ `HELP_FLAGS` / `HEADED_ENV_PATTERN` / `PROFILE_ENV_PATTERN` / `URL_PATTERN` / `ENV_ASSIGN_PATTERN`
+- 调整行数阈值 / 源码扩展名 / 排除路径 → 编辑 `hooks/guards/write-guard.js` 里的 `SOURCE_LINE_LIMIT` / `CLAUDE_MD_LINE_LIMIT` / `SOURCE_EXTENSIONS` / `GENERATED_PATH_PATTERN` / `GENERATED_NAME_PATTERN` / `RULES_DIR_PREFIX`（3.6.0 起 CLAUDE.md 的排除判据由旧常量 `EXCLUDED_SEGMENT_PATTERN` 那种"路径任意位置包含"改成了这个"项目内相对路径前缀"，旧常量已不存在）
 - 调整截图路径的提取与条件注入 → 改 `hooks/lib/prompt-images.js` 的 `IMAGE_TAG_PATTERN` / `BARE_IMAGE_PATH_PATTERN`，或 `hooks/working-discipline.js` 的 `buildImageEvidence()`
 
-> 改注入文本时留一句自检：**这条规则能被机械判定吗？** 注意 3.0.0 给这个问题补的下半句——**判据是取自确定字段，还是靠正则猜语义？** 前者做成 guard，后者留在 `SECTION_*` 里靠自觉，否则会造出「AI 做对了却过不去」的门禁。
+> **判据是硬阻断行为的一部分，AI 不得自行修改。** 按仓库规则 `.claude/rules/hook-restraint.md` 第 4 条：发现判据有问题**只报不改**，把可复现的输入与实际输出交给用户拍板。
+>
+> 改注入文本时留一句自检：**这条规则能被机械判定吗？** 注意 3.0.0 给这个问题补的下半句——**判据是取自确定字段，还是靠正则猜语义？** 再注意 3.6.0 补的第三句——**取自确定字段不等于判据本身确定**，中间隔一层近似解析（切 shell 片段、匹配句式）就已经在猜了。前者做成 guard，后者留在 `SECTION_*` 里靠自觉，否则会造出「AI 做对了却过不去」的门禁。新增前先读 `.claude/rules/hook-restraint.md` 的强度阶梯：多数规则的正确落点是「注入提醒」而不是 `deny`。
 
 ---
 
-版本 3.0.0 · 作者 zhangq · MIT
+版本 3.6.0 · 作者 zhangq · MIT

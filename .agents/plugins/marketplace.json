@@ -28,7 +28,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "6.2.2"
+      "version": "6.3.0"
     },
     {
       "author": {
@@ -46,7 +46,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "author": {
@@ -64,7 +64,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     {
       "author": {
@@ -82,7 +82,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     {
       "author": {
@@ -100,7 +100,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     {
       "name": "mattpocock-skills",
@@ -128,7 +128,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.3.0"
+      "version": "2.4.0"
     },
     {
       "author": {
@@ -147,14 +147,14 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     {
       "author": {
         "name": "zhangq"
       },
       "category": "Productivity",
-      "description": "AI 工作纪律 - 语义规则分三层注入 + 3 个 guard 机械强制。零 skill，适合全局开启",
+      "description": "AI 工作纪律 - 语义规则分三层注入 + 2 道硬拦 1 道事后提醒。零 skill，适合全局开启",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "working-discipline",
       "source": {
@@ -165,7 +165,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "3.4.0"
+      "version": "3.6.0"
     },
     {
       "author": {
@@ -183,14 +183,14 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "author": {
         "name": "zhangq"
       },
       "category": "Development",
-      "description": "跨平台 shell lint - 自动拦 GNU/BSD 不可移植写法并回灌可移植改法",
+      "description": "跨平台 shell lint - 写完即检出 GNU/BSD 不可移植写法并回灌可移植改法",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "portable-shell",
       "source": {
@@ -201,7 +201,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "1.0.0"
+      "version": "1.1.1"
     }
   ]
 }

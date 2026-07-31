@@ -1,6 +1,6 @@
 {
   "name": "portable-shell",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "description": "跨平台 shell 脚本 lint - Write/Edit 生成 shell 时扫 GNU(Linux)/BSD(macOS) 不可移植写法并回灌改法。PORTABLE_SHELL_LINT=off 可关",
   "author": {
     "name": "zhangq"

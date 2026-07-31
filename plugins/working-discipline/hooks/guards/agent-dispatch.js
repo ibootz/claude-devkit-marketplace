@@ -2,8 +2,30 @@
 //
 // 【用途】
 // 派发 subagent 时**结构层面**机械可判定的要求在这里处理：model 是否显式给了且在三档内、
-// name / description 是否齐备、前缀是否与 model 一致、description 是否把 prompt 原文灌了
-// 进去。判据全部取自 tool_input 的确定字段，不猜语义、不回读 transcript。
+// name / description 是否齐备、name 前缀是否与 model 一致、description 是否超长。判据取自
+// tool_input 的确定字段，不回读 transcript。
+//
+// 【判据精度的如实说明（不要再写成"零误判"）】
+// 本文件里绝大多数判据是**确定字段比较**：`model` 是否在闭合枚举 MODELS 内、`name` 是否
+// 匹配完整锚定正则 NAME_PATTERN、`name` 是否以 `<model>-` / `<model>_` 开头、`description`
+// 是否为空、`description` 字符数是否 > DESC_BODY_MAX。这几条同一输入必得同一结论、可人工
+// 复核，符合 .claude/rules/hook-restraint.md 里"可以做成 hook"的分级。
+//
+// **唯一的例外是 PROMPT_LEAK_PREFIXES**：它靠"正文以某个句式开头"近似判断"这是 prompt
+// 角色设定句而不是任务摘要"，本质是猜语义，不是零误判。已知覆盖边界：
+//   - 不覆盖（假阴性）：角色设定句不在开头（"本次请你扮演审计员…"）、换用未列举的句式
+//     （"扮演"/"担任"/"Pretend you are"）、把 prompt 中段而非开头抄进 description。
+//   - 可能误伤（假阳性）：任务摘要本身合法地以列表里的词开头。为压低这一面，2026-07-31
+//     移除了三个高误杀项 `'#'` / `'【'` / `'Your task'`——前两个会命中任何以 markdown 标题
+//     或中文书名号开头的正常摘要，第三个与 `'You are'` 的角色设定语义并不等价（"Your task
+//     summary…"是合法摘要）。留下的都是"第二人称+角色设定"这一类明确句式。
+// 因此这条判据是**近似**的；若日后再出现真实误杀，正确处置是继续收窄词表或整条降级为
+// 注入提醒，而不是加更复杂的正则去猜。
+//
+// 同日一并移除的还有 prompt-prefix-overlap 检查（原 LEAK_MATCH_MIN = 20：description 正文
+// 与 prompt 开头 ≥20 字符逐字重合就判抄袭）。移除原因不是"阈值不合适"，而是**判据前提
+// 不成立**：合法的 description 本来就写任务目标，而本仓派发 prompt 的第一段恰是`【目标】`
+// 且写的是同一件事，两者开头天然重合——它命中的是"写得规范"而不是"抄了 prompt"。
 //
 // 【本文件是「针对 Agent 这一个对象的唯一 hook」】
 // 3.0.0 起本插件的挂载拓扑按**拦截对象**收敛：Agent → 本文件，Bash → bash-guard.js，
@@ -23,7 +45,7 @@
 //
 // 边界（为什么不是"所有命名问题都自动修"）：
 //   - **字段缺失**（name 压根没给）→ 自动补。AI 看不见这个字段，罚它没有教育意义。
-//   - **字段存在但格式错**（前缀与 model 不符 / 含中文 / description 抄 prompt）→ 仍 deny。
+//   - **字段存在但格式错**（前缀与 model 不符 / 含中文 / description 超长或是角色设定句）→ 仍 deny。
 //     AI 既然产出了这个值，就说明它知道字段存在，此时 finding 能真正教会它规则。
 //   - **model 缺失/非法** → 仍 deny，且不顺手补 name。档位是语义决策（这个任务值不值得
 //     上高档模型），自动填一个默认值等于把决策悄悄替 AI 做了，还会让 name 前缀跟着错。
@@ -47,6 +69,8 @@
 //
 // 判断标准因此固化为一条：**判据取自 tool_input 的确定字段** → 可以写成 guard；
 // **判据要靠正则猜语义或回读 transcript** → 留在注入里靠自觉，别做成 deny。
+// 本文件自身并未 100% 做到这一条：PROMPT_LEAK_PREFIXES 仍是句式近似判定（边界见上文
+// 【判据精度的如实说明】），它是留在 deny 里的唯一一条近似判据，词表只减不增。
 //
 // 【触发条件】
 // - 工具名为 Agent。**不匹配旧名 Task**：旧工具名的 tool_input 可能没有 name / model
@@ -89,23 +113,26 @@ const MODELS = ['sonnet', 'opus', 'fable']
 const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 const NAME_MAX = 64
 
+// name 的模型档次前缀与任务语义之间允许的分隔符。**必须同时含 '-' 和 '_'**：
+// NAME_PATTERN 本身允许下划线，只认连字符会造成"照文档正则写却被拦"。
+const NAME_PREFIX_SEPARATORS = ['-', '_']
+
 // 系统内建 subagent_type：model 覆盖被忽略或命名语义不适用，一律放行。
 const EXEMPT_SUBAGENT_TYPES = new Set(['fork', 'statusline-setup', 'output-style-setup'])
 
-// description 正文若以这些句式开头，判定为把 prompt 原文抄进了 description
+// description 正文若以这些句式开头，判定为把 prompt 的角色设定句抄进了 description。
+// 这是本文件唯一的近似判据（覆盖边界见文件头【判据精度的如实说明】），词表只减不增。
+// 2026-07-31 移除 '#' / '【' / 'Your task' 三项：前两个命中任何以 markdown 标题或中文
+// 书名号开头的合法摘要，第三个不等价于角色设定（"Your task summary…"是合法摘要）。
 const PROMPT_LEAK_PREFIXES = [
   '你是', '您是', '你將', '你将', '请你', '請你',
   '作为一个', '作為一個', '作为一名', '作為一名',
-  'You are', 'you are', 'Your task', 'Act as', 'act as',
-  '【', '#',
+  'You are', 'you are', 'Act as', 'act as',
 ]
 
-// description 正文最大长度（纪律要求 3-5 词摘要；超此长度说明塞了 prompt 内容）
+// description 最大长度（纪律要求 3-5 词摘要；超此长度说明塞了 prompt 内容）。
+// **按 description 原始字符串计长**，不减去 [模型名] 前缀——见 checkNaming 第 5 条。
 const DESC_BODY_MAX = 60
-
-// description 正文与 prompt 开头比对的最小长度门槛。低于此值不判抄袭——
-// 短摘要与 prompt 开头偶然重合的概率高，会误报。
-const LEAK_MATCH_MIN = 20
 
 // 完整场景路由表：只在「model 缺失/非法」时才注入（档位错配的语义判定已删除，
 // 这张表现在只用于"你没给 model，这是选档依据"这一个场景）
@@ -177,10 +204,6 @@ function allowWithName(ti, name, note) {
   process.exit(0)
 }
 
-function truncate(s, n) {
-  return s.length > n ? s.slice(0, n) + '…' : s
-}
-
 function guardDisabled() {
   const off = (v) => String(v || '').toLowerCase() === 'off'
   return off(process.env.AGENT_DISPATCH_GUARD) || off(process.env.AGENT_NAMING_GUARD)
@@ -208,16 +231,30 @@ function deriveSlug(ti) {
   return fromType || 'agent'
 }
 
+// 把任意字符串压成合法的 name 片段（只留 ASCII 字母数字，用 '-' 连接）。
+// **hint 文案里凡是要拼进 name 的用户输入都必须过这个函数**：name 受 NAME_PATTERN 约束、
+// 不接受中文与空格，直接把原值回显进"改成 xxx"的建议里，AI 照抄会再撞一次拦截。
+function toAsciiKebab(s) {
+  return (String(s == null ? '' : s).match(/[A-Za-z0-9]+/g) || [])
+    .map((w) => w.toLowerCase())
+    .join('-')
+}
+
 // 同批并发的多个 subagent 必须拿到不同的 name（同名会让 SendMessage 的 latest-wins
-// 寻址把先派的那个弄丢）。用 prompt 的短哈希做区分符：纯函数、无需持久状态，
-// 同一会话里两个 prompt 不同的派发几乎不可能撞。
+// 寻址把先派的那个弄丢）。用短哈希做区分符：纯函数、无需持久状态。
+// **哈希输入必须含 description**：本仓常见的并发分片是"同一段 prompt + 不同中文
+// description"（如"判定 spec 01-05"/"判定 spec 06-10"），description 又多为中文、
+// 抽不出 ASCII 词，deriveSlug 会一齐回落到 subagent_type——若哈希只吃 prompt + slug，
+// 这批分片会拿到**完全相同**的自动名，SendMessage 按名寻址直接失效。
 function shortHash(s) {
   return crypto.createHash('sha1').update(s).digest('hex').slice(0, 4)
 }
 
 function autoName(ti, model) {
   const slug = deriveSlug(ti)
-  const hash = shortHash(String(ti.prompt || '') + '|' + slug)
+  const hash = shortHash(
+    String(ti.prompt || '') + '|' + String(ti.description || '') + '|' + slug
+  )
   const budget = NAME_MAX - model.length - 1 - 1 - hash.length // model + '-' + slug + '-' + hash
   const safeSlug = slug.slice(0, Math.max(1, budget))
   const name = `${model}-${safeSlug}-${hash}`
@@ -231,7 +268,6 @@ function checkNaming(ti) {
   const model = typeof ti.model === 'string' ? ti.model.trim() : ''
   const name = typeof ti.name === 'string' ? ti.name.trim() : ''
   const description = typeof ti.description === 'string' ? ti.description.trim() : ''
-  const prompt = typeof ti.prompt === 'string' ? ti.prompt : ''
 
   const findings = []
   const hints = []
@@ -265,18 +301,24 @@ function checkNaming(ti) {
       findings.push(`name="${name}" 不满足 Agent 工具正则 ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$;只接受 ASCII 字母数字与 - _`)
       hints.push('name 用英文 kebab-case,不能含中文/空格/方括号')
     }
-    const namePrefix = MODELS.find((m) => name.startsWith(m + '-'))
-    if (name.startsWith('haiku-')) {
+    // 前缀分隔符 '-' 与 '_' 等价：NAME_PATTERN 允许下划线，只认连字符会把
+    // "sonnet_review_login" 这类照正则写出来的合法名误拦。
+    const startsWithPrefix = (m) => NAME_PREFIX_SEPARATORS.some((sep) => name.startsWith(m + sep))
+    const namePrefix = MODELS.find(startsWithPrefix)
+    if (startsWithPrefix('haiku')) {
       // 单独识别旧档前缀，避免回落到「缺前缀」分支后给出 "sonnet-haiku-xxx" 这种
       // 把旧档次名留在任务语义里的错误改法。
-      findings.push(`name="${name}" 用了已移除的 haiku 档前缀`)
-      hints.push(`name 改成 "${modelOk ? model : 'sonnet'}-${name.slice(6) || '<任务语义>'}"`)
+      findings.push(`name="${name}" 用了已移除的 haiku 档前缀;本插件无 haiku 档,最低档是 sonnet`)
+      hints.push(`name 改成 "${modelOk ? model : 'sonnet'}-${toAsciiKebab(name.slice(6)) || '<任务语义-kebab>'}"`)
     } else if (!namePrefix) {
       findings.push(`name="${name}" 缺模型档次前缀;用户无法从在飞 agent 面板判断这批任务烧的是哪一档模型`)
-      hints.push(`name 改成 "${modelOk ? model : '<模型名>'}-${name.replace(/^[^A-Za-z0-9]+/, '') || '<任务语义>'}"`)
+      hints.push(`name 改成 "${modelOk ? model : '<模型名>'}-${toAsciiKebab(name) || '<任务语义-kebab>'}"（任务语义只能用 ASCII 字母数字与 - _）`)
     } else if (modelOk && namePrefix !== model) {
-      findings.push(`name 前缀 "${namePrefix}-" 与实际 model="${model}" 不一致;面板会显示错误的模型档次`)
-      hints.push(`name 前缀改成 "${model}-"`)
+      // 回显实际用的分隔符（可能是 '_'），避免 finding 里写 "sonnet-" 而 name 里其实是
+      // "sonnet_"，让人以为 guard 看错了字段。
+      const usedPrefix = name.slice(0, namePrefix.length + 1)
+      findings.push(`name 前缀 "${usedPrefix}" 与实际 model="${model}" 不一致;面板会显示错误的模型档次`)
+      hints.push(`name 前缀改成 "${model}${usedPrefix.slice(-1)}"`)
     }
   }
 
@@ -286,33 +328,49 @@ function checkNaming(ti) {
   //    模型档次由 name 一处表达即可，description 再带 [模型名] 前缀是冗余（每行模型名
   //    出现两次）。AI 仍带了前缀（旧习惯）也不拦——这是**软放宽**口径：strip 掉再做
   //    正文检测，避免「[sonnet] xxx」整体被当正文触发误判。模型档次一致性由 name 侧独担。
+  //
+  //    **strip 只服务于正文检测，不减免字符预算**：DESC_BODY_MAX 一律按 description 的
+  //    原始长度比较（见下 check 9）。否则「[sonnet] 」这类前缀等于白送 9 个字符额度，
+  //    带前缀的 description 能比不带前缀的多写一截，前缀反而变成收益。
+  //
+  //    `[haiku]` 是例外，不 strip 而是报错：本插件已无 haiku 档（MODELS 只有
+  //    sonnet/opus/fable），静默吞掉会让人以为 haiku 仍合法。注意与另两处 haiku 判定
+  //    区分：`model:"haiku"`（上 check 1）与 name 的 `haiku-`/`haiku_` 前缀（上 check 3~4）
+  //    本来就各有拦截，这里补的是 description 里的 `[haiku]`。
   let descBody = ''
   if (!description) {
     findings.push('缺 description')
     hints.push('description 填 "<3-5 词任务摘要>"（模型档次由 name 前缀体现,description 不带 [模型名] 前缀）')
   } else {
-    descBody = description.replace(/^\[(sonnet|opus|fable|haiku)\]\s*/, '').trim()
+    const modelTag = description.match(/^\[(sonnet|opus|fable|haiku)\]\s*/)
+    descBody = modelTag ? description.slice(modelTag[0].length).trim() : description
+    if (modelTag && modelTag[1] === 'haiku') {
+      findings.push('description 前缀 "[haiku]" 用了已移除的档次;本插件无 haiku 档,最低档是 sonnet')
+      hints.push('删掉 description 的 [haiku] 前缀(3.4.0 起 description 本就不要求 [模型名] 前缀,档次由 name 前缀表达),并确认 model 与 name 前缀落在 sonnet')
+    }
     if (!descBody) {
       findings.push('description 没有任务摘要正文')
       hints.push('description 填 3-5 词任务摘要（不带 [模型名] 前缀）')
     }
   }
 
-  // 6~8. 提示词泄露检测（只在拿到 description 正文时进行）
+  // 6. 角色设定句检测（近似判据，覆盖边界见文件头）。原先并列的
+  //    prompt-prefix-overlap 检查（description 正文与 prompt 开头 ≥20 字符逐字重合）
+  //    已于 2026-07-31 整条移除：合法 description 写任务目标、prompt 的【目标】段写
+  //    同一件事，两者开头天然重合，它命中的是"写得规范"而非"抄了 prompt"。
   if (descBody) {
     const leakPrefix = PROMPT_LEAK_PREFIXES.find((p) => descBody.startsWith(p))
     if (leakPrefix) {
       findings.push(`description 正文以 "${leakPrefix}" 开头,是 prompt 角色设定/元指令句式而非任务摘要;提示词会暴露到在飞 agent 面板`)
       hints.push('description 只写"这个子代理在做什么",prompt 与 description 禁止共用同一段文字')
-    } else if (descBody.length >= LEAK_MATCH_MIN && prompt.trimStart().startsWith(descBody)) {
-      findings.push(`description 正文与 prompt 开头逐字重合(前 ${descBody.length} 字符);这是把 prompt 原文抄进 description 的特征`)
-      hints.push('description 换成独立撰写的 3-5 词任务摘要,不要从 prompt 复制')
     }
+  }
 
-    if (descBody.length > DESC_BODY_MAX) {
-      findings.push(`description 正文 ${descBody.length} 字符超过 ${DESC_BODY_MAX};纪律要求 3-5 词摘要,超长说明塞了 prompt 内容`)
-      hints.push(`description 正文压到 ${DESC_BODY_MAX} 字符以内`)
-    }
+  // 7. 字符预算：按 description **原始长度**比较，不减去 [模型名] 前缀（前缀是容错接受
+  //    的旧写法，不该换来更多字符额度）。
+  if (description && description.length > DESC_BODY_MAX) {
+    findings.push(`description ${description.length} 字符超过 ${DESC_BODY_MAX};纪律要求 3-5 词摘要,超长说明塞了 prompt 内容`)
+    hints.push(`description 压到 ${DESC_BODY_MAX} 字符以内(带 [模型名] 前缀的话前缀也算在内,直接删掉前缀最省)`)
   }
 
   return { findings, hints, modelOk, nameMissing }
@@ -367,7 +425,8 @@ function main() {
       generated,
       `[agent-dispatch] 本次派发没给 name（Agent 工具的 JSON Schema 未声明该字段，` +
         `但运行时接受并会存进 subagent 元数据），已自动补为 "${generated}" 并放行。` +
-        `自动名只有 subagent_type + prompt 哈希，在飞面板上看不出任务差异——` +
+        `自动名只有 description/subagent_type 里抽出的弱语义 + prompt·description 的短哈希，` +
+        `在飞面板上看不出任务差异——` +
         `下次派发请自己给 "${model}-<任务语义-kebab>"（如 ${model}-review-login-flow），` +
         `同批并发时把分片依据写进名字。`
     )

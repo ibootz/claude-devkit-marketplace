@@ -1,6 +1,6 @@
 {
   "name": "discover-unknowns",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "发现你的未知 - 3 skill（统领 / brainstorm / quiz）+ 每轮未知雷达 hook（DISCOVER_UNKNOWNS_RADAR=off 可关）。源自 Anthropic 官方博客",
   "author": {
     "name": "zhangq"
