@@ -131,6 +131,23 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - **snapshot + 标注截图**：headless 下靠 `snapshot -i`（拿 `@eN` refs）+ `screenshot --annotate` 回看每步，不靠肉眼盯窗口
 - **安全边界**：headless 必带 `--allowed-domains`（限域 + 禁 WebRTC）、`--content-boundaries`（防 prompt 注入）、`--max-output`（防上下文洪泛）
 
+### 13. task-keeper（常驻 keeper 托管任务队列）
+
+主会话只做「分类分派 + 需要人拍板时集中问一次」，debug 队列与杂务队列由常驻 keeper 子代理在独立上下文跑全流程。4 个 Skill（`tk-debug` / `tk-chore` / `tk-decisions` / `tk-worktree`）+ 2 个 Agent（debug-keeper / chore-keeper）+ 6 个 hook。
+
+- **产物统一 `.keeper/`**：整树 gitignore，keeper 冷启动自动写入项目 `.gitignore` 并回读验证，工作区永远干净
+- **自动归档**：done ≥10 条或最早 done 超 14 天即归档到 `archive/auto-<日期>/`，编号不回收
+- **决策打包 HITL**：subagent 拿不到 AskUserQuestion，keeper 写 `.keeper/decisions/` 信箱、主会话攒批一次问完
+- **外部工单适配器**：三层发现（项目配置 → skill 探测 → 如实报未回写），公司系统能力接线不进插件本体
+- 源自 radnove-core（云学堂内部插件）debug-triage 体系的通用化搬迁，与 radnove-core ≤4.5.1 不可同装，详见插件 README
+
+### 14. plain-talk-output-style（说人话输出风格）
+
+可切换的输出风格插件：一个 SessionStart 注入 hook，要求 AI 一语中的、几句话讲明白、能表格就表格、不专业化/不掉书袋/不自造词。零 skill、零命令。
+
+- 与 working-discipline（≥3.9.0）分工：纪律条款（拍板讲透 / 求真 / 简体中文）留在 working-discipline，风格条款归本插件
+- 切换方式：`/plugin` 里启停本插件即可换风格（原生 output style 机制已废弃，官方 explanatory 风格同为插件实现）
+
 ## 安装
 
 ### Claude Code
@@ -178,6 +195,12 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 # 跨平台 shell lint（生成脚本兼容 Linux 与 macOS）
 /plugin install portable-shell@claude-devkit-marketplace
+
+# 常驻 keeper 托管 debug/杂务队列
+/plugin install task-keeper@claude-devkit-marketplace
+
+# 说人话输出风格（可切换）
+/plugin install plain-talk-output-style@claude-devkit-marketplace
 ```
 
 ### Codex CLI
@@ -301,7 +324,10 @@ claude-devkit-marketplace/
 │   ├── find-skills/
 │   ├── working-discipline/
 │   ├── discover-unknowns/
-│   └── portable-shell/
+│   ├── portable-shell/
+│   ├── agent-browser/
+│   ├── task-keeper/
+│   └── plain-talk-output-style/
 ├── scripts/
 │   ├── install-codex.js       # 安装插件到 Codex CLI
 │   ├── uninstall-codex.js     # 从 Codex CLI 卸载插件

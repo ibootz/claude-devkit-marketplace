@@ -77,13 +77,13 @@
       "source": "./plugins/working-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 2 道硬拦 1 道事后提醒。零 skill，适合全局开启",
-      "version": "3.7.0"
+      "version": "3.9.0"
     },
     {
       "name": "agent-browser",
       "source": "./plugins/agent-browser",
       "category": "Productivity",
-      "description": "浏览器自动化最佳实践 - 用 agent-browser（Vercel）做网页操作/抓取/表单/截图；默认 headless，鉴权前置 + 实例上限 4 + 安全边界 + SessionEnd 强制清理",
+      "description": "浏览器自动化最佳实践 - agent-browser（Vercel）网页操作/抓取/表单/截图，默认 headless 四护栏，细节见 README",
       "version": "1.1.0"
     },
     {
@@ -99,6 +99,20 @@
       "category": "Development",
       "description": "跨平台 shell lint - 写完即检出 GNU/BSD 不可移植写法并回灌可移植改法",
       "version": "1.1.1"
+    },
+    {
+      "name": "task-keeper",
+      "source": "./plugins/task-keeper",
+      "category": "Productivity",
+      "description": "常驻 keeper 子代理托管 debug/杂务队列 - .keeper/ 产物仓自动归档，决策打包 HITL",
+      "version": "1.0.0"
+    },
+    {
+      "name": "plain-talk-output-style",
+      "source": "./plugins/plain-talk-output-style",
+      "category": "Productivity",
+      "description": "说人话输出风格 - 一语中的、几句话讲明白、能表格不成段，启停即切换",
+      "version": "1.0.0"
     }
   ]
 }
