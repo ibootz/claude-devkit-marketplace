@@ -129,9 +129,13 @@ AS
 
 ## 4. 脱敏：AI 打不了码，所以规则是「不落盘」
 
-`.keeper/debug/attachments/` 虽然整个 `.keeper/` 都被 `.gitignore` 排除、不进 git
-历史，但脱敏判据不因此放松——文件仍然会长期留在磁盘上，可能被其他工具打包、被
-误 `cp` 出去共享，或在项目未来取消这条 gitignore 豁免时被一并纳入历史。
+`.keeper/<交付id>/debug/<DBG-id>/`（v4 布局下截图与 `issue.md` 平铺同一目录，不再
+有独立的 `attachments/` 子目录）里的截图本身**不进 git 历史**——v4 起 `.keeper/`
+目录树已整体入库（`index.md` / `issue.md` / `item.md` 等队列文本都被跟踪），"不
+入库"这条改由 `.gitignore` 的两条规则单独保证：`.keeper/**/*.png`、
+`.keeper/**/*.jpg`（v3 时是整棵 `.keeper/` 整树忽略，规则更粗）。脱敏判据不因此
+放松——文件仍然会长期留在磁盘上，可能被其他工具打包、被误 `cp` 出去共享，或在
+这两条 gitignore 规则被调整时被一并纳入历史。
 
 落盘前先看一眼图，出现下列任一样就**不要落盘**：
 
@@ -155,18 +159,20 @@ AS
 ## 5. 为什么落进 `_inbox/` 而不是 `<DBG-id>/`
 
 落盘发生在主会话，而 `DBG-id` 由 `SKILL.md` §2 派出去的 intake+triage subagent
-分配——`.keeper/debug/issues/` 是单一写者（single writer）模式，只有那个 subagent
-能写。hook 注入体里那个「下一个可用 id」是给它用的；主会话拿它自行预分配就出现了
-第二个写者，两边都可能用同一个 id。
+分配——`.keeper/<交付id>/debug/<DBG-id>/` 这个条目目录（`issue.md` 所在处）是
+单一写者（single writer）模式，只有那个 subagent 能建、能写。hook 注入体里那个
+「下一个可用 id」是给它用的；主会话拿它自行预分配就出现了第二个写者，两边都可能
+用同一个 id。
 
 所以主会话只负责抢救像素、放进收件目录：
 
 ```
-.keeper/debug/attachments/_inbox/<时间戳>-<序号>-<简短说明>.png
+.keeper/<交付id>/debug/_inbox/<时间戳>-<序号>-<简短说明>.png
 ```
 
 intake+triage subagent 在登记时分配 `DBG-id`、`mv` 到
-`.keeper/debug/attachments/<DBG-id>/`、并把仓库相对路径写进 `issues/<DBG-id>.md`
+`.keeper/<交付id>/debug/<DBG-id>/`（v4 布局下截图与 `issue.md` 平铺同一目录，
+不再有独立的 `attachments/` 子目录），并把仓库相对路径写进 `<DBG-id>/issue.md`
 的「证据」章节。格式见本目录 `queue.md` §2。
 
 文件名带时间戳是为了避免撞名（同一分钟内多次贴图用序号区分）。文件名尽量用 ASCII：

@@ -1,7 +1,7 @@
 {
   "name": "task-keeper",
-  "version": "1.0.0",
-  "description": "常驻 keeper 子代理托管 debug/杂务队列 - 产物统一 .keeper/（自动 gitignore + 自动归档），决策打包 HITL，细节见 README",
+  "version": "2.1.0",
+  "description": "常驻 keeper 子代理托管 debug/杂务队列 - 队列跟随交付 worktree 入库、自动归档，决策打包 HITL，细节见 README",
   "author": {
     "name": "zhangq"
   },
@@ -22,6 +22,11 @@
       {
         "matcher": "*",
         "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit-keeper-routing.sh",
+            "timeout": 10
+          },
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit-debug-queue.sh",

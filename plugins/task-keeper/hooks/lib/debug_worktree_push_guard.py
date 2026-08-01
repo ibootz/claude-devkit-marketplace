@@ -12,13 +12,15 @@ stdout = 命中「在 DBG fixer worktree 里执行 git push」时输出 permissi
 
 Human 明确的范围是"debug 流程里派发出去的实际干活的 subagent 都不允许 push"。
 本守卫只覆盖其中**可机械判定的那一半**：fixer。fixer 的工作区是
-`wt_supply.py init` 建出的 `<source>/.keeper/worktrees/DBG-NNN/`，按
+`wt_supply.py init` 建出的 `<source>/.keeper/<交付id>/debug/DBG-NNN/worktree/`
+（v4 一交付一目录布局，`<交付id>` 也可以是兜底桶 `_main`），按
 `skills/tk-debug/SKILL.md` §3 硬规则 1，fixer 的每一条 git 操作都必须写成
 `git -C <worktree 绝对路径> ...`——这个约定本身就给了本守卫一个可靠的判定锚点：只要
-push 命令的目标路径（`-C` 参数或本次调用的 cwd）落在某个 `.keeper/worktrees/DBG-*/`
-目录下，就一定是 fixer 在自己的隔离 worktree 里执行的，可以放心 deny，不会有把
-正常 push 误伤的风险（正常 push 走的是主仓/交付 worktree 路径，从不会落在
-`.keeper/worktrees/` 里面）。
+push 命令的目标路径（`-C` 参数或本次调用的 cwd）落在某个
+`.keeper/<交付id>/debug/DBG-*/worktree/` 目录下，就一定是 fixer 在自己的隔离
+worktree 里执行的，可以放心 deny，不会有把正常 push 误伤的风险（正常 push 走的是
+主仓/交付 worktree 路径，从不会落在 `.keeper/<交付id>/debug/<DBG-id>/worktree/`
+里面）。
 
 **debug-keeper 自己呢？** keeper 负责登记 → triage → 派 fixer → 对账 → merge-back
 收尾，它通常跑在主工作区或交付 worktree，cwd 与它是不是在做 debug 收尾没有可机械
@@ -39,8 +41,9 @@ commit，回流合并由 debug-keeper 之后跑 `wt_supply.py merge-back` 完成
      `echo "please push"` 这类不相关文本）。
   2. 解析目标路径：优先取命令里 `-C <path>` / `--git-dir=<path>` 给出的路径；
      两者都没有时退回本次 PreToolUse 事件的 `cwd` 字段（如果 harness 提供了）。
-  3. 目标路径按字符串匹配含 `.keeper/worktrees/` 即命中——不要求路径存在、不要求
-     精确到某一层 DBG-id，命中即视为「这是某个 fixer 的隔离 worktree」。
+  3. 目标路径按正则匹配 `.keeper/<任意交付id>/debug/<任意DBG-id>/worktree` 即
+     命中——不要求路径存在、不要求交付 id 或 DBG-id 是具体哪一个（含兜底桶
+     `_main` 同样命中），命中即视为「这是某个 fixer 的隔离 worktree」。
   4. 解析不到任何路径信息（既没有 `-C`/`--git-dir`，事件也没给 cwd）时**放行**——
      宁可漏放（回到"没有本守卫之前"的现状，不劣化），也不无凭无据地 deny 一条
      可能来自主会话的正常 push。
@@ -56,7 +59,10 @@ GIT_PUSH = re.compile(r"(?:^|[\s;|&(])git\s+(?:-[A-Za-z-]+(?:[= ]\S+)?\s+)*push\
 C_FLAG = re.compile(r"-C[\s=]+([^\s;|&]+)")
 GITDIR_FLAG = re.compile(r"--git-dir[\s=]+([^\s;|&]+)")
 
-WORKTREE_MARK = ".keeper/worktrees/"
+# v4 一交付一目录布局：worktree 落在 `.keeper/<交付id>/debug/<DBG-id>/worktree/`
+# 下（`<交付id>` 含兜底桶 `_main`）。两段变量段都用 `[^/]+` 通配，只锚定
+# `.keeper/`、中间那层固定的 `debug`、以及末尾固定的 `worktree` 字面量。
+WORKTREE_RE = re.compile(r"\.keeper/[^/]+/debug/[^/]+/worktree(?:/|$)")
 
 
 def extract_target_path(command):
@@ -80,11 +86,11 @@ REASON = """禁止在 DBG fixer worktree 里执行 `git push`（2026-07-30 Human
 `agents/debug-keeper.md`），push 完全是 keeper 在 Human 当轮明确同意后才执行的
 动作，不属于 fixer 的职责范围。
 
-如果你是 fixer：不要 push，把改动 commit 好、写完 `receipts/DBG-NNN.md` 回执即可，
-push 与你无关。
+如果你是 fixer：不要 push，把改动 commit 好、写完 `debug/DBG-NNN/receipts.md` 回执
+即可，push 与你无关。
 如果你不是在 DBG worktree 里操作、这次拦截是误判：说明目标路径确实不是某个 fixer
-的隔离 worktree（本守卫只在路径含 `.keeper/worktrees/` 时才会触发），可以确认后
-换一种不含 `.keeper/worktrees/` 路径字面量的写法重试。"""
+的隔离 worktree（本守卫只在路径匹配 `.keeper/<交付id>/debug/<DBG-id>/worktree/`
+时才会触发），可以确认后换一种不含这个路径形态的写法重试。"""
 
 
 def main():
@@ -111,7 +117,7 @@ def main():
     if target is None:
         return  # 抠不到任何路径信息，宁可放行也不无凭据 deny
 
-    if WORKTREE_MARK not in target.replace("\\", "/"):
+    if not WORKTREE_RE.search(target.replace("\\", "/")):
         return  # 目标不在 fixer 的隔离 worktree 里，不是本守卫的管辖范围
 
     print(json.dumps({

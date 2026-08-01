@@ -2,10 +2,12 @@
 #
 # task-keeper · PreToolUse hook（截图证据路径守卫）
 #
-# 【作用】写 .keeper/debug/issues/<DBG-id>.md 时，若正文里出现指向
+# 【作用】写 .keeper/<交付id>/debug/<DBG-id>/issue.md 时（v4 一交付一目录布局，
+#   `<交付id>` 也可以是兜底桶 `_main`），若正文里出现指向
 #   ~/.claude/image-cache/ 的图片路径（会话级临时资源，实测只保留当前活跃会话
-#   目录），返回 permissionDecision=deny，让 AI 自己改成 .keeper/debug/attachments/
-#   下的副本路径，或干脆不写路径只做文字转录。同一行标注了 origin_path 的豁免
+#   目录），返回 permissionDecision=deny，让 AI 自己改成同一 `<DBG-id>` 目录下的
+#   副本路径（v4 布局下截图与 issue.md 平铺同一目录，不再有独立的 attachments/
+#   子目录），或干脆不写路径只做文字转录。同一行标注了 origin_path 的豁免
 #   （那是刻意保留的来源留档，不是给人后续去读的指针）。
 #   判据与两条出路的完整说明见 lib/evidence_guard.py 的模块文档。
 #

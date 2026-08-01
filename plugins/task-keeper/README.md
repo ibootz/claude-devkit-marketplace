@@ -20,33 +20,71 @@
 
 | 脚本 | 事件 | 行为（按动作描述，不是按愿望描述） |
 |---|---|---|
-| `session-start-keeper-routing.sh` | SessionStart | 纯注入三岔口分诊指引（即时做 / 转已有体系 / 转 keeper）。未启用项目注入 ~175 字符，已启用 ~792 字符，不拦截任何操作 |
-| `user-prompt-submit-debug-queue.sh` | UserPromptSubmit | 注入 debug 队列实时快照（open 逐条 + 在飞派生 + done 计数）、重算薄索引 `index.md`；`.gitignore` 缺 `.keeper/` 行时加一句提醒；存量 `.debug/` 未迁移时加一句迁移提示；命中 bug 特征词时给出下一个可用 DBG-id |
+| `session-start-keeper-routing.sh` | SessionStart | 纯注入**静态参考**（决策打包主会话侧职责、v4 布局、指针）。未启用 221 字符（一句话介绍 + 启用方式），已启用 671 字符，不拦截任何操作 |
+| `user-prompt-submit-keeper-routing.sh` | UserPromptSubmit | 纯注入**三岔口分诊**（自己做 / 转 debug-keeper / 转 chore-keeper）+ 转发三原则，424 字符。未启用项目 stdout 全空 |
+| `user-prompt-submit-debug-queue.sh` | UserPromptSubmit | 注入 debug 队列实时快照（open 逐条 + 在飞派生 + done 计数）、重算薄索引 `index.md`（git rebase/bisect/merge 中间态跳过）；`.gitignore` 有整树忽略行或缺三条精确规则时各加一句提醒；存量 v3/v2 布局未迁移时加一句迁移提示；命中 bug 特征词时给出下一个可用 DBG-id（fixer worktree 内不给） |
 | `user-prompt-submit-chore-queue.sh` | UserPromptSubmit | 注入 chore 队列快照（输出预算 ≤900 字符）；代注待拍板决策计数（chore 未启用时由 debug 快照兜底，两边按目录存在性去重） |
-| `pre-tool-use-debug-worktree-push.sh` | PreToolUse(Bash) | `git push` 的目标落在 `.keeper/worktrees/` 内时 deny（fixer 产物只回流不推远端） |
-| `pre-tool-use-debug-worktree-destroy.sh` | PreToolUse(Bash) | 强制删除形态（`rm -rf` / `worktree remove --force` / `clean -fdx`）命中 `.keeper/worktrees/` 路径时 ask 弹确认框 |
-| `pre-tool-use-debug-evidence.sh` | PreToolUse(Write\|Edit) | 只对 `.keeper/debug/issues/*.md` 介入：新内容含 `image-cache` 会话级临时路径时 deny（跨会话必 404），带次数熔断，`origin_path` 留档豁免 |
+| `pre-tool-use-debug-worktree-push.sh` | PreToolUse(Bash) | `git push` 的目标落在 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 内时 deny（fixer 产物只回流不推远端） |
+| `pre-tool-use-debug-worktree-destroy.sh` | PreToolUse(Bash) | 强制删除形态（`rm -rf` / `worktree remove --force` / `clean -fdx`）命中 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 路径时 ask 弹确认框 |
+| `pre-tool-use-debug-evidence.sh` | PreToolUse(Write\|Edit) | 只对 `.keeper/<交付id>/debug/*.md` 介入：新内容含 `image-cache` 会话级临时路径时 deny（跨会话必 404），带次数熔断，`origin_path` 留档豁免 |
 
 三道守卫的判据都是路径子串 + 命令形态的机械判定，未启用队列的项目全部零输出零成本。
 
-## 产物布局：`.keeper/`，整树 gitignore
+## 产物布局：`.keeper/<交付id>/`，文本入库、截图与 worktree 不入库
 
 ```
 <项目根>/.keeper/
-├── debug/{index.md, issues/DBG-NNN.md, attachments/, receipts/, archive/}
-├── chore/{index.md, items/CHR-NNN.md, archive/}
-├── decisions/{<stamp>-<keeper>.md, answers/<同名>.md}
-└── worktrees/<id>/          ← tk-worktree init 的固定落点（与 debug/ 平级）
+├── .keeper-active                       ← 单行文本，记当前活跃交付目录名
+└── <交付id>/                            ← worktree 根 basename，非交付一律 `_main`
+    ├── debug/
+    │   ├── index.md                     入库（派生视图，hook 每轮重算）
+    │   ├── archive/<批次>/<DBG-id>/     入库（归档整目录搬）
+    │   └── DBG-NNN/
+    │       ├── issue.md                 入库（唯一信源）
+    │       ├── receipts.md              入库（fixer commit 进自己分支）
+    │       ├── 01-xxx.png               落盘但 **不入库**
+    │       └── worktree/                **不入库**，tk-worktree init 的固定落点
+    ├── chore/{index.md, CHR-NNN/item.md, archive/}
+    └── decisions/{<stamp>-<keeper>.md, answers/<同名>.md}
 ```
 
-**为什么不入库（有意取舍，不是遗漏）**：前身 radnove-core 的 `.debug/` 设计为整树入库，
-issue 历史与跨 worktree 共享靠 git；代价是工作区常年挂着队列 diff、并行 worktree 会在
-`index.md` 上互写冲突。`.keeper/` 反过来：队列是纯本机产物，工作区永远干净、index 抖动
-问题直接消失，代价是**误删 `.keeper/` 无法从 git 恢复**、多人不共享队列。缓解手段是
-自动归档把 done 沉到 `archive/` 降低活跃面损失 + destroy 守卫对强删弹确认框。
+`<交付id>` 由 `hooks/lib/keeper_paths.py` 解析：先 `--show-superproject-working-tree`
+跳出 submodule、fixer worktree 经 `<git-dir>/wt-supply-source` 回溯到 delivery、
+再取 `--show-toplevel` 的 basename。**不能**简单地"从 cwd 向上找 `.keeper`、遇 `.git`
+停"——linked worktree 根自己就有一个 `.git` 文件，那样第一轮就返回 None，aisdlc 交付
+跑在 `.sdlc/worktrees/D-NNN-<slug>/` 里时队列恒为空，冷启动还会 mkdir 出第二份。
 
-**gitignore 写入分工**：keeper 冷启动（首次 `mkdir -p .keeper/...`）负责向项目 `.gitignore`
-追加 `.keeper/` 行并**回读验证**；快照 hook 发现缺行时只注入一句提醒、不代写文件。
+**文本入库、截图与 worktree 不入库（v4，2026-08-01）**。三条规则划边界：
+`.keeper/**/worktree/`、`.keeper/**/*.png`、`.keeper/**/*.jpg`。
+
+这一版**推翻了 v3 的「整树不入库」**，而 v3 当初又是推翻前身 radnove-core 的 `.debug/`
+整树入库而来的——所以这里等于绕回了一圈，得说清每一轮各自解决了什么、留下了什么：
+
+| 版本 | 做法 | 解决了 | 留下的代价 |
+|---|---|---|---|
+| radnove-core `.debug/` | 整树入库 | issue 有 git 历史、跨 worktree 共享 | 工作区常年挂队列 diff；并行 worktree 在同一个 `index.md` 上互写冲突 |
+| v3 `.keeper/` | 整树 gitignore | 工作区干净、index 抖动消失 | 误删无法恢复、多人不共享；**且被 gitignore 的文件搜不到** |
+| v4 `.keeper/<交付id>/` | 文本入库、截图与 worktree 不入库 | 可搜、可恢复、按交付分目录后 index 冲突面收敛到单个交付内 | 队列是被跟踪文件，`git checkout` 会把它从工作区物理删掉、`git stash` 会把队列改动一起带走 |
+
+**压垮 v3 的是可搜性**：Claude Code 把 `grep` 影子成自带 ugrep，参数写死
+`--ignore-files`（`~/.claude/shell-snapshots/snapshot-zsh-*.sh:5160`）。被 ignore 的
+文件搜起来**静默零命中、不报错**——"搜一下有没有类似 issue"给出的"没有"是假的，且
+无从察觉。注意杀手是 `--ignore-files` 不是点前缀：`--hidden` 已经处理了点前缀，所以
+当年"改个不带点的目录名"这个方向从一开始就不成立。`Read` 不走 grep，一直正常。
+
+这个坑之所以拖了整整一个 v3 才被发现，是因为**它时灵时不灵**——2026-08-01 实测：
+ugrep 只读递归下降途中遇到的 `.gitignore`，**不向上找**。所以从仓库根搜
+（`grep -rn "xxx" .`，AI 的默认动作）是静默零命中；而把搜索根直接设进被忽略的目录
+（`grep -rn "xxx" .keeper/`）反而正常命中，因为那条规则所在的 `.gitignore` 在搜索根
+上一层、压根没被读到。同一份数据、同一个词，换个起点就换个结论。
+
+v4 对上表最后一行代价的缓解：keeper 每个工作窗口结束 commit 一次队列，把未提交窗口
+压到最短。这不能消除风险，只能缩小暴露面——如实记在这里。
+
+**gitignore 分工（v4 改为 fail-loud，不再自动追加）**：keeper 冷启动检查这三行是否
+齐备，**缺行就报错停下要求人工补**，不再像 v3 那样自动追加。原因是实测过：两个分支
+各自在 EOF 追加内容不同的注释即产生合并冲突，而脚本追加裸规则、AI 实际执行时会自由
+发挥注释文案。快照 hook 只注入提醒、不代写文件（与 v3 一致）。
 
 ## 自动归档
 
@@ -67,7 +105,7 @@ subagent 拿不到 `AskUserQuestion` 工具（harness 硬限制），所以拍�
 
 | 步 | 谁 | 动作 |
 |---|---|---|
-| 1 | keeper | 写 `.keeper/decisions/<stamp>-<keeper>.md`（from/about/kind/blocking/options/recommend），`SendMessage(main)` ≤3 行打铃 |
+| 1 | keeper | 写 `.keeper/<交付id>/decisions/<stamp>-<keeper>.md`（from/about/kind/blocking/options/recommend），`SendMessage(main)` ≤3 行打铃 |
 | 2 | 主会话 | 攒批：待决 ≥3 条 / 出现 blocking / 用户问起 / 自然停顿点，四触发点任一命中才问 |
 | 3 | 主会话 | 一次 `AskUserQuestion` 把多条并列问完 |
 | 4 | 主会话 | 用户答复**原文**写 `answers/<同名>.md`，`SendMessage` 回 keeper |
@@ -100,27 +138,45 @@ debug issue 带 `external_ref: <系统>#<编号>` 时，收尾要回写外部工
 本插件是 radnove-core（云学堂内部插件）debug-triage / worktree-supply / debug-keeper 体系
 在 2.x–4.x 十几个版本里打磨出的机制的通用化搬迁：register-first、一 issue 一文件 schema、
 一 issue 一 worktree 物理隔离、submodule 跨对象库共享供给、合并前三件套对账、归档感知的
-编号分配——这些硬教训全部原样保留，只去掉了公司专属部分并把产物仓从入库的 `.debug/` 改为
-gitignored 的 `.keeper/`。radnove-core 自 5.0.0 起已删除全部 debug 资产、只留
+编号分配——这些硬教训全部原样保留，只去掉了公司专属部分并把产物仓改为按交付分目录的
+`.keeper/<交付id>/`。radnove-core 自 5.0.0 起已删除全部 debug 资产、只留
 `debug-ones-writeback` 适配器。
 
 **不要与 radnove-core ≤4.5.1 同装**：守卫会双注册（同一命令弹两次确认框）、`debug-keeper`
 agent 同名二义。装本插件请把 radnove-core 升到 5.0.0+。
 
-## 存量 `.debug/` 迁移（一次性）
+## 存量迁移（一次性）
 
-旧版 radnove-core 项目里入库的 `.debug/` 迁到新布局：
+**v3 → v4**（`.keeper/debug/issues/` → `.keeper/<交付id>/debug/<id>/issue.md`）用脚本，
+默认 dry-run：
 
 ```bash
-mkdir -p .keeper/debug
-mv .debug/* .keeper/debug/
-git rm -r --cached .debug && rm -rf .debug
-printf '.keeper/\n' >> .gitignore
-git add .gitignore && git commit -m "chore: debug 队列迁出 git 跟踪（task-keeper .keeper/ 布局）"
+python3 plugins/task-keeper/skills/tk-debug/scripts/migrate_layout.py --dry-run
+# 核对映射清单无误后
+python3 plugins/task-keeper/skills/tk-debug/scripts/migrate_layout.py --apply
 ```
 
-历史 issue 的 git 历史留在旧提交里可考古。漏做迁移时快照 hook 会检测到
-「`.debug/issues/` 存在而 `.keeper/debug/` 缺失」并注入迁移提示，不会静默丢队列。
+v3 schema 从未记录「这条 issue 属于哪次交付」，所以存量条目一律进 `_main` 桶，
+`--delivery` 可显式改指定桶；归档批次例外，它复用与 `archive_done.py` 同一条交付
+正则独立判断每个批次。活的 git worktree 一律跳过不搬——`shutil.move` 一个活 worktree
+会让主仓 `gitdir` 指向失效路径，那条 worktree 从此既不能用也不能 `remove`（要手工
+`git worktree prune` 收场）。已实测 `git worktree repair` 能在「先移动后修复」的顺序下
+自愈，但脚本刻意不自动调它，留给操作者确认后执行。
+
+**v2 → v4**（radnove-core 时代入库的 `.debug/`）先按 v3 布局收拢到 `.keeper/debug/`，
+再跑上面的脚本。漏做迁移时快照 hook 会检测到旧布局目录存在而 v4 队列缺失，注入一句
+迁移提示，不会静默丢队列。
+
+`.gitignore` 三条规则**一次性提交到主分支**，之后各交付分支只读不写：
+
+```gitignore
+.keeper/**/worktree/
+.keeper/**/*.png
+.keeper/**/*.jpg
+```
+
+若历史上有过整树 `.keeper/` 忽略行，**先删掉它**——两者并存时它会把入库的 issue 一起
+吞掉，而 hook 每轮都会为此告警。
 
 ## 测试
 

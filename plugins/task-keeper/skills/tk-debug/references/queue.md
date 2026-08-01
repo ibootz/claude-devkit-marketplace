@@ -5,7 +5,7 @@
 本文较长，按需查阅——先在本节定位要读的章节，再用
 `grep -n '^##\|^### ' references/queue.md` 跳到对应行。
 
-- **§1 文件布局**——`.keeper/debug/` 目录结构、`.keeper/` 整树为什么不入库、
+- **§1 文件布局**——`.keeper/<交付id>/debug/` 目录结构、哪些入库哪些不入库、
   worktree 落点
 - **§2 issue 文件格式**——frontmatter 9 键、正文章节、`status` 为什么只有二值
 - **§3 三维打分**——`priority`/`difficulty`/`type` 各自的消费者；为什么都不决定派发
@@ -31,30 +31,36 @@
 ## 1. 文件布局
 
 ```
-.keeper/
-├── debug/
-│   ├── index.md            派生视图。hook 每轮重算，人和 AI 共用。不要手改
-│   ├── issues/
-│   │   ├── DBG-001.md      一 issue 一文件。唯一信源
-│   │   └── DBG-002.md
-│   ├── attachments/
-│   │   ├── _inbox/         主会话刚落盘、还没分配 DBG-id 的截图
-│   │   └── DBG-020/        登记后 mv 到这里
-│   ├── receipts/           fixer 的交付回执，一 issue 一个文件
-│   │   └── DBG-017.md
-│   └── archive/            按交付批次归档的 done 条目（§6「归档」）
-│       └── D-001-feat-xxx/
-│           ├── issues/DBG-005.md
-│           ├── receipts/DBG-005.md
-│           └── attachments/DBG-005/
-├── worktrees/               派发用的 git worktree（§4），与 debug/ 平级
-│   └── DBG-017/
-├── decisions/                keeper 与主会话的 HITL 通道（agents/debug-keeper.md §12）
-│   └── answers/
-└── chore/                    另一个 keeper 管，不归本文档
+<worktree 根>/.keeper/
+├── .keeper-active           单行文本，当前活跃交付目录名。解析器自动写入自愈
+└── <交付id>/                worktree 根 basename；非交付 worktree 一律 `_main`
+    ├── debug/
+    │   ├── index.md         派生视图。hook 每轮重算，人和 AI 共用。入库，不要手改
+    │   ├── _inbox/          主会话刚落盘、还没分配 DBG-id 的截图（不入库）
+    │   ├── DBG-017/         **一 issue 一目录**——它的四样东西全在这里
+    │   │   ├── issue.md     唯一信源。入库
+    │   │   ├── receipts.md  fixer 的交付回执。入库，由 fixer commit 进自己分支
+    │   │   ├── 01-xxx.png   登记后从 _inbox/ mv 到这里。落盘但**不入库**
+    │   │   └── worktree/    派发用的 git worktree（§4）。**不入库**
+    │   └── archive/         按交付批次归档的 done 条目（§6「归档」），整目录搬
+    │       └── D-001-feat-xxx/
+    │           └── DBG-005/{issue.md, receipts.md, *.png}
+    ├── decisions/           keeper 与主会话的 HITL 通道（agents/debug-keeper.md §12）
+    │   └── answers/
+    └── chore/               另一个 keeper 管，不归本文档
 ```
 
-**`debug/` 下五样，外加平级的 `worktrees/` 与 `decisions/` 两层临时/通道产物。**
+**`<交付id>` 怎么算**：由 `hooks/lib/keeper_paths.py` 解析——先
+`git rev-parse --show-superproject-working-tree` 跳出 submodule、fixer worktree 经
+`<git-dir>/wt-supply-source` 回溯到 delivery、再取 `--show-toplevel` 的 basename，
+匹配 `^(?:D-\d+-|hotfix-)` 才算交付，否则落固定兜底桶 `_main`。**不要**自己写成
+「从 cwd 向上找 `.keeper`、遇 `.git` 停」——linked worktree 根自己就有一个 `.git`
+文件，那样第一轮就返回 None，aisdlc 交付跑在 `.sdlc/worktrees/D-NNN-<slug>/` 里时
+队列恒为空，而冷启动不检测外层已有队列、直接 mkdir 出第二份（实测两份各缺一半）。
+
+**一个 `DBG-NNN/` 目录里只有那四样，外加队列级的 `index.md` 与 `archive/`。**
+v3 把 issue / receipts / attachments / worktree 分散在四棵平行子树里靠文件名对齐，
+删一条要记得删四处——实际从来没删干净过。
 v2 还有个 `journal.md` 装「跨 issue 的批次记录」，删除——它是 v2 `issues.yaml` 的
 `meta` 段原样搬迁的产物，没做过归属重判，实测装的绝大部分是**单条 issue 的**决策与
 对账（「DBG-002 走方案 1」「DBG-005 外延要一起去」），且没有任何 hook 读它写它校验
@@ -65,21 +71,56 @@ issue 的（Human 对它的拍板、它的落点与量级对账、它的字段�
 delta、本次交付的台账）属于项目自己的交付文档体系（如仓库里的 `.sdlc/` 或等价
 目录），`.keeper/debug/` 只装 bug 队列本身。
 
-**`.keeper/` 整树在项目 `.gitignore` 里一行 `.keeper/` 排除，不入库**——这是用户
-拍板过的取舍：换来工作区干净、不必维护任何子目录级别的 ignore 例外，代价是队列
-数据没有 git 历史、也没法靠 git 在多个 clone/worktree 之间共享，是刻意接受的成本，
-不是遗漏。`index.md` 由 hook 每轮重算，同样落在这条 ignore 规则之下——**不要手工
-编辑它**，下一轮就被覆盖，改了也不会有 diff 提醒你（反正不入库）。
+**队列文本入库，截图与 worktree 不入库**（v4，2026-08-01 用户拍板）。`.gitignore`
+里要有且只要这三行：
 
-**因为一行 `.keeper/` 就覆盖了 `debug/`、`worktrees/`、`decisions/`、`chore/`
-全部子目录，不需要像早期方案那样单独为 `worktrees/` 这一层再配一条精确匹配的
-ignore 规则**——旧方案下 worktree 目录不加专门的 ignore pattern 时，
-`git status` 会把它显示成普通未跟踪目录，一旦被 `git add` 选中还会触发
-`warning: adding embedded git repository` 把整个 worktree 当 gitlink 提交进父仓；
-现在顶层的 `.keeper/` 规则从一开始就让这整棵子树对 `git add -A` / `git add .`
-不可见，不会走到那一步。**冷启动时检查这行是否存在、缺了就追加并回读验证**，
-是 keeper 的职责（`agents/debug-keeper.md` §3），不是 hook 的职责——hook
-（`hooks/lib/queue_snapshot.py`）只在每轮注入时提醒缺失，不代写。
+```gitignore
+.keeper/**/worktree/
+.keeper/**/*.png
+.keeper/**/*.jpg
+```
+
+`index.md` 由 hook 每轮重算，**不要手工编辑它**，下一轮就被覆盖。v4 起它入库，所以
+手改还会在 `git diff` 里留下一条随即被抹掉的假改动。
+
+**这一版推翻了 v3 的「一行 `.keeper/` 整树排除」**。当时的理由是"一行覆盖全部子目录、
+不必维护子目录级 ignore 例外"，那个便利是真的，但它同时带来一个当时没预见的后果：
+Claude Code 把 `grep` 影子成自带 ugrep 且参数写死 `--ignore-files`
+（`~/.claude/shell-snapshots/snapshot-zsh-*.sh:5160`），**被 ignore 的文件搜起来静默
+零命中、不报错**。于是「先搜一下有没有类似 issue」这个动作在整个 v3 期间返回的都是
+假的「没有」，且没有任何信号提示你搜索范围被裁掉了。
+
+它拖了整个 v3 才被发现，是因为**时灵时不灵**（2026-08-01 实测）：ugrep 只读递归下降
+途中遇到的 `.gitignore`、**不向上找**。从仓库根搜（`grep -rn "xxx" .`）静默零命中；
+把搜索根直接设进被忽略的目录（`grep -rn "xxx" .keeper/`）反而正常命中——那条规则在
+搜索根上一层，没被读到。同一份数据同一个词，换个起点换个结论。**排查这类「搜不到」
+时不要用缩小搜索根的办法去复现**，那恰好会绕开症状。
+
+三条规则的写法有两个坑，都实测过：
+
+1. **必须用 `**` 而不是 `*/debug/*/`**。兜底桶 `_main` 与交付桶的层级数虽然相同，但
+   写死中间层的形态在嵌套变化时会漏网。`**` 无此问题。
+2. **不能**用 `.keeper/` 打头再用 `!` 白名单回捞 `issue.md`。git 明文规定：父目录被
+   排除之后，无法再重新包含其中的文件。这个仓自己的 `.gitignore` 注释里就记过这个坑。
+
+v3 那段"顶层规则让整棵子树对 `git add -A` 不可见、所以不会触发 embedded git repository
+警告"的推理**在 v4 不再成立**：`.keeper/**/worktree/` 是精确规则，漏配或写错时
+`git add -A` 会把嵌套 worktree 种成野生 gitlink（实测 `git add -n` 复现出
+`warning: adding embedded git repository`）。所以 v4 补了一道机械校验，keeper 在
+commit 前必须跑：
+
+```bash
+python3 <插件>/skills/tk-debug/scripts/check_staged_gitlink.py
+```
+
+判据是 `git diff --cached --diff-filter=A --raw` 里 mode 字段等于 `160000`——git 自己
+输出的确定字段，没有假阳性；`--diff-filter=A` 只看新增，已声明的 submodule 每次
+gitlink 更新是 `M` 不是 `A`，天然被排除在外。exit 2 时按它打印的命令逐条撤出暂存区。
+
+**冷启动检查这三行是否齐备，缺行 fail-loud 停下要求人工补，不要自动追加**（v4 改法）。
+v3 让 keeper 自动追加，实测的问题是：两个分支各自在 EOF 追加内容不同的注释就会冲突，
+而脚本追加裸规则、AI 实际执行时会自由发挥注释文案。hook
+（`hooks/lib/queue_snapshot.py` 的 `gitignore_findings`）只在每轮注入时提醒，不代写。
 
 ## 2. issue 文件格式
 
@@ -112,7 +153,7 @@ external_ref: TRACKER#644168   # 可选，格式 <系统名>#<id>，见 referenc
 
 ## 证据
 
-- `.keeper/debug/attachments/DBG-017/01-xxx.png`
+- `.keeper/<交付id>/debug/DBG-017/01-xxx.png`
   - origin_path：<image-cache 原路径，仅留档>
   - 转录：<图里能看到什么，文字描述>
 
@@ -228,7 +269,7 @@ ROOT="$(git -C . rev-parse --show-toplevel)"
 WT_SUPPLY="$(find ~/.claude/plugins/cache -maxdepth 6 \
   -path '*/task-keeper/*/skills/tk-worktree/scripts/wt_supply.py' 2>/dev/null | head -1)"
 python3 "$WT_SUPPLY" init --source "$ROOT" --id DBG-017
-WT="$ROOT/.keeper/worktrees/DBG-017"   # init 把落点固定算在 <source>/.keeper/worktrees/<id>/，分支 fix/DBG-017
+WT="$ROOT/.keeper/<交付id>/debug/DBG-017/worktree"   # init 把落点固定算在 <source>/.keeper/<交付id>/debug/<DBG-id>/worktree/<id>/，分支 fix/<交付id>-DBG-017
 ```
 
 **落点不可配**，`--worktree` 之类的参数在 `init` 上不存在。核心原因是很多工具链
@@ -239,7 +280,7 @@ WT="$ROOT/.keeper/worktrees/DBG-017"   # init 把落点固定算在 <source>/.ke
 '/.sdlc/worktrees/'`（`scripts/lib/path-resolve.js:18`）+ slug 白名单（同文件
 `:27` 的 `isValidSlug`，只认 `^D-\d+` / `^hotfix-` 开头），fixer worktree 若直接
 落到 `.sdlc/worktrees/DBG-021`，MARKER 命中但 slug 校验不认，一整串依赖 cwd 判断
-的 hook 集体失准；落在源 worktree 内部的 `.keeper/worktrees/DBG-021` 则前缀完整
+的 hook 集体失准；落在源 worktree 内部的 `.keeper/<交付id>/debug/DBG-021/worktree` 则前缀完整
 保留、识别不受任何影响。**这条约束的通用原理是「宿主工具链靠 cwd 路径字面量识别
 工作区」，不是这一个交付框架独有的毛病**——任何靠 cwd 前缀判断上下文的工具链都有
 同样的脆弱性，落点必须在源 worktree 内部这条要求因此具有普遍性。
@@ -276,7 +317,7 @@ skills/tk-worktree/scripts/wt_supply.py` 这个模式匹配即可跨版本哈希
 不影响供给范围：
 
 ```bash
-python3 "$WT_SUPPLY" explain-scope --worktree "$WT" --from-triage "$ROOT/.keeper/debug/issues/DBG-017.md"
+python3 "$WT_SUPPLY" explain-scope --worktree "$WT" --from-triage "$ROOT/.keeper/<交付id>/debug/DBG-017/issue.md"
 ```
 
 它解析 issue 正文里的 `<path>:<行号>` 引用、按 `.gitmodules` 声明路径做最长前缀匹配反推
@@ -315,7 +356,8 @@ prompt 模板，先看下一节按 `difficulty` 分的两条路径。
 - **`medium` / `hard` → 交互式 subagent**。需要确认意图的改法、跨模块、改数据
   结构这类走这条：`Agent` 多传 `name`（必须带模型档次前缀）与
   `run_in_background: true`，并在 prompt 里加一段交互纪律，让它在真正卡住时
-  用 `SendMessage` 问 `debug-keeper`，而不是自己拍板续做。
+  用 `SendMessage` 问 keeper 自己的 name（`<模型档>-debug-keeper`，默认
+  `sonnet-debug-keeper`），而不是自己拍板续做。
 
 **为什么这样设计（实测支撑）**：
 
@@ -346,9 +388,9 @@ Agent(
   prompt: "【目标】修 DBG-017。
            【上下文】你的工作区是 <worktree 绝对路径>。所有文件操作用该前缀下的
             绝对路径，git 操作用 `git -C <worktree 绝对路径>`。**不要 cd**。
-            issue 全文见 <worktree>/.keeper/debug/issues/DBG-017.md，先读它。
+            issue 全文见 <worktree>/.keeper/<交付id>/debug/DBG-017/issue.md，先读它。
             截图（如有）：<绝对路径>，动手前先 Read。
-           【约束】禁止修改 .keeper/debug/issues/ 与 .keeper/debug/index.md——队列
+           【约束】禁止修改 .keeper/<交付id>/debug/ 与 .keeper/<交付id>/debug/index.md——队列
             写权限只在主工作区，你在 worktree 里改会造成合并冲突。
             改完不要自己重启本地服务，交回执由 debug-keeper 拍板。
             **禁止在这个 worktree 里启动任何本地服务**（如 mvn spring-boot:run /
@@ -377,7 +419,7 @@ Agent(
             **禁止执行 `git push`（不管 push 到这个 worktree 的分支还是任何远程）**——
             commit 在本地分支上就够了，回流合并由 debug-keeper 之后统一处理，push
             完全不属于你的职责范围。
-           【期望输出】把结论写进 <worktree>/.keeper/debug/receipts/DBG-017.md，
+           【期望输出】把结论写进 <worktree>/.keeper/<交付id>/debug/DBG-017/receipts.md，
             包含：改了哪些文件（逐个列路径）/ 关键决策（为什么这样做、放弃了什么）/
             阻塞点 / 需要 debug-keeper 跟进的事项。同时在回执正文里返回同样内容。
             外加一段**逐层 commit 清单**：每层给出「层路径 + commit 短 hash +
@@ -398,9 +440,9 @@ Agent(
   prompt: "【目标】修 DBG-024。
            【上下文】你的工作区是 <worktree 绝对路径>。所有文件操作用该前缀下的
             绝对路径，git 操作用 `git -C <worktree 绝对路径>`。**不要 cd**。
-            issue 全文见 <worktree>/.keeper/debug/issues/DBG-024.md，先读它。
+            issue 全文见 <worktree>/.keeper/<交付id>/debug/DBG-024/issue.md，先读它。
             截图（如有）：<绝对路径>，动手前先 Read。
-           【约束】禁止修改 .keeper/debug/issues/ 与 .keeper/debug/index.md——队列
+           【约束】禁止修改 .keeper/<交付id>/debug/ 与 .keeper/<交付id>/debug/index.md——队列
             写权限只在主工作区，你在 worktree 里改会造成合并冲突。
             改完不要自己重启本地服务，交回执由 debug-keeper 拍板。
             **禁止在这个 worktree 里启动任何本地服务**（如 mvn spring-boot:run /
@@ -432,11 +474,12 @@ Agent(
             完全不属于你的职责范围。
             **遇到需要拍板的歧义**（两种改法都说得通、triage 没写清、发现 issue
             描述与代码实际不符）时，**不要猜、不要挑一个继续**：用 `SendMessage`
-            把选项和你的倾向发给 `debug-keeper`（不是 `main`——你是第 3 层，
+            把选项和你的倾向发给 `sonnet-debug-keeper`（派发时替换成 keeper 自己
+            的实际 name；不是 `main`——你是第 3 层，
             debug-keeper 是第 2 层，只有 debug-keeper 判断这个歧义超出它自己
             权限时才会再走 §12 待拍板协议转交给用户），等它拍板。等待期间你会被
             结束，它答复后你会从 transcript 被唤醒继续，上下文不会丢。
-           【期望输出】把结论写进 <worktree>/.keeper/debug/receipts/DBG-024.md，
+           【期望输出】把结论写进 <worktree>/.keeper/<交付id>/debug/DBG-024/receipts.md，
             包含：改了哪些文件（逐个列路径）/ 关键决策（为什么这样做、放弃了什么）/
             阻塞点 / 需要 debug-keeper 跟进的事项。同时在回执正文里返回同样内容。
             外加一段**逐层 commit 清单**：每层给出「层路径 + commit 短 hash +
@@ -445,8 +488,8 @@ Agent(
 )
 ```
 
-两版模板都保留「禁止修改 `.keeper/debug/issues/` 与 `.keeper/debug/index.md`」
-「改完不要自己重启本地服务」「回执写进 `<worktree>/.keeper/debug/receipts/
+两版模板都保留「禁止修改 `.keeper/<交付id>/debug/` 与 `.keeper/<交付id>/debug/index.md`」
+「改完不要自己重启本地服务」「回执写进 `<worktree>/.keeper/<交付id>/debug/<DBG-id>/receipts.md
 DBG-NNN.md`」这些既有约束——两条轨道都要遵守，只是 medium/hard 版多了 `name`
 （addressing 用，缺了 `SendMessage({to: name})` 唤醒不到它）、`run_in_background:
 true`、交互纪律那一段，以及「等拍板前也要先 commit」这半句。
@@ -462,9 +505,9 @@ true`、交互纪律那一段，以及「等拍板前也要先 commit」这半�
 **【约束】段（写清后果）与【期望输出】段（变成可核对的回执字段）**——只写一处，
 fixer 很容易当成背景说明滑过去。
 
-`receipts/DBG-NNN.md` 与回执正文写同样的内容是刻意冗余：回执正文进 debug-keeper
-上下文供当场判断，`receipts/` 文件随 commit 进入所在 worktree 的分支供合并前对账
-与日后回溯（注意：这份文件本身仍在 `.keeper/` 下不入库，「随 commit」指的是它作为
+`DBG-NNN/receipts.md` 与回执正文写同样的内容是刻意冗余：回执正文进 debug-keeper
+上下文供当场判断，`receipts.md` 随 commit 进入所在 worktree 的分支供合并前对账
+与日后回溯（v4 起这份文件**入库**，「随 commit」指的是它作为
 fixer 工作产物的一部分被提交在 worktree 的本地分支上，不是说它会进 git 远端历史）。
 
 ### 修复前比对确认：fixer 可用 headless agent-browser（不含起服务）
@@ -539,14 +582,25 @@ v3 改在合并前手工做，反而更可靠：那时改动已经是 commit，`
 
 ### 判据
 
-设 `D` = git 实际改动文件集，`R` = `receipts/DBG-NNN.md` 声称改动的文件集：
+设 `D` = git 实际改动文件集，`R` = `DBG-NNN/receipts.md` 声称改动的文件集：
 
 ```bash
-WT="$ROOT/.keeper/worktrees/DBG-017"
+DID="$(basename "$ROOT")"                                    # 交付 id，非交付 worktree 用 _main
+WT="$ROOT/.keeper/$DID/debug/DBG-017/worktree"
 SRC_BRANCH="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)"   # 源 worktree 当前分支
 git -C "$WT" diff --stat "$SRC_BRANCH"...HEAD   # 得到 D 与行数
-cat "$WT/.keeper/debug/receipts/DBG-017.md"      # 得到 R 与声称的量级
+# R 读 fixer **已提交**的那一份，不读工作区（判据 7）
+git -C "$WT" show "HEAD:.keeper/$DID/debug/DBG-017/receipts.md"
 ```
+
+**为什么 R 要 `git show HEAD:` 而不是 `cat`**（v4 新增，v3 只能 `cat`）：v3 时
+`.keeper/` 整树 gitignore，receipts 是纯本机 scratch，`cat` 是唯一读法。v4 receipts
+入库之后，工作区那份可能是 fixer 写了但**还没 commit** 的版本——而合并回来的是
+`HEAD` 那份。两者不一致时 `cat` 让你对着一份不会被合并的申报做对账，结论全错且没有
+任何信号。`git show HEAD:` 读的就是「将要合并进来的那一份」，与 `D` 的口径一致
+（`D` 也是从 commit 算的）。`git show` 在文件未提交时报
+`fatal: path ... does not exist in 'HEAD'`——这个报错本身就是有效信息：fixer 没提交
+receipts，回去追它，不要退回 `cat` 绕过去。
 
 **基线必须取源 worktree 的当前分支，不能写死 `main`。** `init` 建 worktree 用的是
 `git worktree add <target> -b fix/<id> HEAD`，基线是**源 worktree 的 HEAD**；而
@@ -571,8 +625,10 @@ Use '--' to separate paths from revisions, like this:
 3. **量级偏离**（实际行数 > 3× 预期）：改对文件但溢出，把 3 行修复变成 200 行
    待 review 的重构。
 
-`.keeper/debug/` 下的文件在两侧都豁免——fixer 写自己的 `receipts/DBG-017.md` 是规定
-动作，把它算成幽灵改动会让每次对账都不过。
+`.keeper/` 下的文件在两侧都豁免——fixer 写自己的 `DBG-017/receipts.md` 是规定动作，
+把它算成幽灵改动会让每次对账都不过。**v4 这条豁免比 v3 更要紧**：v3 时 receipts 被
+gitignore，压根不会出现在 `git diff --stat` 里；v4 它入库了，**一定会出现在 `D` 里**，
+不豁免就是每次必然误判。
 
 ### 这套对账抓不到什么（别高估它）
 
@@ -655,9 +711,9 @@ commit，push 与否、什么时候 push，由 debug-keeper 在 Human 当轮明�
 决定和执行——不能把 Human 对 merge-back dry-run 清单的确认，或对某条 issue 的
 accept，误读成 push 授权，这是两次分开的决定。fixer 更不允许 push：它在自己隔离的
 worktree 里执行 `git push` 会被 `hooks/pre-tool-use-debug-worktree-push.sh` 机械
-拦下（deny，命中路径含 `.keeper/worktrees/` 即触发，见该 hook 与
+拦下（deny，命中路径含 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 即触发，见该 hook 与
 `lib/debug_worktree_push_guard.py` 的模块头注释）；debug-keeper 自己推主分支的
-push 不在这个机械覆盖范围内（该 hook 只拦截目标路径落在 `.keeper/worktrees/` 下的
+push 不在这个机械覆盖范围内（该 hook 只拦截目标路径落在 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 下的
 push），只能靠这条写死的指令自觉遵守。
 
 **这一步会改 gitlink 指针，凡是会改 gitlink 指针的操作，通用纪律都是同一条**：
@@ -704,12 +760,93 @@ issue 标成「在飞」，而 index.md 里它已经是 done——快照会给�
 有未合并提交时才会保留并打印原因（多半是 `merge-back` 没跑就直接叫了 `remove`）。
 想保留分支供人工核实时加 `--keep-branches`。
 
-`status: done` 的 issue 文件**这一轮先留在 `issues/` 目录不动，等交付收官再统一
+### 销毁 delivery worktree：git 不会警告你正在删掉 fixer
+
+上面整段讲的是**销毁 fixer worktree**（`.keeper/<交付id>/debug/<DBG-id>/worktree/`）。
+这一小节讲的是**销毁 delivery worktree 本身**（`.sdlc/worktrees/D-NNN-<slug>/`），
+两者是不同的对象、规矩也不同——delivery worktree 不是 task-keeper 建的、也不归它
+管，但整个队列连同还在飞的 fixer 都住在它里面，所以销毁它的后果由 task-keeper 承担。
+
+**先记住这一条，其余都是它的推论：`.gitignore` 里 `.keeper/**/worktree/` 那条规则，
+让 git 在删 delivery 时看不见嵌套的 fixer worktree，因此不会给出任何警告。**
+
+平时保命的那道闸是 `fatal: '<path>' contains modified or untracked files, use
+--force to delete it`——本文和 `agents/debug-keeper.md` 都写着「撞到它别加
+`--force`，那是在删掉 fixer 还没提交的修复」。**那条闸在这里不响**。2026-08-01 实测：
+delivery worktree 里嵌着一个内容完整的 fixer worktree 时，直接跑
+`git worktree remove <delivery路径>` **exit 0、静默成功**，fixer 连同里面未提交、
+未推送的修复一起消失，只在主仓留下一条可 prune 的悬空登记。对照实验：同一个
+delivery 里放一个**没被 ignore** 的 `scratch.txt`，同一条命令立刻报
+`contains modified or untracked files` 并拒绝执行。
+
+也就是说：ignore 规则买到了「队列 diff 不污染工作区」，代价是**丢掉了这个位置上的
+误删保护**。这不是可以修的 bug（要保护就得让 fixer worktree 入库，那会种野生
+gitlink，见 §gitlink 铁律），只能靠下面的顺序自己补上。
+
+#### 执行顺序（照抄，不要跳第 1 步）
+
+```bash
+DELIVERY="$(cd <delivery路径> && pwd -P)"   # 必须 -P：/tmp 之类的符号链接会让下面的前缀匹配静默漏掉
+MAIN=<主仓路径>
+
+# 1. 枚举并逐个正常清理嵌套 fixer worktree —— 这一步是给你自己看的保护，不是给 git 看的
+git -C "$MAIN" worktree list --porcelain | awk '/^worktree /{print $2}' \
+  | while read -r wt; do case "$wt" in "$DELIVERY"/*) echo "$wt";; esac; done
+#    对列出的每一个跑（它带干净度检查，脏了会拒绝，那正是你要的）：
+python3 <插件根>/skills/tk-worktree/scripts/wt_supply.py remove --worktree "$wt" --yes
+
+# 2. 删 delivery 本体
+git -C "$MAIN" worktree remove --force "$DELIVERY"
+
+# 3. 清残留登记（第 1 步漏掉的、以及 submodule 层的，都在这里被收走）
+git -C "$MAIN" worktree prune -v
+
+# 4. 验零残留
+git -C "$MAIN" worktree list --porcelain
+ls "$MAIN/.git/worktrees/"
+git -C "$MAIN" worktree prune -v -n        # 应无输出
+
+# 5. 分支要单独删 —— remove 与 prune 从不碰 refs
+git -C "$MAIN" branch --list "fix/<交付id>-*" "delivery/<交付id>"
+```
+
+第 1 步不能省，理由就是本节开头那条：**没有它，第 2 步会静默吃掉 fixer 的未提交
+修复**。`wt_supply.py remove` 自带的干净度检查是这个位置上唯一还在工作的保护。
+
+第 1 步的枚举也**不是完备的**，别把它当作充分条件：`git worktree list --porcelain`
+从主仓跑**看不到 submodule 层的 worktree 登记**（那些登记住在
+`<主仓>/.git/worktrees/<delivery-admin>/modules/<sub>/worktrees/<name>`，不在主仓
+自己的登记表里）。它们由第 3 步的 `prune` 收走——那些层的 gitdir 物理上就在被删的
+delivery 里面，删完即成悬空。所以顺序必须是「先删 delivery、后 prune」，反过来
+prune 什么也清不掉。
+
+#### `--force` 在这里是必须的，这不推翻「不许加 --force」那条
+
+第 2 步的 `--force` 与本文和 `debug-keeper.md` 里禁止 `--force` 的表述**不冲突**，
+因为 `git worktree remove` 有两种拒绝，此前的文字把它们混为一谈了：
+
+| 报错 | 性质 | 处置 |
+|---|---|---|
+| `fatal: working trees containing submodules cannot be moved or removed` | **结构性拒绝**，与干净与否无关。实测：delivery 只要有一个已初始化的 submodule，即使工作区完全干净也照样退 128 | 加 `--force`。它在这里跳过的是一条与安全无关的限制，不掩盖任何东西。有 submodule 的项目里这是唯一出路 |
+| `fatal: '<path>' contains modified or untracked files, use --force to delete it` | **干净度拒绝**，里面真有没提交的内容 | **不许加 `--force`**。先查清是谁的改动。这条规矩不变 |
+
+判据是**看报错原文**，不是看命令。同一条 `--force` 用在前一种是必要，用在后一种
+是删数据。`wt_supply.py remove` 之所以不需要 `--force`，是因为它用「深度优先 +
+删完子层把空目录 `mkdir` 回填」把第一种拒绝从根上消掉了（见上一小节）；delivery
+worktree 没有对应的脚本，只能直接吃 `--force`。
+
+#### 未覆盖的边界（撞到了别按本节推断）
+
+2026-08-01 那次实测**没有**覆盖：≥2 层嵌套 submodule；用户自建的符号链接（只测了
+`/tmp` 这个系统符号链接）；`git worktree lock` 生效时的行为；先 `merge-back --apply`
+再销毁的组合；remote 不可达的 submodule。撞到这些先停下人工确认。
+
+`status: done` 的条目**这一轮先留在队列目录不动，等交付收官再统一
 归档**（见下一小节「归档」）。
 
 v2 有个 `archive.yaml` 归档机制，v3 曾一度取消它：done 的文件本来就不进上下文
 （`index.md` 只列一行 id 链接），移动它会让 `next_id` 的派生逻辑失去 id 历史、
-造成编号重用——这是真实风险，不是臆测：`next_id` 当时的实现只扫 `issues/`
+造成编号重用——这是真实风险，不是臆测：`next_id` 当时的实现只扫现存条目
 目录的文件名，一旦 done 文件被移出这个目录，它的编号就会被误判成「没用过」，
 下一条新 bug 可能拿到同一个编号，两条不同的 bug 共用一个 id、分别躺在两个
 目录里。
@@ -717,17 +854,17 @@ v2 有个 `archive.yaml` 归档机制，v3 曾一度取消它：done 的文件�
 归档功能重新做回来，但**形态不同、不会重犯这个坑**：不是 v2 那种
 需要人工维护的 `archive.yaml` 索引文件，而是「按交付批次的目录搬迁
 （`shutil.move`）+ `next_id` 归档感知」的组合——`next_id`（`hooks/lib/
-queue_files.py`）现在同时扫 `issues/` 目录**与** `archive/**/issues/DBG-*.md`
+queue_files.py`）现在同时扫现存条目目录名**与** `archive/<批次>/<id>/` 归档目录名
 两处的文件名再取最大值+1，只看文件名不解析 frontmatter（即使归档文件的
 frontmatter 损坏，编号也仍然计入历史）。所以归档之后旧编号不会被回收：
 「移动 done 文件」与「id 历史完整」这两件事这次是同时满足的，不再是二选一。
-**用 `shutil.move` 而不是 `git mv`**——`.keeper/` 整树不入库，`issues/DBG-*.md`
+**用 `shutil.move` 而不是 `git mv`**——一次归档搬几十个目录、夹着未跟踪的截图，
 从未被 git 跟踪过，`git mv` 对未跟踪文件必然报 `fatal: not under version
 control`，归档只能是纯文件系统操作。
 
 ### 归档：交付收官后把 done 条目搬进 archive/
 
-`issues/` 目录会被历史上已经 done 的条目越撑越大——虽然 `index.md` 的 done
+队列目录会被历史上已经 done 的条目越撑越大——虽然 `index.md` 的 done
 桶只列 id 不列正文，但 `load_all()` 每轮都要扫过全部历史文件，目录本身也会
 无限增长。**每一轮交付收官、本轮涉及的 worktree 都清理完成之后**，跑一次归档
 脚本，把这一批 done 条目连同它的 receipts 与 attachments 成组搬到
@@ -748,7 +885,7 @@ python3 "$ARCHIVE" --queue-dir "$ROOT/.keeper/debug" --auto --apply
 ```
 
 批次名默认从队列目录绝对路径里提取 `worktrees/<slug>/`（交付级 worktree 布局下
-天然带这一段；fixer 自己的 `.keeper/worktrees/DBG-*` 不会走到这里，归档由 keeper
+天然带这一段；fixer 自己的 `.keeper/<交付id>/debug/DBG-*/worktree` 不会走到这里，归档由 keeper
 在真身队列上执行）；取不到时退回当前 git 分支名清洗后使用；`--auto` 模式固定用
 `auto-<YYYYMMDD>`（当天日期）；都取不到就要求显式传 `--batch <名字>`，不会静默
 拼一个可能错的名字。`--queue chore` 可以对 chore 队列跑同一套归档，但那是
@@ -759,8 +896,28 @@ python3 "$ARCHIVE" --queue-dir "$ROOT/.keeper/debug" --auto --apply
 仍存在对应的 `worktrees/DBG-NNN/` 时会被跳过并给出警告——那说明 worktree 还没
 清理干净，可能还有 fixer 未提交的产物，此时不该把这条 issue 归档走。脚本用
 `shutil.move` 而不是普通移动或 `git mv`，失败时（比如目标已存在）fail-loud 报出来
-并跳过该条，不中断整批。搬迁完不会自动做任何多余动作——`.keeper/` 本就不入库，
+并跳过该条，不中断整批。搬迁完不自动 commit——由 keeper 在收尾窗口一并提交，
 不存在「是否 commit 这次归档」的问题。
+
+### 从 v3 迁移到 v4（一次性布局迁移）
+
+**本文正文描述的已经是 v4**（一交付一目录、一条目一目录，见 §1）。已建过 v3 队列
+（单目录、按类型分桶：`issues/` / `receipts/` / `attachments/`）的项目需要跑一次性
+迁移，脚本是 `skills/tk-debug/scripts/migrate_layout.py`：
+
+```bash
+MIGRATE="$(find ~/.claude/plugins/cache -maxdepth 6 \
+  -path '*/task-keeper/*/skills/tk-debug/scripts/migrate_layout.py' 2>/dev/null | head -1)"
+python3 "$MIGRATE" --keeper-dir "$ROOT/.keeper"                # dry-run，先看清单
+python3 "$MIGRATE" --keeper-dir "$ROOT/.keeper" --apply        # 核对无误后才跑这条
+```
+
+默认 dry-run；存量条目（无法判定原本属于哪次交付）一律归入 `_main` 桶，可用
+`--delivery <id>` 显式指定改归到哪个交付。幂等（重复跑只会处理仍留在 legacy 路径
+下的条目，不会出错也不会重搬）。`.keeper/<交付id>/debug/DBG-NNN/worktree/`（活的 git worktree）
+一律跳过不搬，报告里会列出来并提示先 `wt_supply.py remove` 清理，或迁移后手动执行
+`git worktree repair <新路径>`（实测可行，但脚本刻意不自动做这一步——「移动 + 修复」
+连续动作一旦某一步算错，两头登记都会指错，细节见脚本文件头注释）。
 
 ### 合并后统一实测（二次确认）
 

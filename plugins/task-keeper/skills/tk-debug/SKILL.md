@@ -4,8 +4,8 @@ description: >-
   Debug 队列工程化处理（主会话侧入口）。把「Human 报 bug → AI 立刻派 subagent 修」
   改造成「主会话只转发 → debug-keeper agent 独立跑完登记/triage/派发/对账/收尾，
   自己直接并行派第二层 fixer subagent」的并行流水线。队列落在项目根
-  `.keeper/debug/issues/`（一 issue 一个 md 文件，跨 session 持久，整树 gitignore、
-  不入库）。**主会话在本流程里只做三件事：截图落盘（如果用户附了图）→ 把原话转给
+  `.keeper/<交付id>/debug/`（一 issue 一个目录，跨 session 持久；文本入库，截图与
+  fixer worktree 不入库）。**主会话在本流程里只做三件事：截图落盘（如果用户附了图）→ 把原话转给
   debug-keeper → 立刻回到原任务。** 不做 triage、不写 issue 文件、不派 fixer、
   不对账，这些全部由 debug-keeper 在独立上下文里完成，避免打断主会话手上的工作。
 when_to_use: |
@@ -13,7 +13,7 @@ when_to_use: |
   问题」「triage 一下」「这条插队」「启用 debug 队列」「这些 bug 一起修」，或在
   verify 阶段发现 in-scope 缺陷需要排期修复时，必须用这个 skill。**禁止绕过队列
   直接派 subagent 修 bug**——「收到即派发」正是本机制要消除的行为。项目根还没有
-  `.keeper/debug/issues/` 时也走这里（由 debug-keeper 负责冷启动初始化）。
+  `.keeper/<交付id>/debug/` 时也走这里（由 debug-keeper 负责冷启动初始化）。
 ---
 
 # Debug 队列（主会话侧 · 你只做三件事）
@@ -27,7 +27,7 @@ when_to_use: |
 现在这些全部移到 **`debug-keeper` agent**（task-keeper 插件自带，
 `agents/debug-keeper.md`）。它在独立上下文里跑完全流程，**包括自己直接调用
 `Agent` 工具并行派发第二层 fixer subagent**；需要用户拍板时它走
-`agents/debug-keeper.md` §12 的待拍板协议——写 `.keeper/decisions/` 文件 +
+`agents/debug-keeper.md` §12 的待拍板协议——写 `.keeper/<交付id>/decisions/` 文件 +
 `SendMessage` 指针通知，不经过你转达正文。
 
 **嵌套 `Agent` 调用是否受限，历史上有过反复**（曾一度出现「具名 teammate 唤醒后
@@ -41,7 +41,7 @@ when_to_use: |
 2. 把用户原话逐字转给 `debug-keeper`（§2）
 3. 立刻回到原来在做的事（§3）
 
-不要做的事：不判定优先级、不定位代码、不写 `.keeper/debug/issues/` 下的文件、不派
+不要做的事：不判定优先级、不定位代码、不写 `.keeper/<交付id>/debug/` 下的文件、不派
 fixer、不对账、不回「已登记 DBG-xxx，当前队列…」这类状态模板（§4 说明反馈从哪来）。
 
 ## 1. 用户附了截图：必须由你落盘，且必须回读验证
@@ -69,15 +69,20 @@ fixer、不对账、不回「已登记 DBG-xxx，当前队列…」这类状态�
 枚举命令**不要挂 `2>/dev/null`**，会吞掉报错并被 hook 拦下）。
 
 **第二步，落盘到 `_inbox/`（不是 `<DBG-id>/`）。** `DBG-id` 由 `debug-keeper` 分配
-——`.keeper/debug/issues/` 是单一写者，你自行预分配就出现第二个写者（hook 注入体里
+——`.keeper/<交付id>/debug/` 是单一写者，你自行预分配就出现第二个写者（hook 注入体里
 那个「下一个可用 id」是给 keeper 用的，不是让你去建文件）。keeper 登记时会 `mv` 到
-`.keeper/debug/attachments/<DBG-id>/` 并写进「证据」章节：
+`.keeper/<交付id>/debug/<DBG-id>/` 并写进「证据」章节：
 
 ```bash
-ROOT="$(git -C . rev-parse --show-toplevel)"
+# ROOT 先跳出 submodule 再取当前 worktree 根；直接 --show-toplevel 在 submodule 里
+# 会返回 submodule 根而不是宿主工作区根。判据与 hooks/lib/keeper_paths.py 一致。
+SUP="$(git -C . rev-parse --show-superproject-working-tree)"
+ROOT="$(git -C "${SUP:-.}" rev-parse --show-toplevel)"
+DID="$(basename "$ROOT")"
+case "$DID" in D-[0-9]*-*|hotfix-*) ;; *) DID="_main" ;; esac
 STAMP="$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$ROOT/.keeper/debug/attachments/_inbox"
-DST="$ROOT/.keeper/debug/attachments/_inbox/$STAMP-01-<简短英文或拼音说明>.png"
+mkdir -p "$ROOT/.keeper/$DID/debug/_inbox"
+DST="$ROOT/.keeper/$DID/debug/_inbox/$STAMP-01-<简短英文或拼音说明>.png"
 cp "<照抄来的源路径>" "$DST"
 ```
 
@@ -109,9 +114,9 @@ cp "<照抄来的源路径>" "$DST"
 
 ### 1.2 图里可能含敏感信息时：不落盘
 
-整个 `.keeper/debug/`（含 `attachments/`）虽然本身 gitignore 不入库，但仍可能被
-用户在其他地方误 `cp` 出去共享，或未来该项目取消 gitignore 豁免时被一并纳入历史，
-所以敏感信息的处置口径不因「不入库」而放松。图里出现 token / cookie / 密码 / 密钥、
+截图虽被 `.keeper/**/*.png` 排除在版本库外，但同目录的 `issue.md` **是入库的**——
+你把图里的文字转述进「证据」章节时敏感值就跟着进了 git 历史，而 git 历史删不干净。
+截图本身也可能被误 `cp` 出去共享。所以处置口径不因「截图不入库」而放松。图里出现 token / cookie / 密码 / 密钥、
 手机号 / 邮箱 / 身份证 / 员工工号、真实客户机构名称、产线金额 / 成单数据 / 用户
 明细时**不要落盘**。
 
@@ -122,12 +127,18 @@ cp "<照抄来的源路径>" "$DST"
 
 ## 2. 唯一动作：派出或唤醒 `debug-keeper`
 
-**本会话首次**（还没派过 keeper）用 `Agent` 工具派出，必须固定 `name`：
+**本会话首次**（还没派过 keeper）用 `Agent` 工具派出，必须固定 `name`。
+
+**`name` 的形态是 `<模型档>-debug-keeper`，三段，不加任何多余前后缀**——模型段必须
+与同一次调用的 `model` 一致（`model: "sonnet"` → `sonnet-debug-keeper`；换 `opus`
+派就是 `opus-debug-keeper`，此后 `SendMessage` 的 `to` 同步换）。不要写成
+`debug-keeper`（缺模型段，会被 `working-discipline` 的 `agent-dispatch` 门禁拦下），
+也不要写成 `sonnet-task-keeper-debug-queue-manager` 这类带额外修饰的长名。
 
 ```
 Agent(
   subagent_type: "task-keeper:debug-keeper",   # 若该 subagent_type 不可用则退回 "general-purpose"
-  name: "debug-keeper",
+  name: "sonnet-debug-keeper",
   description: "[sonnet] debug 队列常驻管理",
   model: "sonnet",
   run_in_background: true,
@@ -136,10 +147,10 @@ Agent(
            【上下文】项目根：<git rev-parse --show-toplevel 的结果>。\n
             用户原话逐字如下：\n<原话逐字照抄，不要改写、不要总结>\n
             截图：已落盘 <_inbox 下的绝对路径>（登记时请 mv 到
-            .keeper/debug/attachments/<DBG-id>/ 并写进「证据」章节）；图片内容
+            .keeper/<交付id>/debug/<DBG-id>/ 并写进「证据」章节）；图片内容
             转录：<文字转录>。\n
             〔若落盘失败则写〕原图未落盘，原因：<具体原因>；图片内容转录：<文字转录>。\n
-           【约束】你独占 .keeper/debug/issues/ 写权限；不要动业务代码；需要用户
+           【约束】你独占 .keeper/<交付id>/debug/ 写权限；不要动业务代码；需要用户
             拍板时走 agents/debug-keeper.md §12 的待拍板协议，不要经过我传正文。\n
            【期望输出】按 agents/debug-keeper.md §13 的回执格式返回。"
 )
@@ -152,7 +163,7 @@ Agent(
 
 ```
 SendMessage(
-  to: "debug-keeper",
+  to: "sonnet-debug-keeper",
   summary: "新增 bug 报告",
   message: "用户原话逐字如下：\n<原话>\n截图：<_inbox 路径> / 转录：<文字转录>"
 )
@@ -160,12 +171,12 @@ SendMessage(
 
 `SendMessage` 唤醒时 keeper 的上下文完整保留（已实测确认），所以它记得之前登记过
 什么、能判断新报的这条是否与旧 issue 同根因。**每次新派一个 keeper 都会丢掉这个
-能力，并且产生两个写者竞争 `.keeper/debug/issues/`。**
+能力，并且产生两个写者竞争 `.keeper/<交付id>/debug/`。**
 
 ## 3. 转完立刻回到原任务
 
 转发之后**不要等 keeper 回执**，直接继续你原来在做的事。keeper 是后台 agent，
-它完成时你会收到通知，需要用户拍板时它会通过 `.keeper/decisions/` + `SendMessage`
+它完成时你会收到通知，需要用户拍板时它会通过 `.keeper/<交付id>/decisions/` + `SendMessage`
 指针找你——那时你只需要照 `agents/debug-keeper.md` §12.2 攒批转达、写答复，不需要
 自己去猜决策内容。
 
@@ -175,16 +186,16 @@ SendMessage(
 
 1. `user-prompt-submit-debug-queue.sh` hook 每轮自动注入队列实时快照（open 各条的
    id + 优先级 + 是否在飞、done 计数、reopen 告警，一律现算不落盘）
-2. `.keeper/debug/index.md` 由同一个 hook 重算，人类随时打开就能看全部 issue 一览
+2. `.keeper/<交付id>/debug/index.md` 由同一个 hook 重算，人类随时打开就能看全部 issue 一览
 3. keeper 通过 §12 待拍板协议找你（decisions 文件 + SendMessage 指针）
 
 用户问「debug 状态」「队列里还有啥」时**不必唤醒 keeper**，但要注意这两个来源的
 新鲜度不同：**本轮注入体里那份快照是现算的，最权威**，优先用它回答；
-`.keeper/debug/index.md` 是落盘文件，只在需要每条的摘要或链接时才读。两者同源
+`.keeper/<交付id>/debug/index.md` 是落盘文件，只在需要每条的摘要或链接时才读。两者同源
 （共用 `hooks/lib/queue_files.py` 的分桶计算），正常情况下一致。
 
 **不要手工编辑 `index.md`**（下一轮就被 hook 覆盖），也不要把它当数据源
-（`.keeper/debug/issues/` 下的文件才是）。发现 `index.md` 与注入体的 open 条数不
+（`.keeper/<交付id>/debug/` 下的文件才是）。发现 `index.md` 与注入体的 open 条数不
 一致时，以注入体为准，并检查是不是撞上了「fixer 的 `DBG-*` worktree 里不重算」这条
 规则——那是设计行为，不是 bug。
 
@@ -194,13 +205,13 @@ SendMessage(
 
 ## 5. 什么时候不触发本 skill
 
-- 用户只是**查询**队列状态（「还有啥没修」）→ 读 `.keeper/debug/index.md` 直接答，
+- 用户只是**查询**队列状态（「还有啥没修」）→ 读 `.keeper/<交付id>/debug/index.md` 直接答，
   不派/不唤醒 keeper
 - 范围外的新功能需求、feature-creep → 走项目 backlog，不进 debug 队列
 - 用户明确说「这个我自己改」或指定要主会话立刻手改的一行小修 → 按用户指令做，
   但仍建议登记以免丢失（登记与否听用户）
 - 已在 keeper 手上的 issue，用户追加补充信息 → 用 `SendMessage` 追加给 keeper，
-  不要自己去改 `.keeper/debug/issues/` 下的文件
+  不要自己去改 `.keeper/<交付id>/debug/` 下的文件
 
 ## 6. 分流边界（keeper 执行，主会话仅需知晓判据）
 
@@ -226,11 +237,11 @@ issue 作跨 worktree 接力棒，记下引用写进 `external_ref`，`status` �
 | hook 文件 | 时机 | 作用 |
 |---|---|---|
 | `session-start-keeper-routing.sh` | SessionStart | **纯注入**主会话三岔口分诊规则（即时做 / 转 debug-keeper / 转 chore-keeper）与决策打包主会话侧职责；未启用项目只注入 ≤300 字符介绍。不拦截任何操作 |
-| `user-prompt-submit-debug-queue.sh` | 每轮 prompt | 注入 debug 队列快照 + 重算 `.keeper/debug/index.md`（只在 fixer 的 `DBG-*` worktree 里跳过重算；交付级 worktree 照常重算） |
+| `user-prompt-submit-debug-queue.sh` | 每轮 prompt | 注入 debug 队列快照 + 重算 `.keeper/<交付id>/debug/index.md`（只在 fixer 的 `DBG-*` worktree 里跳过重算；交付级 worktree 照常重算） |
 | `user-prompt-submit-chore-queue.sh` | 每轮 prompt | 同上机制的 chore 队列版，属于 `tk-chore`，本 skill 不消费它的输出 |
 | `pre-tool-use-debug-evidence.sh` | 写 `issues/*.md` | 拦下指向 `image-cache` 的截图路径（跨 session 必然 404），`permissionDecision: deny` |
-| `pre-tool-use-debug-worktree-push.sh` | fixer 执行 `git push` | 目标路径含 `.keeper/worktrees/` 时直接 `deny`（见 `agents/debug-keeper.md` §5） |
-| `pre-tool-use-debug-worktree-destroy.sh` | 针对 `.keeper/worktrees/` 的强制删除类命令 | `permissionDecision: ask` 弹框确认，不是 `deny`——`rm -rf` 一类命令在少数恢复场景下是合法手段，改用 ask 给用户一个放行的出口 |
+| `pre-tool-use-debug-worktree-push.sh` | fixer 执行 `git push` | 目标路径含 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 时直接 `deny`（见 `agents/debug-keeper.md` §5） |
+| `pre-tool-use-debug-worktree-destroy.sh` | 针对 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 的强制删除类命令 | `permissionDecision: ask` 弹框确认，不是 `deny`——`rm -rf` 一类命令在少数恢复场景下是合法手段，改用 ask 给用户一个放行的出口 |
 
 两个已摘除的 hook，不要再引用：派发前六项校验的 hook——它要判断的不是「派发是否
 合规」而是「这次派发是不是在修 bug」，后者无法从 `tool_input` 机械判定；自动对账

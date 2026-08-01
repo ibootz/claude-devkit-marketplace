@@ -1,6 +1,6 @@
 ---
 name: tk-decisions
-description: keeper（后台 subagent）与 Human 之间的决策打包 HITL 协议正典：keeper 把待拍板事项写 `.keeper/decisions/` 文件 + SendMessage 一句话通知，主会话攒批后一次 AskUserQuestion 并列问完，答复原文写 `answers/` 回传。解决「subagent 永远拿不到 AskUserQuestion」与「逐条弹框打断用户」两个问题。
+description: keeper（后台 subagent）与 Human 之间的决策打包 HITL 协议正典：keeper 把待拍板事项写 `.keeper/<交付id>/decisions/` 文件 + SendMessage 一句话通知，主会话攒批后一次 AskUserQuestion 并列问完，答复原文写 `answers/` 回传。解决「subagent 永远拿不到 AskUserQuestion」与「逐条弹框打断用户」两个问题。
 when_to_use: |
   主会话收到 keeper 的 SendMessage 待拍板通知、每轮注入出现「待拍板 N 条」、用户问"有什么要我拍板的"、交付停顿点自查、或任何 keeper 报了需要 Human 决定的事项时。keeper 侧写决策文件的完整规范也在本文件（keeper 的 agent 定义里有摘要）。
 ---
@@ -21,8 +21,8 @@ when_to_use: |
 
 | 路径 | 写者 | 内容 |
 |---|---|---|
-| `.keeper/decisions/<stamp>-<keeper>.md` | 该 keeper | 待拍板事项全文 |
-| `.keeper/decisions/answers/<同名>.md` | 主会话 | 用户答复原文 |
+| `.keeper/<交付id>/decisions/<stamp>-<keeper>.md` | 该 keeper | 待拍板事项全文 |
+| `.keeper/<交付id>/decisions/answers/<同名>.md` | 主会话 | 用户答复原文 |
 
 `<stamp>` 用 UTC 紧凑时间戳（如 `20260731T083015Z`），文件名排序即时间序。
 裁决落地后**两个文件都由 keeper 删除**（见流程第 5 步），目录里只留未决事项。

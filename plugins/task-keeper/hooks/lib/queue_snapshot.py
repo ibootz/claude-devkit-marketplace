@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Debug 队列实时快照（UserPromptSubmit）· schema v3
+"""Debug 队列实时快照（UserPromptSubmit）· schema v4
 
 ## v2 → v3 改了什么，以及为什么（源自真实项目实测，判据设计的通用教训）
 
@@ -26,15 +26,24 @@ v2 的注入体有五个分组：在飞 / 待调度 / 已 triage 待登记 / 待
   · 「改了什么 / 修完没有」→ `git diff --stat` 与 `git merge-base --is-ancestor`，
     只在合并前对账时需要，不进每轮注入。
 
-落盘状态因此只剩 `open` / `done` 两个，在 `issues/DBG-NNN.md` 的 frontmatter 里。
+落盘状态因此只剩 `open` / `done` 两个，在 `<DBG-NNN>/issue.md` 的 frontmatter 里。
+
+## v3 → v4：队列改为跟随交付 worktree
+
+路径从 `<某个根>/.keeper/debug/issues/DBG-NNN.md` 变成
+`<worktree 根>/.keeper/<交付id>/debug/DBG-NNN/issue.md`，且**文本入库**。
+本文件的三处相应改动：根解析委托给 `keeper_paths`（不再自带一份）、
+`gitignore_*` 语义反转（整树忽略从「期望」变成「要告警的错误配置」）、
+`next_id` 纳入 fixer worktree 保护范围。成因见 `keeper_paths.py` 与
+`queue_files.py` 的模块头。
 
 ## 零成本保证不变
 
-本 hook 随插件装到所有项目、每轮触发。从 cwd 向上（到 .git 为止）找不到
-`.keeper/debug/issues/` 就直接 return，stdout 全空，等价于本 hook 不存在。
-唯一例外：项目里有**旧版** `.debug/issues/`（radnove-core 时代的队列目录）而
-没有 `.keeper/debug/` 时，注入一句迁移提示——否则装了新版插件的用户会看到
-「队列消失」且无从归因。判据是两个目录的存在性，纯机械。
+本 hook 随插件装到所有项目、每轮触发。当前 worktree 根下没有
+`.keeper/<交付id>/debug/` 就直接 return，stdout 全空，等价于本 hook 不存在。
+唯一例外：项目里有 v3（`.keeper/debug/issues/`）或 v2（`.debug/issues/`）布局的
+旧队列时，注入一句迁移提示——否则用户看到的只是「队列消失」且无从归因。
+判据是目录存在性，纯机械。
 """
 import json
 import os
@@ -51,14 +60,25 @@ except Exception:                                    # 依赖缺失时静默退�
     load_all = None
     DEBUG = None
 
+try:
+    import keeper_paths
+except Exception:
+    keeper_paths = None
+
 MAX_ASCEND = 30         # 向上查找 .keeper/ 的最大层数（防符号链接环）
 MAX_PER_GROUP = 8       # 注入体里每个分组最多列出的 issue 数
 PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 LEGACY_QUEUE = ".debug"  # radnove-core 时代的旧队列目录，仅用于迁移提示
 
-# .gitignore 里认可的 `.keeper` 忽略写法（strip 后整行相等才算命中——
-# 行存在性判据，不做通配符语义解析）
-GITIGNORE_OK = {".keeper/", ".keeper", "/.keeper/", "/.keeper", ".keeper/**"}
+# 会把整棵队列吞掉的 `.keeper` 忽略写法。**v4 起这是要告警的错误配置，不是期望配置**
+# ——语义相对 v3 完全反转：v3 队列是纯本机产物、整树 gitignore 才对；v4 队列文本入库
+# （否则 Claude Code 的影子 grep 带 `--ignore-files`，搜队列静默零命中而不报错）。
+# strip 后整行相等才算命中，不解析通配符语义。
+GITIGNORE_SWALLOW = {".keeper/", ".keeper", "/.keeper/", "/.keeper", ".keeper/**"}
+
+# v4 期望的三条规则（判据 6）。用 `**` 而非 `*/debug/*/`——后者在 `_main` 兜底桶
+# 那一层少一级会漏网（实测）。
+GITIGNORE_WANT = (".keeper/**/worktree/", ".keeper/**/*.png", ".keeper/**/*.jpg")
 
 # bug 报告特征词。命中即追加 register-first 提醒。
 # 只在队列目录已存在（= 该项目显式 opt-in）时生效，避免污染其他项目。
@@ -84,33 +104,83 @@ def wt_id_re():
 
 # ────────────────────────── 定位 ──────────────────────────
 
-def find_queue(start, dir_name, item_dir):
-    """从 start 向上查找 `<dir_name>/<item_dir>/` 目录，遇到 .git（仓库根）即停。
+def find_queue(start, spec):
+    """定位本 worktree 的 debug 队列目录，找不到返回 None。
 
-    向上找的理由：cwd 不必然等于项目根，用户可能在子目录启动会话。
-    仓库根是上界——多仓库工作区里无限向上会误命中父目录的队列，把 A 项目的
-    issue 注进 B 项目的会话。
+    **v4 起委托给 `keeper_paths`，本文件不再自带一份根解析**。v3 这里是「向上找
+    `<dir_name>/<item_dir>/`、遇 `.git` 停」，而 linked worktree 根自己就有一个
+    `.git` 文件，循环第一轮就返回 None——aisdlc 交付跑在
+    `.sdlc/worktrees/D-NNN-<slug>/` 里时队列恒为空，冷启动又直接 mkdir，于是长出
+    第二份 `.keeper/`。完整成因见 `keeper_paths.py` 模块头。
 
-    认的是**目录**而非某个文件，冷启动入口相应是 `mkdir -p <dir_name>/<item_dir>`。
-    返回队列目录（`<dir_name>` 对应的绝对路径），找不到返回 None。
+    同一份判据当时有三份实现（本文件、`keeper_routing.py`、`archive_done.py`），
+    且第三份不检查 `.git`、会一路走到文件系统根。合并成一份就是为了消掉这个。
     """
+    if keeper_paths is None:
+        return _legacy_find_queue(start, spec)
+    qd = keeper_paths.queue_dir(start, spec, write_back=True)
+    return qd if qd and os.path.isdir(qd) else None
+
+
+def _legacy_find_queue(start, spec):
+    """`keeper_paths` 不可用时的兜底：v3 的向上找。仅在 import 失败时走到。"""
     try:
         cur = Path(start).resolve()
     except Exception:
         return None
     for _ in range(MAX_ASCEND):
-        cand = cur.joinpath(*dir_name.split("/")) / item_dir
+        cand = cur / ".keeper" / spec.dir_name
         try:
             if cand.is_dir():
-                return cand.parent
-            if (cur / ".git").exists():   # 到达仓库根仍未找到 → 本项目没有队列
+                return str(cand)
+            if (cur / ".git").exists():
                 return None
         except OSError:
             return None
-        if cur.parent == cur:             # 文件系统根
+        if cur.parent == cur:
             return None
         cur = cur.parent
     return None
+
+
+def sibling_queue_dirs(queue_dir):
+    """`.keeper/*/debug` 全部交付目录，供 `next_id` 取全局最大值（判据 4）。
+
+    只扫当前交付会让 D-002 的第一条 issue 又叫 DBG-001；跨交付 reopen 是
+    `skills/tk-debug/SKILL.md` 明文规定的常规路径，重号会让「DBG-078」同时指向
+    两条不同的 bug。
+    """
+    if keeper_paths is None:
+        return []
+    keeper_root = os.path.dirname(os.path.dirname(os.path.abspath(queue_dir)))
+    try:
+        return keeper_paths.all_queue_dirs(keeper_root, DEBUG)
+    except Exception:
+        return []
+
+
+def legacy_hints(cwd):
+    """没找到 v4 队列时的迁移提示。返回 0 或 1 条文案，不做任何迁移动作。
+
+    两类旧布局都要认，否则用户看到的只是「队列消失」且无从归因：
+      · v3：`.keeper/debug/issues/`（本插件 1.x）
+      · v2：`.debug/issues/`（radnove-core 时代）
+    """
+    root = keeper_paths.find_worktree_root(cwd) if keeper_paths else None
+    if not root:
+        root = os.path.abspath(cwd)
+    v3 = os.path.join(root, ".keeper", "debug", "issues")
+    if os.path.isdir(v3):
+        return ["⚠ 检测到 v3 布局队列 `%s`。v4 改为一交付一目录、一条目一目录，"
+                "两者路径不兼容。一次性迁移："
+                "`python3 <插件>/skills/tk-debug/scripts/migrate_layout.py --dry-run` "
+                "核对映射后去掉 `--dry-run` 真跑。" % v3]
+    v2 = os.path.join(root, LEGACY_QUEUE, "issues")
+    if os.path.isdir(v2):
+        return ["⚠ 检测到旧版 debug 队列 `%s`（radnove-core 布局），task-keeper 读的是 "
+                "`.keeper/<交付id>/debug/`。先按 v3 布局收拢到 `.keeper/debug/issues/`，"
+                "再跑 `migrate_layout.py` 迁到 v4。" % v2]
+    return []
 
 
 def is_linked_worktree(cwd):
@@ -151,7 +221,18 @@ def in_fixer_worktree(cwd):
 
     两个条件都要满足才跳过：路径带 `DBG-\\d+` **且**确实是 linked worktree。只判
     前者会让「主工作区路径恰好含 DBG-」的仓库被误跳过。
+
+    v4 增加一条**先于**路径判据的精确通道：`<git-dir>/wt-supply-source` 存在即
+    确定是 `wt_supply.py` 建的 fixer worktree。该文件由 `record_source()` 在建
+    worktree 时写入，是确定信息，不需要从路径长相去猜。路径判据保留为兜底——
+    手工 `git worktree add` 出来的、或 v3 时代遗留的 worktree 没有这个标记。
     """
+    if keeper_paths is not None:
+        try:
+            if keeper_paths._read_source_mark(cwd):
+                return True
+        except Exception:
+            pass
     if not wt_id_re().search(str(cwd)):
         return False
     return is_linked_worktree(cwd)
@@ -160,9 +241,10 @@ def in_fixer_worktree(cwd):
 def worktree_in_flight(cwd):
     """从 `git worktree list --porcelain` 派生在飞 issue。
 
-    约定：为某条 issue 开的 worktree，路径里带它的 id（如
-    `.keeper/worktrees/DBG-017`）。这里**不硬编码父目录**——只要路径里出现
-    `DBG-\\d+` 就认，落点放哪都能识别，免得约定一变 hook 就瞎。
+    约定：为某条 issue 开的 worktree，路径里带它的 id（v4 落点是
+    `.keeper/<交付id>/debug/DBG-017/worktree`，v3 是 `.keeper/worktrees/DBG-017`）。
+    这里**不硬编码父目录**——只要路径里出现 `DBG-\\d+` 就认，落点放哪都能识别。
+    v3→v4 落点整体搬家而这个函数一行没改，就是这条判据挣来的。
 
     返回 {DBG-id: worktree 绝对路径}。
     """
@@ -179,22 +261,43 @@ def worktree_in_flight(cwd):
     return found
 
 
-def gitignore_missing_keeper(queue_dir):
-    """项目根 `.gitignore` 是否**缺** `.keeper` 忽略行（缺 → True）。
+def gitignore_findings(queue_dir):
+    """检查 worktree 根 `.gitignore`，返回告警文案列表（全对时返回空列表）。
 
-    项目根 = 队列目录的祖父目录（`<根>/.keeper/debug` → `<根>`）。
-    判据是 strip 后整行相等（GITIGNORE_OK 枚举），不解析通配符语义——
-    宁可对 `**/.keeper/` 这类等效写法多提醒一句，也不做猜测性放行。
-    只提醒不代写：写 `.gitignore` 是 keeper 冷启动的职责，hook 不做文件写入。
+    worktree 根 = 队列目录上溯三级（`<根>/.keeper/<交付id>/debug` → `<根>`）。
+    **v4 比 v3 多一级**——漏改这里会把 `.keeper/` 自己当成项目根去找 `.gitignore`。
+
+    两类问题分开报，因为改法完全不同：
+      · 整树忽略（`.keeper/`）**存在** → 它会把入库的 issue 一起吞掉。而 Claude
+        Code 把 `grep` 影子成自带 ugrep 且参数写死 `--ignore-files`，被 ignore 的
+        文件搜起来**静默零命中、不报错**——「搜一下有没有类似 issue」会得到错误
+        的「没有」。删这一行是 v4 能成立的前提。
+      · 三条精确规则**缺失** → worktree 与截图会被 `git add -A` 一起提交。嵌套
+        worktree 尤其糟：它会被种成幽灵 gitlink（实测 `git add -n` 报
+        `warning: adding embedded git repository`），而这个场景下的宿主仓真的有
+        submodule，野生 gitlink 会让 `wt_supply.merge_into` 的冲突白名单整体阻断。
+
+    判据都是 strip 后整行相等，不解析通配符语义。只提醒不代写——v4 起冷启动也
+    **不再自动追加**：两个分支各自 EOF 追加内容不同的注释即冲突，实测过。
     """
-    root = os.path.dirname(os.path.dirname(os.path.abspath(queue_dir)))
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(queue_dir))))
     gi = os.path.join(root, ".gitignore")
     try:
         with open(gi, encoding="utf-8") as f:
             lines = {line.strip() for line in f}
     except Exception:
-        return True   # 没有 .gitignore 文件 → 当然缺
-    return not (lines & GITIGNORE_OK)
+        lines = set()
+    out = []
+    hit = sorted(lines & GITIGNORE_SWALLOW)
+    if hit:
+        out.append("⚠ `%s/.gitignore` 有整树忽略行 %s——v4 队列文本入库，这一行会把 "
+                   "issue 一起吞掉，且被 ignore 的文件用 grep 搜是**静默零命中**。"
+                   "请删除它，改用下面三条精确规则。" % (root, "、".join("`%s`" % h for h in hit)))
+    missing = [w for w in GITIGNORE_WANT if w not in lines]
+    if missing:
+        out.append("⚠ `%s/.gitignore` 缺 %s——worktree 与截图会被 `git add -A` 提交进去。"
+                   "请补齐并回读验证。" % (root, "、".join("`%s`" % m for m in missing)))
+    return out
 
 
 # ────────────────────────── 渲染 ──────────────────────────
@@ -256,9 +359,7 @@ def render_injection(queue_dir, cwd):
                             "强制升档 opus + 先 Explore 出根因" if n == 2
                             else "停止自动重派，打回重新 triage"))
 
-    if gitignore_missing_keeper(queue_dir):
-        lines.append("⚠ 项目 `.gitignore` 缺 `.keeper/` 行——队列产物不该入库，"
-                     "请在项目根 `.gitignore` 追加一行 `.keeper/` 并回读验证。")
+    lines += gitignore_findings(queue_dir)
     return lines
 
 
@@ -273,45 +374,46 @@ def main():
 
     if load_all is None:
         return
-    found = find_queue(cwd, DEBUG.dir_name, DEBUG.item_dir)
+    found = find_queue(cwd, DEBUG)
     if found is None:
-        # 迁移提示（R11）：装了 task-keeper 但项目里还是旧版 .debug/ 队列时，
-        # 表现为「队列消失」且无从归因。只提醒一句，不做任何迁移动作。
-        legacy = find_queue(cwd, LEGACY_QUEUE, "issues")
-        if legacy is not None:
-            print("⚠ 检测到旧版 debug 队列 `%s`（radnove-core 布局），task-keeper 读的是 "
-                  "`.keeper/debug/`。一次性迁移：`mkdir -p .keeper/debug && "
-                  "mv %s/* .keeper/debug/ && git rm -r --cached .debug && rm -rf .debug`，"
-                  "并在 `.gitignore` 追加 `.keeper/`。" % (legacy, legacy))
+        for hint in legacy_hints(cwd):
+            print(hint)
         return  # 未启用 debug 队列的项目：零成本静默退出
     queue_dir = str(found)
 
-    # 副作用：刷新索引。fixer 的 DBG-* worktree 里跳过——见 in_fixer_worktree()。
-    if not in_fixer_worktree(cwd):
+    # fixer worktree 里**只读不写**：那份队列是随分支 checkout 出来的副本。
+    # v4 起 keeper_paths 已能从 fixer 回溯到 delivery worktree，于是这里读到的
+    # 其实是真身——但仍然不写，因为 fixer 的 hook 去改 delivery 的 index.md
+    # 会在 delivery 那边凭空多出一条工作区修改（v4 index.md 入库）。
+    fixer = in_fixer_worktree(cwd)
+    if not fixer:
         try:
             write_index(queue_dir, DEBUG)
         except Exception:
             pass
 
-    # 全路径只在标题给一次，正文一律用 `.keeper/debug/...` 相对形式——注入体每轮
-    # 都进上下文，重复三遍绝对路径纯属浪费（实测那条 worktree 路径单条 96 字符）。
+    # 全路径只在标题给一次，正文一律用 `<队列>/...` 相对形式——注入体每轮都进
+    # 上下文，重复三遍绝对路径纯属浪费（实测那条 worktree 路径单条 96 字符）。
     out = ["# Debug 队列（%s · harness 注入，非 AI 记忆）" % queue_dir, ""]
     out += render_injection(queue_dir, cwd)
     out += ["",
-            "索引 `.keeper/debug/index.md`（薄，含每条链接）。一条 bug 的全部内容"
-            "（原话 / 证据 / triage / 历次修订）都在 `.keeper/debug/issues/<DBG-id>.md` "
-            "里，**按需打开单条，不要为了看状态去读全部正文**。",
+            "索引 `<队列>/index.md`（薄，含每条链接）。一条 bug 的全部内容"
+            "（原话 / 证据 / triage / 历次修订）都在 `<队列>/<DBG-id>/issue.md` 里，"
+            "**按需打开单条，不要为了看状态去读全部正文**。同目录还有该条的 "
+            "receipts.md、截图与 fixer 的 worktree/。",
             "纪律：收到 bug 只登记不派发（register-first）；一 issue 一 worktree "
             "物理隔离并行；合并前用 `git diff --stat` 与 receipts 申报清单对账。"]
 
-    # 待拍板计数兜底：正常由 chore 快照注入；chore 未启用（items 目录不存在）时
+    # 待拍板计数兜底：正常由 chore 快照注入；chore 未启用（chore 目录不存在）时
     # 这里代注。两边判据是同一个目录的存在性，不会重复注入。
+    # 注意 v4 的层级：queue_dir = <keeper_root>/<交付id>/debug，decisions 与 chore
+    # 都是它的**兄弟**，所以 delivery_root 只上溯一级，keeper_root 上溯两级。
     try:
         from queue_files import CHORE
         from decision_inbox import summary_line
-        keeper_root = os.path.dirname(queue_dir)
-        if not os.path.isdir(os.path.join(keeper_root, "chore", CHORE.item_dir)):
-            dline = summary_line(keeper_root)
+        delivery_root = os.path.dirname(queue_dir)
+        if not os.path.isdir(os.path.join(delivery_root, CHORE.dir_name)):
+            dline = summary_line(delivery_root)
             if dline:
                 out += ["", dline]
     except Exception:
@@ -319,16 +421,25 @@ def main():
 
     if BUG_HINTS.search(prompt):
         # 直接把下一个可用 id 算出来给它——AI 自己扫目录取最大值再 +1 是白费一次
-        # 工具调用，而且它可能把 done 的文件漏掉导致 id 重用。
-        try:
-            nid = next_id(queue_dir, DEBUG)
-        except Exception:
-            nid = "<下一个 DBG-id>"
-        out += ["",
-                "⚠ 本轮疑似 bug 报告：先建 `.keeper/debug/issues/%s.md`"
-                "（frontmatter 写 `status: open`，正文「用户原话」章节逐字照抄、"
-                "禁止改写），回「已登记 + 队列快照」，**不要直接派 subagent 修**。"
-                % nid]
+        # 工具调用，而且它可能把 done 的条目漏掉导致 id 重用。
+        #
+        # **fixer worktree 里不给这个提示**：v3 只保护了 write_index，next_id 照算
+        # 不误，而 fixer 里那份队列是陈旧副本，算出来的编号必然偏小 → 两条不同
+        # issue 抢同一个 id。v4 虽已能回溯到真身，但 fixer 的职责是修一条 bug、
+        # 不是登记新 bug，这里静默省掉比给个可能过期的号更安全。
+        if fixer:
+            nid = None
+        else:
+            try:
+                nid = next_id(queue_dir, DEBUG, sibling_dirs=sibling_queue_dirs(queue_dir))
+            except Exception:
+                nid = "<下一个 DBG-id>"
+        if nid:
+            out += ["",
+                    "⚠ 本轮疑似 bug 报告：先建 `%s/%s/issue.md`"
+                    "（frontmatter 写 `status: open`，正文「用户原话」章节逐字照抄、"
+                    "禁止改写），回「已登记 + 队列快照」，**不要直接派 subagent 修**。"
+                    % (queue_dir, nid)]
 
     print("\n".join(out))
 

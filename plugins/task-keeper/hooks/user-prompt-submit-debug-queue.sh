@@ -2,7 +2,7 @@
 #
 # task-keeper · UserPromptSubmit hook（Debug 队列实时快照注入）
 #
-# 【作用】每轮把项目 `.keeper/debug/issues/` 的**实时快照**注入本轮上下文——open
+# 【作用】每轮把 `.keeper/<交付id>/debug/` 的**实时快照**注入本轮上下文——open
 #   各条的 id + 优先级 + 是否在飞、done 计数、reopen 告警、.gitignore 缺行提醒。
 #   顺带重算 `.keeper/debug/index.md`（只在 fixer 的 `DBG-*` worktree 里跳过重算,
 #   避免几份并行副本互相冒充真身；交付级 worktree 照常重算——那里的队列若是唯一
@@ -22,11 +22,12 @@
 #
 # 【零成本保证（重要）】
 #   本 hook 随插件装到**所有**项目、**每轮**触发。因此：从 cwd 向上（到 .git
-#   为止）找不到 .keeper/debug/issues/ 目录时，python 侧直接 return，stdout
+#   当前 worktree 根下没有 .keeper/<交付id>/debug/ 目录时，python 侧直接 return，stdout
 #   全空，等价于本 hook 不存在。唯一例外是检测到旧版 .debug/issues/（radnove
 #   布局）时注入一句迁移提示——否则升级用户会看到「队列消失」且无从归因。
 #
-# 【启用方式】在项目根 `mkdir -p .keeper/debug/issues`（文件格式见
+# 【启用方式】`mkdir -p .keeper/<交付id>/debug`（交付 id = worktree 根 basename，
+#   非交付 worktree 用 _main；文件格式见
 #   skills/tk-debug/references/queue.md §2）。删掉该目录即自动停用。
 #
 # 【失败策略】注入类 hook 一律静默降级，绝不阻断用户提交：脚本不带 set -e，

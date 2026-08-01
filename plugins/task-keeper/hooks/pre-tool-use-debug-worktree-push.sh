@@ -4,7 +4,8 @@
 #
 # 【作用】把「debug 流程派出去的 fixer 不允许执行 git push」（2026-07-30 Human
 #   立规）从纯文档描述升级为 harness 强制拦截：命中「push 目标路径落在某个
-#   `.keeper/worktrees/DBG-*/` 下」时输出 permissionDecision=deny。走 deny 不走
+#   `.keeper/<交付id>/debug/DBG-*/worktree/` 下」（v4 一交付一目录布局，`<交付id>`
+#   也可以是兜底桶 `_main`）时输出 permissionDecision=deny。走 deny 不走
 #   ask——fixer 结构上从不需要 push，没有需要用户点头放行的合法场景，直接让 AI
 #   自己收手即可。
 #

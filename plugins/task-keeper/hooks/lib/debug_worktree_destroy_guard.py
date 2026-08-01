@@ -2,11 +2,12 @@
 """Debug worktree 强制删除守卫（PreToolUse · Bash matcher）
 
 stdin  = PreToolUse 事件 JSON
-stdout = 命中「针对 `.keeper/worktrees/` 目录执行强制删除类命令」时输出
-         permissionDecision=ask 的 JSON；否则**全空**（放行）
+stdout = 命中「针对 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 目录执行强制删除
+         类命令」时输出 permissionDecision=ask 的 JSON；否则**全空**（放行）
 
 【立规背景】fixer 的工作区是 `wt_supply.py init` 建出的
-`<source>/.keeper/worktrees/DBG-NNN/`，里面可能装着 fixer 尚未 commit 的修复
+`<source>/.keeper/<交付id>/debug/DBG-NNN/worktree/`（v4 一交付一目录布局，
+`<交付id>` 也可以是兜底桶 `_main`），里面可能装着 fixer 尚未 commit 的修复
 产物。`git worktree remove --force` / `rm -rf` / `git clean -fdx` 这类命令一旦
 对准这个目录，删掉的东西不可恢复——而 fixer 的日常操作（改文件、跑测试、写
 receipt）不会走到任何一种强制删除形态，真正会撞上这几种命令的场景要么是清理
@@ -31,7 +32,8 @@ push——没有任何合法场景需要弹框，直接 deny 收工即可。这�
 在命令行字面上长得一模一样，唯一能分辨的人是当时在场的 Human。
 
 【判定细则】
-命中条件 = 「命令形态属于强制删除类」且「目标路径含 `.keeper/worktrees/` 字面量」。
+命中条件 = 「命令形态属于强制删除类」且「目标路径匹配
+`.keeper/<任意交付id>/debug/<任意DBG-id>/worktree` 形态（含兜底桶 `_main`）」。
 
 强制删除类的三种形态（只按命令行字面判定，不猜语义）：
   1. `git worktree remove` 同时带 `--force` 或 `-f`。
@@ -42,7 +44,7 @@ push——没有任何合法场景需要弹框，直接 deny 收工即可。这�
   3. `git clean` 同时带 `-f`（或 `--force`）**且**带 `-d` 或 `-x`，覆盖
      `-fdx`、`-xdf` 这类合并短选项。`git clean -f` 单独出现不算——不加
      `-d`/`-x` 时 git clean 默认不清未跟踪目录，破坏面小得多，且不是
-     `.keeper/worktrees/` 场景下的典型命令。
+     `.keeper/<交付id>/debug/<DBG-id>/worktree/` 场景下的典型命令。
 
 短选项判定统一用「命令行里任何形如 `-[A-Za-z]+` 的独立 token，看它去掉开头
 的 `-` 之后的字符集合里有没有目标字母」，这样 `-rf`/`-fr`/`-Rf` 等任意换序
@@ -51,18 +53,23 @@ push——没有任何合法场景需要弹框，直接 deny 收工即可。这�
 选项的子串误当成 `--force` 命中（`--force` 后面还跟着字符时不是独立 token，
 不会被 `(?<!\S)--force(?!\S)` 命中）。
 
-路径判定：直接对整条命令字符串做 `.keeper/worktrees/` 子串匹配——不精确解析
-是第几个位置参数，因为 `rm -rf /path/to/.keeper/worktrees/DBG-017` 的路径是
-裸位置参数、不在 `-C` 这类具名选项里，精确解析反而容易漏。命令字符串里没有
-这个字面量时，退回看事件的 `cwd` 字段是否含它（cwd 由 harness 提供，是
-AI 发起这条命令时所在的目录）。两处都没有 → 放行——与 push 守卫同一保守
-原则：宁可漏放（回到没有本守卫之前的现状），也不无凭无据弹框打扰 Human。
+路径判定：直接对整条命令字符串做 `.keeper/<交付id>/debug/<DBG-id>/worktree`
+正则匹配——不精确解析是第几个位置参数，因为
+`rm -rf /path/to/.keeper/D-001-feat/debug/DBG-017/worktree` 的路径是裸位置
+参数、不在 `-C` 这类具名选项里，精确解析反而容易漏。交付 id 与 DBG-id 两段
+都用 `[^/]+` 通配，兜底桶 `_main` 同样命中。命令字符串里没有匹配时，退回看
+事件的 `cwd` 字段是否匹配（cwd 由 harness 提供，是 AI 发起这条命令时所在的
+目录）。两处都没有 → 放行——与 push 守卫同一保守原则：宁可漏放（回到没有
+本守卫之前的现状），也不无凭无据弹框打扰 Human。
 """
 import json
 import re
 import sys
 
-WORKTREE_MARK = ".keeper/worktrees/"
+# v4 一交付一目录布局：worktree 落在 `.keeper/<交付id>/debug/<DBG-id>/worktree/`
+# 下（`<交付id>` 含兜底桶 `_main`）。与 debug_worktree_push_guard.py 用同一形态，
+# 两个守卫各自内联判据、不共享 import，保持零依赖的判据风格。
+WORKTREE_RE = re.compile(r"\.keeper/[^/]+/debug/[^/]+/worktree(?:/|$)")
 
 # 命令行里的短选项 token，如 -rf / -f / -C / -fdx，取其 "-" 之后的字符集合判定
 SHORT_OPT = re.compile(r"(?<!\S)-([A-Za-z]+)(?!\S)")
@@ -116,7 +123,8 @@ def is_forced_destroy(command):
     )
 
 
-REASON = """针对 `.keeper/worktrees/` 目录执行了强制删除类命令，需要 Human 确认后再继续。
+REASON = """针对 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 目录执行了强制删除类
+命令，需要 Human 确认后再继续。
 
 本次命中路径：%s
 
@@ -149,11 +157,11 @@ def main():
         return
 
     target = None
-    if WORKTREE_MARK in command.replace("\\", "/"):
+    if WORKTREE_RE.search(command.replace("\\", "/")):
         target = command
     else:
         cwd = ev.get("cwd")
-        if isinstance(cwd, str) and cwd and WORKTREE_MARK in cwd.replace("\\", "/"):
+        if isinstance(cwd, str) and cwd and WORKTREE_RE.search(cwd.replace("\\", "/")):
             target = cwd
 
     if target is None:

@@ -2,9 +2,10 @@
 #
 # task-keeper · PreToolUse hook · Bash matcher（DBG fixer worktree 强制删除 → 弹框确认）
 #
-# 【作用】拦截「针对 `.keeper/worktrees/` 目录执行强制删除类命令」（`git worktree
-#   remove --force` / `rm -rf` / `git clean -fdx` 等），防止 fixer 尚未 commit 的
-#   修复产物被不可逆删掉。命中时输出 permissionDecision=ask，弹框交给 Human
+# 【作用】拦截「针对 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 目录执行强制删除
+#   类命令」（`git worktree remove --force` / `rm -rf` / `git clean -fdx` 等，v4
+#   一交付一目录布局，`<交付id>` 也可以是兜底桶 `_main`），防止 fixer 尚未 commit
+#   的修复产物被不可逆删掉。命中时输出 permissionDecision=ask，弹框交给 Human
 #   拍板——不是 deny，因为 `rm -rf` 这类命令在 `isolated-objdir` / `unreachable`
 #   状态的恢复流程里是文档记载的合法手段（见
 #   skills/tk-worktree/SKILL.md 状态判据表），一律 deny 会堵死这条恢复路径。

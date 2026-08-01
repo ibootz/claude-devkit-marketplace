@@ -9,9 +9,12 @@
 
 判据与存储层全部复用 queue_files.py 的 CHORE spec，不复制第二份实现。
 
-零成本保证：从 cwd 向上（到 .git 为止）找不到 `.keeper/chore/items/` 就直接
-return，stdout 全空。待拍板计数（decision_inbox）随本快照注入；debug 快照只在
-chore 未启用时代为注入，两边不重复（判据：`.keeper/chore/items` 目录存在性）。
+零成本保证：当前 worktree 根下没有 `.keeper/<交付id>/chore/` 就直接 return，
+stdout 全空。待拍板计数（decision_inbox）随本快照注入；debug 快照只在 chore
+未启用时代为注入，两边不重复（判据：`<交付>/chore` 目录存在性）。
+
+v4 起路径改为 `<worktree 根>/.keeper/<交付id>/chore/CHR-NNN/item.md`，根解析与
+find_queue 全部复用 queue_snapshot 那份（它已委托给 keeper_paths）。
 """
 import json
 import os
@@ -22,12 +25,22 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
     from queue_files import CHORE, load_all, split_by_status, write_index, next_id
-    from queue_snapshot import find_queue, gitignore_missing_keeper
+    from queue_snapshot import find_queue, gitignore_findings
     from decision_inbox import summary_line
 except Exception:
     load_all = None
 
 MAX_LIST = 8
+
+
+def sibling_chore_dirs(queue_dir):
+    """`.keeper/*/chore` 全部交付目录，供 `next_id` 取全局最大值（判据 4）。"""
+    try:
+        import keeper_paths
+        keeper_root = os.path.dirname(os.path.dirname(os.path.abspath(queue_dir)))
+        return keeper_paths.all_queue_dirs(keeper_root, CHORE)
+    except Exception:
+        return []
 
 # 杂务特征词。命中即追加 register-first 提醒（只在队列已存在 = 项目 opt-in 时生效）。
 CHORE_HINTS = re.compile(
@@ -74,7 +87,7 @@ def main():
 
     if load_all is None:
         return
-    found = find_queue(cwd, CHORE.dir_name, CHORE.item_dir)
+    found = find_queue(cwd, CHORE)
     if found is None:
         return  # 未启用 chore 队列：零成本静默退出
     queue_dir = str(found)
@@ -94,19 +107,21 @@ def main():
     except Exception:
         pass
 
-    if gitignore_missing_keeper(queue_dir):
-        out.append("⚠ 项目 `.gitignore` 缺 `.keeper/` 行——请追加并回读验证。")
+    # gitignore 告警只由 debug 快照报一次；两个队列都报会在同一轮注入里重复两遍
+    # 同样的文案，而它们检查的是同一个文件。debug 未启用时这里代报。
+    if not os.path.isdir(os.path.join(os.path.dirname(queue_dir), "debug")):
+        out += gitignore_findings(queue_dir)
 
     out.append("纪律：杂务只登记不亲手做——转 chore-keeper（SendMessage 唤醒，首次 "
                "Agent 派出）后回原任务；一切外部系统写由 keeper 打包过用户后才执行。")
 
     if CHORE_HINTS.search(prompt):
         try:
-            nid = next_id(queue_dir, CHORE)
+            nid = next_id(queue_dir, CHORE, sibling_dirs=sibling_chore_dirs(queue_dir))
         except Exception:
             nid = "<下一个 CHR-id>"
-        out.append("⚠ 本轮疑似杂务：转给 chore-keeper 登记为 `.keeper/chore/items/%s.md`"
-                   "（用户原话逐字带上），不要在主会话亲手做。" % nid)
+        out.append("⚠ 本轮疑似杂务：转给 chore-keeper 登记为 `%s/%s/item.md`"
+                   "（用户原话逐字带上），不要在主会话亲手做。" % (queue_dir, nid))
 
     print("\n".join(out))
 

@@ -1,6 +1,6 @@
 ---
 name: tk-worktree
-description: 从一个源 worktree 派生出**结构完整的聚合仓 worktree**（父仓 + 全部 submodule（子模块）层，含嵌套递归），落点固定 `<source>/.keeper/worktrees/<id>/`，并能整体合并回源 worktree 的分支。`git worktree add` 只建父仓工作区、submodule 目录全是空的，本 skill 负责把它们按父仓记录的 gitlink（父仓 index 里那条 `160000` 模式条目，值是子仓某次提交的 40 位 SHA）真正 checkout 出来，并提供状态查询 / 清理 / 回流。核心纪律：linked worktree 里永远走 `git worktree add` 供给、绝不用 `git submodule update --init`；gitlink 一律以**源侧同层 index** 为准。
+description: 从一个源 worktree 派生出**结构完整的聚合仓 worktree**（父仓 + 全部 submodule（子模块）层，含嵌套递归），落点固定 `<source>/.keeper/<交付id>/debug/<id>/worktree/`，并能整体合并回源 worktree 的分支。`git worktree add` 只建父仓工作区、submodule 目录全是空的，本 skill 负责把它们按父仓记录的 gitlink（父仓 index 里那条 `160000` 模式条目，值是子仓某次提交的 40 位 SHA）真正 checkout 出来，并提供状态查询 / 清理 / 回流。核心纪律：linked worktree 里永远走 `git worktree add` 供给、绝不用 `git submodule update --init`；gitlink 一律以**源侧同层 index** 为准。
 when_to_use: |
   用户或 keeper 说"新 worktree 里 submodule 是空的"、"worktree 里子模块没内容"、"给 worktree 补子模块"、"给这个 issue 开一个带完整子模块的工作区"、"submodule update --init 之后回流失败/not our ref"、"清理 worktree 的子模块工作区"、"把 worktree 里子模块的改动合回源分支"。
 ---
@@ -66,9 +66,9 @@ python3 scripts/wt_supply.py init --source <源worktree绝对路径> --id <ID> \
 
 做四件事：建父仓工作区（`git -C <source> worktree add <target> -b <branch> HEAD`）→ 把源路径记进目标 worktree 的 gitdir → 全量递归供给所有 submodule 层 → 自校验（等价 `status`）。
 
-- **落点固定 `<source>/.keeper/worktrees/<id>/`，不可配。** 核心原因：很多工具链（hook、状态注入、路径识别）靠 **cwd 的路径字面量**反推"当前处于哪个工作区"——目标 worktree 落在源 worktree **内部**时，它的绝对路径天然包含源 worktree 的完整路径前缀，这类识别全部照常工作；落到外部（比如与源平级的目录）会被静默判成另一个无关工作区，没有任何报错。一个真实例子：某交付框架的路径识别常量是 `MARKER = '/.sdlc/worktrees/'` + slug 白名单（只认 `^D-\d+` / `^hotfix-` 开头），fixer worktree 若直接落到 `.sdlc/worktrees/DBG-021`，MARKER 命中但 slug 校验不认，一整串依赖 cwd 判断的 hook 集体失准；落在源 worktree 内部的 `.keeper/worktrees/DBG-021` 则前缀完整保留、识别不受任何影响。这条约束只要求落点在源 worktree 内部，具体挂哪个子目录不重要——统一放 `.keeper/worktrees/<id>/`，与 `.keeper/debug/` 队列数据（`issues/`/`receipts/`/`attachments/`）平级分层。**挪走这个落点会静默破坏宿主工具链的 worktree 识别。**
+- **落点固定 `<source>/.keeper/<交付id>/debug/<id>/worktree/`，不可配。** 核心原因：很多工具链（hook、状态注入、路径识别）靠 **cwd 的路径字面量**反推"当前处于哪个工作区"——目标 worktree 落在源 worktree **内部**时，它的绝对路径天然包含源 worktree 的完整路径前缀，这类识别全部照常工作；落到外部（比如与源平级的目录）会被静默判成另一个无关工作区，没有任何报错。一个真实例子：某交付框架的路径识别常量是 `MARKER = '/.sdlc/worktrees/'` + slug 白名单（只认 `^D-\d+` / `^hotfix-` 开头），fixer worktree 若直接落到 `.sdlc/worktrees/DBG-021`，MARKER 命中但 slug 校验不认，一整串依赖 cwd 判断的 hook 集体失准；落在源 worktree 内部的 `.keeper/<交付id>/debug/DBG-021/worktree/` 则前缀完整保留、识别不受任何影响。这条约束在"落点必须在源 worktree 内部"之上又收紧一级：**落进它所属那条 issue 自己的目录**——v3 曾放在与队列数据平级的 `.keeper/worktrees/<id>/`，同一条 bug 的 issue / receipts / 截图 / worktree 分散在四棵子树里，删一条要记四处；v4 收进 `debug/<id>/worktree/` 之后，一条 issue 的全部东西就是一个目录。**挪走这个落点会静默破坏宿主工具链的 worktree 识别。**
 - `--id` 只接受 `^[A-Za-z0-9][A-Za-z0-9._-]*$`（字母数字开头，由字母数字与 `.` `_` `-` 组成），因为它直接当目录名用，不接受路径分隔符。
-- 分支缺省 `fix/<id>`。基线是**源 worktree 的 HEAD**，不是 master。
+- 分支缺省 `fix/<交付id>-<id>`。基线是**源 worktree 的 HEAD**，不是 master。
 - **源侧未提交的改动不会进目标 worktree**（`worktree add ... HEAD` 只带走 HEAD 的内容）。有未提交改动时会列出最多 10 项警告你。
 - 记源之后，`supply` / `status` / `remove` / `merge-back` 的 `--source` 都**可以省略**。
 - **幂等**：目标已登记为 worktree 且分支一致 → 跳过创建、直接续跑供给；分支不一致 → fail-loud，要么先 `remove --yes`，要么用 `--branch` 指定成已有的那个续跑。
@@ -97,15 +97,15 @@ python3 scripts/wt_supply.py supply --worktree <目标worktree> \
 供给成功的样子（一级 + 嵌套两层）：
 
 ```
-  [libs/a] gitlink=7c528417ce3a 状态=empty 源侧=分支 main → 目标侧 -b fix/DBG-017
-    已供给：分支 fix/DBG-017，.git → /src/super/.git/modules/libs/a/worktrees/a
-    [vendor/n] gitlink=ff0eb5e95c42 状态=empty 源侧=分支 main → 目标侧 -b fix/DBG-017
-      已供给：分支 fix/DBG-017，.git → /src/super/.git/modules/libs/a/modules/vendor/n/worktrees/n
+  [libs/a] gitlink=7c528417ce3a 状态=empty 源侧=分支 main → 目标侧 -b fix/D-001-DBG-017
+    已供给：分支 fix/D-001-DBG-017，.git → /src/super/.git/modules/libs/a/worktrees/a
+    [vendor/n] gitlink=ff0eb5e95c42 状态=empty 源侧=分支 main → 目标侧 -b fix/D-001-DBG-017
+      已供给：分支 fix/D-001-DBG-017，.git → /src/super/.git/modules/libs/a/modules/vendor/n/worktrees/n
 ```
 
 嵌套层的存储路径规律是 `<父模块 git-dir>/modules/<子路径>`，例如 `super/.git/modules/libs/a/modules/vendor/n/worktrees/n`。
 
-**分支占用**：复用已被别的 worktree 检出的分支名会报 `fatal: '<branch>' is already used by worktree at '<path>'`。脚本命中这类情况（或同名分支已存在）时自动换派生名 `<基础分支名>-<submodule路径末段>`，例如 `fix/DBG-017` → `fix/DBG-017-b`；派生名也不可用则 fail-loud，让你用 `--branch` 显式指定，**不盲目重试**。
+**分支占用**：复用已被别的 worktree 检出的分支名会报 `fatal: '<branch>' is already used by worktree at '<path>'`。脚本命中这类情况（或同名分支已存在）时自动换派生名 `<基础分支名>-<submodule路径末段>`，例如 `fix/D-001-DBG-017` → `fix/D-001-DBG-017-b`；派生名也不可用则 fail-loud，让你用 `--branch` 显式指定，**不盲目重试**。
 
 ### status —— 逐层报状态
 
@@ -124,7 +124,7 @@ python3 scripts/wt_supply.py remove --worktree <目标worktree> \
 
 缺省只打印计划，加 `--yes` 才执行。**缺省会连父仓工作区一起删干净**（最后一步 `git -C <source> worktree remove <target>`）；只想清 submodule 层、保留父仓工作区时加 `--keep-parent`。源 worktree 全程不受影响。
 
-**缺省还会自动清理每一层 `init`/`supply` 建过的分支**（`fix/<id>` 或 `pick_branch` 派生出的同名分支），不需要额外手工删。判据是尝试安全删除（`git branch -d`）：这条分支若已经被 `merge-back --apply` 合入源侧对应分支，或者压根没产生过新提交（这次 issue 没实际碰这个 submodule），`-d` 都能直接删掉；若分支还有未合并的提交（没跑过 `merge-back` 就直接 `remove`，例如 reject 场景），`-d` 会拒绝，脚本此时只打印保留原因、**不阻断 worktree 本身的删除**，也不静默丢内容。理由与实现见 `wt_supply.py` 里 `try_delete_branch` 的函数注释。`--keep-branches` 跳过这整段清理（想保留分支供人工核实时用）；`--force-delete-branches` 对未合并的分支也强删（`-D`），需要显式传，不是默认行为。
+**缺省还会自动清理每一层 `init`/`supply` 建过的分支**（`fix/<交付id>-<id>` 或 `pick_branch` 派生出的同名分支），不需要额外手工删。判据是尝试安全删除（`git branch -d`）：这条分支若已经被 `merge-back --apply` 合入源侧对应分支，或者压根没产生过新提交（这次 issue 没实际碰这个 submodule），`-d` 都能直接删掉；若分支还有未合并的提交（没跑过 `merge-back` 就直接 `remove`，例如 reject 场景），`-d` 会拒绝，脚本此时只打印保留原因、**不阻断 worktree 本身的删除**，也不静默丢内容。理由与实现见 `wt_supply.py` 里 `try_delete_branch` 的函数注释。`--keep-branches` 跳过这整段清理（想保留分支供人工核实时用）；`--force-delete-branches` 对未合并的分支也强删（`-D`），需要显式传，不是默认行为。
 
 **顺序必须深度优先（先子后父）**：先删父会报 `fatal: working trees containing submodules cannot be moved or removed`。
 
@@ -134,6 +134,8 @@ python3 scripts/wt_supply.py remove --worktree <目标worktree> \
 
 - `git submodule deinit -f <子路径>`：实测在 linked worktree 里 deinit 会从**与源仓共享的** `.git/config` 里删掉 `submodule.<name>.url`，连主 checkout 的 `git submodule status` 都跟着从 ` `（已初始化）变成 `-`（未初始化）——那是波及主 checkout 的副作用，超出本脚本职责。而本链路的供给全部从源侧发起、从不碰主 checkout 的 submodule 初始化状态，压根没有需要 deinit 收拾的东西。
 - `worktree remove --force`：那是掩盖因果，不是消除原因。若报 `contains modified or untracked files`，说明里面真有未提交内容，先人工确认要不要留。
+
+  **这条只管 `contains modified or untracked files` 这一种拒绝。** `git worktree remove` 还有另一种拒绝——`fatal: working trees containing submodules cannot be moved or removed`——它是结构性的、与干净度无关（实测：worktree 完全干净、只要有一个已初始化的 submodule 就照样 exit 128），`--force` 在那里跳过的东西与安全无关。本脚本自己不需要 `--force` 是因为它用「深度优先 + 空目录回填」把那种拒绝从根上消掉了；**没有对应脚本的场景（例如销毁 delivery worktree 本身）必须加 `--force`**，见 `skills/tk-debug/references/queue.md` §6「销毁 delivery worktree」。判据是看报错原文，不是看命令。
 
 ### merge-back —— 回流（会改 gitlink 并建 commit，默认 dry-run）
 
@@ -195,7 +197,8 @@ python3 scripts/wt_supply.py explain-scope --worktree <worktree> --from-triage <
 
 ```bash
 S=/abs/path/to/源worktree
-W=$S/.keeper/worktrees/DBG-017
+DID=_main   # 交付 id：源 worktree 目录名匹配 ^(?:D-\d+-|hotfix-) 才取该名，否则落 _main
+W=$S/.keeper/$DID/debug/DBG-017/worktree
 
 # 建：一条命令搞定父仓工作区 + 全部 submodule 层 + 自校验
 python3 scripts/wt_supply.py init --source "$S" --id DBG-017

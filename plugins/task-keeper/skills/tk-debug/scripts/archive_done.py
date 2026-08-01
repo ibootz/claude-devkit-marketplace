@@ -1,30 +1,45 @@
 #!/usr/bin/env python3
-"""按批次把 `status: done` 的条目从队列条目目录归档到 `archive/<批次>/`，
-同时把它的 receipts 与 attachments 成组搬走（存在才搬）。debug 与 chore
-两个队列共用本脚本，用 `--queue debug|chore` 选择（默认 debug）。
+"""按批次把 `status: done` 的条目整目录归档到 `archive/<批次>/<id>/`。debug 与
+chore 两个队列共用本脚本，用 `--queue debug|chore` 选择（默认 debug）。
+
+## v4 起归档是「搬一个目录」而不是「搬三处文件」
+
+v3 一条 issue 的东西分散在 `issues/DBG-007.md`、`receipts/DBG-007.md`、
+`attachments/DBG-007/` 三棵平行子树里，归档要靠文件名把它们对齐后逐个搬；漏搬
+一处不报错，只是那部分永远留在原地。v4 一条目一目录，归档退化成一次
+`shutil.move`，这个失败模式消失了。
 
 ## 为什么要归档
 
 条目目录与 `index.md` 会被历史上已经 done 的条目越撑越大——虽然 `index.md`
-的 done 桶只列 id 不列正文，但条目目录本身仍在无限增长，每一轮 `load_all()`
-都要扫过全部历史文件。归档把已收尾的条目成组搬到 `archive/<批次>/` 下，
-条目目录和 `index.md` 就只装当前仍在流转的条目。`.keeper/` 整树不入库
-（gitignore），归档同时也是唯一的「留档」动作——done 条目沉进 archive/ 后
-活跃面变小，误删活跃目录的损失也随之变小。
+的 done 桶只列 id 不列正文，但队列目录本身仍在无限增长，每一轮 `load_all()`
+都要扫过全部历史条目。归档把已收尾的条目成组搬到 `archive/<批次>/` 下，
+队列目录和 `index.md` 就只装当前仍在流转的条目。
 
 ## 为什么用 shutil.move 而不是 git mv
 
-`.keeper/` 整树在 `.gitignore` 里，队列文件不被 git 跟踪，`git mv` 对未跟踪
-文件必然报错（fatal: not under version control）。归档是纯文件系统操作。
+**v4 队列文本已入库，但归档仍走文件系统**：一次归档动辄搬几十个目录，其中还夹着
+未跟踪的截图（`.keeper/**/*.png` 在 gitignore 里），`git mv` 会在第一个未跟踪
+文件上报 `fatal: not under version control` 中途停下，留下搬了一半的状态。
+纯文件系统搬完之后由 keeper 一次 `git add -A` 提交，git 自己会识别成 rename。
+
+## 归档前必须确认 worktree 已清理（判据 8）
+
+`shutil.move` 一个活着的 git worktree 会让主仓 `.git/worktrees/<name>/gitdir`
+指向失效路径——那个 worktree 从此既不能用也不能 `git worktree remove`，要手工
+`git worktree prune` 才能收场。所以 `worktree_blocks_archive()` 用两条腿判：
+条目目录下 `worktree/` 存在，**或** `git worktree list --porcelain` 里仍有登记。
+任一命中就跳过该条，不搬。
 
 ## id 复用是唯一的硬风险，本脚本必须与 `hooks/lib/queue_files.py` 的
 ## `next_id()` / `scan_archived_ids()` 配套使用
 
-`next_id()` 只看条目目录时，「文件名集合即完整 id 历史」的前提会被本脚本
+`next_id()` 只看条目目录时，「现存目录名集合即完整 id 历史」的前提会被本脚本
 打破——归档后旧编号被当成「没用过」重新分配，两条不同条目共用一个 id。
-`queue_files.py` 的 `next_id()` 是归档感知的：把 `archive/**/<item_dir>/` 的
-文件名也计入历史（只看文件名、不解析 frontmatter，即使归档文件损坏也不会
-导致编号被回收重用）。**不要在没有这个前置逻辑的存储层上单独使用本脚本**。
+`queue_files.py` 的 `next_id()` 是归档感知的：把 `archive/<批次>/<id>/` 的
+目录名也计入历史（只看目录名、不解析 frontmatter、也不要求正文存在，即使归档
+条目损坏也不会导致编号被回收重用）。**不要在没有这个前置逻辑的存储层上单独
+使用本脚本**。
 
 ## 自动归档（--auto）
 
@@ -38,8 +53,8 @@ keeper 在每次「收尾/执行窗口」结束时跑一次 `--auto`：满足任
 
 ## 用法
 
-    python3 archive_done.py --queue-dir <项目>/.keeper/debug --batch D-001-feat-xxx
-    python3 archive_done.py --queue-dir <项目>/.keeper/debug --batch D-001 --apply
+    python3 archive_done.py --queue-dir <根>/.keeper/D-001-feat-xxx/debug
+    python3 archive_done.py --queue-dir <根>/.keeper/_main/debug --apply
     python3 archive_done.py --queue chore --auto --apply   # chore 队列自动归档
     python3 archive_done.py                                # 自动定位队列与批次名
 
@@ -61,10 +76,15 @@ sys.path.insert(0, os.path.join(
         os.path.dirname(os.path.abspath(__file__))))), "hooks", "lib"))
 
 try:
-    from queue_files import (DEBUG, CHORE, items_dir, archive_dir, load_all,
+    from queue_files import (DEBUG, CHORE, item_dir_path, archive_dir, load_all,
                              split_by_status, next_id)
 except Exception as e:
     sys.exit("无法导入 queue_files（应在 plugins/task-keeper/hooks/lib/）：%s" % e)
+
+try:
+    import keeper_paths
+except Exception:
+    keeper_paths = None
 
 SPECS = {"debug": DEBUG, "chore": CHORE}
 
@@ -78,17 +98,15 @@ def sh(args, cwd=None):
 
 
 def find_queue_dir(spec):
-    """从 cwd 往上找最近的 `<dir_name>`（如 .keeper/debug）目录，纯文件系统查找。"""
-    cur = os.path.abspath(os.getcwd())
-    parts = spec.dir_name.split("/")
-    while True:
-        cand = os.path.join(cur, *parts)
-        if os.path.isdir(cand):
-            return cand
-        parent = os.path.dirname(cur)
-        if parent == cur:
-            return None
-        cur = parent
+    """定位队列目录。**v4 起委托给 `keeper_paths`，与两个 hook 用同一份判据**。
+
+    v3 这里是独立的第三份实现，且与另两份不一致：它**不检查 `.git`**，一路走到
+    文件系统根。后果是在没有队列的项目里跑归档，会静默命中上层某个不相干项目的
+    队列并对它执行搬移。
+    """
+    if keeper_paths is None:
+        sys.exit("无法导入 keeper_paths（应在 plugins/task-keeper/hooks/lib/）")
+    return keeper_paths.queue_dir(os.getcwd(), spec, write_back=False)
 
 
 def guess_batch(queue_dir, explicit, auto):
@@ -97,10 +115,10 @@ def guess_batch(queue_dir, explicit, auto):
     优先级：
       1. 显式 `--batch` 参数
       2. `--auto` 模式固定 `auto-<YYYYMMDD>`
-      3. 从队列目录的绝对路径里提取交付级 worktree 的 slug（路径含
-         `worktrees/<slug>/` 时取 <slug>，适配「整个交付跑在一个 worktree 里」
-         的布局；fixer 自己的 `.keeper/worktrees/DBG-*` 不会走到这里——
-         归档由 keeper 在真身队列上执行）
+      3. **当前**交付 id（`keeper_paths.resolve_delivery_id`，与队列目录名同源）。
+         注意取的是归档发生时所在的交付，不是队列目录名——跨交付 reopen 是常规
+         路径（`skills/tk-debug/SKILL.md`），D-001 的 issue 可能在 D-002 期间才
+         归档，批次要记后者才有回溯价值。兜底桶 `_main` 不算「交付」，跳到下一档
       4. 退回当前 git 分支名（清洗成安全的目录名）
       5. 都取不到就报错要求显式传 `--batch`，不猜
     """
@@ -110,22 +128,25 @@ def guess_batch(queue_dir, explicit, auto):
         stamp = datetime.date.today().strftime("%Y%m%d")
         return "auto-%s" % stamp, "--auto 模式固定 auto-<YYYYMMDD>"
 
-    norm = os.path.abspath(queue_dir).replace(os.sep, "/")
-    m = re.search(r"/worktrees/([^/]+)/", norm)
-    if m and not re.match(r"(DBG|CHR)-\d+$", m.group(1)):
-        return m.group(1), "从路径 %s 提取 worktrees/<slug>" % norm
+    # `<worktree 根>/.keeper/<交付id>/<队列>` → 上溯三级
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(queue_dir))))
 
-    root = os.path.dirname(os.path.dirname(os.path.abspath(queue_dir)))
+    if keeper_paths is not None:
+        did = keeper_paths.resolve_delivery_id(keeper_paths.find_worktree_root(os.getcwd()))
+        if did and did != keeper_paths.MAIN_BUCKET:
+            return did, "当前交付 id（keeper_paths.resolve_delivery_id）"
+
     branch = sh(["git", "-C", root, "rev-parse", "--abbrev-ref", "HEAD"])
     if branch and branch != "HEAD":
         safe = re.sub(r"[^A-Za-z0-9._-]+", "-", branch).strip("-")
         if safe:
-            return safe, ("未检测到 worktrees/<slug> 路径，退回当前 git 分支名 "
-                          "%r 清洗得到" % branch)
+            return safe, ("不在交付 worktree 内（落 %s 桶），退回当前 git 分支名 "
+                          "%r 清洗得到"
+                          % (getattr(keeper_paths, "MAIN_BUCKET", "_main"), branch))
 
     sys.exit(
-        "无法确定归档批次：既不在 worktrees/<slug> 路径下，也取不到当前 "
-        "git 分支名（可能是 detached HEAD 或不在 git 仓库内）。请显式传 --batch <名字>。")
+        "无法确定归档批次：既不在交付 worktree 内，也取不到当前 git 分支名"
+        "（可能是 detached HEAD 或不在 git 仓库内）。请显式传 --batch <名字>。")
 
 
 def parse_date(s):
@@ -163,28 +184,53 @@ def fs_move(src, dst):
         return False, str(e)
 
 
+def registered_worktrees(queue_dir):
+    """`git worktree list --porcelain` 里登记的全部 worktree 绝对路径集合。
+
+    判据 8 的第二条腿：目录已被手工删掉、但 git 那边登记还在（administrative
+    files 残留）时，`os.path.isdir` 是 False，搬走条目目录不会立刻报错，但那条
+    登记从此指向一个不存在的路径，后续 `git worktree list` 与 `wt_supply remove`
+    都会在这条上失败。只看目录存在性会漏掉这一半。
+    """
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(queue_dir))))
+    out = sh(["git", "-C", root, "worktree", "list", "--porcelain"])
+    paths = set()
+    for line in out.splitlines():
+        if line.startswith("worktree "):
+            try:
+                paths.add(os.path.realpath(line[len("worktree "):].strip()))
+            except Exception:
+                pass
+    return paths
+
+
+def worktree_blocks_archive(queue_dir, iid, registered):
+    """该条目还挂着活 worktree → 返回原因字符串；干净则返回 None（判据 8）。
+
+    **归档必须跳过它，不能搬**。`shutil.move` 一个 git worktree 会让主仓
+    `.git/worktrees/<name>/gitdir` 指向失效路径，那个 worktree 从此既不能用也
+    不能 `git worktree remove`（要手工 `prune` 才能收场）。
+    """
+    wt = os.path.join(item_dir_path(queue_dir, iid), "worktree")
+    if os.path.isdir(wt):
+        return "`%s` 目录仍存在" % wt
+    try:
+        if os.path.realpath(wt) in registered:
+            return "`git worktree list` 里仍有 %s 的登记（目录已不在，需先 prune）" % wt
+    except Exception:
+        pass
+    return None
+
+
 def plan_for_item(queue_dir, spec, batch, iid):
-    """给定条目 id，算出这条最多三样东西各自的 (标签, src, dst) 计划。
-    receipts / attachments 不存在时不进计划（不是失败，是本就没有——
-    chore 队列通常两者皆无，自然只搬条目文件本身）。"""
+    """给定条目 id，返回 [(标签, src, dst)]。
+
+    **v4 只有一项**：整个条目目录搬走。v3 要分别搬 `issues/DBG-007.md`、
+    `receipts/DBG-007.md`、`attachments/DBG-007/` 三处，靠文件名对齐——漏搬一处
+    不会报错，只是那部分永远留在原地。v4 一条目一目录之后这个失败模式消失了。
+    """
     dest_root = os.path.join(archive_dir(queue_dir), batch)
-    plan = []
-
-    item_src = os.path.join(items_dir(queue_dir, spec), "%s.md" % iid)
-    item_dst = os.path.join(dest_root, spec.item_dir, "%s.md" % iid)
-    plan.append(("item", item_src, item_dst))
-
-    receipts_src = os.path.join(queue_dir, "receipts", "%s.md" % iid)
-    if os.path.isfile(receipts_src):
-        receipts_dst = os.path.join(dest_root, "receipts", "%s.md" % iid)
-        plan.append(("receipt", receipts_src, receipts_dst))
-
-    attach_src = os.path.join(queue_dir, "attachments", iid)
-    if os.path.isdir(attach_src):
-        attach_dst = os.path.join(dest_root, "attachments", iid)
-        plan.append(("attachments", attach_src, attach_dst))
-
-    return plan
+    return [("item", item_dir_path(queue_dir, iid), os.path.join(dest_root, iid))]
 
 
 def main():
@@ -214,7 +260,7 @@ def main():
     _op, dn, _unk = split_by_status(items)
 
     if not dn:
-        print("无可归档条目（%s/ 下没有 status: done 的条目）。" % spec.item_dir)
+        print("无可归档条目（%s 下没有 status: done 的条目）。" % queue_dir)
         sys.exit(0)
 
     if args.auto:
@@ -233,15 +279,17 @@ def main():
     to_archive = []      # [(iid, plan)]
     skipped = []         # [(iid, reason)]
 
-    # worktrees 落点在 .keeper/worktrees/<id>（与队列目录平级），只对 debug 有意义
-    wt_root = os.path.join(os.path.dirname(queue_dir), "worktrees")
+    # v4 的 worktree 落点在条目目录里（`<queue>/DBG-NNN/worktree`），不再是与队列
+    # 平级的 `.keeper/worktrees/<id>`。判据 8 两条腿：目录存在性 + git 登记。
+    registered = registered_worktrees(queue_dir)
 
     for fm, _body, _path in dn:
         iid = str(fm.get("id"))
-        wt_dir = os.path.join(wt_root, iid)
-        if os.path.isdir(wt_dir):
-            skipped.append((iid, "仍存在 %s/——worktree 还没清理干净，"
-                                 "可能有 fixer 未提交的产物，跳过归档" % wt_dir))
+        blocked = worktree_blocks_archive(queue_dir, iid, registered)
+        if blocked:
+            skipped.append((iid, "%s——worktree 还没清理干净，可能有 fixer 未提交的"
+                                 "产物；直接搬走会让主仓那条登记指向失效路径，跳过归档"
+                                 % blocked))
             continue
         to_archive.append((iid, plan_for_item(queue_dir, spec, batch, iid)))
 

@@ -246,20 +246,27 @@ def commit_line(repo: Path, sha: str) -> str:
 def dirty_lines(repo: Path) -> list[str]:
     """`git status --porcelain -uall` 的行，但**剔除登记在案的嵌套 worktree 目录**。
 
-    为什么必须剔除：本工具刻意把目标 worktree 建在 `<源>/.keeper/worktrees/<id>/`（理由见
-    wt_supply.py `cmd_init`），它在源 worktree 眼里就是一个未跟踪目录。task-keeper 的
-    约定是 `.keeper/` 整树写进项目 `.gitignore`（keeper 冷启动负责追加），此时
-    `git status` 本来就不会列出它——**这段剔除是 `.gitignore` 缺行时的兜底**：缺行时
-    `git status` 恒输出 `?? .keeper/worktrees/<id>/`，不剔除的话源 worktree 永远
-    「不干净」，merge-back 的前置校验会 100% 误拦。剔除逻辑靠 `worktree_entries()`
-    现算的登记路径做匹配，不写死具体层级，所以这层路径改名不影响这段逻辑本身，
-    只有下面这两句举例的路径字面量需要跟着同步。
+    为什么必须剔除：本工具刻意把目标 worktree 建在
+    `<源>/.keeper/<交付id>/debug/<id>/worktree/`（理由见 wt_supply.py `cmd_init`），
+    它在源 worktree 眼里就是一个未跟踪目录。task-keeper 的约定是 `.gitignore` 里有
+    `.keeper/**/worktree/`（判据 6），此时 `git status` 本来就不会列出它——**这段剔除
+    是那条规则缺失时的兜底**：缺行时 `git status` 恒输出
+    `?? .keeper/<交付id>/debug/<id>/worktree/`，不剔除的话源 worktree 永远「不干净」，
+    merge-back 的前置校验会 100% 误拦。剔除逻辑靠 `worktree_entries()` 现算的登记路径
+    做匹配，不写死具体层级——v3→v4 落点整体搬家，这段逻辑一行没改，只有下面举例的
+    路径字面量需要同步。
+
+    **v4 的新情况：队列文本本身入库了**，所以 `.keeper/<交付id>/debug/*/issue.md`
+    这类文件的修改会**正常出现在这里**，且不该被剔除——它们是真实的工作区改动。
+    源侧因此改用 `source_dirty_check()` 的收窄判据（只有与本次合并路径相交才拦）；
+    目标侧仍走本函数的全树严格检查，靠「fixer worktree 里不写 index.md」
+    （`queue_snapshot.in_fixer_worktree`）来保证那份副本不会被 hook 改脏。
 
     为什么用 `-uall` 而不是默认的 `-unormal`：默认模式会把未跟踪目录**折叠**成
     `?? .keeper/`（实测，折叠到未跟踪链的最上层目录），一旦折叠就无法区分「折叠掉的
     只有那个 worktree」还是「里面另有真的未跟踪文件」，剔除就变成掩盖。`-uall` 逐条
-    列出、且不会下钻进嵌套 git 仓库（实测只出一行 `?? .keeper/worktrees/<id>/`），
-    可以精确剔除而不掩盖任何东西。
+    列出、且不会下钻进嵌套 git 仓库（实测只出一行 `?? <落点>/`），可以精确剔除而
+    不掩盖任何东西。
     """
     # 不走 git_out：它对整段 stdout 做 .strip()，会吃掉第一行开头的空格——
     # porcelain 状态码里 " M" / " D" 这类"未 staged"码正是以空格开头，一旦被吃掉，

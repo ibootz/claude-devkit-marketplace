@@ -20,17 +20,24 @@ when_to_use: |
 
 首次（本会话还没有 chore-keeper 在跑时）：
 
+**`name` 的形态是 `<模型档>-chore-keeper`，三段，不加任何多余前后缀**——模型段必须
+与同一次调用的 `model` 一致（`model: "sonnet"` → `sonnet-chore-keeper`；换 `opus`
+派就是 `opus-chore-keeper`，此后 `SendMessage` 的 `to` 同步换）。不要写成
+`chore-keeper`（缺模型段，会被 `working-discipline` 的 `agent-dispatch` 门禁拦下），
+也不要写成 `sonnet-task-keeper-chore-queue-manager` 这类带额外修饰的长名。
+
 ```
 Agent(
-  name: "chore-keeper",
+  name: "sonnet-chore-keeper",
   subagent_type: "task-keeper:chore-keeper",   // 插件 agent；不可用时退 general-purpose 并把 agents/chore-keeper.md 全文放进 prompt
+  description: "[sonnet] chore 队列常驻管理",
   model: "sonnet",
   run_in_background: true,
   prompt: "<用户原话逐字> + 项目根绝对路径"
 )
 ```
 
-之后一律 `SendMessage(to: "chore-keeper", message: "<用户原话逐字>")` 唤醒——
+之后一律 `SendMessage(to: "sonnet-chore-keeper", message: "<用户原话逐字>")` 唤醒——
 keeper 上下文跨唤醒保留，重新 Agent 派出会丢掉它已有的队列认知。
 
 ## 主会话的边界（禁止越位）
@@ -38,7 +45,7 @@ keeper 上下文跨唤醒保留，重新 Agent 派出会丢掉它已有的队列
 1. 不写 `.keeper/chore/` 下任何文件（唯一写者是 chore-keeper；index.md 由 hook 重算）。
 2. 不替 keeper 执行杂务，哪怕看起来 30 秒就能做完——主会话的注意力预算属于用户
    的原任务。
-3. keeper 送回的待拍板事项（`.keeper/decisions/` + SendMessage 通知）按
+3. keeper 送回的待拍板事项（`.keeper/<交付id>/decisions/` + SendMessage 通知）按
    tk-decisions skill 处理：攒批后一次 AskUserQuestion 并列问完，答复原文写
    `answers/` 回传。不要替用户拍板，也不要一条一弹。
 
@@ -46,7 +53,7 @@ keeper 上下文跨唤醒保留，重新 Agent 派出会丢掉它已有的队列
 
 - 每轮 UserPromptSubmit hook 注入 open/done/待拍板 计数（未启用的项目零注入）。
 - 要细看某条：`.keeper/chore/index.md` 是薄索引，单条全文在
-  `.keeper/chore/items/CHR-NNN.md`——按需打开单条，不要读全目录。
+  `.keeper/<交付id>/chore/CHR-NNN/item.md`——按需打开单条，不要读全目录。
 
 ## 配套件
 
