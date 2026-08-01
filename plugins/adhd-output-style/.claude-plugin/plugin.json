@@ -1,7 +1,7 @@
 {
-  "name": "plain-talk-output-style",
-  "version": "1.1.0",
-  "description": "说人话输出风格 - 一语中的、几句话讲明白、能表格不成段；不专业化不掉书袋不自造词。/plugin 启停即切换风格",
+  "name": "adhd-output-style",
+  "version": "1.0.0",
+  "description": "ADHD 友好输出风格 - 首行给可执行动作、多步编号、每轮重述进度、具体时间估算、错误陈述式语气。复刻自 ayghri/i-have-adhd（MIT），拉平成纯 SessionStart 注入，/plugin 启停即切换",
   "author": {
     "name": "zhangq"
   },

@@ -145,8 +145,34 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 可切换的输出风格插件：一个 SessionStart 注入 hook，要求 AI 一语中的、几句话讲明白、能表格就表格、不专业化/不掉书袋/不自造词。零 skill、零命令。
 
-- 与 working-discipline（≥3.9.0）分工：纪律条款（拍板讲透 / 求真 / 简体中文）留在 working-discipline，风格条款归本插件
+- 与 working-discipline（≥3.10.0）分工：纪律条款（拍板四要素 / 求真 / 简体中文）留在 working-discipline，行文风格归本插件
+- 第 10 条承接拍板材料：四要素（起源 / 差距 / 影响范围 / 带行号的现场证据）在本风格下用完整段落承载，详尽优先于简短
 - 切换方式：`/plugin` 里启停本插件即可换风格（原生 output style 机制已废弃，官方 explanatory 风格同为插件实现）
+
+### 15. adhd-output-style（ADHD 友好输出风格）
+
+复刻自 [ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd)（MIT）的可切换风格插件：首行给可执行动作、多步骤编号、每轮重述进度、给具体时间估算、错误用陈述句。规则原文逐字保留在 `style/upstream-rules.md`。
+
+- 与上游差异一：拉平成纯 SessionStart 注入，不保留「skill 手动触发 + `~/.claude/.i-have-adhd-always` 标记文件」双通道，开关只有 `/plugin` 一处
+- 与上游差异二：追加 `style/project-overrides.md`，解决上游 Rule 9（列表封顶 5 条）与 working-discipline 拍板四要素的冲突——四要素约束的是信息不是形状，本风格用「推荐项在前 + 选项排序 + 每项一行代价」承载
+- 注入约 8500 字符，低于 hook 输出上限（10000）
+
+### 16. insight-addon（教学洞察附加件）
+
+**不是风格，是附加件**：只加一条「何时给 ★ Insight 框」的规则，不规定句子长短和段落形态，因此可与 plain-talk / adhd 等任意风格插件**同时开启**。
+
+- 与官方 explanatory-output-style 的区别：后者是一整套风格（含「可超出通常长度限制」的授权），跟简短类风格互斥；本插件把「给洞察」单独摘出来
+- 触发条件比官方更严：要求本轮真做了非平凡技术判断，且门道是**本代码库特有**的。官方原文写的是 `always provide`，在问答轮次会塞出无意义的洞察框
+
+### 17. session-auto-title（会话标题跟随话题）
+
+补 Claude Code 内建自动命名的缺口：内建的 `ai-title` **只在第一条真人 prompt 时生成一次**，之后有两道短路挡着（已有标题就跳过 + resume 进程的闸门初值为 true），话题漂移后永不更新，且没有任何 settings key 能打开重算。本插件用 `UserPromptSubmit` hook 接管，第 2 轮起后台生成、之后每 10 轮重算。
+
+- **异步不卡顿**：hook 只做回填/计数/决定三件不联网的事，生成在 detached 子进程里调 Haiku 4.5，标题慢一轮显示
+- **防递归两道**：子进程带 `CLAUDE_AUTO_TITLE_CHILD` 环境变量 + 带时间戳的锁文件（孤儿锁按 mtime 自动失效）
+- **显示位置与 `/rename` 完全一致**：输入框顶部边框徽章、终端标签页标题、`/status` 面板、`/resume` 列表
+- 三个约束：会永久接管标题（内建从此不工作）、必须挂 `UserPromptSubmit`（挂 `SessionStart` 只改内存不落盘）、agent-team 模式下不生效
+- 成本约 1e-4 美元/次，50 轮会话约 5-6 次
 
 ## 安装
 
@@ -201,6 +227,15 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 # 说人话输出风格（可切换）
 /plugin install plain-talk-output-style@claude-devkit-marketplace
+
+# ADHD 友好输出风格（可切换，与上一个二选一）
+/plugin install adhd-output-style@claude-devkit-marketplace
+
+# 教学洞察附加件（可与任意风格叠加）
+/plugin install insight-addon@claude-devkit-marketplace
+
+# 会话标题自动跟随话题
+/plugin install session-auto-title@claude-devkit-marketplace
 ```
 
 ### Codex CLI
@@ -327,7 +362,10 @@ claude-devkit-marketplace/
 │   ├── portable-shell/
 │   ├── agent-browser/
 │   ├── task-keeper/
-│   └── plain-talk-output-style/
+│   ├── plain-talk-output-style/
+│   ├── adhd-output-style/
+│   ├── insight-addon/
+│   └── session-auto-title/
 ├── scripts/
 │   ├── install-codex.js       # 安装插件到 Codex CLI
 │   ├── uninstall-codex.js     # 从 Codex CLI 卸载插件

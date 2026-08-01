@@ -77,7 +77,7 @@
       "source": "./plugins/working-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 2 道硬拦 1 道事后提醒。零 skill，适合全局开启",
-      "version": "3.9.0"
+      "version": "3.10.0"
     },
     {
       "name": "agent-browser",
@@ -112,6 +112,27 @@
       "source": "./plugins/plain-talk-output-style",
       "category": "Productivity",
       "description": "说人话输出风格 - 一语中的、几句话讲明白、能表格不成段，启停即切换",
+      "version": "1.1.0"
+    },
+    {
+      "name": "adhd-output-style",
+      "source": "./plugins/adhd-output-style",
+      "category": "Productivity",
+      "description": "ADHD 友好输出风格 - 首行给动作、多步编号、每轮重述进度。复刻自 i-have-adhd",
+      "version": "1.0.0"
+    },
+    {
+      "name": "insight-addon",
+      "source": "./plugins/insight-addon",
+      "category": "Productivity",
+      "description": "教学洞察附加件 - 技术判断处给 ★ Insight 框，可与任意输出风格叠加",
+      "version": "1.0.0"
+    },
+    {
+      "name": "session-auto-title",
+      "source": "./plugins/session-auto-title",
+      "category": "Productivity",
+      "description": "会话标题跟随话题 - 第 2 轮起后台生成、每 10 轮重算，补内建只命名一次的缺口",
       "version": "1.0.0"
     }
   ]

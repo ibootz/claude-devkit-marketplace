@@ -1,7 +1,7 @@
 {
-  "name": "plain-talk-output-style",
-  "version": "1.1.0",
-  "description": "说人话输出风格 - 一语中的、几句话讲明白、能表格不成段；不专业化不掉书袋不自造词。/plugin 启停即切换风格",
+  "name": "insight-addon",
+  "version": "1.0.0",
+  "description": "教学洞察附加件 - 在真正做了技术判断的地方给一个 ★ Insight 框。只加一条规则、不定义整体风格，可与 plain-talk / adhd 等任意输出风格同时开启",
   "author": {
     "name": "zhangq"
   },

@@ -1,0 +1,22 @@
+{
+  "name": "session-auto-title",
+  "version": "1.0.0",
+  "description": "会话标题自动跟随话题 - UserPromptSubmit hook 数真人轮数，第 2 轮起后台调 Haiku 生成标题、下一轮回填 sessionTitle。补上内建 ai-title「只生成一次、话题漂移后永不更新」的缺口",
+  "author": {
+    "name": "zhangq"
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit.js",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

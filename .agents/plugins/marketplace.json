@@ -165,7 +165,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "3.9.0"
+      "version": "3.10.0"
     },
     {
       "author": {
@@ -250,6 +250,60 @@
       "source": {
         "source": "local",
         "path": "./plugins/plain-talk-output-style"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "version": "1.1.0"
+    },
+    {
+      "author": {
+        "name": "zhangq"
+      },
+      "category": "Productivity",
+      "description": "ADHD 友好输出风格 - 首行给动作、多步编号、每轮重述进度。复刻自 i-have-adhd",
+      "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
+      "name": "adhd-output-style",
+      "source": {
+        "source": "local",
+        "path": "./plugins/adhd-output-style"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "version": "1.0.0"
+    },
+    {
+      "author": {
+        "name": "zhangq"
+      },
+      "category": "Productivity",
+      "description": "教学洞察附加件 - 技术判断处给 ★ Insight 框，可与任意输出风格叠加",
+      "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
+      "name": "insight-addon",
+      "source": {
+        "source": "local",
+        "path": "./plugins/insight-addon"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "version": "1.0.0"
+    },
+    {
+      "author": {
+        "name": "zhangq"
+      },
+      "category": "Productivity",
+      "description": "会话标题跟随话题 - 第 2 轮起后台生成、每 10 轮重算，补内建只命名一次的缺口",
+      "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
+      "name": "session-auto-title",
+      "source": {
+        "source": "local",
+        "path": "./plugins/session-auto-title"
       },
       "policy": {
         "installation": "AVAILABLE",
