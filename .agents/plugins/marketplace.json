@@ -103,16 +103,6 @@
       "version": "1.1.0"
     },
     {
-      "name": "mattpocock-skills",
-      "source": {
-        "source": "github",
-        "repo": "mattpocock/skills"
-      },
-      "category": "Development",
-      "description": "Matt Pocock 工程技能集（远程引用上游）- TDD、诊断 bug、code-review、research 等",
-      "version": "2.0.0"
-    },
-    {
       "author": {
         "name": "zhangq"
       },

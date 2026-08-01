@@ -4,7 +4,7 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 
 ## 概述
 
-本市场包含 12 个插件，覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论等场景。
+本市场包含 16 个插件，覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论、输出风格等场景。
 
 原 `devkit-git`、`devkit-dev`、`devkit-issue` 已从市场移除，不再作为独立插件提供。
 
@@ -61,15 +61,7 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 - 支持 Web 搜索与内容获取
 - 多种写作工作流程（博客、新闻通讯、教程等）
 
-### 6. mattpocock-skills
-
-Matt Pocock 工程技能集，包含 TDD、诊断 bug、架构改进、问题分类、code-review、prototype、research 等实战工具。
-
-> **远程引用**：本插件不再复制上游代码，而是通过 `source: github` 直接引用上游仓库 [`mattpocock/skills`](https://github.com/mattpocock/skills)。执行 `/plugin marketplace update` 即可拉取上游最新技能。技能清单以上游 `engineering/`、`productivity/` 两大类为准，随上游演进变化，此处不再逐一罗列。
->
-> 插件已由旧名 `matt-pocock-skills` 更名为上游一致的 `mattpocock-skills`，市场清单 `renames` 会为老用户自动迁移。
-
-### 7. omp (Oh My Pi)
+### 6. omp (Oh My Pi)
 
 CLI 工具集成，在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务。
 
@@ -79,7 +71,7 @@ CLI 工具集成，在 Claude Code/Codex 中调用 omp 实现编码、审查、�
 - `omp-review` - 代码审查
 - `omp-subagent` - 子代理任务
 
-### 8. find-skills
+### 7. find-skills
 
 帮助发现和安装 agent 技能 - 基于 skills.sh 生态系统，使用 npx skills CLI 搜索和安装技能。
 
@@ -88,7 +80,7 @@ CLI 工具集成，在 Claude Code/Codex 中调用 omp 实现编码、审查、�
 - 列出已安装技能
 - 基于 vercel-labs/skills 生态
 
-### 9. working-discipline
+### 8. working-discipline
 
 AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`SubagentStart` 注入子代理、`PreToolUse` 硬拦截污染 cwd 的独立 `cd`、缺鉴权或实例超限的 `agent-browser` 启动。零 skill、零命令，适合作为全局基线长期开启。
 
@@ -99,7 +91,7 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - Agent 工具派发：subagent_type × model 四档路由表（haiku/sonnet/opus/fable）、显式 model 指定、成本意识
 - 外部写操作授权：dws 钉钉 CLI 默认只读，写操作须逐批出示清单获用户当次许可
 
-### 10. discover-unknowns（发现你的未知）
+### 9. discover-unknowns（发现你的未知）
 
 与 Claude 协作挖掘未知的方法论：把提示词/上下文当"地图"、真实代码库/约束当"疆域"，两者差距即"未知"，动手前暴露未知、合并前确认理解。源自 Anthropic 官方博客 [*A field guide to Claude Fable 5: Finding your unknowns*](https://claude.com/blog/a-field-guide-to-claude-fable-finding-your-unknowns)（Thariq Shihipar）。
 
@@ -111,7 +103,7 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 > ※ `brainstorm` 在本地已安装 superpowers 插件时优先委派 `superpowers:brainstorming`，未安装时用内置指令。实施规划与执行不属于本插件，交给 devkit-spec。Claude Code 与 Codex 两侧能力一致。
 
-### 11. portable-shell（跨平台 shell lint）
+### 10. portable-shell（跨平台 shell lint）
 
 强制 AI 生成的 shell 脚本同时兼容 Linux 与 macOS。一个 `PostToolUse` hook（matcher `Write|Edit|MultiEdit`），零 skill、零命令。
 
@@ -121,7 +113,7 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - 关闭：`PORTABLE_SHELL_LINT=off`
 - Hook 为 Claude Code 专有机制，Codex 侧不生效
 
-### 12. agent-browser（浏览器自动化最佳实践）
+### 11. agent-browser（浏览器自动化最佳实践）
 
 基于 [Vercel agent-browser](https://github.com/vercel-labs/agent-browser)（headless 浏览器自动化 CLI，Rust + CDP 直连 Chrome-for-Testing）的使用指令。**默认 headless 运行**，用四道机制替代"看到浏览器窗口"的监督。1 个 Skill（`agent-browser`），零 hook——硬护栏由 `working-discipline` 的 `bash-guard` 承担（避免两插件抢同一道 Bash 闸）。
 
@@ -131,7 +123,7 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - **snapshot + 标注截图**：headless 下靠 `snapshot -i`（拿 `@eN` refs）+ `screenshot --annotate` 回看每步，不靠肉眼盯窗口
 - **安全边界**：headless 必带 `--allowed-domains`（限域 + 禁 WebRTC）、`--content-boundaries`（防 prompt 注入）、`--max-output`（防上下文洪泛）
 
-### 13. task-keeper（常驻 keeper 托管任务队列）
+### 12. task-keeper（常驻 keeper 托管任务队列）
 
 主会话只做「分类分派 + 需要人拍板时集中问一次」，debug 队列与杂务队列由常驻 keeper 子代理在独立上下文跑全流程。4 个 Skill（`tk-debug` / `tk-chore` / `tk-decisions` / `tk-worktree`）+ 2 个 Agent（debug-keeper / chore-keeper）+ 6 个 hook。
 
@@ -141,7 +133,7 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - **外部工单适配器**：三层发现（项目配置 → skill 探测 → 如实报未回写），公司系统能力接线不进插件本体
 - 源自 radnove-core（云学堂内部插件）debug-triage 体系的通用化搬迁，与 radnove-core ≤4.5.1 不可同装，详见插件 README
 
-### 14. plain-talk-output-style（说人话输出风格）
+### 13. plain-talk-output-style（说人话输出风格）
 
 可切换的输出风格插件：一个 SessionStart 注入 hook，要求 AI 一语中的、几句话讲明白、能表格就表格、不专业化/不掉书袋/不自造词。零 skill、零命令。
 
@@ -149,7 +141,7 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - 第 10 条承接拍板材料：四要素（起源 / 差距 / 影响范围 / 带行号的现场证据）在本风格下用完整段落承载，详尽优先于简短
 - 切换方式：`/plugin` 里启停本插件即可换风格（原生 output style 机制已废弃，官方 explanatory 风格同为插件实现）
 
-### 15. adhd-output-style（ADHD 友好输出风格）
+### 14. adhd-output-style（ADHD 友好输出风格）
 
 复刻自 [ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd)（MIT）的可切换风格插件：首行给可执行动作、多步骤编号、每轮重述进度、给具体时间估算、错误用陈述句。规则原文逐字保留在 `style/upstream-rules.md`。
 
@@ -157,14 +149,14 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - 与上游差异二：追加 `style/project-overrides.md`，解决上游 Rule 9（列表封顶 5 条）与 working-discipline 拍板四要素的冲突——四要素约束的是信息不是形状，本风格用「推荐项在前 + 选项排序 + 每项一行代价」承载
 - 注入约 8500 字符，低于 hook 输出上限（10000）
 
-### 16. insight-addon（教学洞察附加件）
+### 15. insight-addon（教学洞察附加件）
 
 **不是风格，是附加件**：只加一条「何时给 ★ Insight 框」的规则，不规定句子长短和段落形态，因此可与 plain-talk / adhd 等任意风格插件**同时开启**。
 
 - 与官方 explanatory-output-style 的区别：后者是一整套风格（含「可超出通常长度限制」的授权），跟简短类风格互斥；本插件把「给洞察」单独摘出来
 - 触发条件比官方更严：要求本轮真做了非平凡技术判断，且门道是**本代码库特有**的。官方原文写的是 `always provide`，在问答轮次会塞出无意义的洞察框
 
-### 17. session-auto-title（会话标题跟随话题）
+### 16. session-auto-title（会话标题跟随话题）
 
 补 Claude Code 内建自动命名的缺口：内建的 `ai-title` **只在第一条真人 prompt 时生成一次**，之后有两道短路挡着（已有标题就跳过 + resume 进程的闸门初值为 true），话题漂移后永不更新，且没有任何 settings key 能打开重算。本插件用 `UserPromptSubmit` hook 接管，第 2 轮起后台生成、之后每 10 轮重算。
 
@@ -203,9 +195,6 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 # 内容研究写作
 /plugin install content-research-writer@claude-devkit-marketplace
-
-# Matt Pocock 工程技能集（远程引用上游 mattpocock/skills）
-/plugin install mattpocock-skills@claude-devkit-marketplace
 
 # OMP 工具集成
 /plugin install omp@claude-devkit-marketplace
@@ -324,7 +313,7 @@ node scripts/check-versions.js --fix
 node scripts/check-versions.js --quiet
 ```
 
-检查项包括版本三方不一致、市场清单漏登记、清单里有条目但 `plugins/` 下无对应目录（幽灵条目）。远程源插件（`source` 为 `{"source":"github",...}`，如 `mattpocock-skills`）自动豁免——它们没有本地 `plugin.json`，且 `install-codex.js` 只从本地 `plugins/<name>/` 目录安装，所以不登记到 Codex 清单是有意设计而非遗漏。
+检查项包括版本三方不一致、市场清单漏登记、清单里有条目但 `plugins/` 下无对应目录（幽灵条目）。远程源插件（`source` 为 `{"source":"github",...}`）自动豁免——它们没有本地 `plugin.json`，且 `install-codex.js` 只从本地 `plugins/<name>/` 目录安装，所以不登记到 Codex 清单是有意设计而非遗漏。本市场目前没有远程源插件（`mattpocock-skills` 已于 2026-08-01 移除），这条豁免逻辑保留待用。
 
 `--fix` **只对齐 `version` 字段，不动 `description`**：描述该写什么需要人工判断，机器对齐只会把陈旧描述固化下来，修完仍需自行确认市场清单里的描述是否同步。
 
