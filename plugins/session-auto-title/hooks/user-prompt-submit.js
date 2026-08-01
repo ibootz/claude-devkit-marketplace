@@ -81,12 +81,25 @@ function main() {
     }
   }
 
-  const { turns } = S.scanTranscript(transcriptPath)
+  const { turns, work } = S.scanTranscript(transcriptPath)
   const lastGenTurn = Number(state.lastGenTurn) || 0
+  const lastGenWork = Number(state.lastGenWork) || 0
 
-  // 首次在第 FIRST_TURN 轮，之后每 REGEN_INTERVAL 轮重算一次跟住话题漂移。
-  const firstDue = lastGenTurn === 0 && turns >= S.FIRST_TURN
-  const regenDue = lastGenTurn > 0 && turns - lastGenTurn >= S.REGEN_INTERVAL
+  // 两条独立的到期判据，命中任一即生成：
+  //   轮数——多轮对话的常规路径，首次第 FIRST_TURN 轮、之后每 REGEN_INTERVAL 轮；
+  //   工作量——单 prompt 长会话的兜底，轮数永远不涨，只能看 assistant 行数。
+  // lastGenWork 的 `> 0` 守卫是为了旧 state 兼容：1.0.0 写的缓存没有这个字段，
+  // 缺省 0 会让任何长会话在升级后立刻重算一次；加上守卫就退回纯轮数判据。
+  // 工作量分支额外要求 turns >= 1：没有任何真人 prompt 就没有素材，
+  // generate-title.js 会直接返回不写 state，于是 lastGenTurn 恒为 0、
+  // firstDue 每轮都成立——白跑一个子进程且永不收敛。
+  const firstDue =
+    lastGenTurn === 0 &&
+    (turns >= S.FIRST_TURN || (turns >= 1 && work >= S.FIRST_WORK_LINES))
+  const regenDue =
+    lastGenTurn > 0 &&
+    (turns - lastGenTurn >= S.REGEN_INTERVAL ||
+      (lastGenWork > 0 && work - lastGenWork >= S.REGEN_WORK_LINES))
   if (!firstDue && !regenDue) return
 
   if (generationInFlight(sessionId)) return
@@ -95,7 +108,7 @@ function main() {
   try {
     const child = spawn(
       process.execPath,
-      [generator, sessionId, transcriptPath, String(turns)],
+      [generator, sessionId, transcriptPath, String(turns), String(work)],
       {
         detached: true,
         stdio: 'ignore',

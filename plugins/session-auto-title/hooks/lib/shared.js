@@ -16,6 +16,15 @@ const FIRST_TURN = 2
 // 内建 ai-title 只在第一条 prompt 生成一次、之后永不更新，这个插件存在的意义就是这个间隔。
 const REGEN_INTERVAL = 10
 
+// 【工作量维度】只数真人轮数会漏掉一整类会话：一条 prompt 触发一小时自主工作。
+// 2026-08-01 实测的反例——某会话跑了 20 分钟、275k token、派出 3 个子代理，
+// 因为用户后续消息全压在 queued_command 里没被消化，turns 恒为 1，永远够不到
+// FIRST_TURN=2。而这恰恰是最需要标题的一类会话（短会话用户自己记得在干嘛）。
+// 所以首次与重算各加一条 OR 分支，判据是 transcript 里的 assistant 行数——
+// 它不依赖用户按了几次回车。两个阈值维持与轮数档位相同的 1:5 比例。
+const FIRST_WORK_LINES = 30
+const REGEN_WORK_LINES = 150
+
 // 生成用的模型。与 Claude Code 内建 ai-title 用的是同一档（Haiku 4.5），
 // 单次约 400-600 输入 token，成本 1e-4 美元量级。
 const MODEL = 'claude-haiku-4-5-20251001'
@@ -92,17 +101,19 @@ function extractText(obj) {
     .trim()
 }
 
-// 返回 { turns, prompts }：真人轮数，以及最近 RECENT_PROMPTS 条 prompt 文本。
+// 返回 { turns, work, prompts }：真人轮数、assistant 行数（工作量代理指标），
+// 以及最近 RECENT_PROMPTS 条 prompt 文本。
 // transcript 可能有几 MB，逐行解析比 JSON.parse 整个文件便宜，且坏行可以单独跳过。
 function scanTranscript(transcriptPath) {
   let raw
   try {
     raw = fs.readFileSync(transcriptPath, 'utf8')
   } catch {
-    return { turns: 0, prompts: [] }
+    return { turns: 0, work: 0, prompts: [] }
   }
   const prompts = []
   let turns = 0
+  let work = 0
   for (const line of raw.split('\n')) {
     if (!line || line[0] !== '{') continue
     let obj
@@ -111,12 +122,15 @@ function scanTranscript(transcriptPath) {
     } catch {
       continue
     }
+    // assistant 行不做任何过滤：子代理派发、工具调用、思考块都算工作量，
+    // 这里要的就是「这个会话干了多少活」的粗粒度量，不是精确的回合计数。
+    if (obj.type === 'assistant') work += 1
     if (!isRealUserTurn(obj)) continue
     turns += 1
     prompts.push(extractText(obj).slice(0, MAX_PROMPT_CHARS))
     if (prompts.length > RECENT_PROMPTS) prompts.shift()
   }
-  return { turns, prompts }
+  return { turns, work, prompts }
 }
 
 // 逐字符过滤控制字符，不用正则字符类——源码里出现控制字符字面量会破坏文件编码。
@@ -146,6 +160,8 @@ function sanitizeTitle(raw) {
 module.exports = {
   FIRST_TURN,
   REGEN_INTERVAL,
+  FIRST_WORK_LINES,
+  REGEN_WORK_LINES,
   MODEL,
   LOCK_STALE_MS,
   RECENT_PROMPTS,

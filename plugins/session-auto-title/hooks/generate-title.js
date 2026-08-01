@@ -36,10 +36,11 @@ function buildPrompt(prompts) {
 }
 
 function main() {
-  const [sessionId, transcriptPath, turnRaw] = process.argv.slice(2)
+  const [sessionId, transcriptPath, turnRaw, workRaw] = process.argv.slice(2)
   if (!sessionId || !transcriptPath) return
 
   const turn = Number(turnRaw) || 0
+  const work = Number(workRaw) || 0
   const lock = S.lockPath(sessionId)
 
   try {
@@ -72,6 +73,7 @@ function main() {
     const state = S.readState(sessionId)
     state.pendingTitle = title
     state.lastGenTurn = turn
+    state.lastGenWork = work
     state.generatedAt = new Date().toISOString()
     S.writeState(sessionId, state)
   } catch {

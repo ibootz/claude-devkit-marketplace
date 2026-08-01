@@ -1,6 +1,6 @@
 # session-auto-title
 
-会话标题自动跟随话题：第 2 轮起后台生成标题，之后每 10 轮重算一次。
+会话标题自动跟随话题：第 2 轮起后台生成标题，之后每 10 轮重算一次；单 prompt 长会话按工作量兜底触发。
 
 ## 它补的是什么缺口
 
@@ -15,8 +15,14 @@ Claude Code 2.1.220 自己有一套自动命名（写进会话 jsonl 的 `ai-tit
 hook 挂在 `UserPromptSubmit`，每轮只做三件不联网的快事：
 
 1. **回填**：读缓存，如果有上一轮后台生成好的新标题，通过 `hookSpecificOutput.sessionTitle` 交给 Claude Code
-2. **计数**：扫 transcript 数真人轮数（排除 `tool_result`、meta 行、斜杠命令、XML 包封）
-3. **决定**：够轮数且没有生成在跑，就 detached spawn 一个后台进程去生成
+2. **计数**：扫 transcript 数两个量——真人轮数（排除 `tool_result`、meta 行、斜杠命令、XML 包封）与 assistant 行数
+3. **决定**：任一维度到期且没有生成在跑，就 detached spawn 一个后台进程去生成
+
+### 为什么要数两个量
+
+只数真人轮数会漏掉一整类会话：**一条 prompt 触发一小时自主工作**。2026-08-01 实测的反例是一个跑了 20 分钟、烧掉 275k token、派出 3 个子代理的会话——用户后续消息全压在 `queued_command` 里没被消化，`turns` 恒为 1，永远够不到 `FIRST_TURN = 2`。而这恰恰是最需要标题的一类会话：短会话用户自己记得在干嘛。
+
+所以首次与重算各加一条 OR 分支，判据是 transcript 里的 `assistant` 行数（`FIRST_WORK_LINES` / `REGEN_WORK_LINES`）。这个量不依赖用户按了几次回车。工作量分支额外要求 `turns >= 1`，否则没有任何真人 prompt 可喂给模型，会白跑一个子进程且因 `lastGenTurn` 恒为 0 而永不收敛。
 
 标题生成在 `hooks/generate-title.js` 里，它拿最近 6 条 prompt 调一次 Haiku 4.5，结果写进 `$TMPDIR/claude-auto-title/<sessionId>.json`。
 
@@ -30,11 +36,13 @@ hook 挂在 `UserPromptSubmit`，每轮只做三件不联网的快事：
 |---|---|---|
 | `FIRST_TURN` | 2 | 第几轮首次生成 |
 | `REGEN_INTERVAL` | 10 | 之后每隔多少轮重算 |
+| `FIRST_WORK_LINES` | 30 | assistant 行数达到多少也算首次到期（与轮数 OR 关系） |
+| `REGEN_WORK_LINES` | 150 | 距上次生成新增多少 assistant 行也算重算到期 |
 | `MODEL` | `claude-haiku-4-5-20251001` | 与 Claude Code 内建自动命名同一档 |
 | `LOCK_STALE_MS` | 120000 | 锁超时，超过认为那次生成已死 |
 | `RECENT_PROMPTS` | 6 | 喂给模型的最近几条 prompt |
 
-成本：单次约 400-600 输入 token，1e-4 美元量级。按默认参数一个 50 轮的会话生成约 5-6 次。
+成本：单次约 400-600 输入 token，1e-4 美元量级。按默认参数一个 50 轮的会话生成约 5-6 次；单 prompt 长会话走工作量分支，每 150 条 assistant 行生成一次。
 
 ## 标题显示在哪
 
