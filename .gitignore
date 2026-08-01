@@ -34,3 +34,8 @@ node_modules/
 !.claude/rules/
 .gemini
 .qwen
+
+# 工具运行时状态与产物
+.quality-lint-state.json
+.zcode/
+zcode-sync-checklist.md
