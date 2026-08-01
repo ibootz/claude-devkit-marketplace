@@ -9,7 +9,7 @@ when_to_use: |
 
 把"更新插件市场"这件事拆成两层动作依次执行，并在核实每一层是否真的生效时避开已知的误判坑。
 
-**验证基础**：内容来自两次真实全量执行（17 个 marketplace + 25 个 enabled plugin，2026-07-29 复跑）+ 一次 project/local scope 专项验证（2026-07-30，8 个仅装在 project/local scope、从未装过 user scope 的插件 id），覆盖两层模型（marketplace 源 vs 已启用插件缓存）、批量刷新写法、project/local scope 按 (id, projectPath) 逐条刷新、缓存清理白名单差集算法，以及下方「已验证的坑」列出的各条已复现问题。
+**验证基础**：内容来自两次真实全量执行（17 个 marketplace + 25 个 enabled plugin，2026-07-29 复跑）+ 一次 project/local scope 专项验证（2026-07-30，8 个仅装在 project/local scope、从未装过 user scope 的插件 id）+ 一次 hook 定义方式双检测验证（2026-08-01，发现目录式 hook 会让”只读 `plugin.json` 判生命周期”漏判），覆盖两层模型（marketplace 源 vs 已启用插件缓存）、批量刷新写法、project/local scope 按 (id, projectPath) 逐条刷新、缓存清理白名单差集算法，以及下方「已验证的坑」列出的各条已复现问题。
 
 ## 背景：两层状态，容易只做一半
 
@@ -124,6 +124,21 @@ done < /tmp/project_scope_plugins.txt
 | 新增或改动 `PreToolUse` / `PostToolUse` / `UserPromptSubmit` 挂载点 | `/reload-plugins` 即可（实测新挂载点会生效） |
 | 新增或改动 `SessionStart` / `SessionEnd` / `PreCompact` 挂载点 | **必须重启会话**（或等一次 auto-compact 触发 `SessionStart:compact` 把它补上），否则该份注入在本会话缺失 |
 
+**怎么判断新版本是否含生命周期挂载点——必须同时查两处，漏一处会误判"无需重启"。** Claude Code 的插件有两种互相独立的 hook 定义方式，2026-08-01 实测各踩一种：
+
+1. **字段式**：hook 在 `.claude-plugin/plugin.json` 的 `hooks` 字段里以 `hooks.SessionStart` / `hooks.PreCompact` 等 key 声明。例如 `working-discipline` 3.7.0 的 `hooks` 字段含 `SessionStart`。
+2. **目录式**：hook 以 `hooks/` 目录下的脚本文件名约定挂载，`plugin.json` 里**没有** `hooks` 字段（可能配一份 `hooks/hooks.json` 登记事件绑定），`hooks/session-start.sh` / `hooks/pre-compact.sh` 等文件名直接对应生命周期事件。例如 `radnove-core` 4.5.1 的 `plugin.json` 无 `hooks` 字段，但 `hooks/` 下有 `session-start.sh`——只读 `plugin.json` 会判成"无 SessionStart"，实际它正是会话开头注入的那段内容。
+
+检测命令（对某插件的 installPath 同时查两处，变量名避开 `path` 等 zsh 绑定名）：
+
+```bash
+ipath=<插件 installPath>
+cfg="$ipath/.claude-plugin/plugin.json"; [ ! -f "$cfg" ] && cfg="$ipath/plugin.json"
+jq -r '.hooks // {} | keys[]' "$cfg" 2>/dev/null | grep -iE 'SessionStart|SessionEnd|PreCompact'   # ① 字段式
+ls "$ipath/hooks/" 2>/dev/null | grep -iE 'session-start|session-end|pre-compact'                   # ② 目录式
+# 两条任一命中 → 该插件含生命周期挂载点 → 涉及其改动时必须重启会话
+```
+
 核实方式不要只看 reload 回执的数量，**看行为**：下一轮里 hook 注入的文本是否已经是新版内容（例如长度、章节结构变了），这才证明加载的是新代码。
 
 ### 第五步：清理缓存，回收磁盘占用
@@ -189,7 +204,7 @@ xargs rm -rf < /tmp/cache_orphan.txt
 | `claude plugin update <plugin>` 找不到批量刷新的写法 | CLI 没有 `--all` 之类的参数（见 `--help`），设计上一次只处理一个 `<plugin>@<marketplace>` | 只能枚举 `enabled: true` 的 id 后自己拼循环（见第三步） |
 | 同一插件在 `installed_plugins.json` 里出现好几条记录，`version`/`installPath` 都相同 | 不同项目目录各 `enable` 过一次，各记一条 `scope` 记录，但共用同一份缓存目录（见第二步） | 只需跑一次 `claude plugin update`，不按项目数重复刷 |
 | 刷新了缓存，当前会话里 skill/hook 行为却没有变化 | 缓存刷新不热更新到运行中的进程里（见第四步） | 跑 `/reload-plugins`；只有涉及 `SessionStart` / `SessionEnd` / `PreCompact` 这类生命周期挂载点时才必须重启 |
-| 跑完 `/reload-plugins` 后，每轮 hook 注入已经是新版的"指针"文本，但它引用的那份静态主体内容压根不在上下文里 | 新版本把内容下沉到了 `SessionStart`，而 reload **不重放**生命周期事件（见第四步）。实测 `working-discipline` 3.0.0 → 3.2.0：reload 后本会话里那句"一～六章已在会话开始注入"**不成立** | 涉及 `SessionStart` 类挂载点变动必须重启会话，或等一次 auto-compact 补上；判据看新版 `plugin.json` 的 `hooks` 字段，不看 reload 回执 |
+| 跑完 `/reload-plugins` 后，每轮 hook 注入已经是新版的"指针"文本，但它引用的那份静态主体内容压根不在上下文里 | 新版本把内容下沉到了 `SessionStart`，而 reload **不重放**生命周期事件（见第四步）。实测 `working-discipline` 3.0.0 → 3.2.0：reload 后本会话里那句"一～六章已在会话开始注入"**不成立** | 涉及 `SessionStart` 类挂载点变动必须重启会话，或等一次 auto-compact 补上；判据是**同时查两处**（`plugin.json` 的 `hooks` 字段 + `hooks/` 目录下的脚本文件名约定，见第四步检测命令），只读 `plugin.json` 会漏掉目录式定义的插件——2026-08-01 实测 `radnove-core` 4.5.1 就是目录式（`plugin.json` 无 `hooks` 字段、`hooks/session-start.sh` 存在），只读 `plugin.json` 误判为无 SessionStart |
 | 核验循环里所有 `jq` / `sort` / `wc` / `comm` 突然 `command not found`，但循环之前同样的命令刚跑成功过 | 循环变量名撞上 zsh 的 `typeset -T PATH path` 绑定（见第三步「循环变量禁止命名为 `path`」） | 改用带语义前缀的变量名（`ipath` / `_p` / `orphan_dir`）改名重跑即可；PATH 只在该次 Bash 调用的子 shell 内被破坏，**不影响后续调用** |
 | 第三步的循环只跑了一次就整体失败，报 `Plugin "<第一个插件名>" not found`，可那个插件明明装着 | 用了 `for p in $plugins` 依赖单词分割的写法，zsh 默认不做单词分割（见第三步） | 改成 `while IFS= read -r p` 逐行读；这类失败**无副作用**——CLI 在 id 校验阶段就退出，没有写 `installed_plugins.json`、没有刷新任何插件，改好写法直接重跑即可 |
 | 第三步的循环整体跑完、回执看着都正常滚过去了，但某个只在项目目录里装过的插件（从未在 `user` scope 装过）实际上完全没被刷新 | `claude plugin update "$p"` 默认 `--scope user`，无 `user` scope 记录的 id 会 `exit=1` 但循环不检查退出码（机制与 8 个实测复现 id 见「第三步补充」） | 同一条 jq 判定式（见「第三步补充」），命中的 id 都要走 project/local scope 专项刷新，不能指望第三步的常规循环覆盖到 |
@@ -208,5 +223,5 @@ xargs rm -rf < /tmp/cache_orphan.txt
 - [ ] 每条 `claude plugin update` 的输出都在预期的三种正常结束态之一：`already at the latest version`、`updated from X to Y`、`refreshed from source`
 - [ ] 关键插件已走**写后回读**核实：`installed_plugins.json` 的 `installPath`、磁盘上该缓存目录、目录内 `.claude-plugin/plugin.json` 的 `version` 三处一致（只看 CLI 回执不足以证明落盘）
 - [ ] 若执行了第五步清理：确认在第三步刷新**之后**做的；`temp_git_*` 零引用已 grep 核实；历史版本走的是 `.plugins[][].installPath` 白名单差集；反向检查（配置引用但磁盘缺失）输出为空；删除清单已出示给用户并获得同意
-- [ ] 已明确告知用户让新版本生效的**最小动作**：默认建议 `/reload-plugins`；仅当新版本改动了 `SessionStart` / `SessionEnd` / `PreCompact` 挂载点时才说"必须重启"（判断依据是新版 `plugin.json` 的 `hooks` 字段，见第四步表格）
+- [ ] 已明确告知用户让新版本生效的**最小动作**：默认建议 `/reload-plugins`；仅当新版本改动了 `SessionStart` / `SessionEnd` / `PreCompact` 挂载点时才说”必须重启”（判断依据是**同时查两处**：`plugin.json` 的 `hooks` 字段 + `hooks/` 目录下的脚本文件名约定，见第四步检测命令；只查 `plugin.json` 会漏掉目录式 hook，误判”无需重启”）
 - [ ] 生效后的核实看的是**行为**（下一轮 hook 注入文本 / skill 内容确实变了），不是 reload 回执里的插件数量
