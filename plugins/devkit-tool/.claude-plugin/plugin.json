@@ -1,8 +1,21 @@
 {
   "name": "devkit-tool",
-  "version": "6.4.1",
-  "description": "工具技能集 - 代码库分析、依赖排查、CLAUDE.md 与 .claude/rules 初始化、codegraph 代码知识图谱建图决策（CLI-only）、多模型协作与 Claude Code 自身运维（6 技能）",
+  "version": "6.4.2",
+  "description": "工具技能集 - 代码库分析、依赖排查、CLAUDE.md 与 .claude/rules 初始化、codegraph 代码知识图谱建图决策（CLI-only，配套已建图仓的纯注入 hook）、多模型协作与 Claude Code 自身运维（6 技能）",
   "author": {
     "name": "zhangq"
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit-codegraph.js"
+          }
+        ]
+      }
+    ]
   }
 }

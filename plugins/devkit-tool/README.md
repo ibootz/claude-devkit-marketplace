@@ -1,6 +1,6 @@
 # DevKit-Tool
 
-**版本**: 6.4.1
+**版本**: 6.4.2
 **作者**: zhangq
 **许可证**: MIT
 
@@ -29,6 +29,8 @@
 
   **6.4.1 起明确 CLI-only：禁止执行 `codegraph install`，本插件也不会自动接任何 MCP。**四条实测理由——MCP 面 `tools/list` 只有 `codegraph_explore` 一个工具（README 声称"unlisted but functional"的 `codegraph_node` 按名调用**无任何响应、连 error 都没有**，`query`/`callers`/`impact`/`affected`/`files` 在 MCP 侧全拿不到）；explore 单次 25 KB ≈ 6.5k token，而 CLI `query` 几百字节，成本方向是反的；MCP `initialize` 每会话每 subagent 固定下发 4597 字符 ≈ 1.2k token instructions；那段 instructions 原文 `Trust codegraph's results — don't re-verify them with grep` 与本地核实纪律冲突且服务端下发改不掉。已装过的机器用 `codegraph uninstall -t claude -l global -y --keep-cli` 拆（实测 4 处全清、CLI 保留）。
 
+  6.4.2 起配套一个**纯注入 hook** `hooks/user-prompt-submit-codegraph.js`：cwd 归属的仓已建图时注入两行（强化用 codegraph、抑制拿 `Grep`/`Glob` 全仓搜符号与为找代码而整读文件），未建图的仓输出 **0 字节**。gating 向上找 `.codegraph/` 时读 `.git` 文件的 gitdir 区分边界——`/modules/` 穿过（父仓建图会把 submodule 源码一并索引）、`/worktrees/` 停（未建图 worktree 不得认领父仓那份属于另一分支的图）。`CODEGRAPH_HINT=off` 关闭；`bash hooks/tests/codegraph-hint-gating.sh` 跑 10 条回归。
+
 ### 协作与辅助
 
 - `orphan-process-cleaner`
@@ -52,6 +54,9 @@
 ```text
 plugins/devkit-tool/
 ├── .claude-plugin/plugin.json
+├── hooks/
+│   ├── user-prompt-submit-codegraph.js   # 纯注入：已建图仓才输出两行 codegraph 引导
+│   └── tests/codegraph-hint-gating.sh    # gating 回归用例（10 条，判据两侧都覆盖）
 └── skills/
     ├── codegraph-index/
     ├── deps-investigator/
@@ -67,4 +72,4 @@ plugins/devkit-tool/
 - 每个 skill 的具体流程以对应目录下的 `SKILL.md` 为准
 - `dev-feature`、`dev-review`、`dev-test`、`init`、`planner`、`ui-ux-designer`、`get-current-datetime`、`bugfix` 已从当前插件中移除
 - 该插件不再声明独立 Git 技能，相关能力建议交由专门插件提供
-- 自 5.1.0 起不再内置任何 hook：`guard-full-read.js`（大文件全文读取拦截）已删除；`block-cd.js`（污染 cwd 的独立 `cd` 拦截）已迁至 `working-discipline` 插件
+- **不内置拦截类 hook**：`guard-full-read.js`（大文件全文读取拦截）自 5.1.0 删除；`block-cd.js`（污染 cwd 的独立 `cd` 拦截）已迁至 `working-discipline` 插件。6.4.2 新增的 `hooks/user-prompt-submit-codegraph.js` 是**纯注入类**（只输出 `additionalContext`、不阻止任何操作），按本仓 `.claude/rules/hook-restraint.md` 末节「这条规则自己的适用边界」不受克制原则约束

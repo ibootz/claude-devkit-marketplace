@@ -81,7 +81,9 @@ codegraph status /abs/path/to/repo
 
 **提问必须带英文标识符。** 实测 `explore "岗位序列模型的保存接口在哪"` 返回 `No relevant code found`；把英文类名塞进同一句中文里（`explore "BelloController 的接口方法调用了哪些 service"`）就正常返回 27 个符号，且与纯英文提问输出几乎逐字节相同（25,856 vs 25,836 字节）。匹配靠 query 里的标识符 token，不靠自然语言语义。
 
-**不接 MCP 的一个副作用要自己补**：没有 MCP 就没有服务端自动下发的使用引导，agent 不会自发想到用 codegraph。在**已建图**项目的 `CLAUDE.md` 里补一行即可（未建图项目不要写）：
+**不接 MCP 会少掉服务端自动下发的使用引导**——本插件用一个纯注入 hook 补上：`hooks/user-prompt-submit-codegraph.js` 在 cwd 归属的仓**已建图**时注入两行（强化用 codegraph、抑制拿 `Grep`/`Glob` 全仓搜符号），未建图的仓输出 0 字节。它向上找 `.codegraph/` 时**不越过 worktree 边界**（读 `.git` 文件的 gitdir 区分：`/modules/` 穿过、`/worktrees/` 停），避免未建图的 worktree 认领父仓那份属于另一分支的图。关掉：`CODEGRAPH_HINT=off`。回归用例见 `hooks/tests/codegraph-hint-gating.sh`。
+
+没装本插件、或想让规则进仓库的，在**已建图**项目的 `CLAUDE.md` 里补一行等效内容（未建图项目不要写）：
 
 ```markdown
 本仓已建 codegraph 图（`.codegraph/`）。定位符号/调用方/影响面优先跑
