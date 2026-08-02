@@ -73,7 +73,7 @@
       "source": "./plugins/agent-browser",
       "category": "Productivity",
       "description": "浏览器自动化最佳实践 - agent-browser（Vercel）网页操作/抓取/表单/截图，默认 headless 四护栏，细节见 README",
-      "version": "1.1.0"
+      "version": "1.1.1"
     },
     {
       "name": "discover-unknowns",

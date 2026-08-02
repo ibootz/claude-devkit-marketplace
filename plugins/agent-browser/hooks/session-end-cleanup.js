@@ -15,14 +15,26 @@
 // 【幂等性保证（关键）】
 // 1. CLI 未装：execSync 抛错 → catch → 静默退出，不报错（不污染 SessionEnd 输出）
 // 2. 无活动实例：close --all 的空态退出码官方未文档化，故一律吞掉退出码
-// 3. SessionEnd 非阻塞：即使本脚本卡住也不影响会话退出（但仍应快——故设 5s 超时）
+// 3. 退出流程会 await 本脚本（见下一节的预算），卡住会拖慢关闭——故设 5s 超时；
+//    但退出结果不受影响：exit code 被 Ps() 的 try/catch 吞掉，超时也只是 abort 掉它
 // 4. 任何异常都 exit 0：清理是尽力而为，绝不能让清理失败阻断会话关闭
+//
+// 【必须在 plugin.json 里声明 timeout（否则每次退出都报 Hook cancelled）】
+// CC 2.1.220 的退出流程 Ps() 给全部 SessionEnd hook 一个共享预算：
+//   await n(t, {...r, signal: AbortSignal.timeout(getSessionEndHookTimeoutMs())})
+// 该预算 = 所有 SessionEnd hook 声明的最大 timeout，都没声明就落到下限 1500ms
+// （二进制常量 M$o=1500 / 上限 PFy=60000）。超时不是"脚本失败"，是 ABORT_ERR，
+// 用户看到的字面量就是 "Hook cancelled"。
+// 实测（2026-08-02，macOS）：close --all 0.036s，doctor 1.641s，合计 1.63s > 1.5s，
+// 于是每次关闭 CC 必报一次——尽管 close --all 早已跑完、清理其实是成功的。
+// 故 plugin.json 的这条 hook 声明了 "timeout": 15，同时覆盖下面两次 execSync 各 5s
+// 的最坏情况。改动本文件里的命令数量或 TIMEOUT_MS 时，同步复核那个 15 还够不够。
 //
 // 【可关闭】
 // 设环境变量 AGENT_BROWSER_AUTOCLEAN=off 可禁用本钩子（仍可手动 agent-browser close --all）
 //
 // Input: JSON on stdin（SessionEnd payload，含 session_id/cwd/hook_event_name 等，本脚本不依赖）
-// Exit: 恒为 0（SessionEnd 非阻塞，exit code 不影响会话，但吞掉避免噪音）
+// Exit: 恒为 0（exit code 被退出流程吞掉、不影响会话，但仍吞掉自身异常避免噪音）
 
 'use strict'
 

@@ -1,6 +1,6 @@
 {
   "name": "agent-browser",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "浏览器自动化最佳实践 - agent-browser（Vercel）网页操作/抓取/表单/截图；默认 headless，鉴权前置+实例上限4+安全边界+SessionEnd 清理，细节见 README",
   "author": {
     "name": "zhangq"
@@ -13,7 +13,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.js"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.js",
+            "timeout": 15
           }
         ]
       }
