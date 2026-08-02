@@ -249,6 +249,103 @@ check(
   run(WRITE_GUARD, { tool_name: 'Write', tool_input: {}, cwd: PROJECT }).code
 )
 
+// ── 派发账本（dispatch-ledger.js，3.12.0 新增）────────────────────────
+//
+// 它是纯注入 hook，失败是静默的——没有断言就没人发现它已经不数数了。
+// 三件事必须钉住：(a) 数得对；(b) 判据失灵时**不注入**而不是注「0 派发」；
+// (c) 会话早期不注入（零成本）。
+const LEDGER = path.join(HOOKS_DIR, 'dispatch-ledger.js')
+
+function transcript(rows) {
+  const f = path.join(FIXTURE_ROOT, `tr-${Math.random().toString(36).slice(2)}.jsonl`)
+  fs.writeFileSync(f, rows.map((r) => JSON.stringify(r)).join('\n'), 'utf8')
+  return f
+}
+// 造一条 assistant 行：tools 是工具名数组
+const asst = (tools, sidechain) => ({
+  type: 'assistant',
+  isSidechain: !!sidechain,
+  message: { content: tools.map((name) => ({ type: 'tool_use', name, input: {} })) },
+})
+
+function ledger(label, rows, assertFn) {
+  const payload = rows === null ? {} : { transcript_path: transcript(rows) }
+  const r = spawnSync('node', [LEDGER], { input: JSON.stringify(payload), encoding: 'utf8' })
+  const out = (r.stdout || '').trim()
+  let ctx = ''
+  if (out) {
+    try {
+      ctx = JSON.parse(out).hookSpecificOutput.additionalContext
+    } catch (e) {
+      ctx = `<不是合法 JSON: ${out.slice(0, 80)}>`
+    }
+  }
+  const ok = assertFn(ctx)
+  check(label, true, ok === true, ok === true ? '' : `实际输出: ${ctx || '(空)'}`)
+}
+
+// 15 次主会话调用 + 3 次派发（另有 sidechain 行与 1 条 Task 旧工具名）
+ledger(
+  '账本计数正确（主会话 16 / 派发 3，sidechain 不计入）',
+  [
+    asst(['Bash', 'Read', 'Grep', 'Glob', 'Read', 'Bash']),
+    asst(['Agent', 'Agent']),
+    asst(['Bash', 'Read', 'Grep', 'Glob', 'Read', 'Bash', 'Write']),
+    asst(['Task']),
+    asst(['Bash', 'Bash', 'Bash', 'Agent'], true), // sidechain：整行不计
+  ],
+  (c) => c.includes('主会话工具调用 16 次') && c.includes('派发 3 次')
+)
+
+ledger(
+  '0 派发且调用数达阈值时追加提示',
+  [asst(Array(22).fill('Bash'))],
+  (c) => c.includes('派发 0 次') && c.includes('检查点②')
+)
+
+ledger(
+  '有派发时不追加提示（避免每轮唠叨）',
+  [asst(Array(22).fill('Bash')), asst(['Agent'])],
+  (c) => c.includes('派发 1 次') && !c.includes('检查点②')
+)
+
+ledger(
+  '会话早期（调用数 < 12）零输出',
+  [asst(['Bash', 'Read', 'Grep'])],
+  (c) => c === ''
+)
+
+ledger(
+  '无 transcript_path → 零输出',
+  null,
+  (c) => c === ''
+)
+
+ledger(
+  '解析不出任何 assistant 行时不注入（不谎报 0 派发）',
+  [{ type: 'user', message: { content: 'hi' } }, { type: 'system', subtype: 'x' }],
+  (c) => c === ''
+)
+
+ledger(
+  '损坏行被跳过而不是整体失败',
+  [asst(Array(14).fill('Bash')), asst(['Agent'])],
+  (c) => c.includes('派发 1 次')
+)
+
+// 损坏行单独造：上面 transcript() 只能写合法 JSON
+{
+  const f = path.join(FIXTURE_ROOT, 'tr-broken.jsonl')
+  fs.writeFileSync(
+    f,
+    [JSON.stringify(asst(Array(14).fill('Bash'))), '{ 这行不是 JSON', JSON.stringify(asst(['Agent']))].join('\n'),
+    'utf8'
+  )
+  const r = spawnSync('node', [LEDGER], { input: JSON.stringify({ transcript_path: f }), encoding: 'utf8' })
+  const ctx = r.stdout ? JSON.parse(r.stdout).hookSpecificOutput.additionalContext : ''
+  check('半路损坏行不影响其余计数', true, ctx.includes('主会话工具调用 15 次') && ctx.includes('派发 1 次'), ctx)
+}
+
 // ── 收尾 ────────────────────────────────────────────────────────────
 fs.rmSync(FIXTURE_ROOT, { recursive: true, force: true })
 
