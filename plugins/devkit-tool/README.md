@@ -1,10 +1,10 @@
 # DevKit-Tool
 
-**版本**: 6.2.2
+**版本**: 6.4.0
 **作者**: zhangq
 **许可证**: MIT
 
-工具技能套件（原 `devkit-core`），当前聚焦 5 个 Skills，覆盖代码库分析、依赖排查、多模型协作与 Claude Code 自身运维辅助工具。
+工具技能套件（原 `devkit-core`），当前聚焦 6 个 Skills，覆盖代码库分析、依赖排查、代码知识图谱建图决策、多模型协作与 Claude Code 自身运维辅助工具。
 
 ---
 
@@ -25,6 +25,7 @@
   `.claude/rules/**` 由 Claude Code 自动加载、与 `CLAUDE.md` 并列，**不要**在 `CLAUDE.md` 里 `@import` 它们或加链接引用（前者会让同一份内容注入两次，后者纯冗余）。拆分的核心收益是 `paths` frontmatter 条件加载——只在改动命中这些路径时才进上下文。三个必须避开的边界：不写 `paths` 字段等于无条件加载（省不下任何上下文）；`paths` 只写 `**` 会被判定为全通配而**退化成无条件加载**；尾部 `/**` 会被自动剥掉，`src/**` 与 `src` 等价。模式是 gitignore 风格。
 - `key-module-analysis`
 - `deps-investigator`
+- `codegraph-index` — codegraph 代码知识图谱的**建图决策**技能：先判某仓该不该建（源文件 ≥ 800 且日常检索跨文件调用关系才建；文档仓一律不建——实测 codegraph 不给 md 产任何节点），再判何时建（禁止挂 `SessionStart` 自动建，实测首次全量 9,810 文件 57.2s、峰值 RSS 4.2 GB）。核心结论：**worktree 图不可共用父仓的图**（分支新增类在 worktree 图查得到、主仓图查不到，用 `projectPath` 指父仓会静默拿到旧分支符号），长命 feature worktree 才各自建、短命 fix worktree 不建。另含「未索引项目零成本」的实测依据、7 个已验证的坑（纯中文查询命中率为 0、`install` 写 4 处全局文件、watcher 进程叠加、`codegraph daemon` 是交互式菜单不可脚本调用等）与拆除路径。
 
 ### 协作与辅助
 
@@ -50,6 +51,7 @@
 plugins/devkit-tool/
 ├── .claude-plugin/plugin.json
 └── skills/
+    ├── codegraph-index/
     ├── deps-investigator/
     ├── init-architect/
     ├── key-module-analysis/

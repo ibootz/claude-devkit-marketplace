@@ -1,7 +1,7 @@
 {
   "name": "devkit-tool",
-  "version": "6.3.1",
-  "description": "工具技能集 - 代码库分析、依赖排查、CLAUDE.md 与 .claude/rules 初始化、多模型协作与 Claude Code 自身运维（5 技能）",
+  "version": "6.4.0",
+  "description": "工具技能集 - 代码库分析、依赖排查、CLAUDE.md 与 .claude/rules 初始化、codegraph 代码知识图谱建图决策、多模型协作与 Claude Code 自身运维（6 技能）",
   "author": {
     "name": "zhangq"
   }
