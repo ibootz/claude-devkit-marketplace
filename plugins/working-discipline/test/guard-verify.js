@@ -383,18 +383,22 @@ function agent(label, ti, expect) {
 
 const AD_BASE = { model: 'sonnet', description: '排查登录超时' }
 const ad = (over) => Object.assign({}, AD_BASE, over)
+// 两个 keeper 类型受 check 9 约束（固定 opus），拿它们做 check 8 的载体时必须配 opus 档，
+// 否则 DENY 是 check 9 造成的、验不到 check 8。
+const adO = (over) => Object.assign({}, AD_BASE, { model: 'opus' }, over)
 
 // 该拦：subagent_type 含冒号（插件专用 agent），name 不含任何身份词
-agent('本次事故原样 dbg vs debug-keeper', ad({ name: 'sonnet-dbg-open-audit', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
-agent('chore-keeper 身份丢失', ad({ name: 'sonnet-ledger-tidy', subagent_type: 'task-keeper:chore-keeper' }), 'DENY')
+const ad8 = agent('本次事故原样 dbg vs debug-keeper', adO({ name: 'opus-dbg-open-audit', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+check('agent-dispatch: check 8 finding 点明身份词', true, /身份词/.test(ad8.detail), ad8.detail)
+agent('chore-keeper 身份丢失', adO({ name: 'opus-ledger-tidy', subagent_type: 'task-keeper:chore-keeper' }), 'DENY')
 agent('cavecrew-reviewer 身份丢失', ad({ name: 'sonnet-check-diff', subagent_type: 'caveman:cavecrew-reviewer' }), 'DENY')
 
 // 不得误杀：含任一身份词即可，位置与大小写不限
-agent('带全身份词', ad({ name: 'sonnet-debug-keeper-open-audit', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
-agent('只带尾词 keeper', ad({ name: 'sonnet-open-audit-keeper', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
-agent('只带首词 debug', ad({ name: 'sonnet-debug-open-audit', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
-agent('大小写不敏感', ad({ name: 'sonnet-Debug-Audit', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
-agent('下划线分隔', ad({ name: 'sonnet_keeper_audit', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('带全身份词', adO({ name: 'opus-debug-keeper-open-audit', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('只带尾词 keeper', adO({ name: 'opus-open-audit-keeper', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('只带首词 debug', adO({ name: 'opus-debug-open-audit', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('大小写不敏感', adO({ name: 'opus-Debug-Audit', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('下划线分隔', adO({ name: 'opus_keeper_audit', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
 agent('内建 Explore 不校验', ad({ name: 'sonnet-find-auth-refs', subagent_type: 'Explore' }), 'ALLOW')
 agent('内建 general-purpose 不校验', ad({ name: 'sonnet-fix-login', subagent_type: 'general-purpose' }), 'ALLOW')
 agent('无 subagent_type 不校验', ad({ name: 'sonnet-fix-login' }), 'ALLOW')
@@ -403,15 +407,48 @@ agent('fpf:fpf-agent 滤掉 agent 只剩 fpf', ad({ name: 'sonnet-fpf-hypothesis
 agent('plugin-validator 命中 plugin', ad({ name: 'sonnet-validate-plugin-json', subagent_type: 'plugin-dev:plugin-validator' }), 'ALLOW')
 
 // 旧判据仍然生效
-agent('旧判据: 缺 model 仍 deny', { name: 'sonnet-debug-keeper-x', description: 'x', subagent_type: 'task-keeper:debug-keeper' }, 'DENY')
+const adNoModel = agent('旧判据: 缺 model 仍 deny', { name: 'sonnet-debug-keeper-x', description: 'x', subagent_type: 'task-keeper:debug-keeper' }, 'DENY')
+check('agent-dispatch: 缺 model 的 finding 仍在', true, /缺 model/.test(adNoModel.detail), adNoModel.detail)
 agent('旧判据: 前缀与 model 不符仍 deny', { model: 'opus', name: 'sonnet-debug-keeper-x', description: 'x', subagent_type: 'task-keeper:debug-keeper' }, 'DENY')
 
 // 自动补名路径：补出来的名字自己必须满足 check 8，否则等于补了个 guard 不放行的形态
 for (const [label, desc] of [['中文 description', '排查登录超时'], ['ASCII description', 'triage open bugs']]) {
-  const r = agent(`缺 name 自动补(${label})`, { model: 'sonnet', description: desc, subagent_type: 'task-keeper:debug-keeper' }, 'AUTONAME')
+  const r = agent(`缺 name 自动补(${label})`, { model: 'opus', description: desc, subagent_type: 'task-keeper:debug-keeper' }, 'AUTONAME')
   if (r.verdict === 'AUTONAME') {
     check(`agent-dispatch: 自动名含身份词(${label})`, true, /debug|keeper/i.test(r.detail), r.detail)
   }
+}
+
+// ── agent-dispatch check 9：keeper 类常驻 agent 固定 opus 档 ──────────
+//
+// 判据两侧都覆盖：该拦的四条（含 2026-08-03 事故原样）、绝不能误杀的五条。
+// 重点是最后两条负向用例——判据只看 subagent_type，不看 name；且白名单式枚举，
+// 第三方 keeper-like agent 不在表内不该被牵连。
+
+// 该拦：subagent_type 是两个固定 opus 档 keeper，model 却不是 opus
+const adK = agent(
+  '本次事故原样 debug-keeper 走 sonnet',
+  ad({ name: 'sonnet-debug-keeper-085', subagent_type: 'task-keeper:debug-keeper' }),
+  'DENY'
+)
+check('agent-dispatch: check 9 finding 点明固定档', true, /固定 opus 档的常驻 keeper/.test(adK.detail), adK.detail)
+agent('chore-keeper 走 sonnet', ad({ name: 'sonnet-chore-keeper-tidy', subagent_type: 'task-keeper:chore-keeper' }), 'DENY')
+agent('debug-keeper 走 fable 同样拦', ad({ model: 'fable', name: 'fable-debug-keeper-x', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+agent('无冒号裸 debug-keeper 也拦', ad({ name: 'sonnet-debug-keeper-x', subagent_type: 'debug-keeper' }), 'DENY')
+
+// 不得误杀
+agent('debug-keeper 走 opus 放行', ad({ model: 'opus', name: 'opus-debug-keeper-085', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('chore-keeper 走 opus 放行', ad({ model: 'opus', name: 'opus-chore-keeper-tidy', subagent_type: 'task-keeper:chore-keeper' }), 'ALLOW')
+agent('非 keeper 的插件专用 agent 不受档位约束', ad({ name: 'sonnet-cavecrew-reviewer-diff', subagent_type: 'caveman:cavecrew-reviewer' }), 'ALLOW')
+// 判据取 subagent_type，不取 name——name 里出现 keeper 不构成档位要求
+agent('name 含 keeper 但类型是 Explore', ad({ name: 'sonnet-keeper-queue-audit', subagent_type: 'Explore' }), 'ALLOW')
+// 白名单式枚举：第三方 keeper-like agent 不在表内，不牵连
+agent('第三方 queue-keeper 不在白名单', ad({ name: 'sonnet-queue-keeper-x', subagent_type: 'foo:queue-keeper' }), 'ALLOW')
+
+// 缺 name + 合规 opus → 走自动补名，且补出的前缀是 opus-
+const adAuto = agent('keeper 缺 name 自动补', { model: 'opus', description: '登记三条新报障', subagent_type: 'task-keeper:debug-keeper' }, 'AUTONAME')
+if (adAuto.verdict === 'AUTONAME') {
+  check('agent-dispatch: keeper 自动名前缀 opus-', true, /^opus-/.test(adAuto.detail), adAuto.detail)
 }
 
 // ── 收尾 ────────────────────────────────────────────────────────────

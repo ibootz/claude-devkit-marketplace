@@ -472,7 +472,10 @@ const SECTION_NAMING = [
   '**5.4.4 `Workflow` 的命名**',
   '`agent(prompt, {label})` 的 `label` 虽标着可选但**当必填处理**（省略时进度树回落用 prompt 开头当显示名）；它单独显示、无配对 `name`，所以**仍带 `[模型名]` 前缀** + 任务语义（可用中文）。`meta.name` 用 kebab-case：整个 workflow 走一档时加 `模型名-` 前缀，跨档混用时不加。`meta.description` / `meta.phases[].*` 同样禁止粘 prompt 原文——`meta.description` 会出现在权限弹窗里。',
   '',
-  '**本节字段由 `guards/agent-dispatch.js` 在 `PreToolUse` 硬校验（7 项，含 5.4.1 那条身份词），多条违规一次报清**，判据见下方"六、"的 `Agent` 条目。',
+  '**5.4.5 `task-keeper` 的两个 keeper 档位固定 `opus`**',
+  '派 `subagent_type` 为 `task-keeper:debug-keeper` / `task-keeper:chore-keeper` 时，`model` 必须写 `"opus"`、`name` 前缀同为 `opus-`（如 `opus-debug-keeper-085`），**不按 bug 或杂务看起来难不难下调**。它们的 agent 定义里虽已写 `model: opus`，但 `Agent` 调用里显式传的 `model` **优先级高于该 frontmatter、会把它顶掉**，所以档位只能在派发处给对。keeper 是第一层调度者，triage / 去重 / 合并前对账错一次，整条队列跟着错。真实事故：2026-08-03 派出 `{"model":"sonnet","subagent_type":"task-keeper:debug-keeper"}`，命名全合规、档位静默落在 `sonnet`。',
+  '',
+  '**本节字段由 `guards/agent-dispatch.js` 在 `PreToolUse` 硬校验（8 项，含 5.4.1 那条身份词与 5.4.5 那条固定档），多条违规一次报清**，判据见下方"六、"的 `Agent` 条目。',
 ].join('\n')
 
 const SECTION_DISPATCH = [
@@ -496,6 +499,7 @@ const SECTION_DISPATCH = [
   '- **`opus`**：命中任一即用——(a) 需严密因果链（跨层追根因）；(b) 极高正确性要求（安全/并发/协议/资金/权限）；(c) `sonnet` 已明显吃力（漏点多、方案有硬缺陷、修 A 又出 B）',
   '- **`fable`**：兜底升级不作首选——同一任务用 `opus` 完整跑过 ≥2 轮仍无进展才启用',
   '- 写 `model: "haiku"` 或 `name` 用 `haiku-` 前缀会被 hook 拦下。**禁止预防性堆模型**：没有 `opus` 触发信号就留在 `sonnet`，不确定时一档一档升',
+  '- **例外：`task-keeper` 的两个 keeper 档位钉死 `opus`**——派 `subagent_type` 为 `task-keeper:debug-keeper` / `task-keeper:chore-keeper` 时 `model` 必须写 `"opus"`、`name` 前缀同为 `opus-`（如 `opus-debug-keeper-085`），**不按 bug 或杂务看起来难不难下调**，上面那句「没 `opus` 触发信号就留在 `sonnet`」不管这两个类型。它们的 agent 定义里虽写着 `model: opus`，但你在 `Agent` 里显式传的 `model` **优先级更高、会把它顶掉**，所以档位只能由你这里给对。keeper 是第一层调度者，triage / 去重 / 合并前对账错一次，整条队列跟着错。写别的档会被 `guards/agent-dispatch.js` 拦下',
   '',
   '### 5.3 调用范式',
   '',
@@ -546,7 +550,7 @@ const SECTION_HOOK_ENFORCED = [
   '',
   '- **`Bash`** 里独立 `cd` 一律被拦（`guards/bash-guard.js`）。**写命令前先套模板**：`(cd /abs/path && cmd)` 或 `git -C <path> <cmd>` 或全用绝对路径。这道闸只认「裸 `cd` 开头」一种形态，`pushd` / `source` 含 cd 的脚本 / `eval "cd …"` 同样污染 cwd 却拦不住——要守的是 cwd 干净，不是躲过这道闸',
   '- **`agent-browser`** 的启动类子命令（`open` / `connect` / 带 URL 的 `chat`）默认 headless 运行，受四道护栏约束（同一道闸）：①**启动前先备好鉴权**（带 `--profile` / `--headers` / `--state` / `--restore` 任一，headless 下人类无法中途登录）；②**全局实例上限 4**（启动前 `agent-browser session list`，≥4 先 `close`）；④**建议带安全边界**（`--allowed-domains` + `--content-boundaries`，缺失仅提醒不阻断）。完整工作流见 `agent-browser` 插件 SKILL.md',
-  '- **`Agent`**（`guards/agent-dispatch.js`）：`model` 必填且在 `sonnet`·`opus`·`fable` 内；`name` 的模型前缀与 `model` 一致且满足正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`；`subagent_type` 含冒号（插件专用 agent）时 `name` 须含其身份词（`debug-keeper` → 含 `debug` 或 `keeper`）；`description` 必填有正文、正文非角色设定句、≤60 字符（`[模型名]` 前缀可省；写了也算进 60 字符，`[haiku]` 直接被拒）',
+  '- **`Agent`**（`guards/agent-dispatch.js`）：`model` 必填且在 `sonnet`·`opus`·`fable` 内；**`subagent_type` 为 `debug-keeper` / `chore-keeper` 时 `model` 只能是 `opus`**（固定档，见 5.2 末条）；`name` 的模型前缀与 `model` 一致且满足正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`；`subagent_type` 含冒号（插件专用 agent）时 `name` 须含其身份词（`debug-keeper` → 含 `debug` 或 `keeper`）；`description` 必填有正文、正文非角色设定句、≤60 字符（`[模型名]` 前缀可省；写了也算进 60 字符，`[haiku]` 直接被拒）',
   '- **`Write` / `Edit`**（`guards/write-guard.js`）：单一源码文件 >1000 行、当前项目内 `CLAUDE.md` >200 行会给提示。**它挂 `PostToolUse`，触发时文件已经写完了**——不回滚这次写入、也不停住本轮，指望不上它兜底，动笔前就要判断该不该拆（`CLAUDE.md` 拆到 `.claude/rules/{topic}.md`，不要靠压缩正文过闸——那会丢约束）',
 ].join('\n')
 

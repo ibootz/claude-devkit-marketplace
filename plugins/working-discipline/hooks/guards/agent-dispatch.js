@@ -3,7 +3,8 @@
 // 【用途】
 // 派发 subagent 时**结构层面**机械可判定的要求在这里处理：model 是否显式给了且在三档内、
 // name / description 是否齐备、name 前缀是否与 model 一致、name 是否体现插件专用 agent 的
-// 身份（check 8）、description 是否超长。判据取自 tool_input 的确定字段，不回读 transcript。
+// 身份（check 8）、keeper 类常驻 agent 是否落在固定的 opus 档（check 9）、description 是否
+// 超长。判据取自 tool_input 的确定字段，不回读 transcript。
 //
 // 【判据精度的如实说明（不要再写成"零误判"）】
 // 本文件里绝大多数判据是**确定字段比较**：`model` 是否在闭合枚举 MODELS 内、`name` 是否
@@ -119,6 +120,36 @@ const NAME_PREFIX_SEPARATORS = ['-', '_']
 
 // 系统内建 subagent_type：model 覆盖被忽略或命名语义不适用，一律放行。
 const EXEMPT_SUBAGENT_TYPES = new Set(['fork', 'statusline-setup', 'output-style-setup'])
+
+// 档位被钉死在 opus 的常驻 agent（check 9，2026-08-03 用户拍板加）。
+//
+// 【为什么需要这道闸】task-keeper 的两个 keeper 在自己的定义文件里已经写了
+// `model: opus`（agents/debug-keeper.md:5 / agents/chore-keeper.md:5），但 `Agent` 工具的
+// `model` 参数**优先级高于 agent 定义的 frontmatter**（工具描述原文："Takes precedence
+// over the agent definition's model frontmatter"）——主会话显式传 `sonnet` 就把 frontmatter
+// 的 opus 顶掉了。而「keeper 固定 opus」这条规则只写在 tk-debug/tk-chore 两个 SKILL.md 正文
+// 里，task-keeper 每轮注入的 TRIAGE 文本（hooks/lib/keeper_routing.py:73）压根没提 model；
+// 于是主会话没先调那个 skill 时读不到该规则，只读到本插件注入的三档标尺「没 opus 触发信号
+// 就留在 sonnet」，遂选 sonnet。实测事故：2026-08-03 会话 8477c246 派
+// `{"name":"sonnet-debug-keeper-085","model":"sonnet","subagent_type":"task-keeper:debug-keeper"}`,
+// 八条 check 全过（name 前缀与 model 一致、含身份词 keeper），档位静默落在 sonnet。
+// keeper 是第一层调度者，triage / 去重 / 合并前对账错一次，整条队列跟着错。
+//
+// 【判据形态】完整锚定正则匹配 subagent_type 小写化后的串 + model 与 'opus' 的等值比较，
+// 二者都是确定字段，同一输入必得同一结论（符合 .claude/rules/hook-restraint.md 的
+// "可以做成 hook"分级）。**不是**靠扫 prompt 猜"这活难不难"——3.0.0 删掉的那条档位判据
+// 才是那种（见上文【3.0.0 之三】的 (c)），两者性质不同，别混为一谈。
+//
+// 【覆盖边界（如实记录，勿删）】
+//   - **假阳性**：故意降档跑 keeper 的场景会被硬拦，且本 guard 不给逃生舱。真要降档只能
+//     `AGENT_DISPATCH_GUARD=off`。用户 2026-08-03 拍板时明确选了 deny 而非 ask，口径是
+//     "keeper 降档没有正当理由"；日后若出现真实需求，正确处置是整条降级为 ask，不是加咒语。
+//   - **假阴性**：只覆盖名字正好是 `debug-keeper` / `chore-keeper` 的 slug。别的插件自建的
+//     keeper-like 常驻 agent（`foo:queue-keeper` / `foo:keeper-v2`）不在表内——这张表是**白
+//     名单式枚举**，加新成员要显式改这里，不做"含 keeper 就算"的模糊匹配（那会把无档位要求
+//     的第三方 agent 一并拦下）。
+const FIXED_OPUS_PATTERN = /(^|:)(debug|chore)-keeper$/
+const FIXED_OPUS_MODEL = 'opus'
 
 // 身份词校验（check 8）的通用词黑名单：这些词出现在 subagent_type 的 slug 里不携带
 // 可辨识身份，不能拿来当 name 的必含词。例如 `fpf:fpf-agent` 的 'agent'、
@@ -378,6 +409,27 @@ function checkNaming(ti) {
           `(身份词 ${idWords.join(' 或 ')} 任含其一即可,位置不限)`
       )
     }
+  }
+
+  // 9. keeper 类常驻 agent 的档位钉死在 opus（2026-08-03 新增，判据与边界见 FIXED_OPUS_PATTERN）
+  //    与 check 1 并列而非合并：check 1 管"三档枚举内"，这条管"这个 subagent_type 只允许一档"。
+  //    model 缺失时两条会同时报，hint 各给一半，AI 一次改全。
+  const stLower = String(ti.subagent_type || '').toLowerCase()
+  if (FIXED_OPUS_PATTERN.test(stLower) && model !== FIXED_OPUS_MODEL) {
+    findings.push(
+      `subagent_type="${ti.subagent_type}" 是固定 ${FIXED_OPUS_MODEL} 档的常驻 keeper,` +
+        `本次 model=${model ? `"${model}"` : '(缺失)'};` +
+        `agent 定义 frontmatter 的 model:${FIXED_OPUS_MODEL} 会被这里显式传的 model 顶掉` +
+        `(Agent 工具的 model 参数优先级高于 frontmatter),所以档位只能在这里给对`
+    )
+    // 建议名：剥掉 name 已有的模型前缀，换成 opus-。name 缺失时给出带身份词的完整模板。
+    const strippedName = name.replace(/^(sonnet|opus|fable|haiku)[-_]/i, '')
+    const suggestSlug = toAsciiKebab(strippedName) || `${stLower.split(':').pop()}-<任务语义-kebab>`
+    hints.push(
+      `model 改 "${FIXED_OPUS_MODEL}",name 前缀同改 "${FIXED_OPUS_MODEL}-"(即 "${FIXED_OPUS_MODEL}-${suggestSlug}");` +
+        `keeper 是第一层调度者,triage/去重/对账错一次整条队列跟着错,故不按任务看起来难不难下调,` +
+        `也不受三档标尺那句"没 ${FIXED_OPUS_MODEL} 触发信号就留在 sonnet"约束`
+    )
   }
 
   // 5. description 必填且有正文（description 是 schema 里的必填字段，缺失基本由工具层

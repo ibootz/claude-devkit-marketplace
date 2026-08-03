@@ -229,7 +229,7 @@
 
 **触发条件**：`tool_name` 是 `Agent`。注意**不匹配旧工具名 `Task`**——旧名环境下的 `tool_input` 可能压根没有 `name` / `model` 字段，强制校验会造成永久性误拦，fail-open 优于误伤。
 
-### 拦什么：7 项结构校验，多条一并列出
+### 拦什么：8 项结构校验，多条一并列出
 
 这类问题往往同时出现好几个（`name` 前缀不符 + `description` 抄 prompt + 超长），`findings` 聚合成一条 reason 一次报清，才能一次改对：
 
@@ -244,7 +244,9 @@
 
 | 7 | `subagent_type` 含冒号（插件专用 agent）而 `name` 不含它的任一身份词 | **3.12.1 加**。在飞面板只渲染 `name`、**不渲染 `subagent_type`**，于是 `name="sonnet-dbg-open-audit"` + `subagent_type="task-keeper:debug-keeper"` 这组派发在面板上完全看不出派的是 keeper，用户找不到自己刚被托管的那条队列（2026-08-03 真实事故）。判据是纯子串包含：取冒号后 slug → 拆 ASCII 词 → 滤掉 `GENERIC_IDENTITY_WORDS`（`agent`/`use`/`main`/… 这些不携带身份的通用词）→ 要求 `name` 小写化后含**任意一个**。内建 `Explore`/`Plan`/`general-purpose` 不校验（权限差别不是常驻身份）；slug 的词被黑名单滤空时整条跳过（`foo:use`），fail-open。`autoName()` 同步加了身份词前置，避免自动补出一个 guard 自己不放行的名字 |
 
-**判据精度：不要再写成"零误判"。** 3.6.0 前这里写的是「判据全部取自确定字段，误判空间接近零」，审计用 28 条真实 payload 证伪了后半句。七条里有六条确实是确定字段比较（`model` 在闭合枚举 `MODELS` 内、`name` 匹配完整锚定正则 `NAME_PATTERN`、`name` 以 `<model>-`/`<model>_` 开头、`description` 是否为空、`description.length > DESC_BODY_MAX`、第 7 条的身份词子串包含）——同一输入必得同一结论、可人工复核。**第 5 条不是**：它靠"正文以某个句式开头"近似判断"这是角色设定句而不是任务摘要"，本质在猜语义。已知边界写在 `hooks/guards/agent-dispatch.js:14-23`——假阴性是角色设定句不在开头（`本次请你扮演审计员…`）或换用未列举句式（`扮演` / `担任` / `Pretend you are`）；假阳性是任务摘要本身合法地以词表里的词开头。处置口径是**词表只减不增**：再出现真实误杀就继续收窄或整条降级为注入提醒，不是加更复杂的正则去猜。
+| 8 | `subagent_type` 的 slug 是 `debug-keeper` / `chore-keeper` 而 `model` 不是 `opus` | **3.13.0 加**。这两个 keeper 在自己的定义文件里已写 `model: opus`（`task-keeper/agents/debug-keeper.md:5`），但 `Agent` 工具的 `model` 参数**优先级高于 agent frontmatter**（工具描述原文 "Takes precedence over the agent definition's model frontmatter"），主会话显式传 `sonnet` 就把它顶掉了；而「keeper 固定 opus」这条规则只写在 `tk-debug` / `tk-chore` 两个 SKILL.md 正文里，task-keeper 每轮注入的 TRIAGE 文本（`hooks/lib/keeper_routing.py:73`）压根没提 `model`——主会话没先调那个 skill 就读不到它，只读到本插件的三档标尺「没 `opus` 触发信号就留在 `sonnet`」。2026-08-03 事故：会话 `8477c246` 派出 `{"name":"sonnet-debug-keeper-085","model":"sonnet","subagent_type":"task-keeper:debug-keeper"}`，前七项 check 全过（前缀与 `model` 一致、含身份词 `keeper`），档位静默落在 `sonnet`。判据是完整锚定正则 `/(^|:)(debug|chore)-keeper$/` + `model` 与 `'opus'` 的等值比较，两个都是确定字段。**这不是 3.0.0 删掉的那条档位判据**——那条扫 prompt 里的「不变量」「根因」猜任务难度，这条只看 `subagent_type` 是不是那两个固定档类型。**白名单式枚举**：第三方 keeper-like agent（`foo:queue-keeper`）不在表内、不牵连，加成员要显式改 `FIXED_OPUS_PATTERN`，不做"含 keeper 就算"的模糊匹配。假阳性面是「故意降档跑 keeper」，本 guard 不给逃生舱（只能 `AGENT_DISPATCH_GUARD=off`）——用户拍板时明确选 deny 而非 ask，口径是"keeper 降档没有正当理由"；日后若出现真实需求，正确处置是整条降级为 ask，不是加咒语 |
+
+**判据精度：不要再写成"零误判"。** 3.6.0 前这里写的是「判据全部取自确定字段，误判空间接近零」，审计用 28 条真实 payload 证伪了后半句。八条里有七条确实是确定字段比较（`model` 在闭合枚举 `MODELS` 内、`name` 匹配完整锚定正则 `NAME_PATTERN`、`name` 以 `<model>-`/`<model>_` 开头、`description` 是否为空、`description.length > DESC_BODY_MAX`、第 7 条的身份词子串包含、第 8 条的 `FIXED_OPUS_PATTERN` 锚定匹配 + `model` 等值比较）——同一输入必得同一结论、可人工复核。**第 5 条不是**：它靠"正文以某个句式开头"近似判断"这是角色设定句而不是任务摘要"，本质在猜语义。已知边界写在 `hooks/guards/agent-dispatch.js:14-23`——假阴性是角色设定句不在开头（`本次请你扮演审计员…`）或换用未列举句式（`扮演` / `担任` / `Pretend you are`）；假阳性是任务摘要本身合法地以词表里的词开头。处置口径是**词表只减不增**：再出现真实误杀就继续收窄或整条降级为注入提醒，不是加更复杂的正则去猜。
 
 **3.6.0 整条移除的 prompt-prefix-overlap 检查**（原第 6 项，常量 `LEAK_MATCH_MIN = 20`：`description` 正文与 `prompt` 开头逐字重合 ≥20 字符即判抄袭）：移除原因不是"阈值不合适"，而是**判据前提不成立**。合法的 `description` 本来就写任务目标，而本仓派发 prompt 的第一段恰是 `【目标】` 且写的是同一件事，两者开头天然重合——它命中的是"写得规范"，不是"抄了 prompt"。真正要防的提示词泄露由第 5 项承担。
 
