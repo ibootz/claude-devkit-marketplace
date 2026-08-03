@@ -198,9 +198,14 @@ issue 的**决策与对账（「DBG-002 走方案 1」「DBG-005 外延要一起
 接收时建目录与文件 `DBG-NNN/issue.md`，frontmatter 只填 9 个键（完整格式见
 `skills/tk-debug/references/queue.md` §2）：`id`/`summary`/`status: open`/
 `priority`/`difficulty`/`type`/`reported_at`/`reopen_count: 0`/`external_ref`
-（可选）。正文只写「用户原话」章节（**逐字照抄**）与「证据」章节（截图路径 + 文字
-转录）。`priority`/`difficulty`/`type` 是 triage 产出**此刻不要猜**，缺字段比填错
-字段好。
+（可选）。正文第一节写「问题」（一句话：什么操作 → 什么后果，证据紧跟其后给
+`file:行号` + 最小代码片段）；其后是「用户原话」章节（**逐字照抄**；派生项无原话则
+省略，不要用过程叙事填空）与「证据」章节（截图路径 + 文字转录）。
+`priority`/`difficulty`/`type` 是 triage 产出**此刻不要猜**，缺字段比填错字段好。
+完整正文结构与「结论前置」五条纪律见 `skills/tk-debug/references/queue.md` §2——
+最容易违反的一条先记这里：**核实推翻旧结论时回改正文顶层小节、旧叙述压进「修订记录」，
+禁止只追加新小节而正文留着已被推翻的旧描述**（这是 issue.md 退化成「从头读到尾才看到
+结论」的典型成因）。
 
 `DBG-NNN` 的编号：hook 在你收到 bug 报告那轮已经把下一个可用 id 算好写进注入体了，
 直接用。它扫的是**所有交付目录**的现存条目目录名与 `archive/<批次>/<id>/` 归档目录名，比你
