@@ -139,7 +139,7 @@ cp "<照抄来的源路径>" "$DST"
 Agent(
   subagent_type: "task-keeper:debug-keeper",   # 若该 subagent_type 不可用则退回 "general-purpose"
   name: "sonnet-debug-keeper",
-  description: "[sonnet] debug 队列常驻管理",
+  description: "debug 队列常驻管理",
   model: "sonnet",
   run_in_background: true,
   prompt: "【目标】接管本项目 debug 队列，按 agents/debug-keeper.md 的流程处理下述

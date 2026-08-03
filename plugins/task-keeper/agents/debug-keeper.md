@@ -309,8 +309,9 @@ linked worktree 里会新建一份**独立对象库**，导致其他分支已有
 的目标从主会话换成你自己**：fixer 的 `SendMessage` 打给**你自己的 name**（主会话派
 你时用的那个 `<模型档>-debug-keeper`，默认 `sonnet-debug-keeper`），不是 `main`；只有你判断这个歧义超出你的权限时，才由你走 §12 转交给用户。
 
-**你处在第 2 层（主会话第 1 层派出你），fixer 是第 3 层，第 3 层禁止再派
-subagent**——fixer 的 prompt 里必须显式写明这句话（模板里已经有）。
+**你是主会话派出的第 1 层子代理（层数口径与 working-discipline 一致：主会话不计
+层，它派出的算第 1 层），fixer 是你派出的第 2 层，第 2 层禁止再派任何 subagent**
+——fixer 的 prompt 里必须显式写明「禁止再派发任何 subagent」（模板里已经有）。
 
 **不要用 `Agent` 工具的 `isolation: "worktree"` 参数**。理由不是「目录名随机、
 无法反查」（这个说法不准确——实测目录名其实是确定性的 `agent-<agentId>`，派发
@@ -334,9 +335,10 @@ subagent**——fixer 的 prompt 里必须显式写明这句话（模板里已�
 遵守（对账、回执质量的要求不因有没有这道机械门禁而改变）：
 
 - `model` 必填，三档 `sonnet` / `opus` / `fable` 之一，**没有 `haiku` 档**
-- `name` 与 `description` 双必填，且都带模型档次前缀：`name` 用 `sonnet-` 连字符，
-  `description` 用 `[sonnet]` 方括号，两者必须与实际 `model` 一致
-- `description` 只写 3-5 词任务摘要，禁止把 prompt 原文或角色设定句灌进去
+- `name` 与 `description` 双必填；`name` 带模型档次前缀（`sonnet-` 连字符）且与
+  实际 `model` 一致
+- `description` 只写 3-5 词任务摘要，**不带 `[模型名]` 前缀**（模型档已由 `name`
+  的前缀体现；写了也算进 60 字符限额），禁止把 prompt 原文或角色设定句灌进去
 - 同批并发的 `name` 必须互相可辨，把分片依据（DBG-id / 模块名）写进名字
 - `prompt` 用四段式：`【目标】…【上下文】…【约束】…【期望输出】…`，且必须索要
   结构化回执

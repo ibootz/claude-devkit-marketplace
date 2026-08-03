@@ -1,6 +1,6 @@
 {
   "name": "adhd-output-style",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "ADHD 友好输出风格 - 首行给可执行动作、多步编号、每轮重述进度、具体时间估算、错误陈述式语气。复刻自 ayghri/i-have-adhd（MIT），拉平成纯 SessionStart 注入，/plugin 启停即切换",
   "author": {
     "name": "zhangq"

@@ -227,7 +227,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.1.0"
+      "version": "2.1.1"
     },
     {
       "author": {
@@ -263,7 +263,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "author": {

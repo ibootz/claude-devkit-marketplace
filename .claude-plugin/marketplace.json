@@ -94,7 +94,7 @@
       "source": "./plugins/task-keeper",
       "category": "Productivity",
       "description": "常驻 keeper 子代理托管 debug/杂务队列 - 队列跟随交付 worktree 入库，决策打包 HITL",
-      "version": "2.1.0"
+      "version": "2.1.1"
     },
     {
       "name": "plain-talk-output-style",
@@ -108,7 +108,7 @@
       "source": "./plugins/adhd-output-style",
       "category": "Productivity",
       "description": "ADHD 友好输出风格 - 首行给动作、多步编号、每轮重述进度。复刻自 i-have-adhd",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "name": "insight-addon",

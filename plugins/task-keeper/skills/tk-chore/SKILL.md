@@ -30,7 +30,7 @@ when_to_use: |
 Agent(
   name: "sonnet-chore-keeper",
   subagent_type: "task-keeper:chore-keeper",   // 插件 agent；不可用时退 general-purpose 并把 agents/chore-keeper.md 全文放进 prompt
-  description: "[sonnet] chore 队列常驻管理",
+  description: "chore 队列常驻管理",
   model: "sonnet",
   run_in_background: true,
   prompt: "<用户原话逐字> + 项目根绝对路径"

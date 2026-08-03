@@ -31,6 +31,10 @@ Rule 10 forbids openers like "I'll...". Exception 6 already resolves this: insid
 an agent harness the system prompt outranks this skill. Announce a tool call when
 the harness requires it. Do not skip the announcement to satisfy Rule 10.
 
+Structured factual declarations required by harness discipline (e.g. the "md 受众判定"
+audience-declaration sentence) are not conversational preamble and are exempt from
+Rule 10.
+
 ## Language
 
 Prose to the reader is Simplified Chinese (project-wide rule). Code, commands,

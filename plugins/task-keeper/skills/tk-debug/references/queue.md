@@ -383,7 +383,7 @@ prompt 模板，先看下一节按 `difficulty` 分的两条路径。
 Agent(
   subagent_type: "general-purpose",
   name: "sonnet-fix-dbg017-step3-style",
-  description: "[sonnet] 修 DBG-017 样式对齐",
+  description: "修 DBG-017 样式对齐",
   model: "sonnet",
   prompt: "【目标】修 DBG-017。
            【上下文】你的工作区是 <worktree 绝对路径>。所有文件操作用该前缀下的
@@ -434,7 +434,7 @@ Agent(
 Agent(
   subagent_type: "general-purpose",
   name: "sonnet-DBG-024",
-  description: "[sonnet] 修 DBG-024 序列模型分类归属",
+  description: "修 DBG-024 序列模型分类归属",
   model: "sonnet",
   run_in_background: true,
   prompt: "【目标】修 DBG-024。
@@ -475,8 +475,8 @@ Agent(
             **遇到需要拍板的歧义**（两种改法都说得通、triage 没写清、发现 issue
             描述与代码实际不符）时，**不要猜、不要挑一个继续**：用 `SendMessage`
             把选项和你的倾向发给 `sonnet-debug-keeper`（派发时替换成 keeper 自己
-            的实际 name；不是 `main`——你是第 3 层，
-            debug-keeper 是第 2 层，只有 debug-keeper 判断这个歧义超出它自己
+            的实际 name；不是 `main`——你是 debug-keeper 派出的
+            末层 fixer，禁止再派任何 subagent；只有 debug-keeper 判断这个歧义超出它自己
             权限时才会再走 §12 待拍板协议转交给用户），等它拍板。等待期间你会被
             结束，它答复后你会从 transcript 被唤醒继续，上下文不会丢。
            【期望输出】把结论写进 <worktree>/.keeper/<交付id>/debug/DBG-024/receipts.md，
