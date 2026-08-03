@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude DevKit Pro Marketplace - 精简后的 Claude Code / Codex 插件市场，聚焦核心开发、Spec 工作流与高价值生产力插件",
-    "version": "2.5.0"
+    "version": "2.6.0"
   },
   "renames": {
     "devkit-core": "devkit-tool"
@@ -109,6 +109,13 @@
       "category": "Productivity",
       "description": "ADHD 友好输出风格 - 首行给动作、多步编号、每轮重述进度。复刻自 i-have-adhd",
       "version": "1.0.1"
+    },
+    {
+      "name": "wenyan-output-style",
+      "source": "./plugins/wenyan-output-style",
+      "category": "Productivity",
+      "description": "文言极简输出风格 - 文言语法压缩、字形简体，代码与告警原样，启停即切换",
+      "version": "1.0.0"
     },
     {
       "name": "insight-addon",

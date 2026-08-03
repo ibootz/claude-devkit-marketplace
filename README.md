@@ -4,7 +4,7 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 
 ## 概述
 
-本市场包含 16 个插件，覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论、输出风格等场景。
+本市场包含 17 个插件，覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论、输出风格等场景。
 
 原 `devkit-git`、`devkit-dev`、`devkit-issue` 已从市场移除，不再作为独立插件提供。
 
@@ -149,14 +149,22 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - 与上游差异二：追加 `style/project-overrides.md`，解决上游 Rule 9（列表封顶 5 条）与 working-discipline 拍板四要素的冲突——四要素约束的是信息不是形状，本风格用「推荐项在前 + 选项排序 + 每项一行代价」承载
 - 注入约 8500 字符，低于 hook 输出上限（10000）
 
-### 15. insight-addon（教学洞察附加件）
+### 15. wenyan-output-style（文言极简输出风格）
+
+取自 caveman 插件 `wenyan-ultra` 档位的可切换风格插件：以文言语法压缩对话回复，**字形一律简体**；代码、命令、报错、行号原样不动；安全告警与不可逆操作确认逐段退回白话。
+
+- 与上游差异一：繁体改简体——上游例句 `新參照則重繪` 全繁，与 working-discipline 3.5「禁止繁体中文」正面冲突，本插件保留文言语法与虚词、字形逐句改简
+- 与上游差异二：上游 `wenyan-ultra` 只有 1 行档位定义 + 2 个例句，这里补齐成 8 条压缩法 + 4 条禁忌（含**禁伪古**，防「回调」写成「反召之术」）+ 产出物边界（commit message、md 文档、子代理 prompt 一律白话）
+- 唯一结构差异：**两层注入**——SessionStart 注规则全文（2912 字符），UserPromptSubmit 每轮注 102 字符短锚。文言与模型默认语体正面对抗，只放 SessionStart 会在长对话里漂回白话
+
+### 16. insight-addon（教学洞察附加件）
 
 **不是风格，是附加件**：只加一条「何时给 ★ Insight 框」的规则，不规定句子长短和段落形态，因此可与 plain-talk / adhd 等任意风格插件**同时开启**。
 
 - 与官方 explanatory-output-style 的区别：后者是一整套风格（含「可超出通常长度限制」的授权），跟简短类风格互斥；本插件把「给洞察」单独摘出来
 - 触发条件比官方更严：要求本轮真做了非平凡技术判断，且门道是**本代码库特有**的。官方原文写的是 `always provide`，在问答轮次会塞出无意义的洞察框
 
-### 16. session-auto-title（会话标题跟随话题）
+### 17. session-auto-title（会话标题跟随话题）
 
 补 Claude Code 内建自动命名的缺口：内建的 `ai-title` **只在第一条真人 prompt 时生成一次**，之后有两道短路挡着（已有标题就跳过 + resume 进程的闸门初值为 true），话题漂移后永不更新，且没有任何 settings key 能打开重算。本插件用 `UserPromptSubmit` hook 接管，第 2 轮起后台生成、之后每 10 轮重算。
 
@@ -217,8 +225,11 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 # 说人话输出风格（可切换）
 /plugin install plain-talk-output-style@claude-devkit-marketplace
 
-# ADHD 友好输出风格（可切换，与上一个二选一）
+# ADHD 友好输出风格（可切换，三个风格插件只开一个）
 /plugin install adhd-output-style@claude-devkit-marketplace
+
+# 文言极简输出风格（可切换，三个风格插件只开一个）
+/plugin install wenyan-output-style@claude-devkit-marketplace
 
 # 教学洞察附加件（可与任意风格叠加）
 /plugin install insight-addon@claude-devkit-marketplace
@@ -353,6 +364,7 @@ claude-devkit-marketplace/
 │   ├── task-keeper/
 │   ├── plain-talk-output-style/
 │   ├── adhd-output-style/
+│   ├── wenyan-output-style/
 │   ├── insight-addon/
 │   └── session-auto-title/
 ├── scripts/

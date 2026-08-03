@@ -1,7 +1,7 @@
 {
   "metadata": {
     "description": "Claude DevKit Pro Marketplace - 精简后的 Claude Code / Codex 插件市场，聚焦核心开发、Spec 工作流与高价值生产力插件",
-    "version": "2.5.0"
+    "version": "2.6.0"
   },
   "name": "claude-devkit-marketplace",
   "interface": {
@@ -264,6 +264,24 @@
         "authentication": "ON_INSTALL"
       },
       "version": "1.0.1"
+    },
+    {
+      "author": {
+        "name": "zhangq"
+      },
+      "category": "Productivity",
+      "description": "文言极简输出风格 - 文言语法压缩、字形简体，代码与告警原样，启停即切换",
+      "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
+      "name": "wenyan-output-style",
+      "source": {
+        "source": "local",
+        "path": "./plugins/wenyan-output-style"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "version": "1.0.0"
     },
     {
       "author": {
