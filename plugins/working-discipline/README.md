@@ -229,7 +229,7 @@
 
 **触发条件**：`tool_name` 是 `Agent`。注意**不匹配旧工具名 `Task`**——旧名环境下的 `tool_input` 可能压根没有 `name` / `model` 字段，强制校验会造成永久性误拦，fail-open 优于误伤。
 
-### 拦什么：6 项结构校验，多条一并列出
+### 拦什么：7 项结构校验，多条一并列出
 
 这类问题往往同时出现好几个（`name` 前缀不符 + `description` 抄 prompt + 超长），`findings` 聚合成一条 reason 一次报清，才能一次改对：
 
@@ -242,7 +242,9 @@
 | 5 | `description` 正文以角色设定句开头（`你是` / `您是` / `请你` / `作为一名` / `You are` / `Act as` 等 14 项） | 把 prompt 原文抄进 `description` 的高置信特征。**这是本 guard 唯一一条近似判据**（详见下方「判据精度」）。3.6.0 从词表里移除了 `#`、`【`、`Your task` 三项：前两个会命中任何以 markdown 标题或中文书名号开头的**合法**摘要，第三个与 `You are` 的角色设定语义不等价（`Your task summary…` 是合法摘要） |
 | 6 | `description` **原始串**超过 60 字符 | 纪律要求 3-5 词摘要，超长说明塞了 prompt 内容。**按原始串计长、不减去 `[模型名]` 前缀**（3.6.0 改）：旧实现拿 strip 后的正文比，等于给带前缀的写法白送 7-9 个字符额度，「容错接受的旧写法」反而变成收益 |
 
-**判据精度：不要再写成"零误判"。** 3.6.0 前这里写的是「判据全部取自确定字段，误判空间接近零」，审计用 28 条真实 payload 证伪了后半句。六条里有五条确实是确定字段比较（`model` 在闭合枚举 `MODELS` 内、`name` 匹配完整锚定正则 `NAME_PATTERN`、`name` 以 `<model>-`/`<model>_` 开头、`description` 是否为空、`description.length > DESC_BODY_MAX`）——同一输入必得同一结论、可人工复核。**第 5 条不是**：它靠"正文以某个句式开头"近似判断"这是角色设定句而不是任务摘要"，本质在猜语义。已知边界写在 `hooks/guards/agent-dispatch.js:14-23`——假阴性是角色设定句不在开头（`本次请你扮演审计员…`）或换用未列举句式（`扮演` / `担任` / `Pretend you are`）；假阳性是任务摘要本身合法地以词表里的词开头。处置口径是**词表只减不增**：再出现真实误杀就继续收窄或整条降级为注入提醒，不是加更复杂的正则去猜。
+| 7 | `subagent_type` 含冒号（插件专用 agent）而 `name` 不含它的任一身份词 | **3.12.1 加**。在飞面板只渲染 `name`、**不渲染 `subagent_type`**，于是 `name="sonnet-dbg-open-audit"` + `subagent_type="task-keeper:debug-keeper"` 这组派发在面板上完全看不出派的是 keeper，用户找不到自己刚被托管的那条队列（2026-08-03 真实事故）。判据是纯子串包含：取冒号后 slug → 拆 ASCII 词 → 滤掉 `GENERIC_IDENTITY_WORDS`（`agent`/`use`/`main`/… 这些不携带身份的通用词）→ 要求 `name` 小写化后含**任意一个**。内建 `Explore`/`Plan`/`general-purpose` 不校验（权限差别不是常驻身份）；slug 的词被黑名单滤空时整条跳过（`foo:use`），fail-open。`autoName()` 同步加了身份词前置，避免自动补出一个 guard 自己不放行的名字 |
+
+**判据精度：不要再写成"零误判"。** 3.6.0 前这里写的是「判据全部取自确定字段，误判空间接近零」，审计用 28 条真实 payload 证伪了后半句。七条里有六条确实是确定字段比较（`model` 在闭合枚举 `MODELS` 内、`name` 匹配完整锚定正则 `NAME_PATTERN`、`name` 以 `<model>-`/`<model>_` 开头、`description` 是否为空、`description.length > DESC_BODY_MAX`、第 7 条的身份词子串包含）——同一输入必得同一结论、可人工复核。**第 5 条不是**：它靠"正文以某个句式开头"近似判断"这是角色设定句而不是任务摘要"，本质在猜语义。已知边界写在 `hooks/guards/agent-dispatch.js:14-23`——假阴性是角色设定句不在开头（`本次请你扮演审计员…`）或换用未列举句式（`扮演` / `担任` / `Pretend you are`）；假阳性是任务摘要本身合法地以词表里的词开头。处置口径是**词表只减不增**：再出现真实误杀就继续收窄或整条降级为注入提醒，不是加更复杂的正则去猜。
 
 **3.6.0 整条移除的 prompt-prefix-overlap 检查**（原第 6 项，常量 `LEAK_MATCH_MIN = 20`：`description` 正文与 `prompt` 开头逐字重合 ≥20 字符即判抄袭）：移除原因不是"阈值不合适"，而是**判据前提不成立**。合法的 `description` 本来就写任务目标，而本仓派发 prompt 的第一段恰是 `【目标】` 且写的是同一件事，两者开头天然重合——它命中的是"写得规范"，不是"抄了 prompt"。真正要防的提示词泄露由第 5 项承担。
 
@@ -708,7 +710,7 @@ plugins/working-discipline/
 │   │   └── prompt-images.js            #   从 UserPromptSubmit payload 提取图片绝对路径（纯函数，
 │   │                                   #   不回读 transcript —— 那是 3.0.0 删掉的误判根源）
 │   └── guards/
-│       ├── agent-dispatch.js           # PreToolUse:Agent —— 6 项结构校验聚合报错；
+│       ├── agent-dispatch.js           # PreToolUse:Agent —— 7 项结构校验聚合报错；
 │       │                               #   只缺 name 时用 updatedInput 自动补名放行
 │       ├── bash-guard.js               # PreToolUse:Bash —— 裸 cd 开头污染 cwd + agent-browser
 │       │                               #   启动四护栏（①鉴权 ②实例上限 ④安全边界），一次报清

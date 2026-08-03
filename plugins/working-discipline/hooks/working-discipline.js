@@ -460,6 +460,7 @@ const SECTION_NAMING = [
   '两个用途：(a) 在飞面板左列显示它，缺失时回落成裸 `subagent_type`——同批 3 个 `general-purpose` 就是三行一样的字；(b) `SendMessage({to: name})` 的寻址键，**同一会话内不得复用同名**（latest wins，新 agent 占名后旧 agent 只能靠 raw `agentId` 寻址，等于弄丢先派的）。',
   '格式 `模型名-任务语义`：模型名取 `sonnet` / `opus` / `fable` 之一且与实际 `model` 一致（`haiku-` 已废弃，写了会被拦）；任务语义用英文 kebab-case——`name` 受正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` 约束，只接受 ASCII 字母数字与 `-` `_`，中文或方括号直接被拒。示例：`sonnet-review-login-flow` / `opus-debug-order-race` / `fable-hunt-memleak`。',
   '**不写 `name` 的后果**：你会拿到 `<model>-<语义>-<prompt 短哈希>` 这类补名（如 `sonnet-explore-a3f1`）——不含任务语义、同批只差哈希，面板上分不出谁在做什么。这是兜底，不是替代。',
+  '**派插件专用 agent 时（`subagent_type` 含冒号，如 `task-keeper:debug-keeper` / `caveman:cavecrew-reviewer`），`name` 还必须带上它的身份词**（`keeper` / `reviewer` / `cavecrew` 等，位置不限、大小写不限，含任一即可）：面板只渲染 `name`、**从不渲染 `subagent_type`**，身份词一丢，用户就看不出这活派给了哪种专用 agent。真实事故：`name="sonnet-dbg-open-audit"` 实际派的是 `debug-keeper`，用户在面板上遍寻不着 keeper，以为根本没托管。合规写法 `sonnet-debug-keeper-open-audit`。内建 `Explore` / `Plan` / `general-purpose` 不要求带——它们是权限差别，不是常驻身份。',
   '',
   '**5.4.2 `description` 是任务摘要，禁止灌 prompt 原文，也不带模型前缀**',
   '只写 3-5 词任务摘要，**不带 `[模型名]` 前缀**——模型档次已由 `name` 的前缀体现（两者在在飞面板并排显示，前缀只写一次）。合规示例：`审查登录流程` / `修 order race condition`。例外是 `Workflow` 的 `label`：它在进度树单独显示、没有配对的 `name`，按 5.4.4 仍带 `[模型名]` 前缀。',
@@ -471,7 +472,7 @@ const SECTION_NAMING = [
   '**5.4.4 `Workflow` 的命名**',
   '`agent(prompt, {label})` 的 `label` 虽标着可选但**当必填处理**（省略时进度树回落用 prompt 开头当显示名）；它单独显示、无配对 `name`，所以**仍带 `[模型名]` 前缀** + 任务语义（可用中文）。`meta.name` 用 kebab-case：整个 workflow 走一档时加 `模型名-` 前缀，跨档混用时不加。`meta.description` / `meta.phases[].*` 同样禁止粘 prompt 原文——`meta.description` 会出现在权限弹窗里。',
   '',
-  '**本节字段由 `guards/agent-dispatch.js` 在 `PreToolUse` 硬校验，多条违规一次报清**，判据见下方"六、"的 `Agent` 条目。',
+  '**本节字段由 `guards/agent-dispatch.js` 在 `PreToolUse` 硬校验（7 项，含 5.4.1 那条身份词），多条违规一次报清**，判据见下方"六、"的 `Agent` 条目。',
 ].join('\n')
 
 const SECTION_DISPATCH = [
@@ -503,7 +504,8 @@ const SECTION_DISPATCH = [
   '### 5.4 命名（`name` 与 `description` 都必填 · 细则由 hook 拦截时给）',
   '',
   '**`Agent` 的 JSON Schema 里没有 `name` 字段**（只有 `description` / `prompt` / `subagent_type` / `model` / `run_in_background` / `isolation`，且 `additionalProperties: false`），但运行时接受它并落盘。照字段表生成调用必然漏掉——当硬编码前置记：**凡调 `Agent`，先写 `name`，再写其余字段**。',
-  '`name` 带模型前缀且与实际 `model` 一致（用 `sonnet-` 这样的连字符）；`description` 只写 3-5 词任务摘要、**不带 `[模型名]` 前缀**、**禁止**灌 `prompt` 原文或角色设定句；同批并发的名字必须互相可辨（分片依据写进名字）；`Workflow` 的 `label` / `meta.*` 例外——单独显示无配对 `name`，**仍带 `[模型名]` 前缀**。不写 `name` 会拿到只差哈希的自动补名，面板上分不出谁在做什么。',
+  '`name` 带模型前缀且与实际 `model` 一致（用 `sonnet-` 这样的连字符）；**`subagent_type` 含冒号的插件专用 agent（`task-keeper:debug-keeper` / `caveman:cavecrew-reviewer` 等），`name` 里还要带上身份词**（`keeper` / `reviewer` / `cavecrew` 之类，位置不限）——在飞面板只渲染 `name`、**不渲染 `subagent_type`**，名字不带身份词，用户就看不出你把活派给了哪种专用 agent（实测：`name="sonnet-dbg-open-audit"` 派的其实是 `debug-keeper`，用户在面板上遍寻不着 keeper）。内建 `Explore` / `Plan` / `general-purpose` 不要求带，它们是权限差别不是常驻身份。',
+  '`description` 只写 3-5 词任务摘要、**不带 `[模型名]` 前缀**、**禁止**灌 `prompt` 原文或角色设定句；同批并发的名字必须互相可辨（分片依据写进名字）；`Workflow` 的 `label` / `meta.*` 例外——单独显示无配对 `name`，**仍带 `[模型名]` 前缀**。不写 `name` 会拿到只差哈希的自动补名，面板上分不出谁在做什么。',
   '',
   '### 5.5 多 subagent 并发时等齐再总结（仅约束主会话）',
   '',
@@ -544,7 +546,7 @@ const SECTION_HOOK_ENFORCED = [
   '',
   '- **`Bash`** 里独立 `cd` 一律被拦（`guards/bash-guard.js`）。**写命令前先套模板**：`(cd /abs/path && cmd)` 或 `git -C <path> <cmd>` 或全用绝对路径。这道闸只认「裸 `cd` 开头」一种形态，`pushd` / `source` 含 cd 的脚本 / `eval "cd …"` 同样污染 cwd 却拦不住——要守的是 cwd 干净，不是躲过这道闸',
   '- **`agent-browser`** 的启动类子命令（`open` / `connect` / 带 URL 的 `chat`）默认 headless 运行，受四道护栏约束（同一道闸）：①**启动前先备好鉴权**（带 `--profile` / `--headers` / `--state` / `--restore` 任一，headless 下人类无法中途登录）；②**全局实例上限 4**（启动前 `agent-browser session list`，≥4 先 `close`）；④**建议带安全边界**（`--allowed-domains` + `--content-boundaries`，缺失仅提醒不阻断）。完整工作流见 `agent-browser` 插件 SKILL.md',
-  '- **`Agent`**（`guards/agent-dispatch.js`）：`model` 必填且在 `sonnet`·`opus`·`fable` 内；`name` 的模型前缀与 `model` 一致且满足正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`；`description` 必填有正文、正文非角色设定句、≤60 字符（`[模型名]` 前缀可省；写了也算进 60 字符，`[haiku]` 直接被拒）',
+  '- **`Agent`**（`guards/agent-dispatch.js`）：`model` 必填且在 `sonnet`·`opus`·`fable` 内；`name` 的模型前缀与 `model` 一致且满足正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`；`subagent_type` 含冒号（插件专用 agent）时 `name` 须含其身份词（`debug-keeper` → 含 `debug` 或 `keeper`）；`description` 必填有正文、正文非角色设定句、≤60 字符（`[模型名]` 前缀可省；写了也算进 60 字符，`[haiku]` 直接被拒）',
   '- **`Write` / `Edit`**（`guards/write-guard.js`）：单一源码文件 >1000 行、当前项目内 `CLAUDE.md` >200 行会给提示。**它挂 `PostToolUse`，触发时文件已经写完了**——不回滚这次写入、也不停住本轮，指望不上它兜底，动笔前就要判断该不该拆（`CLAUDE.md` 拆到 `.claude/rules/{topic}.md`，不要靠压缩正文过闸——那会丢约束）',
 ].join('\n')
 

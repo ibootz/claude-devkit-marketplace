@@ -2,8 +2,8 @@
 //
 // 【用途】
 // 派发 subagent 时**结构层面**机械可判定的要求在这里处理：model 是否显式给了且在三档内、
-// name / description 是否齐备、name 前缀是否与 model 一致、description 是否超长。判据取自
-// tool_input 的确定字段，不回读 transcript。
+// name / description 是否齐备、name 前缀是否与 model 一致、name 是否体现插件专用 agent 的
+// 身份（check 8）、description 是否超长。判据取自 tool_input 的确定字段，不回读 transcript。
 //
 // 【判据精度的如实说明（不要再写成"零误判"）】
 // 本文件里绝大多数判据是**确定字段比较**：`model` 是否在闭合枚举 MODELS 内、`name` 是否
@@ -119,6 +119,28 @@ const NAME_PREFIX_SEPARATORS = ['-', '_']
 
 // 系统内建 subagent_type：model 覆盖被忽略或命名语义不适用，一律放行。
 const EXEMPT_SUBAGENT_TYPES = new Set(['fork', 'statusline-setup', 'output-style-setup'])
+
+// 身份词校验（check 8）的通用词黑名单：这些词出现在 subagent_type 的 slug 里不携带
+// 可辨识身份，不能拿来当 name 的必含词。例如 `fpf:fpf-agent` 的 'agent'、
+// `foo:use` 的 'use'——要求 name 含 'use' 既荒谬又制造误杀。slug 的词被这张表
+// 滤空时（如 `foo:use`）整条 check 跳过，fail-open。
+const GENERIC_IDENTITY_WORDS = new Set([
+  'agent', 'use', 'main', 'default', 'general', 'purpose', 'task', 'claude', 'sub',
+])
+
+// 从 subagent_type 抽出「身份词候选集」。只处理**含冒号**的插件专用 agent
+// （`task-keeper:debug-keeper` / `caveman:cavecrew-builder`）：它们带常驻语义
+// （keeper 会持久接管队列、reviewer 只出审查结论），而面板只渲染 name 不渲染
+// subagent_type，name 不带身份词就无法反推派的是谁。内建三档
+// （Explore / Plan / general-purpose）返回空数组、不参与校验——它们只是权限差别。
+function identityWords(subagentType) {
+  const st = String(subagentType || '')
+  if (st.indexOf(':') === -1) return []
+  const slug = st.slice(st.indexOf(':') + 1)
+  return (slug.match(/[A-Za-z0-9]+/g) || [])
+    .map((w) => w.toLowerCase())
+    .filter((w) => w.length >= 3 && !GENERIC_IDENTITY_WORDS.has(w))
+}
 
 // description 正文若以这些句式开头，判定为把 prompt 的角色设定句抄进了 description。
 // 这是本文件唯一的近似判据（覆盖边界见文件头【判据精度的如实说明】），词表只减不增。
@@ -251,7 +273,13 @@ function shortHash(s) {
 }
 
 function autoName(ti, model) {
-  const slug = deriveSlug(ti)
+  let slug = deriveSlug(ti)
+  // check 8 要求 name 体现插件专用 agent 的身份；自动补名同样要满足，否则会补出一个
+  // guard 自己都不放行的形态（description 全是 ASCII 时 deriveSlug 压根不看 subagent_type）。
+  const idWords = identityWords(ti.subagent_type)
+  if (idWords.length && !idWords.some((w) => slug.indexOf(w) !== -1)) {
+    slug = `${idWords[0]}-${slug}`
+  }
   const hash = shortHash(
     String(ti.prompt || '') + '|' + String(ti.description || '') + '|' + slug
   )
@@ -319,6 +347,36 @@ function checkNaming(ti) {
       const usedPrefix = name.slice(0, namePrefix.length + 1)
       findings.push(`name 前缀 "${usedPrefix}" 与实际 model="${model}" 不一致;面板会显示错误的模型档次`)
       hints.push(`name 前缀改成 "${model}${usedPrefix.slice(-1)}"`)
+    }
+  }
+
+  // 8. name 必须体现插件专用 agent 的身份（2026-08-03 新增）
+  //    起因：在飞面板只渲染 name、**不渲染 subagent_type**，于是
+  //    name="sonnet-dbg-open-audit" + subagent_type="task-keeper:debug-keeper" 这组派发
+  //    在面板上完全看不出派的是 keeper，用户找不到自己刚被托管的那条队列。
+  //
+  //    判据是**纯子串包含**、不猜语义：subagent_type 含 ':' → 取冒号后 slug → 拆 ASCII 词
+  //    → 滤掉通用词 → 要求 name 小写化后包含其中**任意一个**。
+  //
+  //    覆盖边界（如实记录，勿删）：
+  //    - **假阴性成本为零**：`sonnet-x-keeper` 这类随便塞词即可过闸，且只查"任一词"，
+  //      分不出 debug-keeper 与 chore-keeper。这条判据只防**遗忘**，不防绕过——而遗忘
+  //      正是它唯一的失败模式（没人有动机故意隐藏 subagent 身份）。
+  //    - **只覆盖含冒号的插件专用 agent**。内建 Explore / Plan / general-purpose 不校验：
+  //      它们是权限差别不是常驻身份，强制带词只会让每个名字多背一个无信息的前缀。
+  //    - slug 的词全落通用词黑名单时整条跳过（`foo:use`），fail-open。
+  if (!nameMissing) {
+    const idWords = identityWords(ti.subagent_type)
+    const lowerName = name.toLowerCase()
+    if (idWords.length && !idWords.some((w) => lowerName.indexOf(w) !== -1)) {
+      findings.push(
+        `name="${name}" 不含 subagent_type="${ti.subagent_type}" 的身份词(${idWords.join('/')});` +
+          `在飞面板只渲染 name 不渲染 subagent_type,用户无法从面板判断这是哪种专用 agent`
+      )
+      hints.push(
+        `name 改成 "${modelOk ? model : '<模型名>'}-${idWords.join('-')}-<任务语义-kebab>"` +
+          `(身份词 ${idWords.join(' 或 ')} 任含其一即可,位置不限)`
+      )
     }
   }
 

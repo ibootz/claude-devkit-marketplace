@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// guard-verify.js — bash-guard / write-guard 的回归套件
+// guard-verify.js — bash-guard / write-guard / agent-dispatch 的回归套件
 //
 // 用法：node plugins/working-discipline/test/guard-verify.js
 // 退出码 0 = 全绿，1 = 有用例失败。
@@ -30,6 +30,7 @@ const { spawnSync } = require('child_process')
 const HOOKS_DIR = path.join(__dirname, '..', 'hooks')
 const BASH_GUARD = path.join(HOOKS_DIR, 'guards', 'bash-guard.js')
 const WRITE_GUARD = path.join(HOOKS_DIR, 'guards', 'write-guard.js')
+const AGENT_GUARD = path.join(HOOKS_DIR, 'guards', 'agent-dispatch.js')
 
 // ── fixture：一棵最小项目树 ──────────────────────────────────────────
 const FIXTURE_ROOT = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wd-guard-')))
@@ -346,6 +347,73 @@ ledger(
   check('半路损坏行不影响其余计数', true, ctx.includes('主会话工具调用 15 次') && ctx.includes('派发 1 次'), ctx)
 }
 
+// ── agent-dispatch check 8：name 必须体现插件专用 agent 的身份 ───────
+//
+// 与上面两个 guard 不同，agent-dispatch **始终 exit 0**，判定表达在 stdout 的 JSON 里：
+// deny / 自动补名（updatedInput）/ 静默放行三态，所以不能复用按退出码断言的 bash()。
+//
+// 判据两侧都覆盖：新增 check 8 该拦的三条（本次事故原样在内）、绝不能误杀的十一条，
+// 外加两条旧判据（缺 model / 前缀不符）确认没被 check 8 挤掉。
+function agentVerdict(ti) {
+  const r = spawnSync('node', [AGENT_GUARD], {
+    input: JSON.stringify({ tool_name: 'Agent', tool_input: ti }),
+    encoding: 'utf8',
+  })
+  const out = (r.stdout || '').trim()
+  if (!out) return { verdict: 'ALLOW', detail: '' }
+  let j
+  try {
+    j = JSON.parse(out)
+  } catch (_) {
+    return { verdict: 'UNPARSABLE', detail: out.slice(0, 200) }
+  }
+  const hso = j.hookSpecificOutput || {}
+  if (hso.permissionDecision === 'deny') {
+    return { verdict: 'DENY', detail: String(hso.permissionDecisionReason || '').slice(0, 200) }
+  }
+  if (hso.updatedInput) return { verdict: 'AUTONAME', detail: hso.updatedInput.name }
+  return { verdict: 'ALLOW', detail: '' }
+}
+
+function agent(label, ti, expect) {
+  const r = agentVerdict(ti)
+  check(`agent-dispatch: ${label}`, expect, r.verdict, r.detail)
+  return r
+}
+
+const AD_BASE = { model: 'sonnet', description: '排查登录超时' }
+const ad = (over) => Object.assign({}, AD_BASE, over)
+
+// 该拦：subagent_type 含冒号（插件专用 agent），name 不含任何身份词
+agent('本次事故原样 dbg vs debug-keeper', ad({ name: 'sonnet-dbg-open-audit', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+agent('chore-keeper 身份丢失', ad({ name: 'sonnet-ledger-tidy', subagent_type: 'task-keeper:chore-keeper' }), 'DENY')
+agent('cavecrew-reviewer 身份丢失', ad({ name: 'sonnet-check-diff', subagent_type: 'caveman:cavecrew-reviewer' }), 'DENY')
+
+// 不得误杀：含任一身份词即可，位置与大小写不限
+agent('带全身份词', ad({ name: 'sonnet-debug-keeper-open-audit', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('只带尾词 keeper', ad({ name: 'sonnet-open-audit-keeper', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('只带首词 debug', ad({ name: 'sonnet-debug-open-audit', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('大小写不敏感', ad({ name: 'sonnet-Debug-Audit', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('下划线分隔', ad({ name: 'sonnet_keeper_audit', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('内建 Explore 不校验', ad({ name: 'sonnet-find-auth-refs', subagent_type: 'Explore' }), 'ALLOW')
+agent('内建 general-purpose 不校验', ad({ name: 'sonnet-fix-login', subagent_type: 'general-purpose' }), 'ALLOW')
+agent('无 subagent_type 不校验', ad({ name: 'sonnet-fix-login' }), 'ALLOW')
+agent('通用词滤空后跳过 foo:use', ad({ name: 'sonnet-do-thing', subagent_type: 'foo:use' }), 'ALLOW')
+agent('fpf:fpf-agent 滤掉 agent 只剩 fpf', ad({ name: 'sonnet-fpf-hypothesis', subagent_type: 'fpf:fpf-agent' }), 'ALLOW')
+agent('plugin-validator 命中 plugin', ad({ name: 'sonnet-validate-plugin-json', subagent_type: 'plugin-dev:plugin-validator' }), 'ALLOW')
+
+// 旧判据仍然生效
+agent('旧判据: 缺 model 仍 deny', { name: 'sonnet-debug-keeper-x', description: 'x', subagent_type: 'task-keeper:debug-keeper' }, 'DENY')
+agent('旧判据: 前缀与 model 不符仍 deny', { model: 'opus', name: 'sonnet-debug-keeper-x', description: 'x', subagent_type: 'task-keeper:debug-keeper' }, 'DENY')
+
+// 自动补名路径：补出来的名字自己必须满足 check 8，否则等于补了个 guard 不放行的形态
+for (const [label, desc] of [['中文 description', '排查登录超时'], ['ASCII description', 'triage open bugs']]) {
+  const r = agent(`缺 name 自动补(${label})`, { model: 'sonnet', description: desc, subagent_type: 'task-keeper:debug-keeper' }, 'AUTONAME')
+  if (r.verdict === 'AUTONAME') {
+    check(`agent-dispatch: 自动名含身份词(${label})`, true, /debug|keeper/i.test(r.detail), r.detail)
+  }
+}
+
 // ── 收尾 ────────────────────────────────────────────────────────────
 fs.rmSync(FIXTURE_ROOT, { recursive: true, force: true })
 
@@ -356,9 +424,13 @@ if (failures.length === 0) {
 }
 
 console.log(`✗ guard 回归 ${pass}/${total} 通过，${failures.length} 条失败：\n`)
+// agent-dispatch 的用例断言的是字符串判定（DENY / ALLOW / AUTONAME）与布尔，
+// 不是退出码；直接套 BLOCK/PASS 映射会把 'DENY' 显示成 'PASS'，反向误导。
+const verdictLabel = (v) => (v === BLOCK ? 'BLOCK' : v === PASS ? 'PASS' : String(v))
+
 for (const f of failures) {
-  const want = f.expect === BLOCK ? 'BLOCK' : 'PASS'
-  const got = f.actual === BLOCK ? 'BLOCK' : 'PASS'
+  const want = verdictLabel(f.expect)
+  const got = verdictLabel(f.actual)
   console.log(`  [want ${want} got ${got}] ${f.label}`)
   if (f.detail) console.log(`      ${f.detail}`)
 }
