@@ -8,9 +8,9 @@
 #
 # 【文件结构】本文件是入口，只负责：算路径变量、source 共享 helper
 #   （lib/harness.sh）、按固定顺序 source 每个 H 节的用例文件
-#   （cases/01-... 到 cases/14-...）、最后汇总 pass/fail。可移植性约束
+#   （cases/01-... 到 cases/15-...）、最后汇总 pass/fail。可移植性约束
 #   （mktemp 模板、不用 sed -i、python3 写死路径、日期不写字面量）随 helper
-#   实现一起搬进了 lib/harness.sh，此处不再重复。14 个用例文件与下面
+#   实现一起搬进了 lib/harness.sh，此处不再重复。15 个用例文件与下面
 #   source 列表逐一对应，新增/调整用例节时两处要一起改。
 #
 # 【来源】本文件搬迁自 radnove-core 插件的
@@ -57,6 +57,12 @@
 #   路由注入、自动归档），radnove-core 里没有对应实现，故不是「搬迁」而是
 #   新写。
 #
+# 【2026-08-03 补一节，编号 [67]-[68] 之后接 [69]-[73]】
+#   H19（[67]-[68]，UserPromptSubmit 三岔口分诊注入）已是当时最后一节；随后
+#   `find_queue` 加了「`.keeper/<交付id>/` 已存在但 debug/chore 子目录缺失时
+#   自动补建」的行为（修一个自锁死循环，见 queue_snapshot.py 的 find_queue
+#   docstring），为它单独补一节 H20（[69]-[73]），接着编号，不复用空档。
+#
 # 【测试用真实进程跑，不 mock】直接把 JSON 喂给 hook 脚本的 stdin、断言 stdout，
 #   与 harness 的调用方式完全一致，因此能覆盖 bash 外壳、python 定位、编码等
 #   全链路，而不只是 python 函数。
@@ -102,6 +108,7 @@ source "$TESTS_DIR/cases/11-h16-dual-queue-ids.sh"
 source "$TESTS_DIR/cases/12-h17-auto-archive.sh"
 source "$TESTS_DIR/cases/13-h18-session-start-routing.sh"
 source "$TESTS_DIR/cases/14-h19-userprompt-triage.sh"
+source "$TESTS_DIR/cases/15-h20-queue-autocreate.sh"
 
 echo
 printf '通过 %d / 失败 %d\n' "$pass" "$fail"

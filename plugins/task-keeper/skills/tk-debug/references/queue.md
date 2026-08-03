@@ -401,7 +401,7 @@ prompt 模板，先看下一节按 `difficulty` 分的两条路径。
   结构这类走这条：`Agent` 多传 `name`（必须带模型档次前缀）与
   `run_in_background: true`，并在 prompt 里加一段交互纪律，让它在真正卡住时
   用 `SendMessage` 问 keeper 自己的 name（`<模型档>-debug-keeper`，默认
-  `sonnet-debug-keeper`），而不是自己拍板续做。
+  `opus-debug-keeper`），而不是自己拍板续做。
 
 **为什么这样设计（实测支撑）**：
 
@@ -518,7 +518,7 @@ Agent(
             完全不属于你的职责范围。
             **遇到需要拍板的歧义**（两种改法都说得通、triage 没写清、发现 issue
             描述与代码实际不符）时，**不要猜、不要挑一个继续**：用 `SendMessage`
-            把选项和你的倾向发给 `sonnet-debug-keeper`（派发时替换成 keeper 自己
+            把选项和你的倾向发给 `opus-debug-keeper`（派发时替换成 keeper 自己
             的实际 name；不是 `main`——你是 debug-keeper 派出的
             末层 fixer，禁止再派任何 subagent；只有 debug-keeper 判断这个歧义超出它自己
             权限时才会再走 §12 待拍板协议转交给用户），等它拍板。等待期间你会被
@@ -579,6 +579,12 @@ triage 结论仍有疑问（比如截图转录不够精确、怀疑现象已经�
    回主分支后 debug-keeper 的统一实测（§6「合并后统一实测」）来判定。
 
 ### 模型分层
+
+**本表只管第二层，不适用于 keeper 自己。** debug-keeper 固定跑 `opus`
+（`agents/debug-keeper.md` frontmatter 写死，理由见该文件 §0），因为它的活是「判错一次
+由整条流水线承担代价」的调度判断。**这个档不向下传染**：keeper 派 fixer 时按下表从
+`sonnet` 起选档，**不要因为「keeper 自己是 opus」就给 fixer 一律开 `opus`**——那是预防性
+堆模型，白烧额度且不提高修复质量。
 
 | difficulty × 场景 | 派发 |
 |---|---|

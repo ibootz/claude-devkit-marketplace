@@ -44,6 +44,11 @@ v2 的注入体有五个分组：在飞 / 待调度 / 已 triage 待登记 / 待
 唯一例外：项目里有 v3（`.keeper/debug/issues/`）或 v2（`.debug/issues/`）布局的
 旧队列时，注入一句迁移提示——否则用户看到的只是「队列消失」且无从归因。
 判据是目录存在性，纯机械。
+
+**2026-08-03 起这条保证的判据边界收窄到 `.keeper/` 顶层**：`.keeper/<交付id>/debug/`
+缺失但 `.keeper/` 顶层已存在时，`find_queue` 会自动补建它（连同 `chore/` 一起），
+不再直接 return——真正维持「未启用项目零成本」的判据变成 `.keeper/` 顶层是否
+存在，细节见下方 `find_queue` docstring「为什么自动补建」。
 """
 import json
 import os
@@ -81,7 +86,8 @@ GITIGNORE_SWALLOW = {".keeper/", ".keeper", "/.keeper/", "/.keeper", ".keeper/**
 GITIGNORE_WANT = (".keeper/**/worktree/", ".keeper/**/*.png", ".keeper/**/*.jpg")
 
 # bug 报告特征词。命中即追加 register-first 提醒。
-# 只在队列目录已存在（= 该项目显式 opt-in）时生效，避免污染其他项目。
+# 只在 `.keeper/` 顶层已存在（= 该项目显式 opt-in）时生效，避免污染其他项目；
+# debug 子目录本身由 find_queue 自动补建，不再是 opt-in 判据。
 BUG_HINTS = re.compile(
     r"报个?\s*bug|有个问题|报错|白屏|崩了|崩溃|挂了|不生效|没反应|点了没|"
     r"显示不对|数据不对|对不上|异常|失败了|错位|乱码|卡住|加载不出|"
@@ -105,7 +111,7 @@ def wt_id_re():
 # ────────────────────────── 定位 ──────────────────────────
 
 def find_queue(start, spec):
-    """定位本 worktree 的 debug 队列目录，找不到返回 None。
+    """定位本 worktree 的队列目录；`.keeper/` 已存在但该队列子目录缺失时**自动补建**。
 
     **v4 起委托给 `keeper_paths`，本文件不再自带一份根解析**。v3 这里是「向上找
     `<dir_name>/<item_dir>/`、遇 `.git` 停」，而 linked worktree 根自己就有一个
@@ -115,11 +121,72 @@ def find_queue(start, spec):
 
     同一份判据当时有三份实现（本文件、`keeper_routing.py`、`archive_done.py`），
     且第三份不检查 `.git`、会一路走到文件系统根。合并成一份就是为了消掉这个。
+
+    ## 为什么自动补建（2026-08-03 加，修一个自锁死循环）
+
+    v4 这里是 `return qd if qd and os.path.isdir(qd) else None`——队列子目录不存在
+    就零输出。**这让缺失的那条队列永远无法被启用**，实测证据：某交付的
+    `.keeper/<did>/` 下只有 `debug/` 与 `decisions/`，`chore/` 从未被创建，全仓
+    零个 `CHR-*`，而 `debug/` 有 15 open + 69 archived。死循环是：
+
+        chore/ 不存在 → 本函数返回 None → 快照与「⚠ 本轮疑似杂务」提醒零输出
+        → 主会话没有任何机械信号提示它转发 → 杂务被就地做掉 → chore-keeper
+        从未被 `Agent` 真正派出 → 它冷启动里那句 mkdir 永无机会执行 → 回到第一步
+
+    补建的判据是**纯 `isdir`、不猜语义**：`keeper_paths.queue_dir()` 返回非 None
+    已经等价于 `<worktree 根>/.keeper/` 存在（见 `keeper_paths.find_keeper_root`
+    的 opt-in 语义），所以**未启用 task-keeper 的项目不会被凭空造目录**，零成本
+    保证不变。建出来是空目录，git 不跟踪空目录，因此不产生任何 `git diff`——这是
+    这个副作用可以接受的前提。本函数所在的调用路径本来就带写副作用
+    （`write_back=True` 会写 `.keeper-active`），补建不引入新性质。
+
+    **fixer worktree 里不补建**，与下方 `write_index` 同一条「fixer 侧只读不写」
+    原则：v4 起 `keeper_paths` 会从 fixer 回溯到 delivery worktree，在那边建目录
+    等于让 fixer 的 hook 去改 delivery 的工作区。此时行为与改动前一致（返回
+    None、零输出），没有退化。
+
+    **补建时 debug 与 chore 一起建，不只建自己那个**——见
+    `_sibling_queue_names` 的 docstring，只建自己会在补建当轮重复注入待拍板计数。
     """
     if keeper_paths is None:
         return _legacy_find_queue(start, spec)
     qd = keeper_paths.queue_dir(start, spec, write_back=True)
-    return qd if qd and os.path.isdir(qd) else None
+    if not qd:
+        return None                      # `.keeper/` 不存在 = 项目未 opt-in
+    if os.path.isdir(qd):
+        return qd
+    if in_fixer_worktree(start):
+        return None                      # fixer 侧只读不写
+    delivery_root = os.path.dirname(qd)
+    for name in _sibling_queue_names():
+        try:
+            os.makedirs(os.path.join(delivery_root, name), exist_ok=True)
+        except Exception:
+            pass                         # 只读挂载等场景：静默降级
+    return qd if os.path.isdir(qd) else None
+
+
+def _sibling_queue_names():
+    """补建时要一起建的队列子目录名（`debug` 与 `chore`）。
+
+    **为什么两个一起建**：`plugin.json` 的 UserPromptSubmit 里 debug 快照**先于**
+    chore 快照执行，而 debug 侧「是否代为注入待拍板计数」的判据是
+    `os.path.isdir(<交付>/chore)`（见本文件 `render_injection` 之后那段）。若补建
+    时只建自己那个，debug 那轮跑完时 `chore/` 仍不存在 → debug 判 chore 未启用、
+    代为注入一次 → 紧随其后的 chore 快照发现自己目录被建好了、又注入一次，同一轮
+    重复两行。两个一起建，debug 快照跑完时 `chore/` 已在，那个判据自然归位。
+
+    名字从 `QueueSpec.dir_name` 取而不是写字面量——它的信源是 `queue_files.py`，
+    v3→v4 改过一次语义（v3 是 `.keeper/debug` 相对路径，v4 只是子目录名）。顶层
+    import 失败（`DEBUG is None`）时退回字面量：补建成功比取值精确更重要，少建一个
+    目录会让那条队列继续困在死循环里。
+    """
+    try:
+        from queue_files import CHORE
+        names = [DEBUG.dir_name, CHORE.dir_name]
+    except Exception:
+        names = ["debug", "chore"]
+    return [n for n in names if n]
 
 
 def _legacy_find_queue(start, spec):
@@ -378,7 +445,7 @@ def main():
     if found is None:
         for hint in legacy_hints(cwd):
             print(hint)
-        return  # 未启用 debug 队列的项目：零成本静默退出
+        return  # 未启用 task-keeper（无 .keeper/）或在 fixer worktree 里：零成本静默退出
     queue_dir = str(found)
 
     # fixer worktree 里**只读不写**：那份队列是随分支 checkout 出来的副本。
@@ -405,7 +472,10 @@ def main():
             "物理隔离并行；合并前用 `git diff --stat` 与 receipts 申报清单对账。"]
 
     # 待拍板计数兜底：正常由 chore 快照注入；chore 未启用（chore 目录不存在）时
-    # 这里代注。两边判据是同一个目录的存在性，不会重复注入。
+    # 这里代注。两边判据是同一个目录的存在性，不会重复注入。**自动补建后 chore
+    # 目录恒存在**，这条兜底分支实际只在 fixer worktree（find_queue 在那里不补建）
+    # 或补建失败（如只读挂载）时才会走到，见 `find_queue` 与 `_sibling_queue_names`
+    # 的 docstring。
     # 注意 v4 的层级：queue_dir = <keeper_root>/<交付id>/debug，decisions 与 chore
     # 都是它的**兄弟**，所以 delivery_root 只上溯一级，keeper_root 上溯两级。
     try:

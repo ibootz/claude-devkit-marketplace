@@ -129,18 +129,23 @@ cp "<照抄来的源路径>" "$DST"
 
 **本会话首次**（还没派过 keeper）用 `Agent` 工具派出，必须固定 `name`。
 
+**`model` 固定 `"opus"`，不按 bug 看起来难不难来下调。** keeper 是第一层调度者，它做的
+triage 打分、落点行区间、同根因判定、对账三件套误报识别，判错一次的返工成本由后面整条
+流水线承担（理由详见 `agents/debug-keeper.md` §0）。**第二层才分档**——keeper 派 fixer
+时按 `difficulty` 从 `sonnet` 起选，见 `references/queue.md` §4「模型分层」。
+
 **`name` 的形态是 `<模型档>-debug-keeper`，三段，不加任何多余前后缀**——模型段必须
-与同一次调用的 `model` 一致（`model: "sonnet"` → `sonnet-debug-keeper`；换 `opus`
-派就是 `opus-debug-keeper`，此后 `SendMessage` 的 `to` 同步换）。不要写成
+与同一次调用的 `model` 一致，所以默认就是 `opus-debug-keeper`（`model: "opus"` →
+`opus-debug-keeper`；万一改用别的档派，此后 `SendMessage` 的 `to` 同步换）。不要写成
 `debug-keeper`（缺模型段，会被 `working-discipline` 的 `agent-dispatch` 门禁拦下），
-也不要写成 `sonnet-task-keeper-debug-queue-manager` 这类带额外修饰的长名。
+也不要写成 `opus-task-keeper-debug-queue-manager` 这类带额外修饰的长名。
 
 ```
 Agent(
   subagent_type: "task-keeper:debug-keeper",   # 若该 subagent_type 不可用则退回 "general-purpose"
-  name: "sonnet-debug-keeper",
+  name: "opus-debug-keeper",
   description: "debug 队列常驻管理",
-  model: "sonnet",
+  model: "opus",
   run_in_background: true,
   prompt: "【目标】接管本项目 debug 队列，按 agents/debug-keeper.md 的流程处理下述
             bug 报告，包括你自己直接调用 Agent 工具并行派发第二层 fixer subagent。\n
@@ -163,7 +168,7 @@ Agent(
 
 ```
 SendMessage(
-  to: "sonnet-debug-keeper",
+  to: "opus-debug-keeper",
   summary: "新增 bug 报告",
   message: "用户原话逐字如下：\n<原话>\n截图：<_inbox 路径> / 转录：<文字转录>"
 )

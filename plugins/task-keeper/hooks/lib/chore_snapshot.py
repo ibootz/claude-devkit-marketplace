@@ -9,9 +9,17 @@
 
 判据与存储层全部复用 queue_files.py 的 CHORE spec，不复制第二份实现。
 
-零成本保证：当前 worktree 根下没有 `.keeper/<交付id>/chore/` 就直接 return，
-stdout 全空。待拍板计数（decision_inbox）随本快照注入；debug 快照只在 chore
-未启用时代为注入，两边不重复（判据：`<交付>/chore` 目录存在性）。
+零成本保证：当前 worktree 根下没有 `.keeper/`（= 项目未启用 task-keeper）就直接
+return，stdout 全空。**`.keeper/` 已存在但 `<交付id>/chore/` 缺失时不再零输出**
+——2026-08-03 起 `find_queue` 会自动补建该目录（连同 `debug/` 一起），理由见
+`queue_snapshot.py` 的 `find_queue` docstring「为什么自动补建」：旧行为让缺失的
+那条队列永远无法启用（零输出 → 主会话收不到提醒 → keeper 从不被派出 → 它冷启动
+里那句 mkdir 永不执行 → 目录继续不存在）。
+
+待拍板计数（decision_inbox）随本快照注入；debug 快照只在 chore 未启用时代为注入，
+两边不重复（判据：`<交付>/chore` 目录存在性）。**自动补建后这个判据恒为「chore
+已启用」**，所以待拍板计数稳定由本文件注入、debug 侧不再代劳；补建当轮也不会重复，
+因为 `find_queue` 把 `debug/` 与 `chore/` 一起建（见 `_sibling_queue_names`）。
 
 v4 起路径改为 `<worktree 根>/.keeper/<交付id>/chore/CHR-NNN/item.md`，根解析与
 find_queue 全部复用 queue_snapshot 那份（它已委托给 keeper_paths）。
@@ -42,7 +50,8 @@ def sibling_chore_dirs(queue_dir):
     except Exception:
         return []
 
-# 杂务特征词。命中即追加 register-first 提醒（只在队列已存在 = 项目 opt-in 时生效）。
+# 杂务特征词。命中即追加 register-first 提醒（只在 `.keeper/` 顶层已存在 = 项目
+# opt-in 时生效；chore 子目录本身由 find_queue 自动补建，不再是 opt-in 判据）。
 CHORE_HINTS = re.compile(
     r"记一下|记个账|台账|沉淀|归档一下|收尾|整理一下|补个文档|补一下文档|"
     r"同步到|登记一下|回头做|之后做|别忘了",
@@ -89,7 +98,7 @@ def main():
         return
     found = find_queue(cwd, CHORE)
     if found is None:
-        return  # 未启用 chore 队列：零成本静默退出
+        return  # 未启用 task-keeper（无 .keeper/）或在 fixer worktree 里：零成本静默退出
     queue_dir = str(found)
 
     try:

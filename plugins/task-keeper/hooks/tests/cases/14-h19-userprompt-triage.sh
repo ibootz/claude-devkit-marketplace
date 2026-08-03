@@ -2,8 +2,9 @@
 # user-prompt-submit）。依赖 harness.sh 的 newtmpdir/mkissue/run_triage/
 # ok/bad/has。
 # 本文件由 run-tests.sh source 执行，不要单独 `bash` 它。
-# 【节间耦合】无——本文件自成一体，不依赖其他 case 文件留下的变量或函数；
-# 这是全部 14 个用例文件里的最后一个，收尾后交回 run-tests.sh 打印汇总。
+# 【节间耦合】无——本文件自成一体，不依赖其他 case 文件留下的变量或函数。
+# 2026-08-03 前是全部用例文件里的最后一个；之后补了 15-h20-queue-autocreate.sh，
+# 收尾与汇总现在交给它之后的 run-tests.sh。
 
 echo
 echo "== H19 · UserPromptSubmit 三岔口分诊注入（keeper_routing.py --event user-prompt-submit）=="

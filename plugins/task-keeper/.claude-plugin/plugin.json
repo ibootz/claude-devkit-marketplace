@@ -1,6 +1,6 @@
 {
   "name": "task-keeper",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "常驻 keeper 子代理托管 debug/杂务队列 - 队列跟随交付 worktree 入库、自动归档，决策打包 HITL，细节见 README",
   "author": {
     "name": "zhangq"

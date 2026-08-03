@@ -13,12 +13,15 @@ T="$(newtmpdir)"; : > "$T/.git"
 OUT="$(run_hook "$T" '报错了，白屏')"
 if [ -z "$OUT" ]; then ok "无队列项目零输出（含 bug 特征词也不注入）"
 else bad "无队列应零输出" "空" "$OUT"; fi
-# 只有 .keeper/ 根目录、还没建出 <交付id>/debug/ 也算未启用——v4 的 opt-in 判据是
-# .keeper/<交付id>/debug 这一层的存在性（keeper_paths.queue_dir），不是 .keeper/ 本身
+# 只有 .keeper/ 根目录、还没建出 <交付id>/debug/ ——2026-08-03 起 opt-in 判据收窄到
+# .keeper/ 顶层本身（keeper_paths.find_keeper_root），不再是 <交付id>/debug 这一层：
+# find_queue 会自动补建缺失的 debug/（连同 chore/），不再零输出。完整场景矩阵见
+# 15-h20-queue-autocreate.sh；这里只保留「已启用 .keeper/ 时不再是零输出」这一条，
+# 与上面「.keeper/ 完全不存在才零输出」形成对照，不重复 15 的补建细节断言。
 mkdir -p "$T/.keeper"
 OUT="$(run_hook "$T" '继续')"
-if [ -z "$OUT" ]; then ok "有 .keeper/ 但无 <交付id>/debug/ 仍视为未启用"
-else bad "应零输出" "空" "$OUT"; fi
+if [ -n "$OUT" ]; then ok "有 .keeper/ 但无 <交付id>/debug/ 视为已启用（自动补建，不再零输出）"
+else bad "应有输出（debug/ 应被自动补建）" "非空" "$OUT"; fi
 rm -rf "$T"
 
 echo "[2] 分桶：open 列出、done 只给计数"

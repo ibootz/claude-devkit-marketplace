@@ -60,7 +60,8 @@ NOT_ENABLED = (
     "task-keeper 未在本项目启用（无 .keeper/ 目录）。启用后可把 bug 转常驻 "
     "debug-keeper、杂务转 chore-keeper 托管，主会话只做分诊转发。启用："
     "`mkdir -p .keeper/$(basename $(git rev-parse --show-toplevel))/debug`"
-    "（debug 队列，非交付 worktree 用 `_main` 代替 basename）或同级 `chore`。")
+    "（非交付 worktree 用 `_main` 代替 basename）。只需建这一个，"
+    "同级 `chore/` 由每轮 hook 自动补建，不必手工创建。")
 
 # 每轮注入：只放与 system prompt 默认行为对立的部分。改这段前先读模块头
 # 「为什么分两层」——往里加静态参考会让每轮成本白涨且稀释对抗力。

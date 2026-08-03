@@ -2,7 +2,7 @@
 name: tk-chore
 description: 主会话把杂务（台账/沉淀/收尾/外部系统小操作）转交常驻 chore-keeper subagent 托管的最小流程：判断是杂务 → 逐字转发 → 回原任务。登记、分类、攒批执行、外部写打包拍板、归档全部由 chore-keeper 在独立上下文完成，主会话不亲手做杂务。队列落盘 `.keeper/chore/`（整树 gitignore，不入库）。
 when_to_use: |
-  用户说"记一下 / 记个账 / 台账加一条"、"这个结论沉淀到文档 / 同步到 wiki"、"回头收尾 / 别忘了清理"、"帮我提个单 / 发个通知（非 bug 类）"，或任何不改核心代码、不修 bug、可以攒着批量做的琐碎事务。bug / 报错 / 异常行为不走这里——那是 tk-debug 的 debug-keeper 管的。
+  用户说"记一下 / 记个账 / 台账加一条"、"这个结论沉淀到文档 / 同步到 wiki"、"回头收尾 / 别忘了清理"、"帮我提个单 / 发个通知（非 bug 类）"，或任何不改核心代码、不修 bug、可以攒着批量做的琐碎事务。**禁止主会话亲手做掉杂务，哪怕它看起来 30 秒就能完**——「顺手做更快」正是本机制要消除的行为：就地做完的杂务只活在本轮上下文里，compact 一次就没了，也没有任何跨 session 的恢复锚点。bug / 报错 / 异常行为不走这里——那是 tk-debug 的 debug-keeper 管的。
 ---
 
 # tk-chore：主会话侧的杂务转交流程
@@ -20,24 +20,28 @@ when_to_use: |
 
 首次（本会话还没有 chore-keeper 在跑时）：
 
+**`model` 固定 `"opus"`，不按杂务看起来多小来下调。** 杂务本身粒度小，但 keeper 要判的是
+外部写红线（判漏一次就是未授权写入外部系统）、共享工作区让位、决策打包，判错代价与活的
+体量无关（理由详见 `agents/chore-keeper.md` §0）。它派的只读 `Explore` 才用 `sonnet`。
+
 **`name` 的形态是 `<模型档>-chore-keeper`，三段，不加任何多余前后缀**——模型段必须
-与同一次调用的 `model` 一致（`model: "sonnet"` → `sonnet-chore-keeper`；换 `opus`
-派就是 `opus-chore-keeper`，此后 `SendMessage` 的 `to` 同步换）。不要写成
+与同一次调用的 `model` 一致，所以默认就是 `opus-chore-keeper`（`model: "opus"` →
+`opus-chore-keeper`；万一改用别的档派，此后 `SendMessage` 的 `to` 同步换）。不要写成
 `chore-keeper`（缺模型段，会被 `working-discipline` 的 `agent-dispatch` 门禁拦下），
-也不要写成 `sonnet-task-keeper-chore-queue-manager` 这类带额外修饰的长名。
+也不要写成 `opus-task-keeper-chore-queue-manager` 这类带额外修饰的长名。
 
 ```
 Agent(
-  name: "sonnet-chore-keeper",
+  name: "opus-chore-keeper",
   subagent_type: "task-keeper:chore-keeper",   // 插件 agent；不可用时退 general-purpose 并把 agents/chore-keeper.md 全文放进 prompt
   description: "chore 队列常驻管理",
-  model: "sonnet",
+  model: "opus",
   run_in_background: true,
   prompt: "<用户原话逐字> + 项目根绝对路径"
 )
 ```
 
-之后一律 `SendMessage(to: "sonnet-chore-keeper", message: "<用户原话逐字>")` 唤醒——
+之后一律 `SendMessage(to: "opus-chore-keeper", message: "<用户原话逐字>")` 唤醒——
 keeper 上下文跨唤醒保留，重新 Agent 派出会丢掉它已有的队列认知。
 
 ## 主会话的边界（禁止越位）

@@ -21,14 +21,19 @@
 #   一个故障不拖累另一个。核心逻辑都有回归测试（hooks/tests/run-tests.sh）。
 #
 # 【零成本保证（重要）】
-#   本 hook 随插件装到**所有**项目、**每轮**触发。因此：从 cwd 向上（到 .git
-#   当前 worktree 根下没有 .keeper/<交付id>/debug/ 目录时，python 侧直接 return，stdout
-#   全空，等价于本 hook 不存在。唯一例外是检测到旧版 .debug/issues/（radnove
-#   布局）时注入一句迁移提示——否则升级用户会看到「队列消失」且无从归因。
+#   本 hook 随插件装到**所有**项目、**每轮**触发。当前 worktree 根下没有 `.keeper/`
+#   目录时（= 项目未启用 task-keeper），python 侧直接 return，stdout 全空，等价于
+#   本 hook 不存在。唯一例外是检测到旧版 `.debug/issues/`（radnove-core 布局）时
+#   注入一句迁移提示——否则升级用户会看到「队列消失」且无从归因。
 #
-# 【启用方式】`mkdir -p .keeper/<交付id>/debug`（交付 id = worktree 根 basename，
-#   非交付 worktree 用 _main；文件格式见
-#   skills/tk-debug/references/queue.md §2）。删掉该目录即自动停用。
+# 【启用方式】只要 `.keeper/` 顶层存在（哪怕只建过 chore/），`.keeper/<交付id>/debug/`
+#   由 `find_queue` 每轮**自动补建**，不需要手工 mkdir——判据见
+#   `lib/queue_snapshot.py` 的 `find_queue` docstring「为什么自动补建」。整个项目
+#   要启用 task-keeper 仍需先手工建一次 `.keeper/<交付id>/`（交付 id = worktree 根
+#   basename，非交付用 `_main`；文件格式见 skills/tk-debug/references/queue.md §2）。
+#   fixer worktree 内不补建（与 write_index 同一条「fixer 侧只读不写」原则）。
+#   **停用方式不再是「删掉 debug 目录」**——下一轮就会被补建回来；要停用整个插件请
+#   在设置里禁用它，或删掉整个 `.keeper/`。
 #
 # 【失败策略】注入类 hook 一律静默降级，绝不阻断用户提交：脚本不带 set -e，
 #   python 异常在其 main 外层被吞。唯一例外是 issue 文件读不懂（frontmatter
