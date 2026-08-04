@@ -19,16 +19,31 @@
 //    但退出结果不受影响：exit code 被 Ps() 的 try/catch 吞掉，超时也只是 abort 掉它
 // 4. 任何异常都 exit 0：清理是尽力而为，绝不能让清理失败阻断会话关闭
 //
-// 【必须在 plugin.json 里声明 timeout（否则每次退出都报 Hook cancelled）】
+// 【本脚本必须在 1.5s 内退出，且 plugin.json 的 timeout 帮不上忙】
 // CC 2.1.220 的退出流程 Ps() 给全部 SessionEnd hook 一个共享预算：
 //   await n(t, {...r, signal: AbortSignal.timeout(getSessionEndHookTimeoutMs())})
-// 该预算 = 所有 SessionEnd hook 声明的最大 timeout，都没声明就落到下限 1500ms
-// （二进制常量 M$o=1500 / 上限 PFy=60000）。超时不是"脚本失败"，是 ABORT_ERR，
-// 用户看到的字面量就是 "Hook cancelled"。
-// 实测（2026-08-02，macOS）：close --all 0.036s，doctor 1.641s，合计 1.63s > 1.5s，
-// 于是每次关闭 CC 必报一次——尽管 close --all 早已跑完、清理其实是成功的。
-// 故 plugin.json 的这条 hook 声明了 "timeout": 15，同时覆盖下面两次 execSync 各 5s
-// 的最坏情况。改动本文件里的命令数量或 TIMEOUT_MS 时，同步复核那个 15 还够不够。
+// 超时不是"脚本失败"，是 ABORT_ERR，用户看到的字面量就是 "Hook cancelled"。
+//
+// 该预算的计算函数（二进制里的 kcn）**只扫两处来源，都不含插件清单**：
+//   function kcn(){let e=Z.CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS;if(e!==void 0&&e>0)return e;
+//     let t=0,r=J0()?[]:Wne()?.SessionEnd??[],n=[...Fie()?.SessionEnd??[],...r];
+//     for(let o of n)for(let i of o.hooks)if(i.timeout&&i.timeout*1000>t)t=i.timeout*1000;
+//     return Math.max(M$o,Math.min(t,PFy))}          // M$o=1500 下限 / PFy=60000 上限
+// Fie() 取 initialHooksConfig ← pas() ← us().hooks（settings.json 合并结果）；
+// Wne() 取 mainThreadAgentHooks。**plugin.json 里声明的 timeout 两处都读不到**，
+// 于是 t=0、预算恒为下限 1500ms。1.1.1 曾据"声明 timeout: 15 即可"修过一次，
+// 那个前提是错的——15 一直没生效，每次退出照样报 Hook cancelled。
+//
+// 实测（2026-08-02 / 2026-08-04 复测，macOS，CC 2.1.220）：
+//   close --all 0.036s，doctor 1.6s，两条同步跑合计 1.69s > 1.5s → 必报。
+// 故 1.1.2 起 doctor 改为 detached spawn 后台放飞（见 runDetached），本脚本
+// 同步部分只剩 close --all，实测总耗时 < 0.1s，远低于 1.5s 下限。
+//
+// 改动本文件时守住这条：**同步执行的命令总耗时必须 < 1.5s**。新增耗时命令一律
+// 走 runDetached，不要靠调 plugin.json 的 timeout 或 TIMEOUT_MS 解决——前者无效，
+// 后者只管单条 execSync 自己的上限、管不了共享预算。
+// （另一条出路是在 settings.json 的 env 里设 CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS，
+//   见 kcn 首行；但那要每台机各配一次，插件侧不该依赖它。）
 //
 // 【可关闭】
 // 设环境变量 AGENT_BROWSER_AUTOCLEAN=off 可禁用本钩子（仍可手动 agent-browser close --all）
@@ -38,13 +53,14 @@
 
 'use strict'
 
-const { execSync } = require('child_process')
+const { execSync, spawn } = require('child_process')
 
 const TIMEOUT_MS = 5000
 
-function runQuiet(cmd) {
+// 同步执行：只给必须在本脚本退出前完成的命令用（当前仅 close --all，0.036s）
+function runQuiet(cmd, args) {
   try {
-    execSync(cmd, {
+    execSync([cmd, ...args].join(' '), {
       timeout: TIMEOUT_MS,
       stdio: ['ignore', 'ignore', 'ignore'], // 全静默，不污染 SessionEnd
       encoding: 'utf8',
@@ -52,6 +68,24 @@ function runQuiet(cmd) {
     return true
   } catch (_) {
     return false // CLI 未装 / daemon 未起 / 超时 / 任何错误 —— 一律视为"已尽力"
+  }
+}
+
+// 后台放飞：脱离本进程继续跑，本脚本立刻退出，不占共享预算的 1.5s
+// detached + unref 让子进程改属 init（PPID=1）而非等本进程；stdio 全 ignore
+// 避免它持有本进程的管道（持有则父进程 exit 后 CC 仍可能等 fd 关闭）。
+// 代价：拿不到结果、失败无从得知——所以只放"失败也无所谓"的收尾命令。
+function runDetached(cmd, args) {
+  try {
+    const child = spawn(cmd, args, {
+      detached: true,
+      stdio: 'ignore',
+    })
+    child.on('error', () => {}) // CLI 未装时 spawn 异步抛 ENOENT，不接会打到 stderr
+    child.unref()
+    return true
+  } catch (_) {
+    return false
   }
 }
 
@@ -68,12 +102,14 @@ function main() {
     process.exit(0)
   }
 
-  // 主清理：关掉所有活动实例（cross-session 或phans 唯一手段）
-  runQuiet('agent-browser close --all')
+  // 主清理：关掉所有活动实例（cross-session orphans 唯一手段）
+  // 同步执行——这是本钩子的核心目的，必须在退出前落地。实测 0.036s
+  runQuiet('agent-browser', ['close', '--all'])
 
   // 兜底：清理残留的 daemon sidecar 文件（stale socket/pid）
   // doctor 不带 --fix 是只读诊断 + 自动清 sidecar，安全
-  runQuiet('agent-browser doctor')
+  // 后台放飞——实测 1.6s，同步跑会撞破 1.5s 共享预算报 Hook cancelled（见文件头）
+  runDetached('agent-browser', ['doctor'])
 
   process.exit(0)
 }

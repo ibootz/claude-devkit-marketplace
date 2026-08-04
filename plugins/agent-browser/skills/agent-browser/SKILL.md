@@ -107,7 +107,7 @@ agent-browser doctor                     # 清理残留 daemon sidecar 文件（
 | 层 | 时机 | 机制 | 强制度 |
 |----|------|------|--------|
 | **L1 主动关闭** | 每个任务结束 | AI 立即 `agent-browser close` | 纪律（SKILL 约束） |
-| **L2 会话兜底** | 会话退出 / `/clear` / resume | 本插件 `SessionEnd` 钩子自动 `close --all` + `doctor`（`hooks/session-end-cleanup.js`） | **强制**（无论 AI 是否记得关） |
+| **L2 会话兜底** | 会话退出 / `/clear` / resume | 本插件 `SessionEnd` 钩子同步跑 `close --all`、并后台放飞 `doctor`（`hooks/session-end-cleanup.js`） | **强制**（无论 AI 是否记得关） |
 | **L3 孤儿扫描** | 会话崩溃 / 压缩后 / CLI 被卸 | `orphan-process-cleaner` 技能场景 4（跨平台，优先 `close --all` 不用 `kill`） | 手动触发 |
 
 **纪律**：
@@ -117,6 +117,7 @@ agent-browser doctor                     # 清理残留 daemon sidecar 文件（
 - **用 `--session <稳定名>` + `--restore`** 让登录态跨会话持久，避免反复登录反复开新实例。
 - **别依赖 daemon 1h idle 自停**：那是最后防线，不是清理策略；`--idle-timeout 0` 还会关掉它。
 - **L2 兜底说明**：SessionEnd **不**在 context 压缩时触发（那是 PreCompact/PostCompact），故压缩后实例会存活到会话真正结束——压缩后若确定不再用浏览器，手动 `close --all`；若会话被 `kill -9` 强杀，钩子也没机会跑，走 L3。设 `AGENT_BROWSER_AUTOCLEAN=off` 可禁用 L2（仍可手动 close）。
+- **L2 的 1.5s 硬预算**：CC 2.1.220 给全部 `SessionEnd` 钩子一个共享超时预算，取自 `settings.json` 的 hooks 与 agent hooks 声明的最大 `timeout`；**插件 `plugin.json` 里的 `timeout` 不在这两处来源内、读不到**，故预算恒为下限 1500ms。超时表现为退出时打印 `SessionEnd hook ... failed: Hook cancelled`（本质是 `AbortSignal` 的 ABORT_ERR，不是脚本报错）。因此改这个钩子时守住：**同步执行的命令总耗时必须 < 1.5s**，耗时命令一律走 `runDetached` 后台放飞（`doctor` 实测 1.6s，1.1.2 起已放飞）。调 `plugin.json` 的 `timeout` 或脚本内 `TIMEOUT_MS` 都解决不了——后者只管单条 `execSync` 自己的上限。
 - guard 会在每次 open/connect 前 run 一次 `session list` 数实例数，≥4 直接拦下并提示先 close。
 
 ## 安全边界（headless 必带）
@@ -201,3 +202,4 @@ agent-browser batch "open <url>" "snapshot -i" "screenshot"
 | 登录页反复跳转 | headless 被风控识别 | 切 `--headed` 让用户协助过验证，或换 stealth 方案 |
 | CFT 起不来 / 强关了用户 Chrome | profile 抢 SingletonLock | 用独立 AI Testing profile，别用日常 Default |
 | context 被单页打爆 | 没限输出 | 加 `--max-output 50000`，snapshot 用 `-c` 紧凑模式 |
+| 每次退出 CC 报 `SessionEnd hook ... failed: Hook cancelled` | L2 钩子同步部分超出 1.5s 共享预算（1.1.1 及更早：`doctor` 同步跑 1.6s） | 升到 ≥1.1.2（`doctor` 已后台放飞）。清理其实成功——`close --all` 早于超时前跑完。仍复现则看是否有别的 `SessionEnd` 钩子拖慢，或按上文「L2 的 1.5s 硬预算」排查 |
