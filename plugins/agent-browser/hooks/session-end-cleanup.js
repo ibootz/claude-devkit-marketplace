@@ -33,6 +33,8 @@
 // Wne() 取 mainThreadAgentHooks。**plugin.json 里声明的 timeout 两处都读不到**，
 // 于是 t=0、预算恒为下限 1500ms。1.1.1 曾据"声明 timeout: 15 即可"修过一次，
 // 那个前提是错的——15 一直没生效，每次退出照样报 Hook cancelled。
+// 1.1.3 已把 plugin.json 里那条死配置删掉，别再往回加：读不到的字段留着只会让下一个
+// 人以为预算被抬高了。真要抬高只有 settings.json 那条 env（见本段末）。
 //
 // 实测（2026-08-02 / 2026-08-04 复测，macOS，CC 2.1.220）：
 //   close --all 0.036s，doctor 1.6s，两条同步跑合计 1.69s > 1.5s → 必报。
