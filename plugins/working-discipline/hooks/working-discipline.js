@@ -1,8 +1,10 @@
 // working-discipline.js — 工作纪律注入 hook
 // 服务三个事件（3.2.0 起投放分层，见下方【3.2.0 投放分层】）：
 //   - SessionStart     ：会话开始与每次 auto-compact 后，注入静态纪律主体（一～六章）
-//   - UserPromptSubmit ：每轮只注入零章（并行优先）+ 4 条自查 + 本轮图片路径
-//   - SubagentStart    ：子代理启动时注入精简纪律（并行/上下文/协作/表达/派发命名/hook 边界）
+//   - UserPromptSubmit ：每轮注入零章（并行优先）+ 派发 Agent 的完整调用形态 + 4 条自查
+//                        + 本轮图片路径
+//   - SubagentStart    ：子代理启动时注入精简纪律（并行/上下文/协作/表达/派发调用形态与
+//                        命名/hook 边界）
 // 同目录另有 dispatch-ledger.js（3.12.0 新增）单挂 UserPromptSubmit，注入本会话的
 // 「主会话工具调用数 / Agent 派发数」现算计数。刻意不并进本文件：本文件是纯静态
 // 文本拼装无 IO，那个要读可能几十 MB 的 transcript JSONL，失败面完全不同。
@@ -258,9 +260,13 @@
 //   for e in SessionStart UserPromptSubmit SubagentStart; do \
 //     echo "{\"hook_event_name\":\"$e\"}" | node hooks/working-discipline.js \
 //     | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).hookSpecificOutput.additionalContext.length))'; done
-//   预算（3.6.0 实测）：SessionStart 7142 守 8000、UserPromptSubmit 1342 守 1600（无图轮）、
-//   SubagentStart 7174 守 8000，三者各自独立受 10000 硬上限约束。3.6.0 净增 +256/0/+256，
-//   来自六章三处如实改写——用准确性换字符，不是没压到。
+//   预算（3.16.0 实测）：SessionStart 8749、UserPromptSubmit 4085（无图轮）、
+//   SubagentStart 9050，三者各自独立受 10000 硬上限约束。
+//   ⚠️ 3.16.0 一度把 SubagentStart 推到 10758、**越过硬上限**——成因是新增的
+//   SECTION_AGENT_CALL 与既有 SECTION_NAMING 的 5.4.1~5.4.3 逐句重合，两份一起注入。
+//   删去重合段后回落到 9050。**加新段前先想清楚它和哪一节重复，别只看新段自身多大。**
+//   这一轮的净变化：每轮层 2034→4085（+2051，用户当面要求把完整调用形态放进每轮），
+//   SessionStart 9398→8749（−649，5.4 压成索引），SubagentStart 7503→9050。
 //   ⚠️ 旧基线 6600 / 1200 是 3.2.0 的实测值，3.3.0 加入 team 模式那大段后早已被突破而未同步，
 //   3.5.0 一并校正。改基线时**同步 README「工作机制速览」里的三行实测值**，别只改这里。
 //   ⚠️ 新增规则前先读 `.claude/rules/hook-restraint.md`（本仓 hook 克制原则）：判据要靠正则
@@ -457,27 +463,27 @@ const SECTION_THINKING = [
   '8. **搬迁 / 重命名专项**：「改了引用声明」≠「实体到位」——删旧引用与建新实体是两个独立动作，只做前者 diff 看着也像完成了搬迁。验证法：逐条确认每个新引用路径在目标位置**真实存在**（`ls` 或 `Read` 到那个文件，不靠推断）。',
 ].join('\n')
 
-// 派发命名规范完整版。**只进子代理版**（子代理启动时注入一次，不是每轮叠加，
+// 派发命名规范的**增量部分**。**只进子代理版**（子代理启动时注入一次，不是每轮叠加，
 // 且它比主会话更可能不知道规范、首次派发就撞 agent-dispatch 的拦截）；
 // 主会话版用下方 SECTION_DISPATCH 里 5.4 的要点索引替代。
+//
+// 【3.16.0 起这里只留增量，不再重复 SECTION_AGENT_CALL 已讲过的】
+// SECTION_AGENT_CALL 现在同时进子代理版，它已覆盖：name 的必填性与 schema 缺字段的成因、
+// 格式与正则、身份词、description 的 3-5 词与禁灌 prompt、同批可辨。原 5.4.1~5.4.3 与它
+// 逐句重合，两份一起注入把子代理版推到 10758 字符、**越过 10000 硬上限**（3.16.0 实测）。
+// 故删去重合段，只保留 SECTION_AGENT_CALL 里没有的四件事：name 作为 SendMessage 寻址键
+// 的复用禁令、prompt 泄露的第二条成因（显示字段留空导致 UI 回落）、Workflow 的命名、
+// 两个 keeper 的固定名与固定档。**改这里前先跑一遍字符数实测**（命令见文件头预算段）。
 const SECTION_NAMING = [
-  '### 5.4 派发命名规范（subagent / teammate / workflow 通用 · 禁止提示词泄露）',
+  '### 5.4 派发命名的补充规范（上一节没讲的部分 · subagent / teammate / workflow 通用）',
   '',
-  '**适用对象**：`Agent` 的 `name` 与 `description`、`TaskCreate` 任务名、teammate 的 `name`、`Workflow` 的 `meta.name` / `meta.description` / `meta.phases[].title` / `meta.phases[].detail` / `agent(prompt, {label})` 的 `label`。下面四条对每个字段都成立。',
+  '**适用对象**：`Agent` 的 `name` 与 `description`、`TaskCreate` 任务名、teammate 的 `name`、`Workflow` 的 `meta.name` / `meta.description` / `meta.phases[].title` / `meta.phases[].detail` / `agent(prompt, {label})` 的 `label`。',
   '',
-  '**5.4.1 `name` 必填——它是 `Agent` schema 里查不到的字段**',
-  '`Agent` 的 JSON Schema 只声明六个 `properties`（`description` / `prompt` / `subagent_type` / `model` / `run_in_background` / `isolation`）且 `additionalProperties: false`，**里面没有 `name`**；但运行时接受它并落盘进 `agent-<id>.meta.json`。照 schema 字段表构造调用必然漏掉它——它对你不是"忘填的必填项"，而是"字段表里不存在的东西"。当硬编码前置记：**凡调 `Agent`，先写 `name`，再写其余字段**。',
-  '两个用途：(a) 在飞面板左列显示它，缺失时回落成裸 `subagent_type`——同批 3 个 `general-purpose` 就是三行一样的字；(b) `SendMessage({to: name})` 的寻址键，**同一会话内不得复用同名**（latest wins，新 agent 占名后旧 agent 只能靠 raw `agentId` 寻址，等于弄丢先派的）。',
-  '格式 `模型名-任务语义`：模型名取 `sonnet` / `opus` / `fable` 之一且与实际 `model` 一致（`haiku-` 已废弃，写了会被拦）；任务语义用英文 kebab-case——`name` 受正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` 约束，只接受 ASCII 字母数字与 `-` `_`，中文或方括号直接被拒。示例：`sonnet-review-login-flow` / `opus-debug-order-race` / `fable-hunt-memleak`。',
-  '**不写 `name` 的后果**：你会拿到 `<model>-<语义>-<prompt 短哈希>` 这类补名（如 `sonnet-explore-a3f1`）——不含任务语义、同批只差哈希，面板上分不出谁在做什么。这是兜底，不是替代。',
-  '**派插件专用 agent 时（`subagent_type` 含冒号，如 `task-keeper:debug-keeper` / `caveman:cavecrew-reviewer`），`name` 还必须带上它的身份词**（`keeper` / `reviewer` / `cavecrew` 等，位置不限、大小写不限，含任一即可）：面板只渲染 `name`、**从不渲染 `subagent_type`**，身份词一丢，用户就看不出这活派给了哪种专用 agent。真实事故：`name="sonnet-dbg-open-audit"` 实际派的是 `debug-keeper`，用户在面板上遍寻不着 keeper，以为根本没托管。合规写法 `sonnet-debug-keeper-open-audit`（**但 `task-keeper` 的两个 keeper 例外——它们的 `name` 被逐字钉死成 `opus-debug-keeper` / `opus-chore-keeper`，不许加任务后缀，见 5.4.5**）。内建 `Explore` / `Plan` / `general-purpose` 不要求带——它们是权限差别，不是常驻身份。',
+  '**5.4.1 `name` 同时是 `SendMessage` 的寻址键——同一会话内不得复用同名**',
+  '两个用途：(a) 在飞面板左列显示它，缺失时回落成裸 `subagent_type`——同批 3 个 `general-purpose` 就是三行一样的字；(b) `SendMessage({to: name})` 按它寻址，**同名 latest wins**——新 agent 占用某个名字后，先派的那个只能靠 raw `agentId` 寻址，等于弄丢了它。所以同一会话里派第二个同类子代理时**必须换个名字**，不要因为"上一个已经结束了"就复用。',
   '',
-  '**5.4.2 `description` 是任务摘要，禁止灌 prompt 原文，也不带模型前缀**',
-  '只写 3-5 词任务摘要，**不带 `[模型名]` 前缀**——模型档次已由 `name` 的前缀体现（两者在在飞面板并排显示，前缀只写一次）。合规示例：`审查登录流程` / `修 order race condition`。例外是 `Workflow` 的 `label`：它在进度树单独显示、没有配对的 `name`，按 5.4.4 仍带 `[模型名]` 前缀。',
-  '**禁止**把 `prompt` 的开头文字、角色设定句、纪律条款、上下文铺陈复制进 `description`。典型错误是写成「你是第 1 层子代理，可派发……」这类 prompt 前缀——一整批面板描述完全同质，既把内部提示词暴露到 UI，又丢掉本该显示的任务信息。两者是独立字段，**不许共用同一段文字**。泄露有两条成因都要防：(a) 主动抄 prompt 原文进 `description` / `label`；(b) 显示字段**留空**导致 UI 回落用 prompt 开头当显示名——所以可选的显示字段（如 `Workflow` 的 `label`）一律**当必填处理**。',
-  '',
-  '**5.4.3 同批并发必须互相可辨**',
-  '同批在飞的多个子代理，`name` 与 `description` 必须一眼区分各自负责什么。只靠数字后缀（`part1` / `part2` / `part3`）看不出任务差异**不合格**——把分片依据写进名字（`sonnet-verdict-spec-01-05`），或在 `description` 里点明范围（`判定 spec 01-05`）。',
+  '**5.4.2 提示词泄露有两条成因，第二条最容易漏**',
+  '(a) 主动把 `prompt` 开头、角色设定句、纪律条款抄进 `description` / `label`——一整批面板描述完全同质，既把内部提示词暴露到 UI，又丢掉本该显示的任务信息；(b) 显示字段**留空**，导致 UI 回落用 `prompt` 开头当显示名。所以标着"可选"的显示字段（如 `Workflow` 的 `label`）一律**当必填处理**。',
   '',
   '**5.4.4 `Workflow` 的命名**',
   '`agent(prompt, {label})` 的 `label` 虽标着可选但**当必填处理**（省略时进度树回落用 prompt 开头当显示名）；它单独显示、无配对 `name`，所以**仍带 `[模型名]` 前缀** + 任务语义（可用中文）。`meta.name` 用 kebab-case：整个 workflow 走一档时加 `模型名-` 前缀，跨档混用时不加。`meta.description` / `meta.phases[].*` 同样禁止粘 prompt 原文——`meta.description` 会出现在权限弹窗里。',
@@ -486,6 +492,73 @@ const SECTION_NAMING = [
   '派 `subagent_type` 为 `task-keeper:debug-keeper` / `task-keeper:chore-keeper` 时，`model` 必须写 `"opus"`，**`name` 只能逐字写 `opus-debug-keeper` / `opus-chore-keeper`**——不加任务后缀、不加短哈希、不加交付 id（`opus-debug-keeper-085` 这类会被 check 10 拦下）。这个名字同时是此后 `SendMessage` 唤醒它的地址：自造过一次就唤醒不到（实测报 `No agent named ... is reachable.`），继而倾向重派第二个实例、两个实例抢同一个 `.keeper/<交付id>/debug/` 的独占写权限。要区分处理的是哪条 issue 靠 `SendMessage` 正文，不靠改名。档位同样**不按 bug 或杂务看起来难不难下调**。它们的 agent 定义里虽已写 `model: opus`，但 `Agent` 调用里显式传的 `model` **优先级高于该 frontmatter、会把它顶掉**，所以档位只能在派发处给对。keeper 是第一层调度者，triage / 去重 / 合并前对账错一次，整条队列跟着错。真实事故：2026-08-03 派出 `{"model":"sonnet","subagent_type":"task-keeper:debug-keeper"}`，命名全合规、档位静默落在 `sonnet`。',
   '',
   '**本节字段由 `guards/agent-dispatch.js` 在 `PreToolUse` 硬校验（8 项，含 5.4.1 那条身份词与 5.4.5 那条固定档），多条违规一次报清**，判据见下方"六、"的 `Agent` 条目。',
+].join('\n')
+
+// ── 派发 Agent 的完整调用形态（2026-08-04 用户当面拍板加）─────────────
+//
+// 【为什么必须给完整示例，而不是继续只写"记得填 name"】
+// 3.12.0 已在检查点②里放了一行紧凑骨架，3.5.0 起每轮自查第 1 条也在提醒「先写 name」。
+// 两者都没拦住：本会话（2026-08-04）主代理 7 次派发里漏 name **7 次**，全部靠
+// agent-dispatch 的自动补名兜底。漏的那几次它刚读过检查点②的骨架。
+//
+// 根因不是"提醒不够响"，是**提醒与构造动作不在同一个形态上**。模型构造工具调用时照的
+// 是工具的 JSON Schema 字段表，而 `Agent` 的 schema 声明了六个 properties 且
+// `additionalProperties: false`，`name` **不在表内**——它对构造过程不是"忘填的必填项"，
+// 是"不存在的字段"。用散文提醒去对抗一张结构化字段表，形态上就不对等。
+// 所以这一节给的是**一个可整体照抄的完整 JSON**：让照抄的对象从 schema 换成它。
+//
+// 【"优先级高于 schema"这句话必须显式写出来】
+// 不写的话，模型看到 schema 的 `additionalProperties: false` 会认为多传 `name` 是非法的，
+// 于是"遵守 schema"与"遵守本纪律"变成一对表面冲突，而 schema 是工具层权威、更容易赢。
+// 显式声明"schema 描述工具层能接受什么，本段规定本会话必须传什么"，冲突就解除了。
+//
+// 【落点：每轮层 + 子代理层，两处共用这一个常量】
+// 每轮层——派发发生在主会话，且必须每轮在场（对抗的是每轮都在的 schema 字段表）。
+// 子代理层——第 1 层子代理可以再派第 2 层，它面对的是同一张 schema。
+// 不进 SessionStart：那份只注入一次，而这段要对抗的东西每轮都在（同零章的理由）。
+const SECTION_AGENT_CALL = [
+  '## 派发 `Agent` 的完整调用形态（**本段优先级高于 `Agent` 工具自带的 JSON Schema**）',
+  '',
+  '**先解除一个表面冲突**：`Agent` 的 JSON Schema 只声明六个 `properties`（`description` / `prompt` / `subagent_type` / `model` / `run_in_background` / `isolation`）且 `additionalProperties: false`，**里面没有 `name`**。它对你不是"忘填的必填项"，而是"字段表里不存在的东西"——照字段表构造必然漏掉。但运行时**接受**它并落盘进 agent 元数据。**schema 描述的是工具层能接受什么，本段规定的是本会话必须传什么；两者不一致时一律以本段为准。**不要因为 `additionalProperties: false` 就省掉 `name`。',
+  '',
+  '**照抄下面这个整体，不要照 schema 的字段表现编。字段顺序照写——`name` 必须第一个**：',
+  '',
+  '```json',
+  '{',
+  '  "name": "sonnet-review-login-flow",',
+  '  "model": "sonnet",',
+  '  "subagent_type": "Explore",',
+  '  "description": "审查登录流程",',
+  '  "run_in_background": true,',
+  '  "prompt": "<四段式，见下>"',
+  '}',
+  '```',
+  '',
+  '`prompt` 的四段式（整段写进上面那个 `prompt` 字符串里）：',
+  '',
+  '```text',
+  '你是第 1 层子代理，<只读探查，禁止修改任何文件 | 可以改文件>。',
+  '',
+  '【目标】要它得出什么结论、或改成什么样。一句话说清。',
+  '【上下文】仓库绝对路径；已知前提（写明"不用再验证，直接当前提"）；本轮用户给过的截图绝对路径。',
+  '【约束】追踪停止条件（仅本文件内 / 追到直接调用方 / 追到跨模块跨服务边界，三选一写死）；',
+  '        引用一律给 path/to/file.ext:行号；读不到的写"未找到"，禁止推断。',
+  '【期望输出】改了哪些文件（逐个列路径）/ 关键决策（为什么这样做、放弃了什么）/ 阻塞点 /',
+  '           需父代理跟进的事项；核实类任务另加"实际追到哪一层、哪些边界没追"。',
+  '```',
+  '',
+  '**六个字段的硬要求**（前四条由 `guards/agent-dispatch.js` 在 `PreToolUse` 校验，违规一次报清）：',
+  '',
+  '| 字段 | 必填 | 要求 |',
+  '|---|---|---|',
+  '| `name` | **是**（schema 里没有它，靠你自己记） | `<模型名>-<任务语义-kebab>`，模型名与 `model` 逐字一致；只收 ASCII，正则 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`；同批并发必须互相可辨（分片依据写进名字）；`subagent_type` 含冒号时还须含其身份词（`task-keeper:debug-keeper` → 含 `debug` 或 `keeper`） |',
+  '| `model` | **是**，禁止默认回落 | `sonnet`（默认档）/ `opus`（跨层追根因·高正确性·sonnet 已吃力）/ `fable`（opus 跑 ≥2 轮无进展）。无 `haiku` 档 |',
+  '| `subagent_type` | 是 | 只读任务一律 `Explore`；要 Edit/Write 才 `general-purpose`；设计与拆解用 `Plan` |',
+  '| `description` | 是 | 3-5 词任务摘要，≤60 字符；**禁止**灌 `prompt` 原文或"你是第 1 层子代理"这类角色设定句；不带 `[模型名]` 前缀 |',
+  '| `run_in_background` | 否 | 需要并发多个、或本轮还要接着干别的时给 `true`；要拿到结果才能继续时给 `false` |',
+  '| `prompt` | 是 | 四段式，见上 |',
+  '',
+  '**什么时候不适用本段**：(a) 唤醒**已经派出过**的 agent 用 `SendMessage`（字段是 `to` / `summary` / `message`，与本段无关，别把 `name` 塞进去）；(b) `Workflow` 脚本内部的 `agent(prompt, {label})`（用 `label` 不用 `name`）；(c) 你是第 2 层子代理——嵌套上限 2 层，你不许再派。',
 ].join('\n')
 
 const SECTION_DISPATCH = [
@@ -515,11 +588,10 @@ const SECTION_DISPATCH = [
   '',
   '`prompt` 用四段式：`【目标】… 【上下文】… 【约束】… 【期望输出】…`。升 `opus` 或 `fable` 时在 `prompt` 里显式点明已知难点、以及上一档失败的具体表现，避免高档模型盲跑走弯路。',
   '',
-  '### 5.4 命名（`name` 与 `description` 都必填 · 细则由 hook 拦截时给）',
+  '### 5.4 命名（细则不在这里）',
   '',
-  '**`Agent` 的 JSON Schema 里没有 `name` 字段**（只有 `description` / `prompt` / `subagent_type` / `model` / `run_in_background` / `isolation`，且 `additionalProperties: false`），但运行时接受它并落盘。照字段表生成调用必然漏掉——当硬编码前置记：**凡调 `Agent`，先写 `name`，再写其余字段**。',
-  '`name` 带模型前缀且与实际 `model` 一致（用 `sonnet-` 这样的连字符）；**`subagent_type` 含冒号的插件专用 agent（`task-keeper:debug-keeper` / `caveman:cavecrew-reviewer` 等），`name` 里还要带上身份词**（`keeper` / `reviewer` / `cavecrew` 之类，位置不限）——在飞面板只渲染 `name`、**不渲染 `subagent_type`**，名字不带身份词，用户就看不出你把活派给了哪种专用 agent（实测：`name="sonnet-dbg-open-audit"` 派的其实是 `debug-keeper`，用户在面板上遍寻不着 keeper）。内建 `Explore` / `Plan` / `general-purpose` 不要求带，它们是权限差别不是常驻身份。**两个 keeper 是更强的一档：`name` 不是"含身份词即可"而是逐字钉死 `opus-debug-keeper` / `opus-chore-keeper`**（见 5.4.5），因为主会话是照文档拼这个名字去 `SendMessage`，不是照面板抄。',
-  '`description` 只写 3-5 词任务摘要、**不带 `[模型名]` 前缀**、**禁止**灌 `prompt` 原文或角色设定句；同批并发的名字必须互相可辨（分片依据写进名字）；`Workflow` 的 `label` / `meta.*` 例外——单独显示无配对 `name`，**仍带 `[模型名]` 前缀**。不写 `name` 会拿到只差哈希的自动补名，面板上分不出谁在做什么。',
+  '完整的字段清单、可照抄的调用 JSON、以及「本段优先级高于 `Agent` 工具自带 schema」这条声明，都在**每轮注入**的「派发 `Agent` 的完整调用形态」一节里——那份每轮都在场，照它抄即可，本章不重复正文。',
+  '这里只留三个此处独有的补充：(a) `name` 同时是 `SendMessage` 的寻址键，**同名 latest wins**，同一会话内派第二个同类子代理必须换名，别因为"上一个已结束"就复用；(b) 标着"可选"的显示字段（`Workflow` 的 `label`）一律**当必填处理**——留空会让 UI 回落用 `prompt` 开头当显示名，这是提示词泄露的第二条成因；(c) 两个 keeper 的 `name` 是逐字钉死的固定值，不是"含身份词即可"，见 5.4.5。',
   '',
   '### 5.5 多 subagent 并发时等齐再总结（仅约束主会话）',
   '',
@@ -632,6 +704,8 @@ function buildTurnPrompt(event) {
     '',
     SECTION_PARALLEL_TURN,
     '',
+    SECTION_AGENT_CALL,
+    '',
     SECTION_TURN_CHECKLIST,
     // 有图才追加；无图轮次一个字符都不多注入
     ...(imageEvidence ? ['', imageEvidence] : []),
@@ -683,7 +757,9 @@ function buildSubagentPrompt() {
     '',
     '## 五、Agent 工具派发子代理（子代理版只保留命名规范）',
     '',
-    '你若要再派下一层子代理（受"二、"的嵌套 2 层上限约束），命名必须守下面这一节。派发时 `model` 必填：默认 `sonnet`；只有「跨层追根因 / 安全·并发·协议·资金·权限类高正确性要求 / `sonnet` 已明显吃力」才升 `opus`；`fable` 仅在 `opus` 跑过 ≥2 轮无进展时用。只读任务用 `Explore`，要写文件才用 `general-purpose`。`prompt` 用四段式：`【目标】…【上下文】…【约束】…【期望输出】…`，并在【约束】里给出追踪停止条件、在【期望输出】里索要结构化回执。',
+    '你若要再派下一层子代理（受"二、"的嵌套 2 层上限约束），完整调用形态照下面第一节整体照抄，命名细则见其后的 5.4。**你若已是第 2 层，不得再派任何子代理**——那时下面两节只用于读懂父代理派你时的字段含义。',
+    '',
+    SECTION_AGENT_CALL,
     '',
     SECTION_NAMING,
     '',
