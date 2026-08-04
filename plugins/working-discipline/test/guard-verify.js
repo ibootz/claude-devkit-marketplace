@@ -347,6 +347,50 @@ ledger(
   check('半路损坏行不影响其余计数', true, ctx.includes('主会话工具调用 15 次') && ctx.includes('派发 1 次'), ctx)
 }
 
+// ── 派发账本 3.15.0：自上次派发以来的检索计数 ─────────────────────────
+//
+// 这一段的判据两侧都要覆盖：过线该提示、没过线不该提示、派发后必须真的清零。
+// 中间那条最要紧——若清零写漏，提示会从"越界告警"退化成"每轮唠叨"，
+// 而唠叨的注入在 AI 眼里等价于噪音，整个反馈回路就白做了。
+
+ledger(
+  '自上次派发以来 ≥6 次检索 → 追加越界提示',
+  [asst(['Agent']), asst(['Read', 'Grep', 'Glob', 'Bash', 'Read', 'Grep']), asst(Array(8).fill('Read'))],
+  (c) => c.includes('已亲手检索 14 次') && c.includes('已过检查点②的次数线')
+)
+
+ledger(
+  '派发后计数清零 → 不追加越界提示',
+  [asst(Array(9).fill('Read')), asst(Array(9).fill('Grep')), asst(['Agent'])],
+  (c) => c.includes('已亲手检索 0 次') && !c.includes('已过检查点②的次数线')
+)
+
+ledger(
+  '未过线（5 次）不追加提示',
+  [asst(['Agent']), asst(Array(12).fill('Bash')), asst(['Agent']), asst(Array(5).fill('Read'))],
+  (c) => c.includes('已亲手检索 5 次') && !c.includes('已过检查点②的次数线')
+)
+
+ledger(
+  '写操作与派发外的工具不计入检索数',
+  [asst(['Agent']), asst(Array(13).fill('Write')), asst(['Edit', 'TodoWrite', 'Read'])],
+  (c) => c.includes('已亲手检索 1 次')
+)
+
+// 0 派发分支（calls ≥ NUDGE_AT）优先于越界分支：它的措辞更重，两段一起注是重复唠叨。
+ledger(
+  '从未派发过时，检索数等于全会话累计（不是 0）',
+  [asst(Array(22).fill('Read'))],
+  (c) => c.includes('派发 0 次') && c.includes('连查 22 次') && !c.includes('已过检查点②的次数线')
+)
+
+// 未到 NUDGE_AT 但已过 PROBE_LIMIT 的中间地带：走越界分支，不走 0 派发分支。
+ledger(
+  '0 派发但调用数未达 20 时，只给越界提示',
+  [asst(Array(14).fill('Read'))],
+  (c) => c.includes('已过检查点②的次数线') && !c.includes('整段会话一次没派过')
+)
+
 // ── agent-dispatch check 8：name 必须体现插件专用 agent 的身份 ───────
 //
 // 与上面两个 guard 不同，agent-dispatch **始终 exit 0**，判定表达在 stdout 的 JSON 里：

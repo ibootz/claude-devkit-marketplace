@@ -55,9 +55,19 @@ EOF
 
 ## 连带约束：改 description 时顺手核版本号
 
-version 与 description 都登记在三处（`plugin.json` 是真相源 + 两份市场清单），漏改是本仓
-反复发生的遗漏。改完跑 `node scripts/check-versions.js`（带 `--fix` 可自动对齐 version，
-但 **description 不会被它同步**，必须手改两份清单）。
+version 登记在**四处**（`plugins/<name>/.claude-plugin/plugin.json` 是真相源 +
+`plugins/<name>/.codex-plugin/plugin.json` + 两份市场清单），漏改是本仓反复发生的遗漏。
+2026-08-04 起 `.githooks/pre-commit` 会在提交涉及 `plugins/` 或任一份市场清单时**强制**跑
+`node scripts/check-versions.js`，不一致直接拦下（需先 `git config core.hooksPath .githooks`）。
+
+**`--fix` 只对齐 version，`description` 不会被它同步**——必须手改。而且 description 的
+登记位置比 version 少一处也少不了：两份市场清单 + `.claude-plugin/plugin.json` +
+（若有）`.codex-plugin/plugin.json`，**四处的 description 各自独立、没有任何工具在同步它们**。
+
+实测这一路已经漂了：2026-08-04 把 8 个插件的 `.codex-plugin/plugin.json` 版本对齐之后，
+它们的 description 仍停在初版——`devkit-tool` 的 codex 侧写着「（5个技能）」而实际已有 6 个、
+且完全没提 codegraph。**版本号有机器兜底，description 只有你自己**。改插件功能时，四处
+description 要一起看一遍。
 
 ## 两份清单的格式差异（不是不一致，别"顺手统一"）
 
