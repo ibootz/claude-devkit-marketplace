@@ -1,6 +1,6 @@
 # discover-unknowns — 发现你的未知
 
-一套与 Claude 协作**挖掘未知**的方法论：把提示词/上下文当"地图"、真实代码库/约束当"疆域"，两者的差距就是**未知（unknowns）**；动手前用盲点扫描/头脑风暴/访谈/参考暴露未知，合并前用测验确认理解，从而减少返工与踩坑。
+一套与 Claude 协作**挖掘未知**的方法论：把提示词/上下文当"地图"、真实代码库/约束当"疆域"，两者的差距就是**未知（unknowns）**；动手前用盲点扫描/头脑风暴/访谈/参考暴露未知，从而减少返工与踩坑。合并前的测验是可选手法，只在你主动要求时才出。
 
 源自 Anthropic 官方博客 [*A field guide to Claude Fable 5: Finding your unknowns*](https://claude.com/blog/a-field-guide-to-claude-fable-finding-your-unknowns)（Thariq Shihipar）。
 
@@ -21,8 +21,10 @@
 |------|------|------|
 | `discover-unknowns` | 任务开局含糊/陌生 | 统领：心智模型 + 路由；内嵌盲点扫描、参考两个手法 |
 | `/brainstorm` | 需求模糊需探索或收敛 | 头脑风暴与访谈：发散（多方向假数据原型）+ 收敛（一次一问，优先会改架构的问题）※ |
-| `/quiz` | 长会话后要合并 | 测验：报告 + 必须通过的测验，通过才 merge |
-| `unknowns-radar` hook | 每轮注入 | UserPromptSubmit 注入 4 条路标级提醒（约 150 token）：模糊任务先挖未知、参考复刻语义、实现偏离选保守并上报、合并前建议 /quiz。设 `DISCOVER_UNKNOWNS_RADAR=off` 可关闭 |
+| `/quiz` | **用户明确要求时**才用 | 测验：报告 + 测验题，答完判分。默认跳过，不阻挡 merge |
+| `unknowns-radar` hook | 每轮注入 | UserPromptSubmit 注入 3 条路标级提醒（约 120 token）：模糊任务先挖未知、参考复刻语义、实现偏离选保守并上报。设 `DISCOVER_UNKNOWNS_RADAR=off` 可关闭 |
+
+> **测验默认不触发**（2.2.0 起）：会话长、变更多、正要 merge/push 都不启动 `/quiz`，Claude 也不主动提议；只有用户开口要（`/quiz` 或"考考我"）才出报告与题目。此前版本会每轮注入"合并前先跑 /quiz"并把"未过测验"当作合并门禁，已移除。
 
 ※ **superpowers 集成**：`brainstorm` 会先检查可用技能列表中是否存在 `superpowers:brainstorming`（[obra/superpowers](https://github.com/obra/superpowers)，其 brainstorming 本身融合了方案探索与一问一答）。已安装则优先委派并叠加本方法论约束（假数据多方向原型、优先问会改架构的问题）；未安装则使用内置指令，功能不受影响。
 
