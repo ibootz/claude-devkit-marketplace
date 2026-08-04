@@ -136,7 +136,7 @@
       "source": "./plugins/clickable-paths",
       "category": "Productivity",
       "description": "文件路径可点击 - iTerm2 里 cmd+click 跳 VS Code 对应行，需配 Semantic History",
-      "version": "1.0.0"
+      "version": "1.1.0"
     }
   ]
 }
