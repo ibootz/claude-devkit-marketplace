@@ -134,11 +134,18 @@ triage 打分、落点行区间、同根因判定、对账三件套误报识别�
 流水线承担（理由详见 `agents/debug-keeper.md` §0）。**第二层才分档**——keeper 派 fixer
 时按 `difficulty` 从 `sonnet` 起选，见 `references/queue.md` §4「模型分层」。
 
-**`name` 的形态是 `<模型档>-debug-keeper`，三段，不加任何多余前后缀**——模型段必须
-与同一次调用的 `model` 一致，所以默认就是 `opus-debug-keeper`（`model: "opus"` →
-`opus-debug-keeper`；万一改用别的档派，此后 `SendMessage` 的 `to` 同步换）。不要写成
-`debug-keeper`（缺模型段，会被 `working-discipline` 的 `agent-dispatch` 门禁拦下），
-也不要写成 `opus-task-keeper-debug-queue-manager` 这类带额外修饰的长名。
+**`name` 逐字写 `opus-debug-keeper`，没有第二种合法写法。** 档位已钉死 `opus`，所以模型段
+恒为 `opus-`。不要写成 `debug-keeper`（缺模型段）、不要写成 `opus-debug-keeper-085` 或
+`opus-debug-keeper-<交付id>`（带任务后缀）、更不要写成
+`opus-task-keeper-debug-queue-manager`——这三类都会被 `working-discipline` 的
+`agent-dispatch` check 10 直接拦下。
+
+**为什么是逐字相等而不是"差不多就行"**：这个 name 同时是此后 `SendMessage` 唤醒它的
+地址，而你是**照本文档拼名字**、不是照在飞面板抄名字。2026-08-03 真实事故：keeper 被派成
+`sonnet-debug-keeper-085`，38 分钟后主会话按文档记的名字唤醒，`SendMessage` 报
+`No agent named 'debug-keeper' is reachable.`，随后它直接又派了第二个 keeper 实例，两个
+实例先后写同一个 `.keeper/<交付id>/debug/`，单一写者模式失效。要区分本次处理的是哪条
+issue，靠 `SendMessage` 的正文，不靠改名。
 
 ```
 Agent(
@@ -184,6 +191,33 @@ SendMessage(
 它完成时你会收到通知，需要用户拍板时它会通过 `.keeper/<交付id>/decisions/` + `SendMessage`
 指针找你——那时你只需要照 `agents/debug-keeper.md` §12.2 攒批转达、写答复，不需要
 自己去猜决策内容。
+
+## 3.1 keeper 因系统原因被终止时：唤醒它，处置权交回给它
+
+判据是**非任务原因**的终止：`API 529 Overloaded`、限流、额度耗尽、网络超时、连接断流。
+（keeper 自己回报"这条我判不了"属于任务内原因，走 §12 待拍板协议，不是本节。）
+
+**你只做一件事**：用 `SendMessage` 唤醒同一个 `opus-debug-keeper`，把"你上一轮因 <具体
+原因> 被终止"这个事实告诉它，然后回到原任务。它的 transcript 完整保留，会照
+`agents/debug-keeper.md` §6.1 自己把在飞 fixer 收口。
+
+**三件不许做**：
+
+1. **不许凭产物 mtime 或「文件零写入」推断它派的 fixer 是死是活。** keeper 死了，它派的
+   第二层 fixer **可能仍在跑**——2026-08-03 实测有一个在 keeper 死后继续工作了至少 9 分钟。
+   mtime 停更无法区分"已终止"与"正在思考 / 正在跑长命令"。
+2. **不许替它派 fixer、停 fixer、改 issue 文件。** 那次事故里主会话据错判派了第二个
+   fixer，两个 `opus` fixer 同时写一个 worktree 的同一批文件。哪个 fixer 对应哪条 issue、
+   该停该续，只有 keeper 知道。
+3. **不许因为唤醒不到就新派一个 keeper。** `SendMessage` 报
+   `No agent named '<x>' is reachable.` 说明你用的名字不对，不是它不在了——改用固定名
+   `opus-debug-keeper`，或用首次派发返回的 agentId 寻址。新派第二个 keeper 会让两个实例
+   抢同一个 `.keeper/<交付id>/debug/` 的独占写权限（`working-discipline` 的
+   `agent-dispatch.js` check 10 现在会把自造名的 keeper 派发直接拦下）。
+
+**若你在读到本节之前已经对 fixer 做过动作**（停过、派过、改过文件），唤醒消息里必须
+**逐条如实交代做了什么**，包括你当时的判断依据——不要只给结论。keeper 要靠这些信息
+判断现在有几个 fixer 在飞、哪些产物是谁写的。
 
 ## 4. 反馈从哪来（不要自己汇报队列状态）
 

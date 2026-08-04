@@ -383,8 +383,11 @@ function agent(label, ti, expect) {
 
 const AD_BASE = { model: 'sonnet', description: '排查登录超时' }
 const ad = (over) => Object.assign({}, AD_BASE, over)
-// 两个 keeper 类型受 check 9 约束（固定 opus），拿它们做 check 8 的载体时必须配 opus 档，
-// 否则 DENY 是 check 9 造成的、验不到 check 8。
+// 两个 keeper 类型受 check 9（固定 opus 档）与 check 10（name 逐字固定）双重约束，
+// 所以它们**不能再当 check 8 宽松性的载体**——3.14.0 加了 check 10 之后，
+// `opus-debug-keeper-open-audit` 这类"含身份词就该放行"的正向用例会被 check 10 拦下，
+// 拦得对但验错了东西。check 8 的正向用例改用 `caveman:cavecrew-reviewer` 当载体
+// （不在固定名白名单内），keeper 只留在 check 9 / check 10 各自的段落里。
 const adO = (over) => Object.assign({}, AD_BASE, { model: 'opus' }, over)
 
 // 该拦：subagent_type 含冒号（插件专用 agent），name 不含任何身份词
@@ -394,11 +397,12 @@ agent('chore-keeper 身份丢失', adO({ name: 'opus-ledger-tidy', subagent_type
 agent('cavecrew-reviewer 身份丢失', ad({ name: 'sonnet-check-diff', subagent_type: 'caveman:cavecrew-reviewer' }), 'DENY')
 
 // 不得误杀：含任一身份词即可，位置与大小写不限
-agent('带全身份词', adO({ name: 'opus-debug-keeper-open-audit', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
-agent('只带尾词 keeper', adO({ name: 'opus-open-audit-keeper', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
-agent('只带首词 debug', adO({ name: 'opus-debug-open-audit', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
-agent('大小写不敏感', adO({ name: 'opus-Debug-Audit', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
-agent('下划线分隔', adO({ name: 'opus_keeper_audit', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+// 载体用 cavecrew-reviewer 而不是 keeper——理由见上面 adO 的注释（keeper 另受 check 10 约束）
+agent('带全身份词', ad({ name: 'sonnet-cavecrew-reviewer-open-audit', subagent_type: 'caveman:cavecrew-reviewer' }), 'ALLOW')
+agent('只带尾词 reviewer', ad({ name: 'sonnet-open-audit-reviewer', subagent_type: 'caveman:cavecrew-reviewer' }), 'ALLOW')
+agent('只带首词 cavecrew', ad({ name: 'sonnet-cavecrew-open-audit', subagent_type: 'caveman:cavecrew-reviewer' }), 'ALLOW')
+agent('大小写不敏感', ad({ name: 'sonnet-Cavecrew-Audit', subagent_type: 'caveman:cavecrew-reviewer' }), 'ALLOW')
+agent('下划线分隔', ad({ name: 'sonnet_reviewer_audit', subagent_type: 'caveman:cavecrew-reviewer' }), 'ALLOW')
 agent('内建 Explore 不校验', ad({ name: 'sonnet-find-auth-refs', subagent_type: 'Explore' }), 'ALLOW')
 agent('内建 general-purpose 不校验', ad({ name: 'sonnet-fix-login', subagent_type: 'general-purpose' }), 'ALLOW')
 agent('无 subagent_type 不校验', ad({ name: 'sonnet-fix-login' }), 'ALLOW')
@@ -437,8 +441,10 @@ agent('debug-keeper 走 fable 同样拦', ad({ model: 'fable', name: 'fable-debu
 agent('无冒号裸 debug-keeper 也拦', ad({ name: 'sonnet-debug-keeper-x', subagent_type: 'debug-keeper' }), 'DENY')
 
 // 不得误杀
-agent('debug-keeper 走 opus 放行', ad({ model: 'opus', name: 'opus-debug-keeper-085', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
-agent('chore-keeper 走 opus 放行', ad({ model: 'opus', name: 'opus-chore-keeper-tidy', subagent_type: 'task-keeper:chore-keeper' }), 'ALLOW')
+// name 用固定三段名——3.14.0 起带任务后缀会被 check 10 拦下（那条的用例见下一段），
+// 这里要验的是"档位对了就不该被 check 9 拦"，所以 name 必须先满足 check 10。
+agent('debug-keeper 走 opus 放行', ad({ model: 'opus', name: 'opus-debug-keeper', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('chore-keeper 走 opus 放行', ad({ model: 'opus', name: 'opus-chore-keeper', subagent_type: 'task-keeper:chore-keeper' }), 'ALLOW')
 agent('非 keeper 的插件专用 agent 不受档位约束', ad({ name: 'sonnet-cavecrew-reviewer-diff', subagent_type: 'caveman:cavecrew-reviewer' }), 'ALLOW')
 // 判据取 subagent_type，不取 name——name 里出现 keeper 不构成档位要求
 agent('name 含 keeper 但类型是 Explore', ad({ name: 'sonnet-keeper-queue-audit', subagent_type: 'Explore' }), 'ALLOW')
@@ -449,7 +455,34 @@ agent('第三方 queue-keeper 不在白名单', ad({ name: 'sonnet-queue-keeper-
 const adAuto = agent('keeper 缺 name 自动补', { model: 'opus', description: '登记三条新报障', subagent_type: 'task-keeper:debug-keeper' }, 'AUTONAME')
 if (adAuto.verdict === 'AUTONAME') {
   check('agent-dispatch: keeper 自动名前缀 opus-', true, /^opus-/.test(adAuto.detail), adAuto.detail)
+  // 3.14.0：补出来的必须正好是固定名，不能带短哈希——否则等于补了个 check 10 自己不放行的形态
+  check('agent-dispatch: keeper 自动名就是固定名', 'opus-debug-keeper', adAuto.detail, adAuto.detail)
 }
+
+// ── agent-dispatch check 10：keeper 的 name 逐字钉死成固定三段名 ────────
+//
+// 与 check 8 的区别就是这一段存在的全部意义：check 8 只防遗忘（随便塞个身份词即可
+// 过闸），这条要求**逐字符相等**——唤醒方是照文档拼名字去 SendMessage，不是照在飞
+// 面板抄名字。2026-08-03 事故原样：keeper 被派成 `sonnet-debug-keeper-085`，38 分钟后
+// 主会话按文档里的固定名唤醒，报 "No agent named 'debug-keeper' is reachable."，
+// 随后它直接又派了第二个实例，两个实例抢同一个 .keeper 队列的独占写权限。
+
+// 该拦：档位对、身份词也带了，但名字自造
+const ad10 = agent('事故原样 opus-debug-keeper-085 带任务后缀', adO({ name: 'opus-debug-keeper-085', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+check('agent-dispatch: check 10 finding 给出固定名', true, /必须逐字等于 "opus-debug-keeper"/.test(ad10.detail), ad10.detail)
+agent('带交付 id 后缀也拦', adO({ name: 'opus-debug-keeper-D-001', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+agent('chore-keeper 带任务后缀也拦', adO({ name: 'opus-chore-keeper-tidy', subagent_type: 'task-keeper:chore-keeper' }), 'DENY')
+agent('身份词乱序拼名也拦', adO({ name: 'opus-keeper-debug', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+// 等值比较不做小写化：大小写不同即不相等（有意为之——SendMessage 按名寻址区分大小写）
+agent('大小写不同也拦', adO({ name: 'opus-Debug-Keeper', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+
+// 不得误杀：逐字相等的两个固定名
+agent('debug-keeper 固定名放行', adO({ name: 'opus-debug-keeper', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('chore-keeper 固定名放行', adO({ name: 'opus-chore-keeper', subagent_type: 'task-keeper:chore-keeper' }), 'ALLOW')
+// 非 keeper 的插件专用 agent 不受这条约束，仍是"含身份词即可"
+agent('cavecrew-reviewer 带任务后缀不受固定名约束', ad({ name: 'sonnet-cavecrew-reviewer-diff-audit', subagent_type: 'caveman:cavecrew-reviewer' }), 'ALLOW')
+// 白名单式枚举：第三方 keeper-like agent 不在表内，名字自由
+agent('第三方 queue-keeper 名字自由', ad({ name: 'sonnet-queue-keeper-anything', subagent_type: 'foo:queue-keeper' }), 'ALLOW')
 
 // ── 收尾 ────────────────────────────────────────────────────────────
 fs.rmSync(FIXTURE_ROOT, { recursive: true, force: true })

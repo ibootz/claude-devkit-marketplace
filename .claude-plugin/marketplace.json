@@ -66,7 +66,7 @@
       "source": "./plugins/working-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 2 道硬拦 1 道事后提醒。零 skill，适合全局开启",
-      "version": "3.13.0"
+      "version": "3.14.0"
     },
     {
       "name": "agent-browser",
@@ -79,8 +79,8 @@
       "name": "discover-unknowns",
       "source": "./plugins/discover-unknowns",
       "category": "Productivity",
-      "description": "发现你的未知 - 动手前用盲点扫描/头脑风暴/访谈挖未知，合并前用测验确认理解",
-      "version": "2.1.0"
+      "description": "发现你的未知 - 动手前用盲点扫描/头脑风暴/访谈挖未知，测验默认跳过按需才出",
+      "version": "2.2.0"
     },
     {
       "name": "portable-shell",
@@ -94,7 +94,7 @@
       "source": "./plugins/task-keeper",
       "category": "Productivity",
       "description": "常驻 keeper 子代理托管 debug/杂务队列 - 队列跟随交付 worktree 入库，决策打包 HITL",
-      "version": "2.2.0"
+      "version": "2.3.0"
     },
     {
       "name": "plain-talk-output-style",

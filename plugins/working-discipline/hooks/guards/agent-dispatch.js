@@ -3,7 +3,8 @@
 // 【用途】
 // 派发 subagent 时**结构层面**机械可判定的要求在这里处理：model 是否显式给了且在三档内、
 // name / description 是否齐备、name 前缀是否与 model 一致、name 是否体现插件专用 agent 的
-// 身份（check 8）、keeper 类常驻 agent 是否落在固定的 opus 档（check 9）、description 是否
+// 身份（check 8）、keeper 类常驻 agent 是否落在固定的 opus 档（check 9）、keeper 的 name 是否
+// 就是那个固定三段名（check 10）、description 是否
 // 超长。判据取自 tool_input 的确定字段，不回读 transcript。
 //
 // 【判据精度的如实说明（不要再写成"零误判"）】
@@ -303,7 +304,19 @@ function shortHash(s) {
   return crypto.createHash('sha1').update(s).digest('hex').slice(0, 4)
 }
 
+// keeper 类常驻 agent 的固定名（check 10 校验的那个值）。`stLower` 传小写化后的
+// subagent_type，命中 FIXED_OPUS_PATTERN 时才有意义。
+function fixedKeeperName(stLower) {
+  return `${FIXED_OPUS_MODEL}-${stLower.split(':').pop()}`
+}
+
 function autoName(ti, model) {
+  // keeper 类常驻 agent 的 name 被 check 10 钉死成固定三段名，自动补名直接给那个值——
+  // 补出带短哈希的形态会被 check 10 拦下（自己补的名自己不放行），而哈希名本身正是
+  // 让后续 `SendMessage` 寻址失败的根因（见 check 10 注释里的事故）。
+  const stLowerForKeeper = String(ti.subagent_type || '').toLowerCase()
+  if (FIXED_OPUS_PATTERN.test(stLowerForKeeper)) return fixedKeeperName(stLowerForKeeper)
+
   let slug = deriveSlug(ti)
   // check 8 要求 name 体现插件专用 agent 的身份；自动补名同样要满足，否则会补出一个
   // guard 自己都不放行的形态（description 全是 ASCII 时 deriveSlug 压根不看 subagent_type）。
@@ -432,6 +445,50 @@ function checkNaming(ti) {
     )
   }
 
+  // 10. keeper 类常驻 agent 的 name 钉死成固定三段名（2026-08-04 用户拍板加）
+  //     起因是一次真实事故（session 8477c246，2026-08-03）：keeper 被派成
+  //     `sonnet-debug-keeper-085`；38 分钟后主会话想唤醒它，按 agent 定义里写的固定名
+  //     `debug-keeper` 寻址，`SendMessage` 返回
+  //     "No agent named 'debug-keeper' is reachable."，随后它直接又派了**第二个**
+  //     debug-keeper 实例。两个实例先后持有同一 `.keeper/<交付id>/debug/` 的独占写权限，
+  //     单一写者模式失效、队列一致性无保障。
+  //
+  //     根因不是"名字不好看"，而是一条因果链：**名字不固定 → 唤醒方记不住 → 寻址失败
+  //     → 倾向重派一个新的**。所以这条判据要钉的是"可预测的名字"，不是"好名字"——
+  //     它与 check 8（name 须含身份词）不是一回事：check 8 只防遗忘、随便塞词即可过闸，
+  //     这条要求逐字符相等，因为唤醒方是**照文档拼名字**而不是照面板抄名字。
+  //
+  //     判据形态：字符串等值比较 name === `opus-<subagent_type 冒号后的 slug>`。
+  //     无正则、无语义猜测、可人工复核。
+  //
+  //     覆盖边界（如实记录，勿删）：
+  //     - **假阳性**：同一会话内真需要两个及以上 keeper 实例（例如并行跑两个交付的队列）
+  //       会被硬拦，且本 guard 不给逃生舱。按现行设计不存在正当例外——
+  //       `plugins/task-keeper/agents/debug-keeper.md:31` 写明「你是**同一会话内唯一的
+  //       debug-keeper 实例**」。日后若要支持多交付并行，正确处置是先改那条设计、再放宽
+  //       这里（例如允许 `opus-debug-keeper-<交付id>` 这种可预测后缀），不是加咒语。
+  //       临时绕过只能 `AGENT_DISPATCH_GUARD=off`。
+  //     - **假阴性为零**：等值比较没有可绕形态。
+  //     - name 缺失时不在这里报：`autoName` 已直接补成同一个固定名（见那里的 keeper 分支）。
+  //     - 与 check 9 的叠加：model 不是 opus 时两条会同时报，期望名恒用 `opus-` 前缀
+  //       （档位本身也被钉死），两条 hint 方向一致、AI 一次改全。
+  if (!nameMissing && FIXED_OPUS_PATTERN.test(stLower)) {
+    const requiredName = fixedKeeperName(stLower)
+    if (name !== requiredName) {
+      findings.push(
+        `subagent_type="${ti.subagent_type}" 是常驻 keeper,name 必须逐字等于 "${requiredName}",` +
+          `本次 name="${name}";主会话此后靠 SendMessage 按这个固定名唤醒它,` +
+          `名字自造过一次就唤醒不到(实测报 "No agent named ... is reachable."),` +
+          `继而倾向重派第二个实例、两个实例抢同一个 .keeper 队列的独占写权限`
+      )
+      hints.push(
+        `name 改成 "${requiredName}"(不加任务后缀、不加短哈希、不加交付 id);` +
+          `keeper 是同一会话内的唯一实例,它的名字是唤醒地址而不是任务标签,` +
+          `要区分处理的是哪条 issue 靠 SendMessage 的正文,不靠改名`
+      )
+    }
+  }
+
   // 5. description 必填且有正文（description 是 schema 里的必填字段，缺失基本由工具层
   //    拦掉，这里仍留判定以防 harness 放宽）。**不再要求 [模型名] 前缀**：name 的模型
   //    前缀已是强制校验（见上 check 3~4），在飞面板 name 与 description 并排显示，
@@ -530,15 +587,23 @@ function main() {
   if (nameMissing) {
     const model = ti.model.trim()
     const generated = autoName(ti, model)
+    // keeper 类补的是 check 10 那个固定名（不含哈希），文案不能沿用"弱语义 + 短哈希"
+    // 那套说法——否则又是一处"效力与描述各自漂移"（见 .claude/rules/hook-restraint.md 实证 5）。
+    const isFixedKeeper = FIXED_OPUS_PATTERN.test(String(ti.subagent_type || '').toLowerCase())
     allowWithName(
       ti,
       generated,
-      `[agent-dispatch] 本次派发没给 name（Agent 工具的 JSON Schema 未声明该字段，` +
-        `但运行时接受并会存进 subagent 元数据），已自动补为 "${generated}" 并放行。` +
-        `自动名只有 description/subagent_type 里抽出的弱语义 + prompt·description 的短哈希，` +
-        `在飞面板上看不出任务差异——` +
-        `下次派发请自己给 "${model}-<任务语义-kebab>"（如 ${model}-review-login-flow），` +
-        `同批并发时把分片依据写进名字。`
+      isFixedKeeper
+        ? `[agent-dispatch] 本次派发没给 name（Agent 工具的 JSON Schema 未声明该字段，` +
+            `但运行时接受并会存进 subagent 元数据）。这是常驻 keeper，name 被钉死成固定` +
+            `三段名，已补为 "${generated}" 并放行——它同时是此后 SendMessage 唤醒它的地址，` +
+            `所以不能带任务后缀或短哈希。下次派发请自己写上 "${generated}"。`
+        : `[agent-dispatch] 本次派发没给 name（Agent 工具的 JSON Schema 未声明该字段，` +
+            `但运行时接受并会存进 subagent 元数据），已自动补为 "${generated}" 并放行。` +
+            `自动名只有 description/subagent_type 里抽出的弱语义 + prompt·description 的短哈希，` +
+            `在飞面板上看不出任务差异——` +
+            `下次派发请自己给 "${model}-<任务语义-kebab>"（如 ${model}-review-login-flow），` +
+            `同批并发时把分片依据写进名字。`
     )
   }
 

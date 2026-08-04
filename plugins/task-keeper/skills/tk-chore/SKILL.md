@@ -24,9 +24,11 @@ when_to_use: |
 外部写红线（判漏一次就是未授权写入外部系统）、共享工作区让位、决策打包，判错代价与活的
 体量无关（理由详见 `agents/chore-keeper.md` §0）。它派的只读 `Explore` 才用 `sonnet`。
 
-**`name` 的形态是 `<模型档>-chore-keeper`，三段，不加任何多余前后缀**——模型段必须
-与同一次调用的 `model` 一致，所以默认就是 `opus-chore-keeper`（`model: "opus"` →
-`opus-chore-keeper`；万一改用别的档派，此后 `SendMessage` 的 `to` 同步换）。不要写成
+**`name` 逐字写 `opus-chore-keeper`，没有第二种合法写法。** 档位已钉死 `opus`，所以模型段
+恒为 `opus-`；带任务后缀（`opus-chore-keeper-001`）或额外修饰都会被 `working-discipline`
+的 `agent-dispatch` check 10 拦下。这个名字同时是此后 `SendMessage` 唤醒它的地址，你是
+照本文档拼它、不是照在飞面板抄它——名字自造一次就唤醒不到，继而倾向重派第二个实例、
+两个实例抢同一个 `.keeper/<交付id>/chore/` 的独占写权限。不要写成
 `chore-keeper`（缺模型段，会被 `working-discipline` 的 `agent-dispatch` 门禁拦下），
 也不要写成 `opus-task-keeper-chore-queue-manager` 这类带额外修饰的长名。
 

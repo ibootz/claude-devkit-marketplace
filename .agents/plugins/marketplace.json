@@ -155,7 +155,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "3.13.0"
+      "version": "3.14.0"
     },
     {
       "author": {
@@ -180,7 +180,7 @@
         "name": "zhangq"
       },
       "category": "Productivity",
-      "description": "发现你的未知 - 动手前用盲点扫描/头脑风暴/访谈挖未知，合并前用测验确认理解",
+      "description": "发现你的未知 - 动手前用盲点扫描/头脑风暴/访谈挖未知，测验默认跳过按需才出",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "discover-unknowns",
       "source": {
@@ -191,7 +191,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.1.0"
+      "version": "2.2.0"
     },
     {
       "author": {
@@ -227,7 +227,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.2.0"
+      "version": "2.3.0"
     },
     {
       "author": {
