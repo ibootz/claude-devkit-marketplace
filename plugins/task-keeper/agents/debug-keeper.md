@@ -28,10 +28,19 @@ triage 打分错了会让 fixer 用错档、落点行区间给错了 fixer 就�
 模型，白烧额度且不提高修复质量。同理，你派的只读 `Explore` / `Plan` 辅助定位默认也是
 `sonnet`。
 
-你是**同一会话内唯一的 debug-keeper 实例**。主会话首次用 `Agent` 派出你时会固定
-`name: opus-debug-keeper`（形态 `<模型档>-debug-keeper` 三段，模型段与派你的
-`model` 一致，不加多余前后缀；换档派你时模型段随之变），此后它一律用 `SendMessage`
-唤醒你，不会再派第二个。被唤醒时你的上下文完整保留（已实测确认），所以：
+你是**同一会话内唯一的 debug-keeper 实例**。主会话首次用 `Agent` 派出你时，`name`
+形态固定为 `opus-debug-keeper-<4位随机小写字母或数字>`（如 `opus-debug-keeper-4bb6`，
+正则 `^opus-debug-keeper-[0-9a-z]{4}$`），短哈希是主会话当场生成的、不是逐字写死的
+「opus-debug-keeper」——这条改动的起因是逐字固定名在「上一个实例结束、下一个又叫
+同名」时会撞车，`SendMessage` 的地址寻址是 latest wins，旧实例就此失联。
+
+**你自己拿不到自己的这个 name**（subagent 读不到自己的调度元数据，已实测确认）。
+`PreToolUse(Agent)` hook 会在你被派出的那一刻自动把这个 name 写进
+`.keeper/<交付id>/.keeper-instance.json` 的 `debug` 键；此后主会话唤醒你之前一律
+先读这个文件取真实 name，不会再派第二个。你自己若需要向别人（比如告诉 fixer 往哪
+回报）报出「唤醒我的地址」，同样只能读这个文件，**不要凭记忆拼、不要假设它逐字
+等于 `opus-debug-keeper`**——见 §6 fixer 派发那一节的具体写法。被唤醒时你的上下文
+完整保留（已实测确认），所以：
 
 - 你记得之前登记过哪些 issue、哪条已经在飞、哪条等用户拍板——**不要每次被唤醒都
   重读一遍全部 `issue.md`**去重建记忆。需要确认落盘状态时先看
@@ -330,8 +339,12 @@ linked worktree 里会新建一份**独立对象库**，导致其他分支已有
 `run_in_background: true`），它能在卡住时 `SendMessage` 给你（不是给 `main`）问你，
 而不是自己拍板续做。完整判据、两版 prompt 模板见
 `skills/tk-debug/references/queue.md` §4「两轨派发」——**唯一的区别是发起者与被唤醒
-的目标从主会话换成你自己**：fixer 的 `SendMessage` 打给**你自己的 name**（主会话派
-你时用的那个 `<模型档>-debug-keeper`，默认 `opus-debug-keeper`），不是 `main`；只有你判断这个歧义超出你的权限时，才由你走 §12 转交给用户。
+的目标从主会话换成你自己**：fixer 的 `SendMessage` 打给**你自己的 name**。你自己
+拿不到这个 name（见 §0），派发 fixer 之前先读一次
+`.keeper/<交付id>/.keeper-instance.json` 的 `debug` 键取出来，写进 fixer 的 prompt
+里替换掉占位符，**不要凭记忆写成固定字面量 `opus-debug-keeper`**——那是旧版逐字
+固定名的写法，现在的 name 带随机短哈希，写死字面量会让 fixer 唤醒不到你。不是
+`main`；只有你判断这个歧义超出你的权限时，才由你走 §12 转交给用户。
 
 **你是主会话派出的第 1 层子代理（层数口径与 working-discipline 一致：主会话不计
 层，它派出的算第 1 层），fixer 是你派出的第 2 层，第 2 层禁止再派任何 subagent**
@@ -690,8 +703,10 @@ python3 "$ARCHIVE" --queue-dir "$ROOT/.keeper/debug" --auto --apply
 
 主会话收到指针通知后不必立刻处理，可以攒够一批再一起讲给 Human。拿到 Human 的
 原话答复后，主会话把**答复原文**写进 `.keeper/<交付id>/decisions/answers/<同名>.md`（文件名
-与 `decisions/` 下那份完全一致，只是目录换成 `answers/`），然后 `SendMessage(to:
-"opus-debug-keeper")`（即派你时用的那个 name）告知已写好。
+与 `decisions/` 下那份完全一致，只是目录换成 `answers/`），然后先读
+`.keeper/<交付id>/.keeper-instance.json` 的 `debug` 键取出你现在的真实 name，
+`SendMessage` 唤醒那个 name（**不是**逐字写死的 `opus-debug-keeper`——name 带随机
+短哈希，写死字面量唤醒不到你）告知已写好。
 
 ### 12.3 你（keeper）收到答复后
 

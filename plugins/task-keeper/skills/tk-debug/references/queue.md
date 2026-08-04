@@ -400,8 +400,10 @@ prompt 模板，先看下一节按 `difficulty` 分的两条路径。
 - **`medium` / `hard` → 交互式 subagent**。需要确认意图的改法、跨模块、改数据
   结构这类走这条：`Agent` 多传 `name`（必须带模型档次前缀）与
   `run_in_background: true`，并在 prompt 里加一段交互纪律，让它在真正卡住时
-  用 `SendMessage` 问 keeper 自己的 name（`<模型档>-debug-keeper`，默认
-  `opus-debug-keeper`），而不是自己拍板续做。
+  用 `SendMessage` 问 keeper 自己的 name。keeper 的 name 带随机短哈希（形态
+  `opus-debug-keeper-<4位>`），fixer 拿不到 keeper 自己的调度元数据，所以
+  debug-keeper 派发 fixer 之前要先读一次 `.keeper/<交付id>/.keeper-instance.json`
+  的 `debug` 键，把真实 name 写进 prompt 里替换掉占位符，而不是自己拍板续做。
 
 **为什么这样设计（实测支撑）**：
 
@@ -518,11 +520,13 @@ Agent(
             完全不属于你的职责范围。
             **遇到需要拍板的歧义**（两种改法都说得通、triage 没写清、发现 issue
             描述与代码实际不符）时，**不要猜、不要挑一个继续**：用 `SendMessage`
-            把选项和你的倾向发给 `opus-debug-keeper`（派发时替换成 keeper 自己
-            的实际 name；不是 `main`——你是 debug-keeper 派出的
-            末层 fixer，禁止再派任何 subagent；只有 debug-keeper 判断这个歧义超出它自己
-            权限时才会再走 §12 待拍板协议转交给用户），等它拍板。等待期间你会被
-            结束，它答复后你会从 transcript 被唤醒继续，上下文不会丢。
+            把选项和你的倾向发给 `<debug-keeper 的实际 name，派发前从
+            .keeper/<交付id>/.keeper-instance.json 的 debug 键读出来填进这段
+            prompt，不要写字面量 opus-debug-keeper>`；不是 `main`——你是
+            debug-keeper 派出的末层 fixer，禁止再派任何 subagent；只有
+            debug-keeper 判断这个歧义超出它自己权限时才会再走 §12 待拍板协议
+            转交给用户），等它拍板。等待期间你会被结束，它答复后你会从
+            transcript 被唤醒继续，上下文不会丢。
            【期望输出】把结论写进 <worktree>/.keeper/<交付id>/debug/DBG-024/receipts.md，
             包含：改了哪些文件（逐个列路径）/ 关键决策（为什么这样做、放弃了什么）/
             阻塞点 / 需要 debug-keeper 跟进的事项。同时在回执正文里返回同样内容。

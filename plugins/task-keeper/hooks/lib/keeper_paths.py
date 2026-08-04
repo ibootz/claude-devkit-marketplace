@@ -68,8 +68,29 @@ v3 有**三份**独立的「找 `.keeper` 在哪」实现，判据还不一致�
 所以引入 `.keeper/.keeper-active`：单行文本，内容是当前活跃交付目录名。冷启动写入，
 交付收尾时删除。解析器**只认它**，不做任何 glob 猜测。文件不存在时按 basename 现算
 并写入——这让它自愈，而不是变成一个必须人工维护的配置。
+
+## `.keeper-instance.json`：keeper 实例落盘登记（name 唤醒锚点）
+
+2026-08-04 起 keeper 的 `name` 强制带 4 位随机短哈希（形态
+`opus-(debug|chore)-keeper-[0-9a-z]{4}`，如 `opus-debug-keeper-4bb6`；正则判据由
+`working-discipline` 插件的 `agent-dispatch.js` 校验，本文件不重复）。改这一条的
+起因是旧的逐字固定名（`opus-debug-keeper`）在「上一个实例结束、下一个又叫同名」时
+会撞车——`SendMessage` 的 name 寻址是 latest wins，旧实例就此失联。
+
+但短哈希是随机的，主会话没法靠记忆或文档拼出实际 `name`，所以需要一个落盘登记点：
+`PreToolUse(Agent)` 命中 keeper 类派发（`tool_input.subagent_type` 的冒号后 slug
+是 `debug-keeper` 或 `chore-keeper`）时，把 `tool_input.name` 写进
+`<worktree 根>/.keeper/<交付id>/.keeper-instance.json`——`debug`/`chore` 两键各自
+独立、互不覆盖。主会话唤醒 keeper 之前先读这个文件取真实 `name`，读不到才首次派出。
+
+`read_keeper_instances` / `write_keeper_instance` 是本模块提供的读写函数；判据（只认
+`tool_name === "Agent"` 且 `subagent_type` 命中白名单）、异常静默降级全部在
+`hooks/pre-tool-use-keeper-instance.sh` 与配套的 `hooks/lib/keeper_instance_register.py`
+里，本模块只管路径与文件格式，不判断"这次调用该不该登记"。
 """
+import datetime
 import io
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -77,6 +98,7 @@ from pathlib import Path
 KEEPER_DIR = ".keeper"
 ACTIVE_MARK = ".keeper-active"
 MAIN_BUCKET = "_main"
+INSTANCE_MARK = ".keeper-instance.json"
 
 # 交付目录名的形态。与 aisdlc 的 `.sdlc/worktrees/<slug>` 命名一致：`D-<数字>-<slug>`
 # 或 `hotfix-<slug>`。不匹配的 worktree（含主仓）一律落 MAIN_BUCKET。
@@ -216,6 +238,75 @@ def active_delivery(keeper_root, worktree_root=None, write_back=True):
         except Exception:
             pass   # 只读挂载等场景下写不进去不该让 hook 失败
     return did
+
+
+def instance_registry_path(worktree_root, delivery_id):
+    """`.keeper/<交付id>/.keeper-instance.json` 的绝对路径。不检查存在性、不做
+    任何 IO——纯路径拼接，调用方自己决定要读还是要写。
+    """
+    return os.path.join(worktree_root, KEEPER_DIR, delivery_id, INSTANCE_MARK)
+
+
+def read_keeper_instances(worktree_root, delivery_id):
+    """读整份登记 dict：`{"debug": {"name": ..., "ts": ...}, "chore": {...}}`。
+
+    文件不存在、损坏（非 JSON）、或顶层不是 dict，一律返回 `{}`——调用方（写入前
+    的合并、注入文本要展示的 name）不需要自己包一层 try/except。
+    """
+    path = instance_registry_path(worktree_root, delivery_id)
+    try:
+        with io.open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def read_keeper_instance_name(worktree_root, delivery_id, kind):
+    """只取某一档（`"debug"` / `"chore"`）当前登记的 name；取不到返回 `None`。"""
+    entry = read_keeper_instances(worktree_root, delivery_id).get(kind)
+    name = entry.get("name") if isinstance(entry, dict) else None
+    return name if isinstance(name, str) and name else None
+
+
+def write_keeper_instance(worktree_root, delivery_id, kind, name):
+    """把 `kind`（`"debug"` / `"chore"`）对应的实例 name 写进登记文件，**保留另一
+    个键**——先读旧文件、只覆盖 `kind` 这一路，再整份写回。旧文件不存在或损坏时
+    当空 dict 处理，不报错。
+
+    这是纯写文件动作，**不做任何拦截判断**——那是调用方
+    （`hooks/lib/keeper_instance_register.py`）的职责。本函数对外的失败模式只有
+    一种：写不进去就返回 `False`，不向上抛异常，因为调用方是一个不允许阻断 Agent
+    派发的 `PreToolUse` hook。
+
+    返回 `True`/`False` 只用于调用方记录用途，不代表这次 `Agent` 派发本身受影响
+    ——写失败时 keeper 照常被派出，只是主会话之后唤醒它时会读到旧登记或读空，
+    需要退回"首次派出"这条路径。
+    """
+    path = instance_registry_path(worktree_root, delivery_id)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+    except Exception:
+        return False
+    data = read_keeper_instances(worktree_root, delivery_id)
+    data = dict(data) if isinstance(data, dict) else {}
+    data[kind] = {
+        "name": name,
+        "ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+    }
+    tmp = path + ".tmp"
+    try:
+        with io.open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        os.replace(tmp, path)
+        return True
+    except Exception:
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
+        return False
 
 
 def queue_dir(start, spec, write_back=False):

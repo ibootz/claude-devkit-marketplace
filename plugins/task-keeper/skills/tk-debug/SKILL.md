@@ -127,30 +127,42 @@ cp "<照抄来的源路径>" "$DST"
 
 ## 2. 唯一动作：派出或唤醒 `debug-keeper`
 
-**本会话首次**（还没派过 keeper）用 `Agent` 工具派出，必须固定 `name`。
+**先判断本会话有没有派过 keeper——判据不是记忆，是文件**：读一次
+`.keeper/<交付id>/.keeper-instance.json` 的 `debug` 键。读到有效 name → 走
+「唤醒」；读不到（文件不存在、`debug` 键缺失）→ 走「首次派出」。**不要因为唤醒不到
+就直接改成首次派出再派第二个**——那正是本节要消除的行为，见下方事故。
 
 **`model` 固定 `"opus"`，不按 bug 看起来难不难来下调。** keeper 是第一层调度者，它做的
 triage 打分、落点行区间、同根因判定、对账三件套误报识别，判错一次的返工成本由后面整条
 流水线承担（理由详见 `agents/debug-keeper.md` §0）。**第二层才分档**——keeper 派 fixer
 时按 `difficulty` 从 `sonnet` 起选，见 `references/queue.md` §4「模型分层」。
 
-**`name` 逐字写 `opus-debug-keeper`，没有第二种合法写法。** 档位已钉死 `opus`，所以模型段
-恒为 `opus-`。不要写成 `debug-keeper`（缺模型段）、不要写成 `opus-debug-keeper-085` 或
-`opus-debug-keeper-<交付id>`（带任务后缀）、更不要写成
+**首次派出时，`name` 自己生成一个带 4 位随机短哈希的后缀，形态
+`opus-debug-keeper-<4位小写字母或数字>`（如 `opus-debug-keeper-4bb6`，正则
+`^opus-debug-keeper-[0-9a-z]{4}$`）。** 档位已钉死 `opus`，所以模型段恒为
+`opus-`，但**不再逐字写死 `opus-debug-keeper`**——那是旧版判据，2026-08-04 起改为
+强制带随机后缀，理由见下方事故。仍然不要写成 `debug-keeper`（缺模型段）、不要写成
+`opus-debug-keeper-<交付id>`（拿交付 id 当后缀，不是随机短哈希）、更不要写成
 `opus-task-keeper-debug-queue-manager`——这三类都会被 `working-discipline` 的
 `agent-dispatch` check 10 直接拦下。
 
-**为什么是逐字相等而不是"差不多就行"**：这个 name 同时是此后 `SendMessage` 唤醒它的
-地址，而你是**照本文档拼名字**、不是照在飞面板抄名字。2026-08-03 真实事故：keeper 被派成
+**为什么改成随机后缀而不是继续逐字固定**：逐字固定名撞上的是另一个问题——同一段
+会话里前一个 debug-keeper 实例结束被关掉后，下一个又叫同一个名字，`SendMessage`
+的 name 寻址是 latest wins，想唤起前一个就冲突。随机后缀让每个实例天生不重名，
+但代价是主会话没法再靠记忆或本文档拼出实际 name——这正是 `PreToolUse(Agent)` hook
+自动登记 `.keeper/<交付id>/.keeper-instance.json` 的原因（2026-08-04 起，见
+`hooks/lib/keeper_paths.py` 模块头「`.keeper-instance.json`」）：派发那一刻 hook
+自动把 name 写进去，唤醒前只需要读它，不需要凭记忆拼、也不需要盯着在飞面板抄。
+2026-08-03 的历史事故（旧版逐字固定名机制下）：keeper 被派成
 `sonnet-debug-keeper-085`，38 分钟后主会话按文档记的名字唤醒，`SendMessage` 报
-`No agent named 'debug-keeper' is reachable.`，随后它直接又派了第二个 keeper 实例，两个
-实例先后写同一个 `.keeper/<交付id>/debug/`，单一写者模式失效。要区分本次处理的是哪条
-issue，靠 `SendMessage` 的正文，不靠改名。
+`No agent named 'debug-keeper' is reachable.`，随后它直接又派了第二个 keeper 实例，
+两个实例先后写同一个 `.keeper/<交付id>/debug/`，单一写者模式失效——落盘登记机制
+就是为了消除这类「唤醒不到就重派」的连锁反应。
 
 ```
 Agent(
   subagent_type: "task-keeper:debug-keeper",   # 若该 subagent_type 不可用则退回 "general-purpose"
-  name: "opus-debug-keeper",
+  name: "opus-debug-keeper-4bb6",   # 自己生成 4 位随机小写字母/数字后缀，不要逐字抄这个例子
   description: "debug 队列常驻管理",
   model: "opus",
   run_in_background: true,
@@ -169,13 +181,23 @@ Agent(
 ```
 
 `run_in_background: true` 是必须的——它让 keeper 在后台跑，你不必等它，也让它具备
-`SendMessage` 到 `main` 的能力。
+`SendMessage` 到 `main` 的能力。`name` 派发成功后 `PreToolUse(Agent)` hook 会自动
+把它写进 `.keeper/<交付id>/.keeper-instance.json` 的 `debug` 键，你不需要自己再写
+这个文件。
 
-**此后每一次**（同一会话内再报 bug）用 `SendMessage` 唤醒同一个，**不要再派第二个**：
+**此后每一次**（同一会话内再报 bug）先读注册文件取真实 name，再用 `SendMessage`
+唤醒同一个，**不要再派第二个**：
+
+```
+NAME="$(/usr/bin/python3 -c '
+import json
+print(json.load(open(".keeper/<交付id>/.keeper-instance.json")).get("debug", {}).get("name", ""))
+' 2>/dev/null)"
+```
 
 ```
 SendMessage(
-  to: "opus-debug-keeper",
+  to: "<上面读出来的 NAME，不是字面量 opus-debug-keeper>",
   summary: "新增 bug 报告",
   message: "用户原话逐字如下：\n<原话>\n截图：<_inbox 路径> / 转录：<文字转录>"
 )
@@ -197,7 +219,9 @@ SendMessage(
 判据是**非任务原因**的终止：`API 529 Overloaded`、限流、额度耗尽、网络超时、连接断流。
 （keeper 自己回报"这条我判不了"属于任务内原因，走 §12 待拍板协议，不是本节。）
 
-**你只做一件事**：用 `SendMessage` 唤醒同一个 `opus-debug-keeper`，把"你上一轮因 <具体
+**你只做一件事**：先读 `.keeper/<交付id>/.keeper-instance.json` 的 `debug` 键取出
+它现在的真实 name，用 `SendMessage` 唤醒那个 name（**不是**字面量
+`opus-debug-keeper`——name 带随机短哈希，凭记忆拼写不出来），把"你上一轮因 <具体
 原因> 被终止"这个事实告诉它，然后回到原任务。它的 transcript 完整保留，会照
 `agents/debug-keeper.md` §6.1 自己把在飞 fixer 收口。
 
@@ -210,10 +234,12 @@ SendMessage(
    fixer，两个 `opus` fixer 同时写一个 worktree 的同一批文件。哪个 fixer 对应哪条 issue、
    该停该续，只有 keeper 知道。
 3. **不许因为唤醒不到就新派一个 keeper。** `SendMessage` 报
-   `No agent named '<x>' is reachable.` 说明你用的名字不对，不是它不在了——改用固定名
-   `opus-debug-keeper`，或用首次派发返回的 agentId 寻址。新派第二个 keeper 会让两个实例
-   抢同一个 `.keeper/<交付id>/debug/` 的独占写权限（`working-discipline` 的
-   `agent-dispatch.js` check 10 现在会把自造名的 keeper 派发直接拦下）。
+   `No agent named '<x>' is reachable.` 说明你用的名字不对，不是它不在了——先检查
+   有没有重新读一次 `.keeper/<交付id>/.keeper-instance.json` 取最新 name（name 带
+   随机短哈希，凭记忆拼、或抄一份旧记录都可能对不上），或用首次派发返回的 agentId
+   寻址。新派第二个 keeper 会让两个实例抢同一个 `.keeper/<交付id>/debug/` 的独占
+   写权限（`working-discipline` 的 `agent-dispatch.js` check 10 现在会把自造名的
+   keeper 派发直接拦下）。
 
 **若你在读到本节之前已经对 fixer 做过动作**（停过、派过、改过文件），唤醒消息里必须
 **逐条如实交代做了什么**，包括你当时的判断依据——不要只给结论。keeper 要靠这些信息

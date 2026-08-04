@@ -104,6 +104,52 @@ print(json.dumps({"hook_event_name":"UserPromptSubmit","cwd":sys.argv[1]}))
 ' "$1" | bash "$TRIAGE_HOOK"
 }
 
+run_keeper_instance() {   # $1=cwd $2=subagent_type(可省) $3=name(可省) $4=tool_name(可省，默认 Agent)
+  # PreToolUse(Agent) keeper 实例登记 hook。$2/$3 省略时 tool_input 里对应键就不写，
+  # 用来构造「缺 subagent_type」「缺 name」这类假阴性输入。
+  /usr/bin/python3 -c '
+import json,sys
+ti = {}
+if len(sys.argv) > 2 and sys.argv[2]:
+    ti["subagent_type"] = sys.argv[2]
+if len(sys.argv) > 3 and sys.argv[3]:
+    ti["name"] = sys.argv[3]
+ev = {
+    "hook_event_name": "PreToolUse",
+    "tool_name": sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else "Agent",
+    "cwd": sys.argv[1],
+    "tool_input": ti,
+}
+print(json.dumps(ev))
+' "$1" "${2:-}" "${3:-}" "${4:-Agent}" | bash "$KEEPER_INSTANCE_HOOK"
+}
+
+# 造一个真实 git 仓库（keeper_paths.find_worktree_root 需要真实 git 命令能跑通，
+# 假 `.git` 占位文件在这里不适用——find_worktree_root 会因为 git 命令全部失败而
+# 返回 None，本 hook 遇到 None 就直接放弃，测不出任何写入行为）。$1=目标目录
+mkrealrepo() {
+  git init -q -b master "$1" >/dev/null 2>&1
+  git -C "$1" config user.email t@t.t
+  git -C "$1" config user.name t
+  echo hi > "$1/f.txt"
+  git -C "$1" add -A >/dev/null 2>&1
+  git -C "$1" commit -qm init >/dev/null 2>&1
+}
+
+# 读 `.keeper-instance.json` 某一档的某个字段。$1=json 文件绝对路径 $2=kind(debug/chore)
+# $3=字段名(name/ts)。文件不存在/损坏/键缺失都返回空串，不报错——断言侧用空串与
+# 期望值比较即可，不需要先判断文件是否存在。
+ki_field() {
+  /usr/bin/python3 -c '
+import json,sys
+try:
+    d = json.load(open(sys.argv[1]))
+    print(d.get(sys.argv[2], {}).get(sys.argv[3], ""))
+except Exception:
+    print("")
+' "$1" "$2" "$3"
+}
+
 ok()   { pass=$((pass+1)); printf '  \033[32m✓\033[0m %s\n' "$1"; }
 bad()  { fail=$((fail+1)); printf '  \033[31m✗\033[0m %s\n' "$1"; printf '      期望: %s\n      实际: %s\n' "$2" "$3"; }
 

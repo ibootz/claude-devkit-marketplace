@@ -485,46 +485,54 @@ agent('debug-keeper 走 fable 同样拦', ad({ model: 'fable', name: 'fable-debu
 agent('无冒号裸 debug-keeper 也拦', ad({ name: 'sonnet-debug-keeper-x', subagent_type: 'debug-keeper' }), 'DENY')
 
 // 不得误杀
-// name 用固定三段名——3.14.0 起带任务后缀会被 check 10 拦下（那条的用例见下一段），
-// 这里要验的是"档位对了就不该被 check 9 拦"，所以 name 必须先满足 check 10。
-agent('debug-keeper 走 opus 放行', ad({ model: 'opus', name: 'opus-debug-keeper', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
-agent('chore-keeper 走 opus 放行', ad({ model: 'opus', name: 'opus-chore-keeper', subagent_type: 'task-keeper:chore-keeper' }), 'ALLOW')
+// name 用「固定前缀 + 4 位短哈希」——2026-08-04 起裸固定名会被 check 10 拦下（那条的
+// 用例见下一段），这里要验的是"档位对了就不该被 check 9 拦"，所以 name 必须先满足 check 10。
+agent('debug-keeper 走 opus 放行', ad({ model: 'opus', name: 'opus-debug-keeper-4bb6', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('chore-keeper 走 opus 放行', ad({ model: 'opus', name: 'opus-chore-keeper-0a9z', subagent_type: 'task-keeper:chore-keeper' }), 'ALLOW')
 agent('非 keeper 的插件专用 agent 不受档位约束', ad({ name: 'sonnet-cavecrew-reviewer-diff', subagent_type: 'caveman:cavecrew-reviewer' }), 'ALLOW')
 // 判据取 subagent_type，不取 name——name 里出现 keeper 不构成档位要求
 agent('name 含 keeper 但类型是 Explore', ad({ name: 'sonnet-keeper-queue-audit', subagent_type: 'Explore' }), 'ALLOW')
 // 白名单式枚举：第三方 keeper-like agent 不在表内，不牵连
 agent('第三方 queue-keeper 不在白名单', ad({ name: 'sonnet-queue-keeper-x', subagent_type: 'foo:queue-keeper' }), 'ALLOW')
 
-// 缺 name + 合规 opus → 走自动补名，且补出的前缀是 opus-
+// 缺 name + 合规 opus → 走自动补名，且补出的名字自己必须满足 check 10 的新形态
+// （固定前缀 + 4 位小写字母数字），不能补出一个 guard 自己不放行的名字——这是本仓
+// 已经踩过的坑（见 hooks/guards/agent-dispatch.js 的 autoName 注释）。
 const adAuto = agent('keeper 缺 name 自动补', { model: 'opus', description: '登记三条新报障', subagent_type: 'task-keeper:debug-keeper' }, 'AUTONAME')
 if (adAuto.verdict === 'AUTONAME') {
-  check('agent-dispatch: keeper 自动名前缀 opus-', true, /^opus-/.test(adAuto.detail), adAuto.detail)
-  // 3.14.0：补出来的必须正好是固定名，不能带短哈希——否则等于补了个 check 10 自己不放行的形态
-  check('agent-dispatch: keeper 自动名就是固定名', 'opus-debug-keeper', adAuto.detail, adAuto.detail)
+  check('agent-dispatch: keeper 自动名满足新形态(固定前缀+4位短哈希)', true, /^opus-debug-keeper-[0-9a-z]{4}$/.test(adAuto.detail), adAuto.detail)
 }
 
-// ── agent-dispatch check 10：keeper 的 name 逐字钉死成固定三段名 ────────
+// ── agent-dispatch check 10：keeper 的 name 必须带 4 位短哈希后缀 ────────
 //
-// 与 check 8 的区别就是这一段存在的全部意义：check 8 只防遗忘（随便塞个身份词即可
-// 过闸），这条要求**逐字符相等**——唤醒方是照文档拼名字去 SendMessage，不是照在飞
-// 面板抄名字。2026-08-03 事故原样：keeper 被派成 `sonnet-debug-keeper-085`，38 分钟后
-// 主会话按文档里的固定名唤醒，报 "No agent named 'debug-keeper' is reachable."，
-// 随后它直接又派了第二个实例，两个实例抢同一个 .keeper 队列的独占写权限。
+// 2026-08-04 用户拍板改：旧判据（逐字钉死固定三段名）本身埋了新坑——同一会话内
+// 前一个 keeper 实例结束后，若下一个又派成逐字相同的固定名，`SendMessage` 的
+// latest-wins 寻址会让唤醒方分不清唤到的是哪一个。新判据要求 name 必须形如
+// `opus-<slug>-xxxx`（`xxxx` 恰好 4 位小写字母数字），强制把"名字不可预测"这个
+// 事实暴露出来，逼唤醒方必须先读 `.keeper/<交付id>/.keeper-instance.json` 才能拿到
+// 当前有效的 name。与 check 8 的区别：check 8 只防遗忘（随便塞个身份词即可过闸），
+// 这条同样不校验后 4 位是不是真的取自哈希，只校验形态——假阴性面是"AI 可以随便编
+// 4 个字符"，可接受，见 hooks/guards/agent-dispatch.js check 10 注释里的覆盖边界说明。
 
-// 该拦：档位对、身份词也带了，但名字自造
-const ad10 = agent('事故原样 opus-debug-keeper-085 带任务后缀', adO({ name: 'opus-debug-keeper-085', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
-check('agent-dispatch: check 10 finding 给出固定名', true, /必须逐字等于 "opus-debug-keeper"/.test(ad10.detail), ad10.detail)
-agent('带交付 id 后缀也拦', adO({ name: 'opus-debug-keeper-D-001', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
-agent('chore-keeper 带任务后缀也拦', adO({ name: 'opus-chore-keeper-tidy', subagent_type: 'task-keeper:chore-keeper' }), 'DENY')
-agent('身份词乱序拼名也拦', adO({ name: 'opus-keeper-debug', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
-// 等值比较不做小写化：大小写不同即不相等（有意为之——SendMessage 按名寻址区分大小写）
-agent('大小写不同也拦', adO({ name: 'opus-Debug-Keeper', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+// 该拦：旧版逐字固定名现在缺后缀
+agent('旧版固定名缺后缀也拦', adO({ name: 'opus-debug-keeper', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+// 该拦：事故原样的旧三位数字后缀，形态本身没问题（3 位不是 4 位），仍要拦
+const ad10 = agent('事故原样 opus-debug-keeper-085 位数不对', adO({ name: 'opus-debug-keeper-085', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+check('agent-dispatch: check 10 finding 给出新形态提示', true, /必须形如 "opus-debug-keeper-xxxx"/.test(ad10.detail), ad10.detail)
+// 该拦：大写
+agent('后缀大写也拦', adO({ name: 'opus-debug-keeper-4BB6', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+// 该拦：3 位
+agent('后缀 3 位也拦', adO({ name: 'opus-debug-keeper-4bb', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+// 该拦：5 位
+agent('后缀 5 位也拦', adO({ name: 'opus-debug-keeper-4bb6c', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+agent('chore-keeper 缺后缀也拦', adO({ name: 'opus-chore-keeper', subagent_type: 'task-keeper:chore-keeper' }), 'DENY')
+agent('身份词乱序拼名也拦', adO({ name: 'opus-keeper-debug-4bb6', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
 
-// 不得误杀：逐字相等的两个固定名
-agent('debug-keeper 固定名放行', adO({ name: 'opus-debug-keeper', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
-agent('chore-keeper 固定名放行', adO({ name: 'opus-chore-keeper', subagent_type: 'task-keeper:chore-keeper' }), 'ALLOW')
+// 不得误杀：新形态（固定前缀 + 4 位小写字母数字）
+agent('debug-keeper 新形态放行', adO({ name: 'opus-debug-keeper-4bb6', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('chore-keeper 新形态放行', adO({ name: 'opus-chore-keeper-0a9z', subagent_type: 'task-keeper:chore-keeper' }), 'ALLOW')
 // 非 keeper 的插件专用 agent 不受这条约束，仍是"含身份词即可"
-agent('cavecrew-reviewer 带任务后缀不受固定名约束', ad({ name: 'sonnet-cavecrew-reviewer-diff-audit', subagent_type: 'caveman:cavecrew-reviewer' }), 'ALLOW')
+agent('cavecrew-reviewer 带任务后缀不受这条约束', ad({ name: 'sonnet-cavecrew-reviewer-diff-audit', subagent_type: 'caveman:cavecrew-reviewer' }), 'ALLOW')
 // 白名单式枚举：第三方 keeper-like agent 不在表内，名字自由
 agent('第三方 queue-keeper 名字自由', ad({ name: 'sonnet-queue-keeper-anything', subagent_type: 'foo:queue-keeper' }), 'ALLOW')
 

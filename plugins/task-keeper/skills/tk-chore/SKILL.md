@@ -18,23 +18,31 @@ when_to_use: |
 
 ## 派出与唤醒
 
-首次（本会话还没有 chore-keeper 在跑时）：
+**先判断本会话有没有派过 chore-keeper——判据不是记忆，是文件**：读一次
+`.keeper/<交付id>/.keeper-instance.json` 的 `chore` 键。读到有效 name → 走
+「唤醒」；读不到 → 走「首次派出」。**不要因为唤醒不到就直接改判成首次派出再派
+第二个**——这正是要消除的行为，见下方事故。
 
 **`model` 固定 `"opus"`，不按杂务看起来多小来下调。** 杂务本身粒度小，但 keeper 要判的是
 外部写红线（判漏一次就是未授权写入外部系统）、共享工作区让位、决策打包，判错代价与活的
 体量无关（理由详见 `agents/chore-keeper.md` §0）。它派的只读 `Explore` 才用 `sonnet`。
 
-**`name` 逐字写 `opus-chore-keeper`，没有第二种合法写法。** 档位已钉死 `opus`，所以模型段
-恒为 `opus-`；带任务后缀（`opus-chore-keeper-001`）或额外修饰都会被 `working-discipline`
-的 `agent-dispatch` check 10 拦下。这个名字同时是此后 `SendMessage` 唤醒它的地址，你是
-照本文档拼它、不是照在飞面板抄它——名字自造一次就唤醒不到，继而倾向重派第二个实例、
-两个实例抢同一个 `.keeper/<交付id>/chore/` 的独占写权限。不要写成
+**首次派出时，`name` 自己生成一个带 4 位随机短哈希的后缀，形态
+`opus-chore-keeper-<4位小写字母或数字>`（如 `opus-chore-keeper-9f2a`，正则
+`^opus-chore-keeper-[0-9a-z]{4}$`）。** 档位已钉死 `opus`，所以模型段恒为
+`opus-`，但**不再逐字写死 `opus-chore-keeper`**——2026-08-04 起改为强制带随机后缀，
+原因是逐字固定名会在「上一个实例结束、下一个又叫同名」时撞车：`SendMessage` 的
+name 寻址是 latest wins，想唤起前一个就冲突。随机后缀让每个实例天生不重名，但
+代价是你没法再靠记忆或本文档拼出实际 name——`PreToolUse(Agent)` hook 会在派发那
+一刻自动把 name 写进 `.keeper/<交付id>/.keeper-instance.json` 的 `chore` 键，
+唤醒前只需要读它。拿交付 id 当后缀（`opus-chore-keeper-<交付id>`）或额外修饰都
+仍会被 `working-discipline` 的 `agent-dispatch` check 10 拦下。不要写成
 `chore-keeper`（缺模型段，会被 `working-discipline` 的 `agent-dispatch` 门禁拦下），
 也不要写成 `opus-task-keeper-chore-queue-manager` 这类带额外修饰的长名。
 
 ```
 Agent(
-  name: "opus-chore-keeper",
+  name: "opus-chore-keeper-9f2a",   // 自己生成 4 位随机小写字母/数字后缀，不要逐字抄这个例子
   subagent_type: "task-keeper:chore-keeper",   // 插件 agent；不可用时退 general-purpose 并把 agents/chore-keeper.md 全文放进 prompt
   description: "chore 队列常驻管理",
   model: "opus",
@@ -43,8 +51,12 @@ Agent(
 )
 ```
 
-之后一律 `SendMessage(to: "opus-chore-keeper", message: "<用户原话逐字>")` 唤醒——
-keeper 上下文跨唤醒保留，重新 Agent 派出会丢掉它已有的队列认知。
+派发成功后 `PreToolUse(Agent)` hook 会自动登记这个 name，不需要你自己再写登记文件。
+
+之后一律先读 `.keeper/<交付id>/.keeper-instance.json` 的 `chore` 键取出真实 name，
+再 `SendMessage(to: "<读出来的 NAME，不是字面量 opus-chore-keeper>", message:
+"<用户原话逐字>")` 唤醒——keeper 上下文跨唤醒保留，重新 Agent 派出会丢掉它已有的
+队列认知，也会让两个实例抢同一个 `.keeper/<交付id>/chore/` 的独占写权限。
 
 ## 主会话的边界（禁止越位）
 

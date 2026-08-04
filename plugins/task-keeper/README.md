@@ -14,21 +14,25 @@
 | skill | `tk-worktree` | 为 `git worktree` 建的工作区供给 submodule 内容（含嵌套递归），4 个子命令 |
 | agent | `debug-keeper` | 独占 `.keeper/debug/` 写权限，承接 bug 报告全流程 |
 | agent | `chore-keeper` | 独占 `.keeper/chore/` 写权限，承接杂务登记与攒批执行 |
-| hook × 6 | 见下表 | 注入路由/队列快照 + 三道窄判据守卫 |
+| hook × 7 | 见下表 | 注入路由/队列快照 + 三道窄判据守卫 + 1 个 keeper 实例登记 |
 
 ## hooks（挂载事件与实际行为）
 
 | 脚本 | 事件 | 行为（按动作描述，不是按愿望描述） |
 |---|---|---|
 | `session-start-keeper-routing.sh` | SessionStart | 纯注入**静态参考**（决策打包主会话侧职责、v4 布局、指针）。未启用 221 字符（一句话介绍 + 启用方式），已启用 671 字符，不拦截任何操作 |
-| `user-prompt-submit-keeper-routing.sh` | UserPromptSubmit | 纯注入**三岔口分诊**（自己做 / 转 debug-keeper / 转 chore-keeper）+ 转发三原则，424 字符。未启用项目 stdout 全空 |
+| `user-prompt-submit-keeper-routing.sh` | UserPromptSubmit | 纯注入**三岔口分诊**（自己做 / 转 debug-keeper / 转 chore-keeper）+ 转发三原则 + 唤醒前先读 name 登记文件那句提醒，523 字符。未启用项目 stdout 全空 |
 | `user-prompt-submit-debug-queue.sh` | UserPromptSubmit | 注入 debug 队列实时快照（open 逐条 + 在飞派生 + done 计数）、重算薄索引 `index.md`（git rebase/bisect/merge 中间态跳过）；`.gitignore` 有整树忽略行或缺三条精确规则时各加一句提醒；存量 v3/v2 布局未迁移时加一句迁移提示；命中 bug 特征词时给出下一个可用 DBG-id（fixer worktree 内不给） |
 | `user-prompt-submit-chore-queue.sh` | UserPromptSubmit | 注入 chore 队列快照（输出预算 ≤900 字符）；`.keeper/` 顶层存在时缺失的 `chore/`（连同 `debug/`）由 `find_queue` 每轮自动补建，不需要手工 mkdir；代注待拍板决策计数（自动补建后 `chore/` 恒存在，debug 快照的兜底注入分支实际只在 fixer worktree 内或补建失败时才会走到，两边判据仍是同一个目录的存在性） |
 | `pre-tool-use-debug-worktree-push.sh` | PreToolUse(Bash) | `git push` 的目标落在 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 内时 deny（fixer 产物只回流不推远端） |
 | `pre-tool-use-debug-worktree-destroy.sh` | PreToolUse(Bash) | 强制删除形态（`rm -rf` / `worktree remove --force` / `clean -fdx`）命中 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 路径时 ask 弹确认框 |
 | `pre-tool-use-debug-evidence.sh` | PreToolUse(Write\|Edit) | 只对 `.keeper/<交付id>/debug/*.md` 介入：新内容含 `image-cache` 会话级临时路径时 deny（跨会话必 404），带次数熔断，`origin_path` 留档豁免 |
+| `pre-tool-use-keeper-instance.sh` | PreToolUse(Agent) | 命中 keeper 类 `subagent_type`（`debug-keeper`/`chore-keeper`）的派发时，把 `tool_input.name` 写进 `.keeper/<交付id>/.keeper-instance.json` 对应键，另一个键原样保留；**纯写文件，不拦截任何操作**，不输出 permissionDecision，写不进去就静默放弃 |
 
 三道守卫的判据都是路径子串 + 命令形态的机械判定，未启用队列的项目全部零输出零成本。
+`pre-tool-use-keeper-instance.sh` 不是守卫——它不拦下任何动作，只有"顺手写一个登记
+文件"这个副作用，供主会话下次唤醒 keeper 前读取真实 `name`（见下方「登记 keeper
+实例 name」）。
 
 ## 产物布局：`.keeper/<交付id>/`，文本入库、截图与 worktree 不入库
 
@@ -45,7 +49,8 @@
     │       ├── 01-xxx.png               落盘但 **不入库**
     │       └── worktree/                **不入库**，tk-worktree init 的固定落点
     ├── chore/{index.md, CHR-NNN/item.md, archive/}
-    └── decisions/{<stamp>-<keeper>.md, answers/<同名>.md}
+    ├── decisions/{<stamp>-<keeper>.md, answers/<同名>.md}
+    └── .keeper-instance.json            ← keeper 实例 name 登记，见下方「登记 keeper 实例 name」
 ```
 
 `<交付id>` 由 `hooks/lib/keeper_paths.py` 解析：先 `--show-superproject-working-tree`
@@ -85,6 +90,28 @@ v4 对上表最后一行代价的缓解：keeper 每个工作窗口结束 commit
 齐备，**缺行就报错停下要求人工补**，不再像 v3 那样自动追加。原因是实测过：两个分支
 各自在 EOF 追加内容不同的注释即产生合并冲突，而脚本追加裸规则、AI 实际执行时会自由
 发挥注释文案。快照 hook 只注入提醒、不代写文件（与 v3 一致）。
+
+## 登记 keeper 实例 name（2026-08-04 起）
+
+keeper 的 `name` 强制带 4 位随机短哈希（形态 `opus-(debug|chore)-keeper-[0-9a-z]{4}`，
+如 `opus-debug-keeper-4bb6`；正则由 `working-discipline` 插件的 `agent-dispatch.js`
+校验，不在本插件内）。起因是旧版逐字固定名（`opus-debug-keeper`）在「同一段会话里
+前一个实例结束、下一个又叫同名」时会撞车——`SendMessage` 的 name 寻址是 latest wins，
+唤起前一个就会失联。
+
+短哈希是随机的，主会话没法靠记忆或文档拼出实际 name，所以需要落盘登记：
+`pre-tool-use-keeper-instance.sh` 挂在 `PreToolUse(Agent)`，命中 `tool_input.subagent_type`
+为 `debug-keeper`/`chore-keeper` 的派发时，把 `tool_input.name` 写进
+`.keeper/<交付id>/.keeper-instance.json`（`debug`/`chore` 两键各自独立，写一个不
+覆盖另一个）。主会话唤醒 keeper 之前先读这个文件取真实 name，读不到才当作首次、
+自己生成一个新的短哈希后缀派出。
+
+这是纯写文件的副作用 hook：不判断该不该放行这次 `Agent` 调用（放行判据是
+`working-discipline` 的职责），任何异常（找不到 git 仓库、文件写不进去）都静默降级，
+不影响本次 Agent 派发——写失败的后果只是"主会话下次唤醒时可能读到旧登记或读空，
+需要退回首次派出这条路径"，不是"这次派发失败了"。读写函数在
+`hooks/lib/keeper_paths.py`（`read_keeper_instances` / `write_keeper_instance`），
+判据与异常处理在 `hooks/lib/keeper_instance_register.py`。
 
 ## 自动归档
 
@@ -186,4 +213,6 @@ bash plugins/task-keeper/hooks/tests/run-tests.sh
 
 真实进程回归（JSON 喂 stdin、断言 stdout，不 mock），覆盖：队列快照分桶/排序/坏文件显式告警、
 index 幂等、三道守卫的拦与不拦两侧、wt_supply 供给/幂等/回流前置校验、归档与编号不回收、
-chore 快照字节预算、决策信箱计数、双队列互不串号、自动归档判据、路由注入分档。
+chore 快照字节预算、决策信箱计数、双队列互不串号、自动归档判据、路由注入分档、
+keeper 实例登记的写入与放弃两侧（白名单命中/不命中、name 缺失、目录不存在时自动建出、
+另一个键保留）。
