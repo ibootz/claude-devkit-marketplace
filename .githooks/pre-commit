@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# pre-commit：提交前校验插件版本四方一致（plugins/<dir>/.claude-plugin/plugin.json、
+# plugins/<dir>/.codex-plugin/plugin.json、.claude-plugin/marketplace.json、
+# .agents/plugins/marketplace.json），不一致就拦下本次提交。
+#
+# 【为什么要挂成 hook，而不是只写进 README】
+# scripts/check-versions.js 早就存在，README 里也写了「改完跑一下」，但 2026-08-04 审计
+# 发现 22 个插件里 8 个在 .codex-plugin 那一路上漂移，且每个插件的 .codex-plugin/plugin.json
+# 都**只有创建那一次提交**——靠文档提醒的实际执行率是零。防护要生效，必须挂在会响的
+# 时机点上，而不是停在「记得跑一下」。
+#
+# 【判据】
+# 取自 git 的确定输出，不猜语义：本次暂存文件的路径前缀。落在 plugins/ 或两份市场清单
+# 里才跑校验。
+#
+# 【什么时候不触发】
+# 暂存文件里没有任何一个落在上述范围时直接放行——改 README、改 .claude/rules/、改
+# scripts/ 自身、改根目录文档都不需要跑这道校验。
+#
+# 【怎么绕过】
+# 确有正当理由要提交一次不一致的状态（例如分两次提交、先落插件后落清单）：
+#   git commit --no-verify
+#
+# 【启用方式】
+# 本文件靠 core.hooksPath 生效，clone 之后需要各自设一次（git config 不随仓库同步）：
+#   git config core.hooksPath .githooks
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+
+# 本次提交没碰插件与市场清单 → 与版本登记无关，直接放行
+if ! git diff --cached --name-only |
+  grep -qE '^(plugins/|\.claude-plugin/marketplace\.json$|\.agents/plugins/marketplace\.json$)'; then
+  exit 0
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "[pre-commit] 未找到 node，跳过版本一致性校验" >&2
+  exit 0
+fi
+
+if ! node "$ROOT/scripts/check-versions.js" --quiet; then
+  echo "" >&2
+  echo "[pre-commit] 版本登记不一致，本次提交已拦下。" >&2
+  echo "  修复：node scripts/check-versions.js --fix && git add -u" >&2
+  echo "  确需带着不一致提交：git commit --no-verify" >&2
+  exit 1
+fi

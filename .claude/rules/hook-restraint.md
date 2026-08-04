@@ -215,6 +215,39 @@ agent-browser open https://y --profile /p --json "{--headed}"      # PASS
 判据设计的取向由此明确：**存在性判定必须绑定到它要约束的那次调用的作用域内**，不能对
 整条输入做全局搜索。3.6.0 已把判定收窄到单次调用的参数列表与紧邻的环境变量前缀。
 
+## 注入类 hook 的事件落点：选错等于没写
+
+判据准不准是一回事，**注入到不到得了它要影响的那个代理**是另一回事。后者选错时没有任何
+报错——hook 正常执行、正常输出、退出码 0，只是那段文本永远不出现在需要它的上下文里。
+
+三个纯注入事件的触达面（Claude Code 2.1.220 二进制实证，2026-08-04）：
+
+| 事件 | 触达谁 | 关键点 |
+|---|---|---|
+| `UserPromptSubmit` | **只有主会话** | 语义是「用户在交互界面提交了一次 prompt」。子代理由 `Agent`/`Task` 工具**编程派发任务字符串**，不存在这个动作，注入到不了它们 |
+| `SubagentStart` | **每个子代理自己** | `additionalContext` 被包成 `hook_additional_context` 消息 `push` 进子代理的初始消息数组，不经父代理。payload 带 `agent_id` / `agent_type`；`matcher` 按 `agent_type` 过滤，插件自带的 agent 要用 `plugin:agent` 全名 |
+| `SessionStart` | 会话启动那一次 | 子代理场景下指的是「子代理自己那次 SessionStart」，**不是**父会话那次注入的透传 |
+
+**实证，不是推演**：`devkit-tool` 的 codegraph 引导原先单挂 `UserPromptSubmit`。某会话里
+主会话收到该注入 **20 次**，而同一项目 **23 份 transcript 里 codegraph 的实际调用为 0**——
+真正做符号检索的是 keeper / fixer 子代理，它们一次都没收到过那段文本。图建了、hook 跑了、
+判据也对，只是落点错了，于是整套机制等于不存在。修法是双挂两个事件（6.5.0）。
+
+**动手前先问一句：这条规则要影响的动作，是主会话做还是子代理做？**
+
+- 主会话做（要不要拆任务、怎么与用户沟通、拿什么口径汇报）→ `UserPromptSubmit`
+- 子代理做（检索、改文件、跑命令、调外部 API）→ **必须**挂 `SubagentStart`，只挂前者等于没写
+- 两边都做 → 双挂，共用同一个脚本
+
+**双挂时的硬要求**：输出的 `hookSpecificOutput.hookEventName` **必须与入参
+`hook_event_name` 一致**。写死任一个都会让另一路静默失效——不报错、不告警，与「压根没挂」
+的外观完全相同。回声时要过白名单，不要把 payload 里的任意字符串原样回声进
+`hookSpecificOutput`。参考实现见 `plugins/devkit-tool/hooks/codegraph-hint.js`，两侧回归
+用例见同目录 `tests/codegraph-hint-gating.sh` 里三条 `event` 用例。
+
+**本节不改变克制原则**：注入类 hook 依然不受判据严格性约束（见末节适用边界），本节只解决
+「注入去了哪里」这个正交问题。
+
 ## 已存在的 hook 怎么办
 
 不要因为这条规则去批量删除现有 hook。处置顺序是：

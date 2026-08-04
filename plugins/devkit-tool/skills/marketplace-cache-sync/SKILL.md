@@ -3,6 +3,9 @@ name: marketplace-cache-sync
 description: 拉取 Claude Code 已配置的插件市场(marketplace)最新代码，刷新已启用插件(enabled plugin)的本地缓存版本(含 user scope 与 project/local scope 两种安装范围)，并在刷新后回收缓存磁盘占用。
 when_to_use: |
   用户说"更新一下插件市场"、"拉取 marketplace 最新代码"、"刷新插件缓存"、"plugin 装的新版本怎么不生效"、"skill 改了但没同步过来"、"市场 lastUpdated 变了/没变是不是真的更新了"、"marketplace update 之后要不要重启"、"插件缓存占了多少空间"、"清理插件缓存"、"cache 目录太大"、"temp_git_ 开头的目录能删吗"、"历史版本缓存能不能删"、"reload-plugins 够不够还是必须重启"、"reload 完 hook 还是旧的"、"某个项目里装的插件版本没跟着更新"、"project scope 的插件怎么刷新"、"这个插件只在某个项目里装了，全局刷新覆盖不到"。
+  **另一类触发是主动的，不要漏**——上面那些措辞全是「发现没生效之后」的补救语气，但更常见的场景是**改完当场就该刷**：
+  你（或用户）刚改完自己维护的某个插件的 SKILL.md / hook / plugin.json 并提交推送，此时**当前会话读到的仍是旧版缓存**。
+  判据很机械：**本轮是否写过 `<某个 marketplace 仓>/plugins/**` 下的文件**。写过就该在收尾时刷一次，而不是只丢下一句「记得刷新缓存」让用户自己去跑。
 ---
 
 # Marketplace Cache Sync（插件市场与插件缓存刷新）

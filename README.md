@@ -311,20 +311,32 @@ node scripts/uninstall-codex.js --all --dry-run
 
 ### 版本一致性检查
 
-同一个插件的版本号登记在**三处**，改了插件却漏改市场清单是本仓库反复发生的遗漏：`plugins/<dir>/.claude-plugin/plugin.json`（真相源）、`.claude-plugin/marketplace.json`（Claude Code 市场清单）、`.agents/plugins/marketplace.json`（Codex 市场清单）。真实案例：`working-discipline` 连续两次 bump（1.8.0 / 1.9.0）都只改了 `plugin.json`，两份市场清单一直卡在 1.7.1；`omp` 升到 2.3.0 后 Codex 清单仍是 2.2.0。后果是用户按市场清单看到的版本号与描述都是过期的。
+同一个插件的版本号登记在**四处**，改了插件却漏改其中某处是本仓库反复发生的遗漏：`plugins/<dir>/.claude-plugin/plugin.json`（真相源）、`plugins/<dir>/.codex-plugin/plugin.json`（Codex 侧插件声明，只有发布到 Codex 的插件有）、`.claude-plugin/marketplace.json`（Claude Code 市场清单）、`.agents/plugins/marketplace.json`（Codex 市场清单）。真实案例：`working-discipline` 连续两次 bump（1.8.0 / 1.9.0）都只改了 `plugin.json`，两份市场清单一直卡在 1.7.1；`omp` 升到 2.3.0 后 Codex 清单仍是 2.2.0。后果是用户按市场清单看到的版本号与描述都是过期的。
+
+**第 2 路（`.codex-plugin/plugin.json`）是 2026-08-04 才补进检查范围的**，补之前脚本对它没有任何分支。审计结果：22 个插件里 8 个在这一路上漂移，且每个插件的 `.codex-plugin/plugin.json` 都**只有创建那一次提交**——`devkit-tool` 的 `.claude-plugin` 侧已迭代五次以上到 6.5.0，`.codex-plugin` 侧原地停在 6.0.0。这条通道上从来没有会响的警报，所以漂移是必然而非疏忽。**防护的覆盖面小于问题面时，它给出的「全部通过」是假的。**
 
 ```bash
-# 检查（有问题 exit 1，适合挂 CI / pre-push）
+# 检查（有问题 exit 1）
 node scripts/check-versions.js
 
-# 把两份市场清单的 version 对齐 plugin.json
+# 把四处 version 对齐 plugin.json（真相源）
 node scripts/check-versions.js --fix
 
-# 只输出问题行，通过时不打表
+# 只输出问题行，通过时不打表（pre-commit hook 用的就是这个）
 node scripts/check-versions.js --quiet
 ```
 
-检查项包括版本三方不一致、市场清单漏登记、清单里有条目但 `plugins/` 下无对应目录（幽灵条目）。远程源插件（`source` 为 `{"source":"github",...}`）自动豁免——它们没有本地 `plugin.json`，且 `install-codex.js` 只从本地 `plugins/<name>/` 目录安装，所以不登记到 Codex 清单是有意设计而非遗漏。本市场目前没有远程源插件（`mattpocock-skills` 已于 2026-08-01 移除），这条豁免逻辑保留待用。
+**已挂 pre-commit 强制执行**（`.githooks/pre-commit`）：提交涉及 `plugins/` 或任一份市场清单时自动跑一次校验，不一致就拦下并给出修复命令。靠 `core.hooksPath` 生效，而 `git config` 不随仓库同步，**clone 之后要各自设一次**：
+
+```bash
+git config core.hooksPath .githooks
+```
+
+确有正当理由要带着不一致提交（例如拆成两次提交）：`git commit --no-verify`。改 README、改 `.claude/rules/`、改 `scripts/` 自身不触发这道校验（判据是暂存文件的路径前缀）。
+
+**为什么必须挂成 hook**：这个脚本和上面这段说明早就存在，下方「添加新插件」第 5 步也写着「跑一下」，但那 8 处漂移证明靠文档提醒的实际执行率是零。防护要生效，必须挂在会响的时机点上。
+
+检查项包括版本四方不一致、市场清单漏登记、清单里有条目但 `plugins/` 下无对应目录（幽灵条目）。远程源插件（`source` 为 `{"source":"github",...}`）自动豁免——它们没有本地 `plugin.json`，且 `install-codex.js` 只从本地 `plugins/<name>/` 目录安装，所以不登记到 Codex 清单是有意设计而非遗漏。本市场目前没有远程源插件（`mattpocock-skills` 已于 2026-08-01 移除），这条豁免逻辑保留待用。
 
 `--fix` **只对齐 `version` 字段，不动 `description`**：描述该写什么需要人工判断，机器对齐只会把陈旧描述固化下来，修完仍需自行确认市场清单里的描述是否同步。
 
@@ -367,10 +379,12 @@ claude-devkit-marketplace/
 │   ├── wenyan-output-style/
 │   ├── insight-addon/
 │   └── session-auto-title/
+├── .githooks/
+│   └── pre-commit             # 提交前强制跑版本四方校验（需 git config core.hooksPath .githooks）
 ├── scripts/
 │   ├── install-codex.js       # 安装插件到 Codex CLI
 │   ├── uninstall-codex.js     # 从 Codex CLI 卸载插件
-│   └── check-versions.js      # 版本三方一致性检查
+│   └── check-versions.js      # 版本四方一致性检查
 ├── README.md
 └── AGENTS.md
 ```
@@ -385,7 +399,8 @@ claude-devkit-marketplace/
    - 对于 MCP 插件：`.mcp.json`（或 `.claude-plugin/plugin.json` + `.mcp.json`）
 3. 在 `.claude-plugin/marketplace.json` 中添加插件条目（Claude Code 市场清单）
 4. **同时**在 `.agents/plugins/marketplace.json` 中添加对应条目（Codex 市场清单，`scripts/install-codex.js` 读的是这一份）——只有远程源插件（`source` 为 `{"source":"github",...}`）可以不登记，因为 `install-codex.js` 只从本地 `plugins/<name>/` 目录安装
-5. 跑 `node scripts/check-versions.js` 确认三处版本登记一致（漏改市场清单是本仓库反复出现的遗漏，见下方「版本一致性检查」）
+5. 若该插件也发布到 Codex，建 `plugins/<名>/.codex-plugin/plugin.json`，**版本号与 `.claude-plugin` 侧保持一致**
+6. 跑 `node scripts/check-versions.js` 确认四处版本登记一致（漏改是本仓库反复出现的遗漏，见下方「版本一致性检查」）。设过 `git config core.hooksPath .githooks` 的话，提交时会自动跑这一步并在不一致时拦下
 
 ### 本地测试
 

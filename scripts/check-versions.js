@@ -1,14 +1,24 @@
 #!/usr/bin/env node
-// check-versions.js — 插件版本三方一致性检查
+// check-versions.js — 插件版本四方一致性检查
 //
 // 【为什么需要】
-// 同一个插件的版本号登记在三处，改了插件却漏改市场清单是反复发生的遗漏：
+// 同一个插件的版本号登记在四处，改了插件却漏改其中某处是反复发生的遗漏：
 //   1. plugins/<dir>/.claude-plugin/plugin.json    ← 真相源（插件自身声明）
-//   2. .claude-plugin/marketplace.json             ← Claude Code 市场清单
-//   3. .agents/plugins/marketplace.json            ← Codex 市场清单（install-codex.js 读它）
+//   2. plugins/<dir>/.codex-plugin/plugin.json     ← Codex 侧插件声明（有此目录的插件才有）
+//   3. .claude-plugin/marketplace.json             ← Claude Code 市场清单
+//   4. .agents/plugins/marketplace.json            ← Codex 市场清单（install-codex.js 读它）
 // 真实案例：working-discipline 连续两次 bump（1.8.0 / 1.9.0）都只改了 plugin.json，
 // 两份市场清单卡在 1.7.1；omp 升到 2.3.0 后 .agents 清单仍是 2.2.0。
 // 用户按市场清单安装时拿到的是过期版本号，且 description 一并陈旧。
+//
+// 【第 2 路是 2026-08-04 补的，补之前漏了整整一路】
+// 本脚本原先只扫 .claude-plugin/plugin.json，对 .codex-plugin/plugin.json 没有任何分支。
+// 后果不是"偶尔漏一次"：审计发现 22 个插件里 8 个在这一路上漂移，且每个插件的
+// .codex-plugin/plugin.json 都**只有创建那一次提交**——devkit-tool 的 .claude-plugin
+// 侧已迭代五次以上到 6.5.0，.codex-plugin 侧原地停在 6.0.0；agent-browser 1.2.0 对
+// 1.1.0；omp 2.4.0 对 2.0.0。这条通道上从来没有会响的警报，所以漂移是必然而非疏忽。
+// 教训：**防护的覆盖面小于问题面时，它给出的"全部通过"是假的**——脚本本身跑得好好的，
+// 只是没在看那一路。加新的版本登记位置时，这里必须同步加一路。
 //
 // 【豁免规则】
 // 远程源插件（source 非本地路径，如 {"source":"github","repo":"..."}）：
@@ -50,7 +60,9 @@ function isLocalSource(source) {
   return false
 }
 
-// 扫 plugins/*/.claude-plugin/plugin.json，以 plugin.json 里声明的 name 为键
+// 扫 plugins/*/.claude-plugin/plugin.json，以 plugin.json 里声明的 name 为键；
+// 同一目录下若有 .codex-plugin/plugin.json 一并读进来（没有就是 null，不算问题——
+// 只有 8 个插件同时发布到 Codex，其余本来就没这个目录）。
 function collectLocalPlugins() {
   const out = {}
   if (!fs.existsSync(PLUGINS_DIR)) return out
@@ -65,7 +77,25 @@ function collectLocalPlugins() {
       out['__parse_error__' + entry.name] = { error: `${manifest} 解析失败: ${e.message}` }
       continue
     }
-    out[json.name || entry.name] = { version: json.version, dir: entry.name, manifest }
+
+    const codexManifest = path.join(PLUGINS_DIR, entry.name, '.codex-plugin', 'plugin.json')
+    let codexVersion = null
+    if (fs.existsSync(codexManifest)) {
+      try {
+        codexVersion = readJson(codexManifest).version
+      } catch (e) {
+        out['__parse_error__codex_' + entry.name] = { error: `${codexManifest} 解析失败: ${e.message}` }
+        continue
+      }
+    }
+
+    out[json.name || entry.name] = {
+      version: json.version,
+      dir: entry.name,
+      manifest,
+      codexManifest: fs.existsSync(codexManifest) ? codexManifest : null,
+      codexVersion,
+    }
   }
   return out
 }
@@ -96,6 +126,7 @@ function main() {
   const rows = []
   let fixedCc = 0
   let fixedCodex = 0
+  let fixedCodexPlugin = 0
 
   for (const name of names) {
     if (name.startsWith('__parse_error__')) {
@@ -139,10 +170,23 @@ function main() {
         rowIssues.push(`.agents/plugins/marketplace.json 里是 ${codexEntry.version}，应为 ${truth}`)
       }
     }
+    // 第 2 路：plugins/<dir>/.codex-plugin/plugin.json。没有这个目录的插件跳过（不是问题），
+    // 有则必须与 .claude-plugin 侧同版本 —— 这一路 2026-08-04 之前完全没在查，8 个插件全漂了。
+    if (lp && lp.codexManifest && truth && lp.codexVersion !== truth) {
+      if (fix) {
+        const cj = readJson(lp.codexManifest)
+        cj.version = truth
+        fs.writeFileSync(lp.codexManifest, JSON.stringify(cj, null, 2) + '\n')
+        fixedCodexPlugin++
+      } else {
+        rowIssues.push(`plugins/${lp.dir}/.codex-plugin/plugin.json 里是 ${lp.codexVersion}，应为 ${truth}`)
+      }
+    }
 
     rows.push({
       name,
       local: lp ? lp.version : '-',
+      codexPlugin: lp && lp.codexManifest ? lp.codexVersion : '-',
       cc: ccEntry ? ccEntry.version : '-',
       codex: codexEntry ? codexEntry.version : '-',
       remote,
@@ -151,21 +195,24 @@ function main() {
     for (const issue of rowIssues) problems.push(`${name}: ${issue}`)
   }
 
-  if (fix && (fixedCc || fixedCodex)) {
-    fs.writeFileSync(CC_MARKET, JSON.stringify(cc.json, null, 2) + '\n')
-    fs.writeFileSync(CODEX_MARKET, JSON.stringify(codex.json, null, 2) + '\n')
-    console.log(`已对齐 version：.claude-plugin/marketplace.json ${fixedCc} 处，.agents/plugins/marketplace.json ${fixedCodex} 处`)
-    console.log('注意：--fix 不改 description，请自行确认市场清单里的描述是否也需同步更新')
+  if (fix && (fixedCc || fixedCodex || fixedCodexPlugin)) {
+    if (fixedCc || fixedCodex) {
+      fs.writeFileSync(CC_MARKET, JSON.stringify(cc.json, null, 2) + '\n')
+      fs.writeFileSync(CODEX_MARKET, JSON.stringify(codex.json, null, 2) + '\n')
+    }
+    console.log(`已对齐 version：.claude-plugin/marketplace.json ${fixedCc} 处，.agents/plugins/marketplace.json ${fixedCodex} 处，plugins/*/.codex-plugin/plugin.json ${fixedCodexPlugin} 处`)
+    console.log('注意：--fix 不改 description，请自行确认市场清单与 .codex-plugin 侧的描述是否也需同步更新')
   }
 
   if (!quiet) {
-    console.log('plugin.json   | cc-market | codex-market | plugin')
-    console.log('--------------|-----------|--------------|-------')
+    console.log('plugin.json  | codex-plugin | cc-market | codex-market | plugin')
+    console.log('-------------|--------------|-----------|--------------|-------')
     for (const r of rows) {
       const flag = r.ok ? '  ' : '✗ '
       const tag = r.remote ? ' (远程源)' : ''
       console.log(
-        flag + String(r.local).padEnd(12) + ' | ' +
+        flag + String(r.local).padEnd(11) + ' | ' +
+        String(r.codexPlugin).padEnd(12) + ' | ' +
         String(r.cc).padEnd(9) + ' | ' +
         String(r.codex).padEnd(12) + ' | ' +
         r.name + tag
@@ -181,7 +228,7 @@ function main() {
     process.exit(1)
   }
 
-  console.log(`✓ ${rows.length} 个插件的版本登记三方一致`)
+  console.log(`✓ ${rows.length} 个插件的版本登记四方一致`)
   process.exit(0)
 }
 

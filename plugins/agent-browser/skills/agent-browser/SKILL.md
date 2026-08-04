@@ -32,7 +32,7 @@ headless 一旦启动，人类**无法中途参与**登录授权，所以**第�
 |------|--------|--------------|
 | 持久化 profile | `ls <候选目录>/Default/Cookies` —— **有该文件才算数**，目录存在但为空（`du -sh` 显示 0B）等于没有 | `--profile <路径>` |
 | agent-browser 自带 vault | `agent-browser auth list` | `auth use <name>` |
-| 本机的凭据管理 CLI | 团队常自建这类工具（集中登记账密、自动换 token、过期自动重登），名字各不相同。先看本机装没装、有没有对应的 skill；装了就跑它的**只读列表命令**看有没有目标站点的身份及其新鲜度 | 取 token 灌 `--headers`，或取 cookie 走 `cookies set` |
+| 本机的凭据管理 CLI | 团队常自建这类工具（集中登记账密、自动换 token、过期自动重登），名字各不相同。**在可用 skill 列表里找 description 提到 token / 凭据 / 鉴权 / 登录态的那个**，按它的指引跑**只读列表命令**（通常形如 `<工具> list`）看有没有目标站点的身份及其新鲜度 | 取 token 灌 `--headers`，或取 cookie 走 `cookies set` |
 | 项目文档记载的免登入口 | 在项目 `CLAUDE.md`、`.claude/rules/`、交付文档里 grep `token=` / `免登` / `localhost:<端口>` | 按它记载的方式拼 URL 或注入头 |
 
 **第 2 步 · 四行全空才问用户**：
