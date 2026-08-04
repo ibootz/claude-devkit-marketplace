@@ -16,7 +16,7 @@ headless 浏览器下人类看不到画面、无法中途授权或纠错，盲�
 
 | 机制 | 解决 | 强制度 |
 |------|------|--------|
-| 鉴权前置 | 启动前先向用户索取账密/token/cookie 并注入 | guard 硬拦 |
+| 鉴权前置 | 启动前先**盘点本机已有来源**（profile / vault / 凭据管理 CLI / 项目文档免登入口），四行全空才向用户索取账密/token/cookie | guard 硬拦 |
 | 实例上限 4 | 全局最多 4 个并发实例（agent-browser 无内置上限） | guard 硬拦 |
 | 登录态复用 | 持久化 `--profile`，跨会话不重登 | guard 硬拦 |
 | snapshot + 标注截图 | headless 下靠结构化快照与 `--annotate` 截图回看每步 | 指令约束 |
@@ -29,4 +29,4 @@ headless 浏览器下人类看不到画面、无法中途授权或纠错，盲�
 
 ## 一句话用法
 
-触发后按指令走：**先问用户要鉴权 → `session list` 确认实例数 → `--profile` 注入登录态 → `open` → `snapshot -i` → 按 `@eN` 操作 → `screenshot --annotate` 复核 → `close`**。
+触发后按指令走：**先盘点本机已有鉴权来源（为空才问用户要）→ `session list` 确认实例数 → `--profile` 注入登录态 → `open` → `snapshot -i` → 按 `@eN` 操作 → `screenshot --annotate` 复核 → `close`**。

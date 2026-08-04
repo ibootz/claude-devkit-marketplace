@@ -81,7 +81,7 @@ codegraph status /abs/path/to/repo
 
 **提问必须带英文标识符。** 实测 `explore "岗位序列模型的保存接口在哪"` 返回 `No relevant code found`；把英文类名塞进同一句中文里（`explore "BelloController 的接口方法调用了哪些 service"`）就正常返回 27 个符号，且与纯英文提问输出几乎逐字节相同（25,856 vs 25,836 字节）。匹配靠 query 里的标识符 token，不靠自然语言语义。
 
-**不接 MCP 会少掉服务端自动下发的使用引导**——本插件用一个纯注入 hook 补上：`hooks/user-prompt-submit-codegraph.js` 在 cwd 归属的仓**已建图**时注入两行（强化用 codegraph、抑制拿 `Grep`/`Glob` 全仓搜符号），未建图的仓输出 0 字节。它向上找 `.codegraph/` 时**不越过 worktree 边界**（读 `.git` 文件的 gitdir 区分：`/modules/` 穿过、`/worktrees/` 停），避免未建图的 worktree 认领父仓那份属于另一分支的图。关掉：`CODEGRAPH_HINT=off`。回归用例见 `hooks/tests/codegraph-hint-gating.sh`。
+**不接 MCP 会少掉服务端自动下发的使用引导**——本插件用一个纯注入 hook 补上：`hooks/codegraph-hint.js` 在 cwd 归属的仓**已建图**时注入两行（强化用 codegraph、抑制拿 `Grep`/`Glob` 全仓搜符号），未建图的仓输出 0 字节。它**双挂 `UserPromptSubmit` + `SubagentStart`**（6.5.0 起）：前者覆盖主会话每轮，后者覆盖每个子代理启动时——`UserPromptSubmit` 的语义是「用户在交互界面提交了一次 prompt」，而子代理由 `Agent`/`Task` 工具编程派发，**该事件的注入到不了子代理**。实证：某会话主会话收到注入 20 次、该项目 23 份 transcript 里 codegraph 实调为 0，因为真正做符号检索的是 keeper / fixer 子代理，它们一次都没收到过。它向上找 `.codegraph/` 时**不越过 worktree 边界**（读 `.git` 文件的 gitdir 区分：`/modules/` 穿过、`/worktrees/` 停），避免未建图的 worktree 认领父仓那份属于另一分支的图。关掉：`CODEGRAPH_HINT=off`。回归用例见 `hooks/tests/codegraph-hint-gating.sh`。
 
 没装本插件、或想让规则进仓库的，在**已建图**项目的 `CLAUDE.md` 里补一行等效内容（未建图项目不要写）：
 

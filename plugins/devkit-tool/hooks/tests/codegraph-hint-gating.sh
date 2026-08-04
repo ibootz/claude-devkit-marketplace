@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# user-prompt-submit-codegraph.js 的 gating 回归用例。
+# codegraph-hint.js 的 gating 回归用例。
 # 判据两侧都覆盖：该注入的（仓根 / submodule / 已建图 worktree）与该静默的
 # （未建图 worktree / 无图仓 / 非仓目录）。两条曾经判错的边界各留一条用例：
 #   - submodule 的 gitdir 同时含 modules 与 worktrees（`.git/modules/<sub>/worktrees/<sub>`）
@@ -7,7 +7,7 @@
 # 跑法：bash hooks/tests/codegraph-hint-gating.sh
 
 set -u
-HOOK="$(cd "$(dirname "$0")/.." && pwd)/user-prompt-submit-codegraph.js"
+HOOK="$(cd "$(dirname "$0")/.." && pwd)/codegraph-hint.js"
 B="$(mktemp -d "${TMPDIR:-/tmp}/codegraph-hint.XXXXXX")"
 trap 'rm -rf "$B"' EXIT
 
@@ -36,6 +36,18 @@ t "$B/repo/.wt/G"     inject "已建图 worktree"
 t "$B/repo/.wt/G/sub" inject "已建图 worktree 内 submodule（gitdir 含 modules+worktrees）"
 t "$B/repo2"          silent "无图独立仓"
 t "/tmp"              silent "非仓目录"
+
+# hookEventName 回声：双挂 UserPromptSubmit + SubagentStart 共用本脚本，输出的
+# hookEventName 写死任一个都会让另一路**静默失效**（不报错、只是不生效），故两侧各留一条。
+ev() { # $1=入参 hook_event_name $2=期望回声
+  got=$(printf '%s' "{\"cwd\":\"$B/repo\",\"hook_event_name\":\"$1\"}" | node "$HOOK" 2>/dev/null |
+    node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).hookSpecificOutput.hookEventName))}catch{process.stdout.write("PARSE_FAIL")}})')
+  if [ "$got" = "$2" ]; then pass=$((pass+1)); printf 'PASS event    %-18s → %s\n' "$1" "$got"
+  else fail=$((fail+1)); printf 'FAIL event    %-18s → %s (期望 %s)\n' "$1" "$got" "$2"; fi
+}
+ev SubagentStart    SubagentStart
+ev UserPromptSubmit UserPromptSubmit
+ev BogusEventName   UserPromptSubmit   # 白名单兜底：未挂的事件名不得原样回声
 
 n=$(printf '%s' "{\"cwd\":\"$B/repo\"}" | CODEGRAPH_HINT=off node "$HOOK" 2>/dev/null | wc -c | tr -d ' ')
 if [ "$n" = "0" ]; then pass=$((pass+1)); echo "PASS silent   CODEGRAPH_HINT=off 关闭注入"
