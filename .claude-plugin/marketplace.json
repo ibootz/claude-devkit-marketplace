@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude DevKit Pro Marketplace - 精简后的 Claude Code / Codex 插件市场，聚焦核心开发、Spec 工作流与高价值生产力插件",
-    "version": "2.6.0"
+    "version": "2.7.0"
   },
   "renames": {
     "devkit-core": "devkit-tool"
@@ -130,6 +130,13 @@
       "category": "Productivity",
       "description": "会话标题跟随话题 - 轮数或工作量到阈值即后台重算，补内建只命名一次的缺口",
       "version": "1.1.0"
+    },
+    {
+      "name": "clickable-paths",
+      "source": "./plugins/clickable-paths",
+      "category": "Productivity",
+      "description": "文件路径可点击 - iTerm2 里 cmd+click 跳 VS Code 对应行，需配 Semantic History",
+      "version": "1.0.0"
     }
   ]
 }

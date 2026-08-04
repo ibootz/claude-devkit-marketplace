@@ -1,7 +1,7 @@
 {
   "metadata": {
     "description": "Claude DevKit Pro Marketplace - 精简后的 Claude Code / Codex 插件市场，聚焦核心开发、Spec 工作流与高价值生产力插件",
-    "version": "2.6.0"
+    "version": "2.7.0"
   },
   "name": "claude-devkit-marketplace",
   "interface": {
@@ -318,6 +318,24 @@
         "authentication": "ON_INSTALL"
       },
       "version": "1.1.0"
+    },
+    {
+      "author": {
+        "name": "zhangq"
+      },
+      "category": "Productivity",
+      "description": "文件路径可点击 - iTerm2 里 cmd+click 跳 VS Code 对应行，需配 Semantic History",
+      "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
+      "name": "clickable-paths",
+      "source": {
+        "source": "local",
+        "path": "./plugins/clickable-paths"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "version": "1.0.0"
     }
   ]
 }
