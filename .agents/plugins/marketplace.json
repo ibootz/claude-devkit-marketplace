@@ -144,7 +144,7 @@
         "name": "zhangq"
       },
       "category": "Productivity",
-      "description": "AI 工作纪律 - 语义规则分三层注入 + 2 道硬拦 1 道事后提醒。零 skill，适合全局开启",
+      "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒。零 skill，适合全局开启",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "working-discipline",
       "source": {
@@ -155,7 +155,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "3.23.0"
+      "version": "3.24.0"
     },
     {
       "author": {

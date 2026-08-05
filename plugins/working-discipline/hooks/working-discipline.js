@@ -435,7 +435,9 @@ const SECTION_PARALLEL_TURN = [
   '',
   '**检查点①（合并）**：本轮已连续发出 3 次「一条消息只有一个工具调用」时，**第 4 次调用前把剩余待查项一次性合并进同一条消息发出**；不能合并就写明属于上面哪个正当理由。',
   '',
-  '**检查点②（派发，与①相互独立——满足①不等于满足②）**：**自上次派发以来**你已自己发起 **≥6 次只读检索**（`Read` / `Grep` / `Glob` / `Bash` 累计，同一条消息里的按条数各算一次），且手上仍有 **≥2 个互不依赖的待查项** → 下一步**派 `Explore`**，不得继续自己查。判据是**次数**不是难度。次数那一半由每轮的「派发账本」现算、过线时直接点名；你只需答另一半（还有没有 ≥2 个互不依赖的待查项），那个只有你知道。',
+  '**检查点②（派发，与①相互独立——满足①不等于满足②）**：**自上次派发以来**你已自己发起 **≥6 次只读检索**（`Read` / `Grep` / `Glob` / `Bash` 累计），且手上仍有 **≥2 个互不依赖的待查项** → 下一步**派 `Explore`**，不得继续自己查。判据是**次数**不是难度。次数那一半由 harness 现算：每轮开头的「派发账本」给累计值，`guards/probe-throttle.js` 在你即将发起第 4 次起实时报数、第 6 次**强制中断一次**让你当场决定（可自解除，细则撞到时给）。你只需答另一半（还有没有 ≥2 个互不依赖的待查项），那个只有你知道。',
+  '',
+  '**这道闸只数串行次数——同一条消息里并发发出的调用判为同批、一次不计。** 所以①和②在机制上是同一件事的两面：把独立的待查项合并进一条消息，既满足①也天然不撞②的闸；逐个单发才会累积。',
   '',
   '（两个检查点都要有**外部可见的产物**才算做过：①的产物是那条多工具调用消息，②的产物是 `Agent` 调用本身。只在心里过一遍等于没做。）',
 ].join('\n')
@@ -610,6 +612,20 @@ const SECTION_AGENT_CALL = [
   '}',
   '```',
   '',
+  '**并发就是把上面这个整体重复 N 份、放进同一条消息**（不是某个字段的数组，也不需要额外开关）。可整体照抄：',
+  '',
+  '```json',
+  '// 一条消息里发多个 Agent 调用 = 并发。三个分片各自独立，互不等待。',
+  '{ "name": "sonnet-probe-config-layer", "model": "sonnet", "subagent_type": "Explore",',
+  '  "description": "查配置层加载顺序", "run_in_background": true, "prompt": "<四段式>" }',
+  '{ "name": "sonnet-probe-hook-wiring", "model": "sonnet", "subagent_type": "Explore",',
+  '  "description": "查 hook 挂载与触达面", "run_in_background": true, "prompt": "<四段式>" }',
+  '{ "name": "sonnet-probe-test-fixture", "model": "sonnet", "subagent_type": "Explore",',
+  '  "description": "查回归用例现有形态", "run_in_background": true, "prompt": "<四段式>" }',
+  '```',
+  '',
+  '`name` 里的分片依据（`config-layer` / `hook-wiring` / `test-fixture`）是同批可辨的唯一手段——`SendMessage` 靠 `name` 寻址且同名 latest wins，三个都叫 `sonnet-probe-x` 等于弄丢前两个。',
+  '',
   '`prompt` 的四段式（整段写进上面那个 `prompt` 字符串里）：',
   '',
   '```text',
@@ -685,25 +701,43 @@ const SECTION_DISPATCH = [
 const HOOK_ENFORCED_AGENT_BULLET =
   '- **`Agent`**（`guards/agent-dispatch.js`）校验 `model` / `name` / `description` 的结构，判据就是「派发 `Agent` 的完整调用形态」那张六字段表（主会话每轮注入一份，子代理版在上面第五章里），外加三条 keeper 专项：档位钉 `opus`、`name` 带 4 位短哈希、`description` 钉死为「debug 队列常驻管理」/「chore 队列常驻管理」（逐字，不写当次任务——面板显示的是首次派发那一刻的值，`SendMessage` 唤醒改不了它）。照那张表写就不会撞'
 
+// `probe-throttle` 那条同样单独抽出来，理由与 `Agent` 那条相反：它**只对主会话生效**。
+// 该 hook 读到 payload.agent_id（仅子代理触发时存在）就直接放行、连计数都不做——因为
+// 嵌套上限 2 层，第 2 层压根不许再派，拦它等于卡死；第 1 层的检索本身就是父代理派发的
+// 产物。所以子代理版必须剔除这条，否则是向它描述一条对它不存在的约束。
+const HOOK_ENFORCED_PROBE_BULLET =
+  '- **`Read` / `Grep` / `Glob` / `Bash` 的节奏**（`guards/probe-throttle.js`，唯一不按对象、按**行为节奏**拦的一道，故 `Bash` 会过两道闸）：自上次 `Agent` 派发以来**逐个**发起的只读检索满 4 次起实时报数、满 6 次 deny 一次，把检查点②的决定点摆到你面前。**它是减速带不是墙**——deny 后同一段内不会再拦第二次，确认无 ≥2 个互不依赖待查项时**原样重发那次调用即放行**，不必改写命令、更不要为过闸凑一个假派发。**同一条消息里并发发出的调用判为同批、一次不计**，所以合并调用既是正解也天然不撞闸'
+
 // 由 guard 硬拦截的规则，这里只留一行索引：让 AI 知道边界存在（别把撞拦截当异常、
 // 也别在事前反复自我审查细节），细则由各 guard 在命中时给出。
 const SECTION_HOOK_ENFORCED = [
   '## 六、hook 在时机点强制的规则（撞到时会给出完整细则）',
   '',
-  'hook 按**拦截对象**收敛：一个对象一道闸，多条违规**一次报清**，撞到照 finding 一次改全。**判据是文本形态匹配而非语义判定**，三道闸都有实测过的误杀面：finding 明显对不上你的真实意图时按 hint 改一次，改完仍被拦而你确信无害就**报告用户拍板**，不要多轮试探正则边界。',
+  'hook 按**拦截对象**收敛：一个对象一道闸，多条违规**一次报清**，撞到照 finding 一次改全。**判据是文本形态匹配或纯计数，而非语义判定**，每道闸都有实测过或已声明的误杀面：finding 明显对不上你的真实意图时按 hint 改一次，改完仍被拦而你确信无害就**报告用户拍板**，不要多轮试探正则边界。',
   '',
   '- **`Bash`**（`guards/bash-guard.js`）拦独立 `cd`，并查 `agent-browser` 启动类子命令（`open` / `connect` / 带 URL 的 `chat`）。**写 Bash 前先套模板**：`(cd /abs/path && cmd)` 或 `git -C <path> <cmd>` 或全用绝对路径——这道闸只认「裸 `cd` 开头」一种形态，`pushd` / `source` 含 cd 的脚本 / `eval "cd …"` 同样污染 cwd 却拦不住，要守的是 cwd 干净不是躲过这道闸。`agent-browser` 默认 headless（人类无法中途登录），启动前必须已备好登录态（`--profile` / `--headers` / `--state` / `--restore` 任一），且先 `agent-browser session list` 数活动实例、≥4 时先 `close` 再开；另建议带 `--allowed-domains` + `--content-boundaries`（缺失仅提醒不阻断）。完整工作流见 `agent-browser` 插件 SKILL.md',
   HOOK_ENFORCED_AGENT_BULLET,
+  HOOK_ENFORCED_PROBE_BULLET,
   '- **`Write` / `Edit`**（`guards/write-guard.js`）：单一源码文件 >1000 行、当前项目内 `CLAUDE.md` >200 行会给提示。**它挂 `PostToolUse`，触发时文件已经写完了**——不回滚这次写入、也不停住本轮，指望不上它兜底，动笔前就要判断该不该拆（`CLAUDE.md` 拆到 `.claude/rules/{topic}.md`，不要靠压缩正文过闸——那会丢约束）',
 ].join('\n')
 
-// 同上，去掉 `Agent` 那条——它指向「完整调用形态」那张字段表，而派不出下一层的
+// 剔除指定 bullet 的派生版本。前言里刻意不写"共几道闸"，正是为了让派生版无需改动前言
+// 就自洽——写死数字是实证 5 那类文案漂移的温床（hook 效力与描述它的文案分别演进）。
+function withoutBullets(section, bullets) {
+  const drop = new Set(bullets)
+  return section.split('\n').filter((line) => !drop.has(line)).join('\n')
+}
+
+// 子代理版：去掉 `probe-throttle` 那条（它对子代理直接放行，见该常量上方注释）。
+const SECTION_HOOK_ENFORCED_SUBAGENT = withoutBullets(SECTION_HOOK_ENFORCED, [HOOK_ENFORCED_PROBE_BULLET])
+
+// 再去掉 `Agent` 那条——它指向「完整调用形态」那张字段表，而派不出下一层的
 // agent 类型（`Explore` / `Plan`）不会收到那一节，留着会变成一条指向空处的引用。
 // 这类 agent 也压根触发不了 agent-dispatch：它们的工具集里没有 `Agent`。
-const SECTION_HOOK_ENFORCED_NO_DISPATCH = SECTION_HOOK_ENFORCED
-  .split('\n')
-  .filter((line) => line !== HOOK_ENFORCED_AGENT_BULLET)
-  .join('\n')
+const SECTION_HOOK_ENFORCED_NO_DISPATCH = withoutBullets(SECTION_HOOK_ENFORCED, [
+  HOOK_ENFORCED_PROBE_BULLET,
+  HOOK_ENFORCED_AGENT_BULLET,
+])
 
 // ── 条件注入：本轮用户给了截图 ──────────────────────────────────────
 //
@@ -803,6 +837,9 @@ const SECTION_PARALLEL_SUB = [
 // 叠加），这份成本换命名合规是划算的——这也是主会话压成索引、子代理保留完整的原因。
 // 注 2：SECTION_HOOK_ENFORCED 必须进子代理版——子代理的工具调用同样触发
 // PreToolUse / PostToolUse guard（hook payload 里带 agent_id 标识），撞到的拦截与主会话一致。
+// **唯一的例外是 probe-throttle**（3.24.0）：它拿 agent_id 当放行判据，对子代理压根不生效，
+// 故子代理走 SECTION_HOOK_ENFORCED_SUBAGENT（已剔除那条）。这里不能图省事复用完整版——
+// 向子代理描述一条对它不存在的闸，等于教它去规避一个不会发生的拦截。
 // 注 3：章节编号与主版保持一致（子代理版故意跳号：零、一、二、三、五、六，缺四；`Explore` /
 // `Plan` 再缺五，见下方 canDispatch。同一字符串单一真相源，避免同一条规则出现两套编号）。
 // 注 4（3.18.0）：语言令必须置顶复述，不能只靠下方 SECTION_EXPRESSION 的 3.5。根因是两路
@@ -869,7 +906,7 @@ function buildSubagentPrompt(event) {
     SECTION_EXPRESSION,
     '',
     ...dispatchSections,
-    dispatches ? SECTION_HOOK_ENFORCED : SECTION_HOOK_ENFORCED_NO_DISPATCH,
+    dispatches ? SECTION_HOOK_ENFORCED_SUBAGENT : SECTION_HOOK_ENFORCED_NO_DISPATCH,
   ].join('\n')
 }
 

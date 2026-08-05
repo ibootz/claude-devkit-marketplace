@@ -1,7 +1,7 @@
 {
   "name": "working-discipline",
-  "version": "3.23.0",
-  "description": "AI 工作纪律 - 纪律分三层注入（SessionStart 会话级 / 每轮零章与自查 / 子代理版），下沉 3 个 guard：2 道硬拦 + 1 道事后提醒。零 skill，适合全局开启。设计依据与实测见 README",
+  "version": "3.24.0",
+  "description": "AI 工作纪律 - 纪律分三层注入（SessionStart 会话级 / 每轮零章与自查 / 子代理版），下沉 4 个 guard：3 道硬拦 + 1 道事后提醒，含决策时刻的串行检索减速带。零 skill，适合全局开启。设计依据与实测见 README",
   "author": {
     "name": "zhangq"
   },
@@ -22,6 +22,15 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/bash-guard.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Read|Grep|Glob|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/probe-throttle.js"
           }
         ]
       }
