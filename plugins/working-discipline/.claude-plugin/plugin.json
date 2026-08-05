@@ -1,6 +1,6 @@
 {
   "name": "working-discipline",
-  "version": "3.17.0",
+  "version": "3.18.0",
   "description": "AI 工作纪律 - 纪律分三层注入（SessionStart 会话级 / 每轮零章与自查 / 子代理版），下沉 3 个 guard：2 道硬拦 + 1 道事后提醒。零 skill，适合全局开启。设计依据与实测见 README",
   "author": {
     "name": "zhangq"

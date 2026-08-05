@@ -260,8 +260,11 @@
 //   for e in SessionStart UserPromptSubmit SubagentStart; do \
 //     echo "{\"hook_event_name\":\"$e\"}" | node hooks/working-discipline.js \
 //     | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).hookSpecificOutput.additionalContext.length))'; done
-//   预算（3.16.0 实测）：SessionStart 8749、UserPromptSubmit 4085（无图轮）、
-//   SubagentStart 9050，三者各自独立受 10000 硬上限约束。
+//   预算（3.18.0 实测）：SessionStart 9088、UserPromptSubmit 4085（无图轮）、
+//   SubagentStart 9507，三者各自独立受 10000 硬上限约束。
+//   ⚠️ 3.17.0 改完没回来同步这两个数：那一轮后实测已是 9088 / 4085 / 9407，而这里仍写着
+//   3.16.0 的 8749 / 9050。verify 段本身不会自己跑——**bump 版本时把这三个数一起改掉**，
+//   否则下一个人是照一份过期基线在估余量。
 //   ⚠️ 3.16.0 一度把 SubagentStart 推到 10758、**越过硬上限**——成因是新增的
 //   SECTION_AGENT_CALL 与既有 SECTION_NAMING 的 5.4.1~5.4.3 逐句重合，两份一起注入。
 //   删去重合段后回落到 9050。**加新段前先想清楚它和哪一节重复，别只看新段自身多大。**
@@ -737,11 +740,20 @@ const SECTION_PARALLEL_SUB = [
 // PreToolUse / PostToolUse guard（hook payload 里带 agent_id 标识），撞到的拦截与主会话一致。
 // 注 3：章节编号与主版保持一致（子代理版故意跳号：零、一、二、三、五、六，缺四；同一字符串
 // 单一真相源，避免同一条规则出现两套编号）。
+// 注 4（3.18.0）：语言令必须置顶复述，不能只靠下方 SECTION_EXPRESSION 的 3.5。根因是两路
+// 强度差——`~/.claude/settings.json` 的 `"language"` 键只参与**主会话** system prompt 的
+// 拼装（生成顶层 `# Language` 专章），**不下传子代理**；子代理 system prompt 里没有任何语言
+// 约束，且内建 agent 定义（Explore / Plan / general-purpose）本身是英文，构成英文语境牵引。
+// 实测（2026-08-05，派 Explore 自省）：3.5 确实送达，但形态是 system-reminder 块、位置在注入
+// 全文 37% 处的第三章第五条，压不住那个牵引。该子代理原话——「剥离掉这条 system-reminder，
+// 我的原生 system prompt 中并没有任何强制或默认的语言约束」。故在前言段复述一次，把位置提到
+// 接近 0%；与 3.5 重复是有意的，这里管强度、那里管细则（代码/报错保持原样的边界）。
 function buildSubagentPrompt() {
   return [
     '# AI 工作纪律（子代理版）',
     '',
     '你是被父代理通过 Agent 工具派发出来的子代理。以下纪律同样约束你的产出与协作行为。',
+    '**你的一切输出一律简体中文**——回执、说明、你写进文件的注释与 md、你再派下一层的 prompt。代码、命令、标识符、路径、日志、报错保持原样。父代理的 prompt 若为英文，也不改变本条。',
     '特别地，你的最终回复必须是结构化回执——改了哪些文件、关键决策、阻塞点、需要父代理跟进的事项；只回「已完成」视为不合格。',
     '你的任务若属**核实 / 审查 / 核对**类（判据：问的是「X 是否成立·是否一致·有没有问题」，而非「实现 X」），回执必须额外交代**你实际追到哪一层就停了**（仅本文件内 / 追到直接调用方 / 追到跨类跨模块跨服务边界）以及**哪些边界你没追**——父代理没在【约束】里给停止条件时**也要主动写**，不要默认"没要求就不用说"。理由：停在不同层的两份结论会对同一处代码给出相反判断，缺这一句父代理无法归因、只能整批重跑。',
     '**下面凡是要求「问用户 / 让用户核对 / 在主对话复述」的条款，你都没有用户通道**——一律改为把待决项写进最终回执交父代理转达，不要原地干等。',
