@@ -69,6 +69,17 @@
 #   登记动作。H21 覆盖它命中/不命中两侧、name 缺失时放弃、目录不存在时能建出来、
 #   写一档不覆盖另一档。
 #
+# 【2026-08-05 补会话隔离，H21 追加 [81]-[86]，新增 H22 编号 [87]-[92]】
+#   登记文件跨会话存活，但派出去的 subagent 只活在派出它的那次会话里——新会话
+#   读到上一个会话的死 name、唤醒失败后误判成"重派"，两个实例抢同一个目录的独占
+#   写权限。修法是登记里多写 `session_id`（`keeper_paths.write_keeper_instance`
+#   新增同名参数、`read_keeper_instance_name` 新增 `current_session_id` 参数做
+#   比对），真正的三选一判断现算在 `keeper_routing.py` 的 `triage_wake_line` 里、
+#   直接注进每轮的三岔口文案。H21 追加的 [81]-[86] 测 `keeper_paths.py` 函数级的
+#   写入/比对/旧格式陈旧判据；新增 H22（[87]-[92]）测 `triage_wake_line` 三选一
+#   在真实 hook 外壳下的注入文案（无登记 / session 匹配直接带出 name / session
+#   不匹配或旧格式当陈旧 / 两档同时匹配 / payload 缺 session_id 时的安全降级）。
+#
 # 【测试用真实进程跑，不 mock】直接把 JSON 喂给 hook 脚本的 stdin、断言 stdout，
 #   与 harness 的调用方式完全一致，因此能覆盖 bash 外壳、python 定位、编码等
 #   全链路，而不只是 python 函数。
@@ -117,6 +128,7 @@ source "$TESTS_DIR/cases/13-h18-session-start-routing.sh"
 source "$TESTS_DIR/cases/14-h19-userprompt-triage.sh"
 source "$TESTS_DIR/cases/15-h20-queue-autocreate.sh"
 source "$TESTS_DIR/cases/16-h21-keeper-instance-registry.sh"
+source "$TESTS_DIR/cases/17-h22-keeper-routing-session.sh"
 
 echo
 printf '通过 %d / 失败 %d\n' "$pass" "$fail"

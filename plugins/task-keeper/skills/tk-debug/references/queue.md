@@ -403,7 +403,11 @@ prompt 模板，先看下一节按 `difficulty` 分的两条路径。
   用 `SendMessage` 问 keeper 自己的 name。keeper 的 name 带随机短哈希（形态
   `opus-debug-keeper-<4位>`），fixer 拿不到 keeper 自己的调度元数据，所以
   debug-keeper 派发 fixer 之前要先读一次 `.keeper/<交付id>/.keeper-instance.json`
-  的 `debug` 键，把真实 name 写进 prompt 里替换掉占位符，而不是自己拍板续做。
+  的 `debug` 键，把真实 name 写进 prompt 里替换掉占位符，而不是自己拍板续做。这份
+  登记从 2026-08-05 起还带 `session_id`（用于主会话跨会话判断"这条登记是不是本会话
+  写的"，完整说明见 `agents/debug-keeper.md` §0），但 debug-keeper 读自己这一份时
+  不需要比对——写它的正是这次派发/唤醒本身，必然属于当前会话，会话隔离要处理的是
+  主会话跨会话唤醒的场景，不是这里。
 
 **为什么这样设计（实测支撑）**：
 

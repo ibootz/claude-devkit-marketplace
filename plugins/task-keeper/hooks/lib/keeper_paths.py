@@ -87,6 +87,33 @@ v3 有**三份**独立的「找 `.keeper` 在哪」实现，判据还不一致�
 `tool_name === "Agent"` 且 `subagent_type` 命中白名单）、异常静默降级全部在
 `hooks/pre-tool-use-keeper-instance.sh` 与配套的 `hooks/lib/keeper_instance_register.py`
 里，本模块只管路径与文件格式，不判断"这次调用该不该登记"。
+
+## `.keeper-instance.json` 的会话隔离（2026-08-05 补）
+
+登记文件落在磁盘上、**跨会话存活**，但派出去的 subagent 只活在派出它的那一次会话里。
+上一版只登记 `name`，没有任何字段能区分"这条登记是不是本会话写的"——于是新会话第一次
+转 bug 时，主会话读到的是**上一个会话的死 name**，`SendMessage` 报
+`No agent named ... is reachable`，按"唤醒不到就重派"的错误反应，会直接又派第二个
+实例，两个实例抢同一个 `.keeper/<交付id>/debug/` 的独占写权限——这正是本机制本来要
+消除的失败模式，在跨会话场景下原样复活了一次。
+
+修法是登记里多写一个 `session_id` 键（`{"debug": {"name": ..., "ts": ..., "session_id":
+...}}`），取自 hook payload 的 `session_id` 字段——这是所有 hook 输入 schema 的公共
+字段，`PreToolUse` 与 `UserPromptSubmit` 都有。`write_keeper_instance` 的 `session_id`
+参数取不到（`None` 或空字符串）时**不写这个键**（不是写 `null`）——省一次"键存在但值
+为 null"与"键不存在"的双态判断，读侧统一按"没有这个键"处理。`read_keeper_instance_name`
+新增 `current_session_id` 参数：传了就要求登记的 `session_id` 与它相等才返回 `name`，
+不传则维持旧行为（不比较会话，只看 name 有没有）。
+
+**旧格式兼容口径**：登记文件里没有 `session_id` 键的记录（即本次改动落地之前写入的
+存量登记），在传了 `current_session_id` 比对时**一律当作陈旧处理**——不是"没写就算
+通过"。理由是"没有这个字段"和"字段值确实等于当前会话"是两种不同的确定性，前者是
+"无法确认"，不能当"确认属于本会话"处理；比对失败的代价只是退回"首次派发"这条已经
+验证过安全的路径，比误判成"属于本会话"继而唤醒一个早已不存在的实例代价小得多。
+
+真正做会话比对决策的落点是 `hooks/lib/keeper_routing.py` 的 `UserPromptSubmit` 每轮
+注入（它能拿到当前 `session_id`，直接把比对结果算成一句话注给主会话）；主会话自己
+读不到自己的 `session_id`，没法重新做这个比对，所以决策不能留给主会话自己读文件猜。
 """
 import datetime
 import io
@@ -262,17 +289,43 @@ def read_keeper_instances(worktree_root, delivery_id):
     return data if isinstance(data, dict) else {}
 
 
-def read_keeper_instance_name(worktree_root, delivery_id, kind):
-    """只取某一档（`"debug"` / `"chore"`）当前登记的 name；取不到返回 `None`。"""
+def read_keeper_instance_name(worktree_root, delivery_id, kind, current_session_id=None):
+    """只取某一档（`"debug"` / `"chore"`）当前登记的 name；取不到返回 `None`。
+
+    `current_session_id` 缺省（`None`）时只看有没有 name，不比较会话——这是旧调用方
+    （不关心会话隔离的场景）的行为，原样保留。
+
+    传了非空字符串时，额外要求登记记录里的 `session_id` 键存在且与它相等，否则也
+    返回 `None`。这一条判据同时覆盖两种"过期"：`session_id` 不一致（跨会话的死
+    登记）、以及登记文件根本没有 `session_id` 键（会话隔离机制落地之前写入的旧格式）
+    ——**两种都当"无法确认属于本会话"处理，一律视为陈旧**，不做"没写就算通过"的
+    宽松判断。取不到的具体原因（文件不存在/损坏/kind 缺失/name 缺失/会话不匹配/
+    旧格式无 session_id）调用方不需要分辨，统一按 `None` 处理、退回"首次派发"。
+    """
     entry = read_keeper_instances(worktree_root, delivery_id).get(kind)
-    name = entry.get("name") if isinstance(entry, dict) else None
-    return name if isinstance(name, str) and name else None
+    if not isinstance(entry, dict):
+        return None
+    name = entry.get("name")
+    if not isinstance(name, str) or not name:
+        return None
+    if current_session_id:
+        entry_session_id = entry.get("session_id")
+        if not isinstance(entry_session_id, str) or entry_session_id != current_session_id:
+            return None
+    return name
 
 
-def write_keeper_instance(worktree_root, delivery_id, kind, name):
+def write_keeper_instance(worktree_root, delivery_id, kind, name, session_id=None):
     """把 `kind`（`"debug"` / `"chore"`）对应的实例 name 写进登记文件，**保留另一
     个键**——先读旧文件、只覆盖 `kind` 这一路，再整份写回。旧文件不存在或损坏时
     当空 dict 处理，不报错。
+
+    `session_id` 是这次派发所在会话的 id（取自 hook payload 的 `session_id` 字段），
+    用于后续跨会话判断"这条登记还有效吗"。**取不到时（`None` 或空字符串）不写这个
+    键**——不是写 `null`：省掉读侧"键存在但值为 null"与"键压根不存在"的双态判断，
+    统一按"没有这个键"处理即可（见 `read_keeper_instance_name` 的旧格式兼容口径）。
+    `session_id` 取不到不影响登记本身——name 照常写入，只是这条记录之后没法被会话
+    比对认领，读它的调用方会一律当陈旧处理、退回首次派发，这是安全的降级方向。
 
     这是纯写文件动作，**不做任何拦截判断**——那是调用方
     （`hooks/lib/keeper_instance_register.py`）的职责。本函数对外的失败模式只有
@@ -290,10 +343,13 @@ def write_keeper_instance(worktree_root, delivery_id, kind, name):
         return False
     data = read_keeper_instances(worktree_root, delivery_id)
     data = dict(data) if isinstance(data, dict) else {}
-    data[kind] = {
+    record = {
         "name": name,
         "ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
     }
+    if isinstance(session_id, str) and session_id:
+        record["session_id"] = session_id
+    data[kind] = record
     tmp = path + ".tmp"
     try:
         with io.open(tmp, "w", encoding="utf-8") as f:

@@ -11,6 +11,12 @@
 # 本 hook 遇到 None 就直接放弃，测不出任何写入行为。所以本节统一用 mkrealrepo
 # 造一个可以真正跑 git 命令的仓库；basename 不匹配 `D-\d+-*`/`hotfix-*`，落
 # `_main` 兜底桶。
+# 【2026-08-05 追加 [81]-[86]】会话隔离——[81]-[82] 测本文件对应的 hook 外壳
+# （payload 带/不带 session_id 两侧）；[83]-[86] 直接调用 `keeper_paths.py` 的
+# `write_keeper_instance`/`read_keeper_instance_name`，测函数级的会话比对与
+# 旧格式（无 session_id 键）陈旧判据，走 py_kp() 这个新 helper，模式与
+# 04-h8-wt-supply.sh 的 py_nextid() 一致。三岔口注入文案的三选一（要用到
+# `keeper_routing.py` 的 `triage_wake_line`）另开一节，见 17-h22。
 
 echo
 echo "== H21 · keeper 实例落盘登记（pre-tool-use-keeper-instance.sh：PreToolUse(Agent)）=="
@@ -73,4 +79,86 @@ run_keeper_instance "$T" "debug-keeper" "opus-debug-keeper-cafe" >/dev/null
 NAME_BARE="$(ki_field "$T/.keeper/_main/.keeper-instance.json" debug name)"
 if [ "$NAME_BARE" = "opus-debug-keeper-cafe" ]; then ok "裸 subagent_type（无冒号）同样命中并登记"
 else bad "裸 subagent_type 应同样命中" "opus-debug-keeper-cafe" "$NAME_BARE"; fi
+rm -rf "$T"
+
+# ────────────────────────── 会话隔离（2026-08-05 补，keeper_instance_register.py 侧）──────────────────────────
+# 判据在 keeper_paths.py：write_keeper_instance 新增 session_id 参数、
+# read_keeper_instance_name 新增 current_session_id 参数。本节先测
+# pre-tool-use-keeper-instance.sh 这一层（payload 带/不带 session_id 两侧），
+# keeper_paths.py 函数级别的读写/旧格式判据放到下面单独一段直接调用 python。
+
+echo "[81] payload 带 session_id → 登记文件的 session_id 键写入正确"
+T="$(newtmpdir)"; mkrealrepo "$T"
+run_keeper_instance "$T" "task-keeper:debug-keeper" "opus-debug-keeper-4bb6" "Agent" "sess-AAA" >/dev/null
+REG="$T/.keeper/_main/.keeper-instance.json"
+SID="$(ki_field "$REG" debug session_id)"
+if [ "$SID" = "sess-AAA" ]; then ok "debug 键的 session_id 写入正确"
+else bad "debug.session_id 应为 sess-AAA" "sess-AAA" "$SID"; fi
+rm -rf "$T"
+
+echo "[82] payload 缺 session_id → 仍然登记 name，且不写出坏文件（JSON 仍合法，没有 session_id 键）"
+T="$(newtmpdir)"; mkrealrepo "$T"
+run_keeper_instance "$T" "task-keeper:debug-keeper" "opus-debug-keeper-4bb6" >/dev/null
+REG="$T/.keeper/_main/.keeper-instance.json"
+NAME_NOSID="$(ki_field "$REG" debug name)"
+if [ "$NAME_NOSID" = "opus-debug-keeper-4bb6" ]; then ok "缺 session_id 时 name 仍正常登记"
+else bad "缺 session_id 时 name 应仍登记" "opus-debug-keeper-4bb6" "$NAME_NOSID"; fi
+HAS_KEY="$(/usr/bin/python3 -c '
+import json
+try:
+    d = json.load(open("'"$REG"'"))
+    print("session_id" in d.get("debug", {}))
+except Exception:
+    print("ERROR")
+')"
+if [ "$HAS_KEY" = "False" ]; then ok "缺 session_id 时登记记录里不写出这个键（不是写 null）"
+else bad "缺 session_id 时不应写出 session_id 键" "False" "$HAS_KEY"; fi
+rm -rf "$T"
+
+# ────────────────────────── 会话隔离（keeper_paths.py 函数级） ──────────────────────────
+# 直接调用 write_keeper_instance/read_keeper_instance_name，不经过 hook 外壳——
+# 判据是这两个函数自己的行为，用 py_kp() 直接跑，模式与 04-h8-wt-supply.sh 的
+# py_nextid() 一致。
+
+py_kp() {   # $1=worktree_root，其余转给 python 表达式，import 好 keeper_paths 后 eval
+  /usr/bin/python3 -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+import keeper_paths as kp
+root = sys.argv[2]
+print(eval(sys.argv[3]))
+' "$LIBDIR" "$1" "$2"
+}
+
+echo "[83] write_keeper_instance 带 session_id，read_keeper_instance_name 传相同 session_id → 读得到 name"
+T="$(newtmpdir)"; mkrealrepo "$T"
+py_kp "$T" 'kp.write_keeper_instance(root, "_main", "debug", "opus-debug-keeper-1111", session_id="sess-A")' >/dev/null
+GOT="$(py_kp "$T" 'kp.read_keeper_instance_name(root, "_main", "debug", current_session_id="sess-A")')"
+if [ "$GOT" = "opus-debug-keeper-1111" ]; then ok "同 session_id 比对通过，读得到 name"
+else bad "同 session_id 应读得到 name" "opus-debug-keeper-1111" "$GOT"; fi
+rm -rf "$T"
+
+echo "[84] 同一条登记，传不同的 current_session_id → 读不到（返回 None）"
+T="$(newtmpdir)"; mkrealrepo "$T"
+py_kp "$T" 'kp.write_keeper_instance(root, "_main", "debug", "opus-debug-keeper-1111", session_id="sess-A")' >/dev/null
+GOT="$(py_kp "$T" 'kp.read_keeper_instance_name(root, "_main", "debug", current_session_id="sess-B")')"
+if [ "$GOT" = "None" ]; then ok "不同 session_id 比对失败，返回 None"
+else bad "不同 session_id 应返回 None" "None" "$GOT"; fi
+rm -rf "$T"
+
+echo "[85] 登记是旧格式（没有 session_id 键）→ 传 current_session_id 比对时当陈旧处理，返回 None"
+T="$(newtmpdir)"; mkrealrepo "$T"
+# 不传 session_id 参数，模拟会话隔离机制落地之前写入的旧格式记录。
+py_kp "$T" 'kp.write_keeper_instance(root, "_main", "debug", "opus-debug-keeper-1111")' >/dev/null
+GOT="$(py_kp "$T" 'kp.read_keeper_instance_name(root, "_main", "debug", current_session_id="sess-A")')"
+if [ "$GOT" = "None" ]; then ok "旧格式（无 session_id 键）在会话比对下当陈旧处理，返回 None"
+else bad "旧格式登记在会话比对下应返回 None" "None" "$GOT"; fi
+rm -rf "$T"
+
+echo "[86] 不传 current_session_id（缺省）→ 维持旧行为，不比较会话，只看 name 有没有"
+T="$(newtmpdir)"; mkrealrepo "$T"
+py_kp "$T" 'kp.write_keeper_instance(root, "_main", "debug", "opus-debug-keeper-1111", session_id="sess-A")' >/dev/null
+GOT="$(py_kp "$T" 'kp.read_keeper_instance_name(root, "_main", "debug")')"
+if [ "$GOT" = "opus-debug-keeper-1111" ]; then ok "不传 current_session_id 时忽略会话比对，读到 name"
+else bad "不传 current_session_id 时应读到 name（旧行为）" "opus-debug-keeper-1111" "$GOT"; fi
 rm -rf "$T"

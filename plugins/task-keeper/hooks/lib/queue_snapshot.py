@@ -81,9 +81,17 @@ LEGACY_QUEUE = ".debug"  # radnove-core 时代的旧队列目录，仅用于迁�
 # strip 后整行相等才算命中，不解析通配符语义。
 GITIGNORE_SWALLOW = {".keeper/", ".keeper", "/.keeper/", "/.keeper", ".keeper/**"}
 
-# v4 期望的三条规则（判据 6）。用 `**` 而非 `*/debug/*/`——后者在 `_main` 兜底桶
-# 那一层少一级会漏网（实测）。
-GITIGNORE_WANT = (".keeper/**/worktree/", ".keeper/**/*.png", ".keeper/**/*.jpg")
+# v4 期望的四条规则（判据 6）。用 `**` 而非 `*/debug/*/`——后者在 `_main` 兜底桶
+# 那一层少一级会漏网（实测）。第四条（2026-08-05 补）排除的是
+# `.keeper-instance.json`——它是会话级运行时状态，跨会话即失效（见
+# `keeper_paths.py` 模块头「`.keeper-instance.json` 的会话隔离」），入库既产生
+# 噪音 diff（每派一个新 keeper 实例就一次），也会把已失效的 name 同步给协作者。
+GITIGNORE_WANT = (
+    ".keeper/**/worktree/",
+    ".keeper/**/*.png",
+    ".keeper/**/*.jpg",
+    ".keeper/**/.keeper-instance.json",
+)
 
 # bug 报告特征词。命中即追加 register-first 提醒。
 # 只在 `.keeper/` 顶层已存在（= 该项目显式 opt-in）时生效，避免污染其他项目；
@@ -339,10 +347,11 @@ def gitignore_findings(queue_dir):
         Code 把 `grep` 影子成自带 ugrep 且参数写死 `--ignore-files`，被 ignore 的
         文件搜起来**静默零命中、不报错**——「搜一下有没有类似 issue」会得到错误
         的「没有」。删这一行是 v4 能成立的前提。
-      · 三条精确规则**缺失** → worktree 与截图会被 `git add -A` 一起提交。嵌套
+      · 四条精确规则**缺失** → worktree 与截图会被 `git add -A` 一起提交。嵌套
         worktree 尤其糟：它会被种成幽灵 gitlink（实测 `git add -n` 报
         `warning: adding embedded git repository`），而这个场景下的宿主仓真的有
-        submodule，野生 gitlink 会让 `wt_supply.merge_into` 的冲突白名单整体阻断。
+        submodule，野生 gitlink 会让 `wt_supply.merge_into` 的冲突白名单整体阻断；
+        第四条（`.keeper-instance.json`）缺失则是把会话级死 name 同步进 git 历史。
 
     判据都是 strip 后整行相等，不解析通配符语义。只提醒不代写——v4 起冷启动也
     **不再自动追加**：两个分支各自 EOF 追加内容不同的注释即冲突，实测过。
@@ -359,7 +368,7 @@ def gitignore_findings(queue_dir):
     if hit:
         out.append("⚠ `%s/.gitignore` 有整树忽略行 %s——v4 队列文本入库，这一行会把 "
                    "issue 一起吞掉，且被 ignore 的文件用 grep 搜是**静默零命中**。"
-                   "请删除它，改用下面三条精确规则。" % (root, "、".join("`%s`" % h for h in hit)))
+                   "请删除它，改用下面四条精确规则。" % (root, "、".join("`%s`" % h for h in hit)))
     missing = [w for w in GITIGNORE_WANT if w not in lines]
     if missing:
         out.append("⚠ `%s/.gitignore` 缺 %s——worktree 与截图会被 `git add -A` 提交进去。"

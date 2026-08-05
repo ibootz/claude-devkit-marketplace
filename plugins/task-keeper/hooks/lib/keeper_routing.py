@@ -44,6 +44,26 @@ SessionStart 那份。`hookSpecificOutput.hookEventName` 必须与真实事件�
 
 注意不能用 `python3 - <<'EOF'` 内联写法：heredoc 会占用 stdin，事件 JSON（含
 cwd）就读不到了——2026-07-31 实测踩过，遂独立成文件。
+
+## 三岔口里"唤醒前怎么办"那句话：为什么现算而不是让 AI 自己读文件（2026-08-05 补）
+
+`.keeper-instance.json` 落在磁盘上跨会话存活，但派出去的 keeper 只活在派出它的那次
+会话里——新会话第一次转 bug 时，AI 读到的是上一个会话的死 `name`，唤醒失败后容易
+误判成"重派"，两个实例抢同一个目录的独占写权限（完整事故描述见 `keeper_paths.py`
+模块头「`.keeper-instance.json` 的会话隔离」）。
+
+修法**不是**教 AI 自己去读文件比对 `session_id`——AI（主会话）本身拿不到自己的
+`session_id`，这个字段只在 hook 收到的 payload 里才有，AI 没有任何机械手段验证
+"这条登记是不是本会话写的"。所以比对这一步必须由本 hook 现算，直接把结论注进
+三岔口文案：
+
+  · 登记存在且 `session_id` 与当前一致 → 直接告诉 AI "唤醒 `<真实 name>`"。
+  · 登记存在但不一致（或是加 `session_id` 之前落的旧格式，压根没这个键）→ 告诉
+    AI "这份登记已失效，当首次派发处理"。
+  · 没有任何登记 → 保持原来的措辞，首次派发。
+
+三选一，同一轮只注入其中一种——预算是每轮成本，三种都注等于把预算浪费在另外
+两种当下不成立的分支上。
 """
 import json
 import os
@@ -52,9 +72,11 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from keeper_paths import find_keeper_root
+    from keeper_paths import find_keeper_root, resolve_delivery_id, read_keeper_instances
 except Exception:
     find_keeper_root = None
+    resolve_delivery_id = None
+    read_keeper_instances = None
 
 NOT_ENABLED = (
     "task-keeper 未在本项目启用（无 .keeper/ 目录）。启用后可把 bug 转常驻 "
@@ -65,7 +87,11 @@ NOT_ENABLED = (
 
 # 每轮注入：只放与 system prompt 默认行为对立的部分。改这段前先读模块头
 # 「为什么分两层」——往里加静态参考会让每轮成本白涨且稀释对抗力。
-TRIAGE = """# task-keeper 分诊（本轮先分诊，再动手）
+#
+# TRIAGE_HEAD/TRIAGE_TAIL 夹着一句现算的动态提示（见 `triage_wake_line`），三选一：
+# 唤醒某个真实 name / 登记已失效当首次派发 / 没有登记当首次派发。三者共用同一个
+# 头尾骨架，只有中间这一句不同——见模块头「为什么现算而不是让 AI 自己读文件」。
+TRIAGE_HEAD = """# task-keeper 分诊（本轮先分诊，再动手）
 
 对刚收到的这条用户消息判一次归属。分错代价小，**不要为分类反问用户**：
 
@@ -73,11 +99,73 @@ TRIAGE = """# task-keeper 分诊（本轮先分诊，再动手）
 2. **转 debug-keeper**：bug / 报错 / 异常行为 → 逐字转发（首次用 `Agent` 派出，之后 `SendMessage` 唤醒）。属于项目既有交付流程的活走该流程。
 3. **转 chore-keeper**：台账 / 沉淀 / 收尾 / 外部系统小操作等杂务 → 逐字转发。
 
-唤醒前先读 `.keeper/<交付id>/.keeper-instance.json` 取实际 name（name 带随机短哈希，别凭记忆拼），读不到才算首次、按上面用 `Agent` 派出。
+"""
+
+TRIAGE_TAIL = """
 
 三原则：**逐字**（不改写用户原话）、**即回**（转完回主线，不追问 keeper 进度）、**不越位**（`.keeper/` 队列文件你只读，写者是 keeper）。
 
 最常见的失效方式是「这个我顺手做了更快」。转发的目的不是省你的时间——是不让这条任务的状态只活在本轮上下文里，compact 一次就没了。"""
+
+# 分支 1：没有任何登记（本会话与之前任何会话都没派过）——保持原有措辞。
+WAKE_LINE_NONE = "还没有 keeper 登记记录：首次转发时用 `Agent` 派出，name 自己生成 4 位随机短哈希后缀。"
+
+# 分支 3：登记存在但不属于本会话（session_id 不一致，或是加会话隔离之前落的旧格式、
+# 压根没有 session_id 键）——一律当陈旧处理，判据见 keeper_paths.read_keeper_instance_name。
+WAKE_LINE_STALE = ("`.keeper-instance.json` 里的登记来自上一个会话、name 已失效：这是首次"
+                    "派发，直接用 `Agent` 派出并自己生成新的 4 位随机短哈希后缀。")
+
+KIND_LABELS = (("debug", "debug-keeper"), ("chore", "chore-keeper"))
+
+
+def triage_wake_line(worktree_root, session_id):
+    """算三岔口里"唤醒前怎么办"这句话，三选一，失败一律回落到"没有登记"这一支。
+
+    `worktree_root` 是 `find_worktree_root` 的返回值（本函数不重新解析，避免重复
+    起 git 子进程）；`session_id` 是本轮 `UserPromptSubmit` payload 里的 `session_id`
+    字段，取不到时传 `None`——此时任何登记都判不出"匹配"，一律落到"陈旧"或"没有
+    登记"两支中的一支，这是安全的降级方向（宁可多提示一次首次派发，也不要在无法
+    确认的情况下让 AI 去唤醒一个可能早已不存在的实例）。
+
+    `debug`/`chore` 两档分别判断：session_id 匹配的进 matched，登记存在但不匹配
+    （含旧格式无 session_id 键）的进 stale。matched 非空优先；否则 stale 非空则
+    提陈旧；两者都空则是"没有登记"。
+    """
+    if resolve_delivery_id is None or read_keeper_instances is None or not worktree_root:
+        return WAKE_LINE_NONE
+    try:
+        delivery_id = resolve_delivery_id(worktree_root)
+        data = read_keeper_instances(worktree_root, delivery_id)
+    except Exception:
+        return WAKE_LINE_NONE
+    if not isinstance(data, dict):
+        return WAKE_LINE_NONE
+
+    matched, stale = [], []
+    for kind, label in KIND_LABELS:
+        entry = data.get(kind)
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        entry_session_id = entry.get("session_id")
+        if session_id and isinstance(entry_session_id, str) and entry_session_id == session_id:
+            matched.append((label, name))
+        else:
+            stale.append((label, name))
+
+    if matched:
+        parts = "、".join("%s（name `%s`）" % (label, name) for label, name in matched)
+        return "本会话已有 %s在跑，用 `SendMessage` 唤醒它，不要重派。" % parts
+    if stale:
+        return WAKE_LINE_STALE
+    return WAKE_LINE_NONE
+
+
+def build_triage(wake_line):
+    return TRIAGE_HEAD + wake_line + TRIAGE_TAIL
+
 
 # SessionStart：静态参考。刻意不复述三岔口（那份每轮注入）。
 ENABLED = """# task-keeper 主会话侧参考
@@ -107,12 +195,18 @@ def main():
     except Exception:
         ev = {}
     cwd = ev.get("cwd") or os.getcwd()
-    enabled = bool(find_keeper_root and find_keeper_root(cwd))
+    keeper_root = find_keeper_root(cwd) if find_keeper_root else None
+    enabled = bool(keeper_root)
 
     if ev_name == "UserPromptSubmit":
         if not enabled:
             return  # 零成本保证：未启用项目一个字符都不注入
-        text = TRIAGE
+        session_id = ev.get("session_id")
+        session_id = session_id if isinstance(session_id, str) and session_id else None
+        # keeper_root 形如 <worktree 根>/.keeper，取父目录拿 worktree 根——避免再起
+        # 一次 git 子进程重新解析（find_keeper_root 内部已经解析过一遍）。
+        worktree_root = os.path.dirname(keeper_root)
+        text = build_triage(triage_wake_line(worktree_root, session_id))
     else:
         text = ENABLED if enabled else NOT_ENABLED
 

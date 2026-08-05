@@ -3,10 +3,13 @@
 
 stdin  = PreToolUse 事件 JSON
 stdout = 永远空——本 hook **不拦截任何操作**，不输出 permissionDecision，不 exit 2。
-         它唯一的动作是把 keeper 的 `name` 写进
-         `<worktree 根>/.keeper/<交付id>/.keeper-instance.json`，供主会话下次唤醒
-         时读取真实 name（keeper 的 name 现在强制带 4 位随机短哈希，主会话没法靠
-         记忆或文档拼出来，见 `keeper_paths.py` 模块头「`.keeper-instance.json`」）。
+         它唯一的动作是把 keeper 的 `name`（连同这次派发所在的 `session_id`，2026-08-05
+         补）写进 `<worktree 根>/.keeper/<交付id>/.keeper-instance.json`，供主会话
+         下次唤醒时读取真实 name（keeper 的 name 现在强制带 4 位随机短哈希，主会话
+         没法靠记忆或文档拼出来，见 `keeper_paths.py` 模块头「`.keeper-instance.json`」）。
+         写进 `session_id` 是为了让跨会话读到的登记能被识别成"陈旧"——否则新会话
+         第一次读到上一个会话的死 name，唤醒失败后会误判成"重派"，见 `keeper_paths.py`
+         模块头「`.keeper-instance.json` 的会话隔离」那一节的事故描述。
 
 【判据：只用确定字段，白名单枚举，不做模糊匹配】
   1. `tool_name == "Agent"`——不是这次调用就不用往下看。
@@ -18,6 +21,14 @@ stdout = 永远空——本 hook **不拦截任何操作**，不输出 permissio
 
   这三条都是对 `tool_input`/`tool_name` 字段的直接读取和字符串比较，没有语义猜测，
   符合本仓 `.claude/rules/hook-restraint.md` 对"可以做成 hook 的判据"的要求。
+
+【`session_id` 读取：读不到不影响登记本身】
+  `ev.get("session_id")` 是这次 `PreToolUse` 事件所在会话的 id，随 `name` 一起传给
+  `keeper_paths.write_keeper_instance`。若它缺失或不是字符串——理论上不该发生，
+  但本 hook 一贯的口径是"异常静默降级"——就传 `None`，`write_keeper_instance` 内部
+  会据此跳过 `session_id` 键（见其模块头），name 照常写入。这条记录之后没法被会话
+  比对认领，只是退回"下次一律当陈旧处理、走首次派发"这条已验证安全的路径，不是
+  登记失败。
 
 【为什么不校验 name 是否满足短哈希正则】那是 `working-discipline` 的
   `agent-dispatch.js` 的职责（判断该不该放行这次派发）。本 hook 运行在它之后
@@ -99,8 +110,11 @@ def main():
     if not root:
         return  # 不在任何 git 仓库内，没有 .keeper/ 该挂的地方
 
+    session_id = ev.get("session_id")
+    session_id = session_id if isinstance(session_id, str) and session_id.strip() else None
+
     delivery_id = keeper_paths.resolve_delivery_id(root)
-    keeper_paths.write_keeper_instance(root, delivery_id, kind, name.strip())
+    keeper_paths.write_keeper_instance(root, delivery_id, kind, name.strip(), session_id=session_id)
     # 不打印任何东西：本 hook 没有需要回灌给 harness 的输出。
 
 

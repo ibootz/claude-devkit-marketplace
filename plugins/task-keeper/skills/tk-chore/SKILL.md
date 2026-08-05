@@ -18,10 +18,15 @@ when_to_use: |
 
 ## 派出与唤醒
 
-**先判断本会话有没有派过 chore-keeper——判据不是记忆，是文件**：读一次
-`.keeper/<交付id>/.keeper-instance.json` 的 `chore` 键。读到有效 name → 走
-「唤醒」；读不到 → 走「首次派出」。**不要因为唤醒不到就直接改判成首次派出再派
-第二个**——这正是要消除的行为，见下方事故。
+**先看这一轮的三岔口注入怎么说，不要自己重新判断**：`user-prompt-submit-keeper-routing.sh`
+每轮都会读 `.keeper/<交付id>/.keeper-instance.json` 并核对 `session_id`，直接给出
+「唤醒 `<真实 name>`」／「登记来自上一个会话（或是加会话隔离之前落的旧格式、压根
+没有 `session_id` 键），已失效，首次派发」／「还没有登记，首次派发」三种结论之一。
+**照它说的做**——你（主会话）自己读不到自己的 `session_id`，重新读一遍文件只能看到
+name 存不存在，判断不出它是不是上一个会话留下的死 name，这正是"唤醒不到就重派、
+两个实例抢同一个目录写权限"这类事故的根因，现在交给 hook 现算。**不要因为
+`SendMessage` 唤醒失败就直接改判成首次派出再派第二个**——先确认自己用的 name 是不是
+这一轮注入给你的那个，见下方事故。
 
 **`model` 固定 `"opus"`，不按杂务看起来多小来下调。** 杂务本身粒度小，但 keeper 要判的是
 外部写红线（判漏一次就是未授权写入外部系统）、共享工作区让位、决策打包，判错代价与活的
@@ -34,9 +39,10 @@ when_to_use: |
 原因是逐字固定名会在「上一个实例结束、下一个又叫同名」时撞车：`SendMessage` 的
 name 寻址是 latest wins，想唤起前一个就冲突。随机后缀让每个实例天生不重名，但
 代价是你没法再靠记忆或本文档拼出实际 name——`PreToolUse(Agent)` hook 会在派发那
-一刻自动把 name 写进 `.keeper/<交付id>/.keeper-instance.json` 的 `chore` 键，
-唤醒前只需要读它。拿交付 id 当后缀（`opus-chore-keeper-<交付id>`）或额外修饰都
-仍会被 `working-discipline` 的 `agent-dispatch` check 10 拦下。不要写成
+一刻自动把 name（连同 `session_id`，2026-08-05 补，见上方「派出与唤醒」的会话隔离
+说明）写进 `.keeper/<交付id>/.keeper-instance.json` 的 `chore` 键，每轮三岔口注入
+据此现算该唤醒还是首次派发。拿交付 id 当后缀（`opus-chore-keeper-<交付id>`）或额外
+修饰都仍会被 `working-discipline` 的 `agent-dispatch` check 10 拦下。不要写成
 `chore-keeper`（缺模型段，会被 `working-discipline` 的 `agent-dispatch` 门禁拦下），
 也不要写成 `opus-task-keeper-chore-queue-manager` 这类带额外修饰的长名。
 
@@ -53,8 +59,10 @@ Agent(
 
 派发成功后 `PreToolUse(Agent)` hook 会自动登记这个 name，不需要你自己再写登记文件。
 
-之后一律先读 `.keeper/<交付id>/.keeper-instance.json` 的 `chore` 键取出真实 name，
-再 `SendMessage(to: "<读出来的 NAME，不是字面量 opus-chore-keeper>", message:
+**之后每一次**（同一会话内再有新杂务），这一轮的三岔口注入已经直接给出真实 name
+（见上方「派出与唤醒」），不需要再自己读文件——下面这段读取命令只是给你在需要单独
+确认时用的等价写法：一律先读 `.keeper/<交付id>/.keeper-instance.json` 的 `chore`
+键取出真实 name，再 `SendMessage(to: "<读出来的 NAME，不是字面量 opus-chore-keeper>", message:
 "<用户原话逐字>")` 唤醒——keeper 上下文跨唤醒保留，重新 Agent 派出会丢掉它已有的
 队列认知，也会让两个实例抢同一个 `.keeper/<交付id>/chore/` 的独占写权限。
 

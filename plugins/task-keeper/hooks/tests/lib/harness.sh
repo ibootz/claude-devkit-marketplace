@@ -104,9 +104,20 @@ print(json.dumps({"hook_event_name":"UserPromptSubmit","cwd":sys.argv[1]}))
 ' "$1" | bash "$TRIAGE_HOOK"
 }
 
-run_keeper_instance() {   # $1=cwd $2=subagent_type(可省) $3=name(可省) $4=tool_name(可省，默认 Agent)
-  # PreToolUse(Agent) keeper 实例登记 hook。$2/$3 省略时 tool_input 里对应键就不写，
-  # 用来构造「缺 subagent_type」「缺 name」这类假阴性输入。
+run_triage_sess() {   # $1=cwd $2=session_id(可省，省则 payload 不带 session_id 键)
+  # 与 run_triage 的差异只是多带 session_id——H22 用它构造"本会话匹配/不匹配"两侧。
+  /usr/bin/python3 -c '
+import json,sys
+ev = {"hook_event_name": "UserPromptSubmit", "cwd": sys.argv[1]}
+if len(sys.argv) > 2 and sys.argv[2]:
+    ev["session_id"] = sys.argv[2]
+print(json.dumps(ev))
+' "$1" "${2:-}" | bash "$TRIAGE_HOOK"
+}
+
+run_keeper_instance() {   # $1=cwd $2=subagent_type(可省) $3=name(可省) $4=tool_name(可省，默认 Agent) $5=session_id(可省)
+  # PreToolUse(Agent) keeper 实例登记 hook。$2/$3/$5 省略时 tool_input/顶层对应键就
+  # 不写，用来构造「缺 subagent_type」「缺 name」「缺 session_id」这类假阴性输入。
   /usr/bin/python3 -c '
 import json,sys
 ti = {}
@@ -120,8 +131,10 @@ ev = {
     "cwd": sys.argv[1],
     "tool_input": ti,
 }
+if len(sys.argv) > 5 and sys.argv[5]:
+    ev["session_id"] = sys.argv[5]
 print(json.dumps(ev))
-' "$1" "${2:-}" "${3:-}" "${4:-Agent}" | bash "$KEEPER_INSTANCE_HOOK"
+' "$1" "${2:-}" "${3:-}" "${4:-Agent}" "${5:-}" | bash "$KEEPER_INSTANCE_HOOK"
 }
 
 # 造一个真实 git 仓库（keeper_paths.find_worktree_root 需要真实 git 命令能跑通，

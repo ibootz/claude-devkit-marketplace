@@ -21,13 +21,13 @@
 | 脚本 | 事件 | 行为（按动作描述，不是按愿望描述） |
 |---|---|---|
 | `session-start-keeper-routing.sh` | SessionStart | 纯注入**静态参考**（决策打包主会话侧职责、v4 布局、指针）。未启用 221 字符（一句话介绍 + 启用方式），已启用 671 字符，不拦截任何操作 |
-| `user-prompt-submit-keeper-routing.sh` | UserPromptSubmit | 纯注入**三岔口分诊**（自己做 / 转 debug-keeper / 转 chore-keeper）+ 转发三原则 + 唤醒前先读 name 登记文件那句提醒，523 字符。未启用项目 stdout 全空 |
-| `user-prompt-submit-debug-queue.sh` | UserPromptSubmit | 注入 debug 队列实时快照（open 逐条 + 在飞派生 + done 计数）、重算薄索引 `index.md`（git rebase/bisect/merge 中间态跳过）；`.gitignore` 有整树忽略行或缺三条精确规则时各加一句提醒；存量 v3/v2 布局未迁移时加一句迁移提示；命中 bug 特征词时给出下一个可用 DBG-id（fixer worktree 内不给） |
+| `user-prompt-submit-keeper-routing.sh` | UserPromptSubmit | 纯注入**三岔口分诊**（自己做 / 转 debug-keeper / 转 chore-keeper）+ 转发三原则 + 现算的一句"唤醒前怎么办"（三选一：唤醒某个真实 name / 登记已失效当首次派发 / 没有登记当首次派发，见下方「登记 keeper 实例 name」的会话隔离说明），三支分别 481/503/511 字符（两档同时命中时最长约 550 字符），硬上限 800。未启用项目 stdout 全空 |
+| `user-prompt-submit-debug-queue.sh` | UserPromptSubmit | 注入 debug 队列实时快照（open 逐条 + 在飞派生 + done 计数）、重算薄索引 `index.md`（git rebase/bisect/merge 中间态跳过）；`.gitignore` 有整树忽略行或缺四条精确规则时各加一句提醒；存量 v3/v2 布局未迁移时加一句迁移提示；命中 bug 特征词时给出下一个可用 DBG-id（fixer worktree 内不给） |
 | `user-prompt-submit-chore-queue.sh` | UserPromptSubmit | 注入 chore 队列快照（输出预算 ≤900 字符）；`.keeper/` 顶层存在时缺失的 `chore/`（连同 `debug/`）由 `find_queue` 每轮自动补建，不需要手工 mkdir；代注待拍板决策计数（自动补建后 `chore/` 恒存在，debug 快照的兜底注入分支实际只在 fixer worktree 内或补建失败时才会走到，两边判据仍是同一个目录的存在性） |
 | `pre-tool-use-debug-worktree-push.sh` | PreToolUse(Bash) | `git push` 的目标落在 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 内时 deny（fixer 产物只回流不推远端） |
 | `pre-tool-use-debug-worktree-destroy.sh` | PreToolUse(Bash) | 强制删除形态（`rm -rf` / `worktree remove --force` / `clean -fdx`）命中 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 路径时 ask 弹确认框 |
 | `pre-tool-use-debug-evidence.sh` | PreToolUse(Write\|Edit) | 只对 `.keeper/<交付id>/debug/*.md` 介入：新内容含 `image-cache` 会话级临时路径时 deny（跨会话必 404），带次数熔断，`origin_path` 留档豁免 |
-| `pre-tool-use-keeper-instance.sh` | PreToolUse(Agent) | 命中 keeper 类 `subagent_type`（`debug-keeper`/`chore-keeper`）的派发时，把 `tool_input.name` 写进 `.keeper/<交付id>/.keeper-instance.json` 对应键，另一个键原样保留；**纯写文件，不拦截任何操作**，不输出 permissionDecision，写不进去就静默放弃 |
+| `pre-tool-use-keeper-instance.sh` | PreToolUse(Agent) | 命中 keeper 类 `subagent_type`（`debug-keeper`/`chore-keeper`）的派发时，把 `tool_input.name` 连同这次派发所在的 `session_id` 写进 `.keeper/<交付id>/.keeper-instance.json` 对应键，另一个键原样保留；**纯写文件，不拦截任何操作**，不输出 permissionDecision，写不进去就静默放弃 |
 
 三道守卫的判据都是路径子串 + 命令形态的机械判定，未启用队列的项目全部零输出零成本。
 `pre-tool-use-keeper-instance.sh` 不是守卫——它不拦下任何动作，只有"顺手写一个登记
@@ -59,8 +59,10 @@
 停"——linked worktree 根自己就有一个 `.git` 文件，那样第一轮就返回 None，aisdlc 交付
 跑在 `.sdlc/worktrees/D-NNN-<slug>/` 里时队列恒为空，冷启动还会 mkdir 出第二份。
 
-**文本入库、截图与 worktree 不入库（v4，2026-08-01）**。三条规则划边界：
-`.keeper/**/worktree/`、`.keeper/**/*.png`、`.keeper/**/*.jpg`。
+**文本入库、截图与 worktree 不入库（v4，2026-08-01）**。四条规则划边界：
+`.keeper/**/worktree/`、`.keeper/**/*.png`、`.keeper/**/*.jpg`、
+`.keeper/**/.keeper-instance.json`（第四条 2026-08-05 补，理由见下方「登记 keeper
+实例 name」——它是会话级运行时状态，跨会话即失效，入库只产生噪音 diff）。
 
 这一版**推翻了 v3 的「整树不入库」**，而 v3 当初又是推翻前身 radnove-core 的 `.debug/`
 整树入库而来的——所以这里等于绕回了一圈，得说清每一轮各自解决了什么、留下了什么：
@@ -86,10 +88,12 @@ ugrep 只读递归下降途中遇到的 `.gitignore`，**不向上找**。所以
 v4 对上表最后一行代价的缓解：keeper 每个工作窗口结束 commit 一次队列，把未提交窗口
 压到最短。这不能消除风险，只能缩小暴露面——如实记在这里。
 
-**gitignore 分工（v4 改为 fail-loud，不再自动追加）**：keeper 冷启动检查这三行是否
+**gitignore 分工（v4 改为 fail-loud，不再自动追加）**：keeper 冷启动检查这四行是否
 齐备，**缺行就报错停下要求人工补**，不再像 v3 那样自动追加。原因是实测过：两个分支
 各自在 EOF 追加内容不同的注释即产生合并冲突，而脚本追加裸规则、AI 实际执行时会自由
-发挥注释文案。快照 hook 只注入提醒、不代写文件（与 v3 一致）。
+发挥注释文案。快照 hook 只注入提醒、不代写文件（与 v3 一致）——**这条只是文档级
+约定加一个机械检查（`hooks/lib/queue_snapshot.py` 的 `GITIGNORE_WANT` 缺行时告警），
+没有任何代码会自动往 `.gitignore` 里写入这四行**，需要人工补上。
 
 ## 登记 keeper 实例 name（2026-08-04 起）
 
@@ -112,6 +116,33 @@ keeper 的 `name` 强制带 4 位随机短哈希（形态 `opus-(debug|chore)-ke
 需要退回首次派出这条路径"，不是"这次派发失败了"。读写函数在
 `hooks/lib/keeper_paths.py`（`read_keeper_instances` / `write_keeper_instance`），
 判据与异常处理在 `hooks/lib/keeper_instance_register.py`。
+
+### 会话隔离（2026-08-05 补）
+
+登记文件落在磁盘上、**跨会话存活**，但派出去的 keeper 只活在派出它的那次会话里。
+上一版只登记 name，没有字段能区分"这条登记是不是本会话写的"——于是新会话第一次
+转 bug 时，主会话读到的是上一个会话的死 name，`SendMessage` 报
+`No agent named ... is reachable`，按"唤醒不到就重派"的错误反应会直接又派第二个
+实例，两个实例抢同一个 `.keeper/<交付id>/debug/` 的独占写权限——这正是登记机制
+本来要消除的失败模式，在跨会话场景下原样复活了一次。
+
+修法是登记里多写一个 `session_id` 键（取自 hook payload 的 `session_id` 字段，这是
+所有 hook 输入 schema 的公共字段），形状变成
+`{"debug": {"name": "...", "ts": "...", "session_id": "..."}}`。真正做会话比对的
+落点**不是主会话自己读文件**——主会话拿不到自己的 `session_id`，没有任何机械手段
+验证"这条登记是不是本会话写的"；比对现算在 `user-prompt-submit-keeper-routing.sh`
+每轮注入里（它能拿到当前 `session_id`），直接把结论注成一句话：
+
+- 登记存在且 `session_id` 与当前一致 → 直接告诉主会话"唤醒 `<真实 name>`"。
+- 登记存在但不一致，**或是加会话隔离之前落的旧格式（压根没有 `session_id` 键）**
+  → 告诉主会话"这份登记已失效，当首次派发处理"——旧格式一律当陈旧，不做"没写就
+  算通过"的宽松判断。
+- 没有任何登记 → 保持原有措辞，首次派发。
+
+`keeper_paths.write_keeper_instance` 的 `session_id` 参数取不到时**不写这个键**
+（不是写 `null`），登记本身不受影响，只是这条记录之后没法被会话比对认领。
+`keeper_paths.read_keeper_instance_name` 新增 `current_session_id` 参数：传了就要求
+一致才返回 name，不传则维持旧行为（不比较会话）。
 
 ## 自动归档
 
@@ -194,12 +225,13 @@ v3 schema 从未记录「这条 issue 属于哪次交付」，所以存量条目
 再跑上面的脚本。漏做迁移时快照 hook 会检测到旧布局目录存在而 v4 队列缺失，注入一句
 迁移提示，不会静默丢队列。
 
-`.gitignore` 三条规则**一次性提交到主分支**，之后各交付分支只读不写：
+`.gitignore` 四条规则**一次性提交到主分支**，之后各交付分支只读不写：
 
 ```gitignore
 .keeper/**/worktree/
 .keeper/**/*.png
 .keeper/**/*.jpg
+.keeper/**/.keeper-instance.json
 ```
 
 若历史上有过整树 `.keeper/` 忽略行，**先删掉它**——两者并存时它会把入库的 issue 一起
@@ -215,4 +247,7 @@ bash plugins/task-keeper/hooks/tests/run-tests.sh
 index 幂等、三道守卫的拦与不拦两侧、wt_supply 供给/幂等/回流前置校验、归档与编号不回收、
 chore 快照字节预算、决策信箱计数、双队列互不串号、自动归档判据、路由注入分档、
 keeper 实例登记的写入与放弃两侧（白名单命中/不命中、name 缺失、目录不存在时自动建出、
-另一个键保留）。
+另一个键保留）、会话隔离两侧（`session_id` 写入/同会话读得到/跨会话读不到/旧格式
+无 `session_id` 键当陈旧处理/payload 缺 `session_id` 时仍正常登记 name、三岔口注入
+按会话状态三选一各自的措辞）。224 条用例，覆盖见 `hooks/tests/run-tests.sh` 头部
+按 H 编号的分节说明。

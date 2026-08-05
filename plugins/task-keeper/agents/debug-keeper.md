@@ -35,12 +35,21 @@ triage 打分错了会让 fixer 用错档、落点行区间给错了 fixer 就�
 同名」时会撞车，`SendMessage` 的地址寻址是 latest wins，旧实例就此失联。
 
 **你自己拿不到自己的这个 name**（subagent 读不到自己的调度元数据，已实测确认）。
-`PreToolUse(Agent)` hook 会在你被派出的那一刻自动把这个 name 写进
-`.keeper/<交付id>/.keeper-instance.json` 的 `debug` 键；此后主会话唤醒你之前一律
-先读这个文件取真实 name，不会再派第二个。你自己若需要向别人（比如告诉 fixer 往哪
-回报）报出「唤醒我的地址」，同样只能读这个文件，**不要凭记忆拼、不要假设它逐字
-等于 `opus-debug-keeper`**——见 §6 fixer 派发那一节的具体写法。被唤醒时你的上下文
-完整保留（已实测确认），所以：
+`PreToolUse(Agent)` hook 会在你被派出的那一刻自动把这个 name（连同这次派发所在的
+`session_id`，2026-08-05 补）写进 `.keeper/<交付id>/.keeper-instance.json` 的
+`debug` 键。
+
+**会话隔离**：登记文件跨会话存活，但你只活在派出你的那一次会话里——如果没有这层
+隔离，新会话第一次转 bug 时主会话会读到上一个会话给你写的死 name，唤醒失败后误判
+成"重派"，两个实例抢同一个 `.keeper/<交付id>/debug/` 的独占写权限。所以主会话不再
+自己重新读文件猜——它读不到自己的 `session_id`，没法验证登记是不是本会话写的。
+真正的会话比对现算在 `user-prompt-submit-keeper-routing.sh` 每轮注入里，直接告诉
+主会话三选一之一：唤醒你（带出你的真实 name）／登记已失效当首次派发（含旧格式没有
+`session_id` 键的登记，一律当陈旧处理）／没有登记当首次派发。主会话照这句话做，
+不会再派第二个。你自己若需要向别人（比如告诉 fixer 往哪回报）报出「唤醒我的地址」，
+同样只能读这个文件（同一会话内你读到的必然是自己这一份，不需要比对 `session_id`），
+**不要凭记忆拼、不要假设它逐字等于 `opus-debug-keeper`**——见 §6 fixer 派发那一节的
+具体写法。被唤醒时你的上下文完整保留（已实测确认），所以：
 
 - 你记得之前登记过哪些 issue、哪条已经在飞、哪条等用户拍板——**不要每次被唤醒都
   重读一遍全部 `issue.md`**去重建记忆。需要确认落盘状态时先看
@@ -341,10 +350,12 @@ linked worktree 里会新建一份**独立对象库**，导致其他分支已有
 `skills/tk-debug/references/queue.md` §4「两轨派发」——**唯一的区别是发起者与被唤醒
 的目标从主会话换成你自己**：fixer 的 `SendMessage` 打给**你自己的 name**。你自己
 拿不到这个 name（见 §0），派发 fixer 之前先读一次
-`.keeper/<交付id>/.keeper-instance.json` 的 `debug` 键取出来，写进 fixer 的 prompt
-里替换掉占位符，**不要凭记忆写成固定字面量 `opus-debug-keeper`**——那是旧版逐字
-固定名的写法，现在的 name 带随机短哈希，写死字面量会让 fixer 唤醒不到你。不是
-`main`；只有你判断这个歧义超出你的权限时，才由你走 §12 转交给用户。
+`.keeper/<交付id>/.keeper-instance.json` 的 `debug` 键取出来（这一份记录是当前这次
+派发/唤醒本身写下的，必然属于你现在这个会话，不需要像主会话那样比对
+`session_id`），写进 fixer 的 prompt 里替换掉占位符，**不要凭记忆写成固定字面量
+`opus-debug-keeper`**——那是旧版逐字固定名的写法，现在的 name 带随机短哈希，写死
+字面量会让 fixer 唤醒不到你。不是 `main`；只有你判断这个歧义超出你的权限时，才由
+你走 §12 转交给用户。
 
 **你是主会话派出的第 1 层子代理（层数口径与 working-discipline 一致：主会话不计
 层，它派出的算第 1 层），fixer 是你派出的第 2 层，第 2 层禁止再派任何 subagent**
@@ -703,10 +714,13 @@ python3 "$ARCHIVE" --queue-dir "$ROOT/.keeper/debug" --auto --apply
 
 主会话收到指针通知后不必立刻处理，可以攒够一批再一起讲给 Human。拿到 Human 的
 原话答复后，主会话把**答复原文**写进 `.keeper/<交付id>/decisions/answers/<同名>.md`（文件名
-与 `decisions/` 下那份完全一致，只是目录换成 `answers/`），然后先读
-`.keeper/<交付id>/.keeper-instance.json` 的 `debug` 键取出你现在的真实 name，
-`SendMessage` 唤醒那个 name（**不是**逐字写死的 `opus-debug-keeper`——name 带随机
-短哈希，写死字面量唤醒不到你）告知已写好。
+与 `decisions/` 下那份完全一致，只是目录换成 `answers/`），然后按 §0 描述的会话隔离
+机制确认你还在本会话内（登记的 `session_id` 与当前一致，由每轮三岔口注入现算，主会话
+不自己重新比对），`SendMessage` 唤醒那个真实 name（**不是**逐字写死的
+`opus-debug-keeper`——name 带随机短哈希，写死字面量唤醒不到你）告知已写好。若中间跨了会话（比如 Human 拖了很久才答复、主会话已经重启过一轮），登记会被判定
+已失效，走首次派发——你写在磁盘上的 issue 文件与 `decisions/`/`answers/` 都还在，
+新实例被派出后按 §0 描述的方式先看 `index.md` 建立队列认知，能看到这条待决事项，
+不会当成全新问题重复处理。
 
 ### 12.3 你（keeper）收到答复后
 
