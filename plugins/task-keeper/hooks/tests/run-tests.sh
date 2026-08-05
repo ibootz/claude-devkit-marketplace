@@ -80,6 +80,16 @@
 #   在真实 hook 外壳下的注入文案（无登记 / session 匹配直接带出 name / session
 #   不匹配或旧格式当陈旧 / 两档同时匹配 / payload 缺 session_id 时的安全降级）。
 #
+# 【2026-08-05 新增 H23，编号 [93]-[98]】
+#   三岔口加了第 4 支路「sdlc 流程文档编写 → 派 sdlc-writer」，但它是**条件注入**：
+#   只在工作区确实在跑 ai-sdlc 流程时才出现，判据是 `keeper_routing.sdlc_present`
+#   （worktree 根 + 往上 4 层里任一层存在 `sdlc/specs` 或 `sdlc/deliveries`，纯目录
+#   存在性）。H23 测两侧：不命中时输出与加这条支路之前逐字相同（不含 sdlc-writer
+#   字样，原三支路完好）；命中时支路出现且总长度仍 ≤800。另外三条覆盖判据边界——
+#   `deliveries` 子目录同样命中、交付跑在 `.sdlc/worktrees/D-NNN-<slug>/` 里时能
+#   向上三层找到 sdlc/（这正是最需要它的场景，只看当前根会全部漏掉）、空的同名
+#   `sdlc/` 目录与超出查找深度都不命中。
+#
 # 【测试用真实进程跑，不 mock】直接把 JSON 喂给 hook 脚本的 stdin、断言 stdout，
 #   与 harness 的调用方式完全一致，因此能覆盖 bash 外壳、python 定位、编码等
 #   全链路，而不只是 python 函数。
@@ -129,6 +139,7 @@ source "$TESTS_DIR/cases/14-h19-userprompt-triage.sh"
 source "$TESTS_DIR/cases/15-h20-queue-autocreate.sh"
 source "$TESTS_DIR/cases/16-h21-keeper-instance-registry.sh"
 source "$TESTS_DIR/cases/17-h22-keeper-routing-session.sh"
+source "$TESTS_DIR/cases/18-h23-sdlc-routing.sh"
 
 echo
 printf '通过 %d / 失败 %d\n' "$pass" "$fail"

@@ -93,8 +93,8 @@
       "name": "task-keeper",
       "source": "./plugins/task-keeper",
       "category": "Productivity",
-      "description": "常驻 keeper 子代理托管 debug/杂务队列 - 队列跟随交付 worktree 入库，决策打包 HITL",
-      "version": "2.6.0"
+      "description": "keeper 托管 debug/杂务队列 + sdlc-writer 承接 sdlc 文档编写，决策打包 HITL",
+      "version": "2.7.0"
     },
     {
       "name": "plain-talk-output-style",

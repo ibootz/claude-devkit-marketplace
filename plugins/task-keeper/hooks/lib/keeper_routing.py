@@ -64,6 +64,23 @@ cwd）就读不到了——2026-07-31 实测踩过，遂独立成文件。
 
 三选一，同一轮只注入其中一种——预算是每轮成本，三种都注等于把预算浪费在另外
 两种当下不成立的分支上。
+
+## 第 4 支路（sdlc-writer）为什么是条件注入（2026-08-05 加）
+
+三岔口默认只有三支。第 4 支「sdlc 流程文档编写 → 派 sdlc-writer」只在**本工作区确实
+在跑 ai-sdlc 流程**时才注入，判据是 `sdlc_present`：worktree 根往上最多 5 层里任一层
+存在 `sdlc/specs` 或 `sdlc/deliveries` 目录。纯目录存在性，机械可判、无需理解语义。
+
+为什么要往上找而不是只看 worktree 根：交付常跑在 `<工作区>/.sdlc/worktrees/D-NNN-<slug>/`
+里，此时 `sdlc/` 在工作区根，与 worktree 根隔三层——只看当前根会在所有交付 worktree 里
+判成"没有 sdlc"，恰好把最需要这条支路的场景漏掉。
+
+为什么不无条件注入：没跑 sdlc 流程的项目一个字符都不该付（与两个队列快照 hook 同一条
+零成本口径）。为什么不下沉到 SessionStart：这条支路要对抗的是"这份文档我顺手写了更快"
+这个默认行为，与杂务那条同构——会话开头读一次的软约束压不过每轮生效的 base 指令。
+
+**不命中时 `build_triage` 的输出与加这条支路之前逐字相同**（`sdlc_line=""` 走原路径），
+所以 H19 / H22 既有断言不受影响；命中时长度上浮约 90 字符，仍在 800 硬上限内。
 """
 import json
 import os
@@ -116,6 +133,39 @@ WAKE_LINE_STALE = ("`.keeper-instance.json` 的登记来自上一个会话，已
 
 KIND_LABELS = (("debug", "debug-keeper"), ("chore", "chore-keeper"))
 
+# 第 4 支路：只在工作区真有 sdlc 流程目录时注入，判据见模块头「第 4 支路」。
+# sdlc-writer 不是 keeper（一次性、不登记、不唤醒、档位不锁 opus），所以它既不进
+# KIND_LABELS，也不进 keeper_instance_register 的白名单——那两处只管常驻实例。
+SDLC_LINE = ("4. **转 sdlc-writer**：sdlc 流程文档编写（Gate 已放行、AI 自主落盘那段）"
+             "→ 派 `Agent`，分片与 prompt 见 tk-sdlc skill。Gate 交互与拍板仍你自己做。\n")
+
+# sdlc 流程目录的判定深度：worktree 根本身 + 往上 4 层。交付跑在
+# `<工作区>/.sdlc/worktrees/D-NNN-<slug>/` 时 sdlc/ 在第 3 层上，留一层余量。
+SDLC_LOOKUP_DEPTH = 5
+
+
+def sdlc_present(worktree_root):
+    """本工作区是否在跑 ai-sdlc 流程。纯目录存在性判定，任何异常一律判 False。
+
+    判 False 的代价只是少注入一条支路（主会话仍可自己走 tk-sdlc skill）；判 True 的
+    代价是给没跑 sdlc 的项目白付约 90 字符。所以异常方向选 False。
+    """
+    if not worktree_root:
+        return False
+    cur = worktree_root
+    for _ in range(SDLC_LOOKUP_DEPTH):
+        for sub in ("specs", "deliveries"):
+            try:
+                if os.path.isdir(os.path.join(cur, "sdlc", sub)):
+                    return True
+            except Exception:
+                return False
+        parent = os.path.dirname(cur)
+        if not parent or parent == cur:
+            break
+        cur = parent
+    return False
+
 
 def triage_wake_line(worktree_root, session_id):
     """算三岔口里"唤醒前怎么办"这句话，三选一，失败一律回落到"没有登记"这一支。
@@ -162,8 +212,15 @@ def triage_wake_line(worktree_root, session_id):
     return WAKE_LINE_NONE
 
 
-def build_triage(wake_line):
-    return TRIAGE_HEAD + wake_line + TRIAGE_TAIL
+def build_triage(wake_line, sdlc_line=""):
+    """组装三岔口。`sdlc_line` 为空时输出与加第 4 支路之前**逐字相同**。
+
+    非空时插在第 3 条之后、"唤醒前怎么办"那句之前——`TRIAGE_HEAD` 末尾带一个空行用于
+    与 wake_line 分段，插入时先 rstrip 掉再补，避免第 4 条与第 3 条之间多出空行。
+    """
+    if not sdlc_line:
+        return TRIAGE_HEAD + wake_line + TRIAGE_TAIL
+    return TRIAGE_HEAD.rstrip("\n") + "\n" + sdlc_line + "\n" + wake_line + TRIAGE_TAIL
 
 
 # SessionStart：静态参考。刻意不复述三岔口（那份每轮注入）。
@@ -205,7 +262,10 @@ def main():
         # keeper_root 形如 <worktree 根>/.keeper，取父目录拿 worktree 根——避免再起
         # 一次 git 子进程重新解析（find_keeper_root 内部已经解析过一遍）。
         worktree_root = os.path.dirname(keeper_root)
-        text = build_triage(triage_wake_line(worktree_root, session_id))
+        text = build_triage(
+            triage_wake_line(worktree_root, session_id),
+            SDLC_LINE if sdlc_present(worktree_root) else "",
+        )
     else:
         text = ENABLED if enabled else NOT_ENABLED
 
