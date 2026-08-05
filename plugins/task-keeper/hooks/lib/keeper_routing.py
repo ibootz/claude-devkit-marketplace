@@ -124,12 +124,16 @@ TRIAGE_TAIL = """
 最常见失效是「这个我顺手做了更快」——转发是为了不让任务状态只活在本轮上下文里，compact 一次就没了。"""
 
 # 分支 1：没有任何登记（本会话与之前任何会话都没派过）——保持原有措辞。
-WAKE_LINE_NONE = "还没有登记：首次转发用 `Agent` 派出，name 自带 4 位随机短哈希后缀。"
+# 句尾补一句 description 提示（≤25 汉字）：working-discipline 的 agent-dispatch
+# check 11 把 keeper 的 description 钉死成固定串，首次派发就写对可省一轮 deny。
+WAKE_LINE_NONE = ("还没有登记：首次转发用 `Agent` 派出，name 自带 4 位随机短哈希后缀，"
+                   "description 固定填『debug/chore 队列常驻管理』。")
 
 # 分支 3：登记存在但不属于本会话（session_id 不一致，或是加会话隔离之前落的旧格式、
 # 压根没有 session_id 键）——一律当陈旧处理，判据见 keeper_paths.read_keeper_instance_name。
 WAKE_LINE_STALE = ("`.keeper-instance.json` 的登记来自上一个会话，已失效：当首次派发，"
-                    "用 `Agent` 派出并生成新的 4 位随机短哈希后缀。")
+                    "用 `Agent` 派出并生成新的 4 位随机短哈希后缀，"
+                    "description 固定填『debug/chore 队列常驻管理』。")
 
 KIND_LABELS = (("debug", "debug-keeper"), ("chore", "chore-keeper"))
 

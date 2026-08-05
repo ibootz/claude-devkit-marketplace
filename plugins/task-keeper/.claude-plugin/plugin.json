@@ -1,7 +1,7 @@
 {
   "name": "task-keeper",
-  "version": "2.7.0",
-  "description": "常驻 keeper 托管 debug/杂务队列（跟随交付 worktree 入库、自动归档）+ sdlc-writer 承接 sdlc 流程文档编写，决策打包 HITL，细节见 README",
+  "version": "2.8.0",
+  "description": "常驻 keeper 托管 debug/杂务队列（跟随交付 worktree 入库、自动归档）+ sdlc-writer 承接 sdlc 流程文档编写，决策打包 HITL，tk-board 出进度看板，细节见 README",
   "author": {
     "name": "zhangq"
   },

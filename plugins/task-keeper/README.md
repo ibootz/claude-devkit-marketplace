@@ -17,6 +17,7 @@
 | skill | `tk-sdlc` | sdlc 流程产物派发：切割线、按 feature 的分片规则、prompt 模板、回执收尾 |
 | skill | `tk-decisions` | 决策打包 HITL 协议正典（keeper 与主会话之间怎么攒批问人） |
 | skill | `tk-worktree` | 为 `git worktree` 建的工作区供给 submodule 内容（含嵌套递归），4 个子命令 |
+| skill | `tk-board` | 进度看板：每条一行（编号 + 20 字说明 + 四态）+ 计数占比 + 告警段，纯只读、不唤醒 keeper |
 | agent | `debug-keeper` | 独占 `.keeper/debug/` 写权限，承接 bug 报告全流程 |
 | agent | `chore-keeper` | 独占 `.keeper/chore/` 写权限，承接杂务登记与攒批执行 |
 | agent | `sdlc-writer` | **非 keeper**，一次性：写 Gate 后的 sdlc 文档正文，不常驻、不登记、无队列 |
@@ -176,6 +177,40 @@ subagent 拿不到 `AskUserQuestion` 工具（harness 硬限制），所以拍�
 | 5 | keeper | 把裁决抄进对应条目正文留痕，删 decisions 与 answers 两文件 |
 
 一文件一写者，免锁。协议全文在 `skills/tk-decisions/SKILL.md`。
+
+## 进度看板（2.8.0 新增 · `tk-board`）
+
+`skills/tk-board/scripts/board.py`，**纯只读**：不落盘、不 mkdir、不 `git` 写，跑多少次
+都不改队列状态（回归用例 [103] 逐文件比对跑前跑后的清单与大小来守这一点）。用户问
+「进度怎么样 / 还剩多少 / 哪些等我拍板」时跑它，把输出原样贴回去。
+
+输出三段：四态计数与占比 → 条目明细（编号 / 20 字说明 / 状态 / 优先级或类别 / 类型或
+外部写 / 外部工单）→ 告警。
+
+**四态里只有一态来自 `status` 字段。** frontmatter 的 `status` 只有 `open` / `done`
+两个值（v2 的 `in_progress` 在 v3 被砍，理由见 `hooks/lib/queue_snapshot.py` 模块头：
+AI 手写的业务字段当机械判据不可靠），另两态从文件系统事实反推：
+
+| 状态 | 判据 |
+|---|---|
+| 已解决 | `status: done` |
+| 待拍板 | `decisions/` 里有未答复的 `.md`，其 `about:` 指向这条 |
+| 进行中 | 条目目录下有 `worktree/` |
+| 未解决 | 以上都不是的 `open` |
+
+判定自上而下短路。`done` 排最前，所以「修完了但 `worktree/` 忘删」不会冒充在飞——它进
+告警段（那正是归档跳过该条的原因）。「待拍板」优先于「进行中」：一条 issue 可以既派了
+fixer 又卡在等人答复，此时该突出需要人动作的那一面。
+
+`about:` 的解析是本脚本新写的——`decision_inbox.pending_decisions()` 只回答「总共几条
+待拍板」，全文不解析 `about:`，给不出「哪条 issue 在等」。解析不出归属的、以及归属指向
+已 `done` 条目的，都单列进告警段，不静默丢弃（v2 教训：读不懂的静默跳过，16 条 issue
+从视图里人间蒸发）。
+
+另做两处真实数据脏点归一（2026-08-05 在一份 151 条的真实队列里实测到）：外部工单号有
+`external_ref` 与 `ones` 两种字段名，两个都读；`priority` 出现过小写 `p1`，upper() 后
+再比。`summary` 前导的 `【已关闭 —— …】` 状态块在显示时剥掉——20 字的说明列被状态叙述
+占满就一条也看不出讲什么，而状态本身已经在状态列里。
 
 ## sdlc-writer：不是 keeper 的第三个 agent（2.7.0 新增）
 

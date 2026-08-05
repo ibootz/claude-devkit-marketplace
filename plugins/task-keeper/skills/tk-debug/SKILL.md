@@ -194,6 +194,17 @@ Agent(
 )
 ```
 
+**`description` 逐字照抄上面这个固定串，不要改写成当次任务摘要**（如「关闭三条 +
+开工 DBG-140」）——在飞 agent 面板渲染的是**首次 `Agent` 派发那一刻**的
+`description`，而 debug-keeper 是常驻实例：派出后此后一律靠 `SendMessage` 唤醒、
+反复接不同的活，`SendMessage` 只有 `to` / `summary` / `message` 三个字段，**没有
+任何入口能更新已派出 agent 的 description**，写当次任务会让面板永久定格在派发那
+一刻。2026-08-05 实证（会话 `b4b5cb3e`，交付 D-001-feat-job-sequence-model）：
+`opus-debug-keeper-7f3a` 派发时 description 写的是「关闭三条 + 开工 DBG-140」，此后
+对它的 `SendMessage` 唤醒 20+ 次（转新 bug、转裁决、放行合并……各不相同），面板始终
+显示派发那一刻那句。写成当次任务的 description 现在会被 `working-discipline` 的
+`agent-dispatch` check 11 直接拦下（判据是逐字等值比较，改成本文档给的固定串即过）。
+
 `run_in_background: true` 是必须的——它让 keeper 在后台跑，你不必等它，也让它具备
 `SendMessage` 到 `main` 的能力。`name` 派发成功后 `PreToolUse(Agent)` hook 会自动
 把它写进 `.keeper/<交付id>/.keeper-instance.json` 的 `debug` 键，你不需要自己再写

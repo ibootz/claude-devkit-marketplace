@@ -4,7 +4,8 @@
 // 派发 subagent 时**结构层面**机械可判定的要求在这里处理：model 是否显式给了且在三档内、
 // name / description 是否齐备、name 前缀是否与 model 一致、name 是否体现插件专用 agent 的
 // 身份（check 8）、keeper 类常驻 agent 是否落在固定的 opus 档（check 9）、keeper 的 name 是否
-// 满足「固定前缀 + 4 位小写字母数字短哈希」的形态（check 10）、description 是否
+// 满足「固定前缀 + 4 位小写字母数字短哈希」的形态（check 10）、keeper 的 description 是否是
+// 那句固定的常驻语义（check 11）、description 是否
 // 超长。判据取自 tool_input 的确定字段，不回读 transcript。
 //
 // 【判据精度的如实说明（不要再写成"零误判"）】
@@ -151,6 +152,51 @@ const EXEMPT_SUBAGENT_TYPES = new Set(['fork', 'statusline-setup', 'output-style
 //     的第三方 agent 一并拦下）。
 const FIXED_OPUS_PATTERN = /(^|:)(debug|chore)-keeper$/
 const FIXED_OPUS_MODEL = 'opus'
+
+// keeper 类常驻 agent 的 description 固定值（check 11，2026-08-05 用户拍板加）。
+// 键取自 FIXED_OPUS_PATTERN 的第 2 个捕获组（`debug` / `chore`），两个值与
+// task-keeper 的 `skills/tk-debug/SKILL.md` / `skills/tk-chore/SKILL.md` 派发样例
+// 里写的 description **逐字一致**——改任一处都要三处同步（含本仓 README 的 check 表）。
+//
+// 【为什么需要这道闸】在飞 agent 面板渲染的是**首次 `Agent` 派发时的 description**，
+// 而 keeper 是常驻实例：派出去之后一律用 `SendMessage` 唤醒，反复接不同的活。
+// `SendMessage` 只有 `to` / `summary` / `message` 三个字段，**没有任何入口能更新已派出
+// agent 的 description**，所以那句描述从派发那一刻起就永久定格。于是「description 写当次
+// 任务」这个写法对 keeper 恒错——它描述的活几分钟后就干完了，面板却要挂着它到会话结束。
+//
+// 2026-08-05 实证（会话 b4b5cb3e，交付 D-001-feat-job-sequence-model）：
+// `opus-debug-keeper-7f3a` 派发时 description 写的是「关闭三条 + 开工 DBG-140」，此后
+// 对它的 `SendMessage` 唤醒 20+ 次（转新 bug、转裁决、放行合并……各不相同），面板始终
+// 显示派发那一刻那句。同会话 `opus-chore-keeper-3d7b` 的「登记五项杂务」同理。
+//
+// 【漂移成因是两条指令打架，不是 AI 疏忽】本插件每轮注入的字段表写的是
+// 「`description`：3-5 词任务摘要，只写这次任务干什么」——那条对一次性 subagent 完全正确，
+// 对常驻 keeper 恰好相反。两份 SKILL.md 早给了正确样例（"debug 队列常驻管理"），但它们
+// 只在主会话调过对应 skill 时才在场，而字段表每轮都在。软文本斗软文本斗不过，故加闸。
+//
+// 【判据形态】`subagent_type` 命中 FIXED_OPUS_PATTERN（完整锚定正则）+ description 正文与
+// 固定串的**等值比较**，两个都是确定字段，同一输入必得同一结论。不猜语义、不看 prompt。
+//
+// 【覆盖边界（如实记录，勿删）】
+//   - **假阳性**：想在面板上区分两个同类 keeper 的场景会被硬拦。目前不成立——同一会话同一
+//     交付只允许一个 debug-keeper（单一写者模式，见 check 10 的事故），要区分实例靠 name 的
+//     4 位短哈希，不靠 description。日后真出现多实例需求，正确处置是整条降级为 ask，不是
+//     在这里加白名单。
+//   - **假阴性**：改用 `general-purpose` 派 keeper 可绕过——但那连 check 9 / check 10 一起
+//     绕过了，是既有边界，本条不新增。
+//   - 比较用的是 **strip 掉 `[模型名]` 前缀后的正文**（与 check 6 同口径），`[opus] debug
+//     队列常驻管理` 不会被这条拦下；面板多显示一个前缀无害，不值得多一个误杀面。
+const KEEPER_FIXED_DESCRIPTIONS = {
+  debug: 'debug 队列常驻管理',
+  chore: 'chore 队列常驻管理',
+}
+
+// keeper 的固定 description；非 keeper（或表内没登记的新 keeper）返回空串，
+// 调用方据此整条跳过（fail-open，与 FIXED_OPUS_PATTERN 的白名单口径一致）。
+function keeperFixedDescription(stLower) {
+  const m = String(stLower || '').match(FIXED_OPUS_PATTERN)
+  return (m && KEEPER_FIXED_DESCRIPTIONS[m[2]]) || ''
+}
 
 // 身份词校验（check 8）的通用词黑名单：这些词出现在 subagent_type 的 slug 里不携带
 // 可辨识身份，不能拿来当 name 的必含词。例如 `fpf:fpf-agent` 的 'agent'、
@@ -356,6 +402,12 @@ function checkNaming(ti) {
   const model = typeof ti.model === 'string' ? ti.model.trim() : ''
   const name = typeof ti.name === 'string' ? ti.name.trim() : ''
   const description = typeof ti.description === 'string' ? ti.description.trim() : ''
+  // subagent_type 小写化后的串：check 9 / 10 / 11 共用，是 keeper 判定的唯一入口。
+  const stLower = String(ti.subagent_type || '').toLowerCase()
+  // 非空即说明这是白名单内的常驻 keeper，其 description 被 check 11 钉死成这个值。
+  // check 5 的 hint 也要用它——否则缺 description 时会教 AI 去写「3-5 词任务摘要」，
+  // 它照做之后下一轮又撞上 check 11，两轮才改对。
+  const keeperDesc = keeperFixedDescription(stLower)
 
   const findings = []
   const hints = []
@@ -443,7 +495,6 @@ function checkNaming(ti) {
   // 9. keeper 类常驻 agent 的档位钉死在 opus（2026-08-03 新增，判据与边界见 FIXED_OPUS_PATTERN）
   //    与 check 1 并列而非合并：check 1 管"三档枚举内"，这条管"这个 subagent_type 只允许一档"。
   //    model 缺失时两条会同时报，hint 各给一半，AI 一次改全。
-  const stLower = String(ti.subagent_type || '').toLowerCase()
   if (FIXED_OPUS_PATTERN.test(stLower) && model !== FIXED_OPUS_MODEL) {
     findings.push(
       `subagent_type="${ti.subagent_type}" 是固定 ${FIXED_OPUS_MODEL} 档的常驻 keeper,` +
@@ -536,7 +587,11 @@ function checkNaming(ti) {
   let descBody = ''
   if (!description) {
     findings.push('缺 description')
-    hints.push('description 填 "<3-5 词任务摘要>"（模型档次由 name 前缀体现,description 不带 [模型名] 前缀）')
+    hints.push(
+      keeperDesc
+        ? `description 填 "${keeperDesc}"（常驻 keeper 的 description 是固定值,不写当次任务,理由见 check 11）`
+        : 'description 填 "<3-5 词任务摘要>"（模型档次由 name 前缀体现,description 不带 [模型名] 前缀）'
+    )
   } else {
     const modelTag = description.match(/^\[(sonnet|opus|fable|haiku)\]\s*/)
     descBody = modelTag ? description.slice(modelTag[0].length).trim() : description
@@ -546,7 +601,11 @@ function checkNaming(ti) {
     }
     if (!descBody) {
       findings.push('description 没有任务摘要正文')
-      hints.push('description 填 3-5 词任务摘要（不带 [模型名] 前缀）')
+      hints.push(
+        keeperDesc
+          ? `description 填 "${keeperDesc}"（常驻 keeper 的 description 是固定值,不写当次任务,理由见 check 11）`
+          : 'description 填 3-5 词任务摘要（不带 [模型名] 前缀）'
+      )
     }
   }
 
@@ -567,6 +626,25 @@ function checkNaming(ti) {
   if (description && description.length > DESC_BODY_MAX) {
     findings.push(`description ${description.length} 字符超过 ${DESC_BODY_MAX};纪律要求 3-5 词摘要,超长说明塞了 prompt 内容`)
     hints.push(`description 压到 ${DESC_BODY_MAX} 字符以内(带 [模型名] 前缀的话前缀也算在内,直接删掉前缀最省)`)
+  }
+
+  // 11. keeper 类常驻 agent 的 description 钉死成常驻语义（2026-08-05 用户拍板加，
+  //     判据、成因与覆盖边界见 KEEPER_FIXED_DESCRIPTIONS 上方的整段注释）。
+  //     与 check 7（长度）叠加时两条会同时报，hint 方向一致（都是改成那个固定串），
+  //     AI 一次改全。
+  if (keeperDesc && descBody && descBody !== keeperDesc) {
+    findings.push(
+      `subagent_type="${ti.subagent_type}" 是常驻 keeper,description 钉死为 "${keeperDesc}",` +
+        `本次写的是 "${descBody}";在飞面板渲染的是**首次派发那一刻**的 description,` +
+        `而 keeper 此后一律靠 SendMessage 唤醒、反复接不同的活,` +
+        `SendMessage 只有 to/summary/message 三个字段,没有任何入口能更新已派出 agent 的 description——` +
+        `写当次任务会让面板永久定格在派发那一刻(2026-08-05 实证:某 keeper 面板挂着"关闭三条 + 开工 DBG-140",` +
+        `其后 20+ 次唤醒各干各的,那句一直没变)`
+    )
+    hints.push(
+      `description 改成 "${keeperDesc}"(逐字照抄);` +
+        `"面板显示它当前在干什么"做不到,别在 description 里试——当次任务那句写进 SendMessage 的 summary`
+    )
   }
 
   return { findings, hints, modelOk, nameMissing }

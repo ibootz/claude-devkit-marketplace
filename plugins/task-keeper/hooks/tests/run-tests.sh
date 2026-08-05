@@ -140,6 +140,7 @@ source "$TESTS_DIR/cases/15-h20-queue-autocreate.sh"
 source "$TESTS_DIR/cases/16-h21-keeper-instance-registry.sh"
 source "$TESTS_DIR/cases/17-h22-keeper-routing-session.sh"
 source "$TESTS_DIR/cases/18-h23-sdlc-routing.sh"
+source "$TESTS_DIR/cases/19-h24-board-report.sh"
 
 echo
 printf '通过 %d / 失败 %d\n' "$pass" "$fail"

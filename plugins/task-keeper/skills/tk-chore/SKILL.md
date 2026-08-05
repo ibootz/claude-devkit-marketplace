@@ -57,6 +57,17 @@ Agent(
 )
 ```
 
+**`description` 逐字照抄上面这个固定串，不要改写成当次任务摘要**（如「登记五项
+杂务」）——在飞 agent 面板渲染的是**首次 `Agent` 派发那一刻**的 `description`，
+而 chore-keeper 是常驻实例：派出后此后一律靠 `SendMessage` 唤醒、反复接不同的活，
+`SendMessage` 只有 `to` / `summary` / `message` 三个字段，**没有任何入口能更新已
+派出 agent 的 description**，写当次任务会让面板永久定格在派发那一刻。2026-08-05
+实证（会话 `b4b5cb3e`，交付 D-001-feat-job-sequence-model）：`opus-chore-keeper-3d7b`
+派发时 description 写的是「登记五项杂务」，此后对它的 `SendMessage` 唤醒同样各自
+不同，面板始终显示派发那一刻那句。写成当次任务的 description 现在会被
+`working-discipline` 的 `agent-dispatch` check 11 直接拦下（判据是逐字等值比较，
+改成本文档给的固定串即过）。
+
 派发成功后 `PreToolUse(Agent)` hook 会自动登记这个 name，不需要你自己再写登记文件。
 
 **之后每一次**（同一会话内再有新杂务），这一轮的三岔口注入已经直接给出真实 name

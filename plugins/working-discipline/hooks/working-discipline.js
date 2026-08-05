@@ -321,8 +321,11 @@
 //   for e in SessionStart UserPromptSubmit SubagentStart; do \
 //     echo "{\"hook_event_name\":\"$e\"}" | node hooks/working-discipline.js \
 //     | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).hookSpecificOutput.additionalContext.length))'; done
-//   预算（3.22.0 实测）：SessionStart 8157、UserPromptSubmit 3476（无图轮）、
-//   SubagentStart 8545（可派发类型）/ 4829（`agent_type` 为 `Explore` 或 `Plan`）。
+//   预算（3.23.0 实测）：SessionStart 7891、UserPromptSubmit 3513（无图轮）、
+//   SubagentStart 8571（可派发类型）/ 4722（`agent_type` 为 `Explore` 或 `Plan`）。
+//   （3.22.0 那组记的是 8157 / 3476 / 8545 / 4829。注意 SessionStart 这次实测比它
+//   **低** 266，而 3.23.0 的两处改动只增不减——说明那组基线在 3.22.0 之后已被别的改动
+//   动过、没人同步回来。差值的具体来源未回溯，别拿这两组数去算某次改动的净增。）
 //   三者各自独立受 10000 硬上限约束。历史值见 README「工作机制速览」。
 //   ⚠️ 子代理层测两种 payload，别只测不带 `agent_type` 的那个——不带即回落到完整分支，
 //   测它测不出条件注入是否还活着：
@@ -626,7 +629,7 @@ const SECTION_AGENT_CALL = [
   '| `name` | 必填（schema 里没有它，靠你自己记）。`<模型名>-<任务语义-kebab>`，模型名与 `model` 逐字一致；只收 ASCII，合 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`；同批并发互相可辨（分片依据写进名字）；`subagent_type` 含冒号时还须含其身份词（`task-keeper:debug-keeper` → 含 `debug` 或 `keeper`） |',
   '| `model` | 必填，禁止默认回落。`sonnet`（默认档）/ `opus`（跨层追根因·高正确性·sonnet 已吃力）/ `fable`（opus 跑 ≥2 轮无进展）。无 `haiku` 档 |',
   '| `subagent_type` | 必填。只读任务一律 `Explore`；要 Edit/Write 才 `general-purpose`；设计与拆解用 `Plan` |',
-  '| `description` | 必填。3-5 词任务摘要，≤60 字符；只写这次任务干什么，不带 `[模型名]` 前缀，不放 `prompt` 原文与"你是第 1 层子代理"这类角色设定句 |',
+  '| `description` | 必填。3-5 词任务摘要，≤60 字符；只写这次任务干什么，不带 `[模型名]` 前缀，不放 `prompt` 原文与"你是第 1 层子代理"这类角色设定句（常驻 keeper 例外：description 是固定值，非当次任务） |',
   '| `run_in_background` | 选填。要并发多个、或本轮还接着干别的时给 `true`；要拿到结果才能继续时给 `false` |',
   '| `prompt` | 必填。四段式，见上 |',
   '',
@@ -680,7 +683,7 @@ const SECTION_DISPATCH = [
 // `Agent` 那条单独抽出来：它是三条里唯一只对「能派下一层的 agent」有意义的一条，
 // 且它指向「完整调用形态」那一节，必须与那一节同进同出，否则会留下悬空引用。
 const HOOK_ENFORCED_AGENT_BULLET =
-  '- **`Agent`**（`guards/agent-dispatch.js`）校验 `model` / `name` / `description` 的结构，判据就是「派发 `Agent` 的完整调用形态」那张六字段表（主会话每轮注入一份，子代理版在上面第五章里），外加两条 keeper 专项：档位钉 `opus`、`name` 带 4 位短哈希。照那张表写就不会撞'
+  '- **`Agent`**（`guards/agent-dispatch.js`）校验 `model` / `name` / `description` 的结构，判据就是「派发 `Agent` 的完整调用形态」那张六字段表（主会话每轮注入一份，子代理版在上面第五章里），外加三条 keeper 专项：档位钉 `opus`、`name` 带 4 位短哈希、`description` 钉死为「debug 队列常驻管理」/「chore 队列常驻管理」（逐字，不写当次任务——面板显示的是首次派发那一刻的值，`SendMessage` 唤醒改不了它）。照那张表写就不会撞'
 
 // 由 guard 硬拦截的规则，这里只留一行索引：让 AI 知道边界存在（别把撞拦截当异常、
 // 也别在事前反复自我审查细节），细则由各 guard 在命中时给出。
