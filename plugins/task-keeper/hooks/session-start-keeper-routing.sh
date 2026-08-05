@@ -4,7 +4,7 @@
 #
 # 【作用】会话开始（含每次 auto-compact 后，matcher * 覆盖 compact 来源）给主会话
 #   注入「任务分诊三岔口」与「决策打包主会话侧职责」。**纯注入，零拦截**——分诊是
-#   语义判断，按 hook 克制原则只能做软约束（见仓库 .claude/rules/hook-restraint.md）。
+#   语义判断，按 hook 克制原则只能做软约束（见仓库 .claude/rules/project/hook-restraint.md）。
 #
 # 【opt-in 分档】判据是项目里 `.keeper/` 目录的存在性（从 cwd 向上找，到 .git 止）：
 #   · 未启用：只注入 ≤300 字符的一句话介绍 + 启用方式，不铺开细节。

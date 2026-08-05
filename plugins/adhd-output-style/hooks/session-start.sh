@@ -32,9 +32,9 @@ def read(name):
         return f.read().strip()
 
 HEADER = (
-    "ADHD MODE ACTIVE. The ruleset below shapes every response for the rest of "
-    "this session, including after context compaction. It does not lapse when "
-    "the topic changes. Turn it off by disabling the adhd-output-style plugin."
+    "ADHD MODE ACTIVE for the rest of this session, including after context "
+    "compaction; it does not lapse when the topic changes. Disable it in "
+    "/plugin (adhd-output-style)."
 )
 
 body = "\n\n".join([HEADER, read("upstream-rules.md"), read("project-overrides.md")])

@@ -10,7 +10,7 @@
 #
 # 【纯写文件，不拦截任何操作】本脚本不输出 permissionDecision，不 exit 2，任何异常
 #   都在 python 侧静默降级。写得进就写，写不进就算了，绝不阻断这次 Agent 派发。
-#   本仓 `.claude/rules/hook-restraint.md` 的严格判据表约束的是拦截类 hook；本 hook
+#   本仓 `.claude/rules/project/hook-restraint.md` 的严格判据表约束的是拦截类 hook；本 hook
 #   是纯副作用 hook，不受那张表约束，但代价是必须保证自己不会误伤——判据与异常处理
 #   细节见 `lib/keeper_instance_register.py` 模块头。
 #

@@ -473,12 +473,10 @@ def main():
     out = ["# Debug 队列（%s · harness 注入，非 AI 记忆）" % queue_dir, ""]
     out += render_injection(queue_dir, cwd)
     out += ["",
-            "索引 `<队列>/index.md`（薄，含每条链接）。一条 bug 的全部内容"
-            "（原话 / 证据 / triage / 历次修订）都在 `<队列>/<DBG-id>/issue.md` 里，"
-            "**按需打开单条，不要为了看状态去读全部正文**。同目录还有该条的 "
-            "receipts.md、截图与 fixer 的 worktree/。",
-            "纪律：收到 bug 只登记不派发（register-first）；一 issue 一 worktree "
-            "物理隔离并行；合并前用 `git diff --stat` 与 receipts 申报清单对账。"]
+            "索引 `<队列>/index.md`；单条正文在 `<队列>/<DBG-id>/issue.md`，"
+            "按需打开单条，不整读全部。同目录还有 receipts.md/截图/fixer worktree/。",
+            "纪律：bug 只登记不派发；一 issue 一 worktree 隔离并行；"
+            "合并前 `git diff --stat` 对 receipts 核账。"]
 
     # 待拍板计数兜底：正常由 chore 快照注入；chore 未启用（chore 目录不存在）时
     # 这里代注。两边判据是同一个目录的存在性，不会重复注入。**自动补建后 chore

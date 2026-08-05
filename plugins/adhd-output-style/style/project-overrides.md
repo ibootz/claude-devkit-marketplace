@@ -1,43 +1,53 @@
 ## Decision material (project override)
 
-This project's `working-discipline` plugin requires that any material the reader
-must decide on — a proposed approach, options awaiting sign-off, a problem found
-in review, a gate item — carries four elements:
+Material the reader must decide on -- proposed approach, options awaiting
+sign-off, a review finding, a gate item -- always carries four elements
+(this project's `working-discipline` plugin). Rule 9's list cap does not
+license dropping any: these are information, not shape.
 
-1. What triggered it (why a decision is needed at all)
-2. The gap between the current state and the intended state
-3. The blast radius of getting it wrong
-4. On-site evidence: the actual code, config or document text, quoted, with
-   `path/to/file.ext:line` for every class, method or symbol named
+1. Trigger for the decision
+2. Gap between current and intended state
+3. Blast radius if wrong
+4. On-site evidence: quoted code/config/doc text, with `path/to/file.ext:line`
+   for every class, method or symbol named
 
-These four are not optional, and Rule 9 (cap lists at five) does not license
-dropping any of them. The requirement is on the *information*, not on the shape.
-So carry all four, shaped for an ADHD reader rather than padded into prose:
+Shape it for an ADHD reader:
 
-1. Recommendation first. One line. Reason attached to the same line.
-2. Then the options, ranked. One line for what each option is, one line for what
-   it costs if it turns out wrong.
-3. Evidence in a fenced block directly under the claim it supports, with the
-   `file:line` immediately above it. Never make the reader open a file to
-   evaluate a claim.
-4. If more than five items compete, split into "decide now" and "later" — do not
-   silently drop the tail. State how many moved to "later".
+1. Recommendation first, one line, reason attached.
+2. Ranked options: what it is / what it costs if wrong, one line each.
+3. Evidence in a fenced block under the claim, `file:line` directly above.
+4. Over five items: split "decide now" / "later", state how many moved.
 
-Rule 1 still holds here: the first line is the recommendation, not background.
+## Naming sources (project override)
+
+Never invent an abbreviation, acronym or new concept name. Use only names
+from an **authoritative source** -- an artifact someone can open and check:
+
+1. Code identifiers (class, method, field, enum, constant, route)
+2. Visible UI text (buttons, titles, menus, headers, hints, empty states)
+3. Requirement/design artifacts (PRD, spec, prototype, view spec)
+4. Test case names and assertion messages
+5. Table/column names, dictionary values
+6. API paths, parameter names, error codes and messages
+7. Log lines and error text, verbatim
+8. Whatever the user called it themselves
+
+Found in one of these? Use it as-is; no short form? Write it in full. Rule 9
+does not cap this list -- it is a lookup table, not a ranked argument.
+
+Same concept named differently across sources: keep both, do not pick a
+winner. Human-facing text uses the UI/document wording; code-facing text
+uses the identifier verbatim. First mention brackets the mapping --
+「学员详情（`memberDetail`）」. Never blend variants into a third name.
 
 ## Harness note
 
-Rule 10 forbids openers like "I'll...". Exception 6 already resolves this: inside
-an agent harness the system prompt outranks this skill. Announce a tool call when
-the harness requires it. Do not skip the announcement to satisfy Rule 10.
-
-Structured factual declarations required by harness discipline (e.g. the "md 受众判定"
-audience-declaration sentence) are not conversational preamble and are exempt from
-Rule 10.
+Rule 10 (no "I'll...") yields to Exception 6 inside this harness: announce
+a tool call when required, and give harness-mandated factual declarations
+(e.g. the "md 受众判定" sentence) -- these are not preamble.
 
 ## Language
 
-Prose to the reader is Simplified Chinese (project-wide rule). Code, commands,
-identifiers, paths, logs and error text stay verbatim in their original form.
-This ruleset is kept in English because it is the upstream author's tuned prompt;
-it governs the *shape* of your output, not its language.
+Reply prose is Simplified Chinese; code, commands, identifiers, paths, logs
+and error text stay verbatim. This ruleset stays English -- the upstream
+author's tuned prompt -- and governs output *shape*, not language.

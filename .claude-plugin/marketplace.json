@@ -17,7 +17,7 @@
       "source": "./plugins/devkit-tool",
       "category": "Development",
       "description": "工具技能集 - 代码库分析、依赖排查、CLAUDE.md 与 rules 初始化、codegraph 建图决策（CLI-only + 已建图仓注入 hook）、CC 自身运维（6 技能）",
-      "version": "6.6.0"
+      "version": "6.8.0"
     },
     {
       "name": "devkit-spec",
@@ -52,7 +52,7 @@
       "source": "./plugins/omp",
       "category": "Development",
       "description": "Oh my pi (omp) CLI 集成 - 在 CC/Codex 里用 omp 做编码、审查、搜索",
-      "version": "2.4.0"
+      "version": "2.5.0"
     },
     {
       "name": "find-skills",
@@ -66,7 +66,7 @@
       "source": "./plugins/working-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 2 道硬拦 1 道事后提醒。零 skill，适合全局开启",
-      "version": "3.18.0"
+      "version": "3.22.0"
     },
     {
       "name": "agent-browser",
@@ -80,7 +80,7 @@
       "source": "./plugins/discover-unknowns",
       "category": "Productivity",
       "description": "发现你的未知 - 动手前用盲点扫描/头脑风暴/访谈挖未知，测验默认跳过按需才出",
-      "version": "2.2.0"
+      "version": "2.3.0"
     },
     {
       "name": "portable-shell",
@@ -94,35 +94,35 @@
       "source": "./plugins/task-keeper",
       "category": "Productivity",
       "description": "常驻 keeper 子代理托管 debug/杂务队列 - 队列跟随交付 worktree 入库，决策打包 HITL",
-      "version": "2.5.0"
+      "version": "2.6.0"
     },
     {
       "name": "plain-talk-output-style",
       "source": "./plugins/plain-talk-output-style",
       "category": "Productivity",
       "description": "说人话输出风格 - 一语中的、几句话讲明白、能表格不成段，启停即切换",
-      "version": "1.1.0"
+      "version": "1.4.0"
     },
     {
       "name": "adhd-output-style",
       "source": "./plugins/adhd-output-style",
       "category": "Productivity",
       "description": "ADHD 友好输出风格 - 首行给动作、多步编号、每轮重述进度。复刻自 i-have-adhd",
-      "version": "1.0.1"
+      "version": "1.2.0"
     },
     {
       "name": "wenyan-output-style",
       "source": "./plugins/wenyan-output-style",
       "category": "Productivity",
       "description": "文言极简输出风格 - 文言语法压缩、字形简体，代码与告警原样，启停即切换",
-      "version": "1.1.0"
+      "version": "1.4.0"
     },
     {
       "name": "insight-addon",
       "source": "./plugins/insight-addon",
       "category": "Productivity",
       "description": "教学洞察附加件 - 技术判断处给 ★ Insight 框，可与任意输出风格叠加",
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     {
       "name": "session-auto-title",
@@ -136,7 +136,7 @@
       "source": "./plugins/clickable-paths",
       "category": "Productivity",
       "description": "文件路径可点击 - iTerm2 里 cmd+click 跳 VS Code 对应行，需配 Semantic History",
-      "version": "1.1.0"
+      "version": "1.2.0"
     }
   ]
 }

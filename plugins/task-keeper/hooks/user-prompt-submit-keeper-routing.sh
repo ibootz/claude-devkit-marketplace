@@ -4,7 +4,7 @@
 #
 # 【作用】每轮把「自己做 / 转 debug-keeper / 转 chore-keeper」三岔口分诊规则注入
 #   本轮上下文。**纯注入，零拦截**——分诊是语义判断，按 hook 克制原则不能做成
-#   拦截（见仓库 .claude/rules/hook-restraint.md）。
+#   拦截（见仓库 .claude/rules/project/hook-restraint.md）。
 #
 # 【为什么从 SessionStart 挪到这里（2026-08-01）】
 #   分诊规则与 system prompt 的默认行为直接对立：base 指令是「有足够信息就动手」，

@@ -1,6 +1,6 @@
 {
   "name": "clickable-paths",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "文件路径写成可点击链接 - 每轮注入一段输出格式规约，让 AI 提到本机文件时输出 [文件名:行号](file:///绝对路径#行号)，iTerm2 渲染成 OSC 8 超链接、cmd+click 用 VS Code 打开对应行。零 skill，纯注入不拦截（CLICKABLE_PATHS=off 可关）",
   "author": {
     "name": "zhangq"

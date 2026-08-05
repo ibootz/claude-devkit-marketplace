@@ -1,6 +1,6 @@
 {
   "name": "discover-unknowns",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "发现你的未知 - 3 skill（统领 / brainstorm / quiz 默认跳过、按需才出）+ 每轮未知雷达 hook（DISCOVER_UNKNOWNS_RADAR=off 可关）",
   "author": {
     "name": "zhangq"

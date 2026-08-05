@@ -26,7 +26,7 @@ T="$(newtmpdir)"; mkrealrepo "$T"
 mkdir -p "$T/.keeper"   # 只需 .keeper/ 顶层存在即 enabled，不要求已建出具体队列目录
 OUT="$(run_triage_sess "$T" "sess-A")"
 TEXT="$(triage_text "$OUT")"
-has "无登记时提示还没有登记记录" "$TEXT" "还没有 keeper 登记记录"
+has "无登记时提示还没有登记记录" "$TEXT" "还没有登记"
 hasnt "无登记时不误报已失效" "$TEXT" "已失效"
 CHARS="$(/usr/bin/python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
 if [ "$CHARS" -le 800 ]; then ok "无登记分支 ${CHARS} 字符 ≤800"

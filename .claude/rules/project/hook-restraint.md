@@ -1,3 +1,10 @@
+---
+paths:
+  - "plugins/*/hooks/**"
+  - "plugins/*/.claude-plugin/plugin.json"
+  - "plugins/*/.codex-plugin/plugin.json"
+---
+
 # hook 克制原则：默认不加 hook，能 100% 机械判定才可以
 
 本仓做插件时，**hook 是最后手段，不是首选手段**。新增任何 `PreToolUse` / `PostToolUse` /

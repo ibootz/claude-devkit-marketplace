@@ -29,8 +29,8 @@ def read(name):
         return f.read().strip()
 
 HEADER = (
-    "文言极简模式已启用。以下规则约束本会话每一次回复，包含上下文压缩之后；"
-    "话题变更不失效，长对话不衰减。关闭方式：/plugin 里停用 wenyan-output-style 插件。"
+    "文言极简模式已启用，约束本会话每轮回复，含 compact 之后；话题变更不失效，"
+    "长对话不衰减。关闭：/plugin 里停用本插件。"
 )
 
 body = "\n\n".join([HEADER, read("wenyan-ultra-rules.md"), read("project-overrides.md")])

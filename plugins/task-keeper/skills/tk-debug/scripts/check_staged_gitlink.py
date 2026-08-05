@@ -33,7 +33,7 @@ merge 冲突，完全看不出根因在几十次提交之前的一次 `git add -
 
 ## 为什么不做成 hook
 
-按本仓 `.claude/rules/hook-restraint.md` 的强度阶梯，判据机械≠就该做成拦截。要在
+按本仓 `.claude/rules/project/hook-restraint.md` 的强度阶梯，判据机械≠就该做成拦截。要在
 `PreToolUse(Bash)` 上拦，得先判断「这条命令是不是 git commit」——那是对整条命令
 字符串做形态匹配，`git commit` 可以写成 `git -C x commit`、`git commit -m "..."`、
 被 `&&` 串在中间、出现在 heredoc 正文里……误报与漏报都跑不掉，而这条脚本的价值

@@ -20,8 +20,8 @@
 
 | 脚本 | 事件 | 行为（按动作描述，不是按愿望描述） |
 |---|---|---|
-| `session-start-keeper-routing.sh` | SessionStart | 纯注入**静态参考**（决策打包主会话侧职责、v4 布局、指针）。未启用 221 字符（一句话介绍 + 启用方式），已启用 671 字符，不拦截任何操作 |
-| `user-prompt-submit-keeper-routing.sh` | UserPromptSubmit | 纯注入**三岔口分诊**（自己做 / 转 debug-keeper / 转 chore-keeper）+ 转发三原则 + 现算的一句"唤醒前怎么办"（三选一：唤醒某个真实 name / 登记已失效当首次派发 / 没有登记当首次派发，见下方「登记 keeper 实例 name」的会话隔离说明），三支分别 481/503/511 字符（两档同时命中时最长约 550 字符），硬上限 800。未启用项目 stdout 全空 |
+| `session-start-keeper-routing.sh` | SessionStart | 纯注入**静态参考**（决策打包主会话侧职责、v4 布局、指针）。未启用 195 字符（一句话介绍 + 启用方式），已启用 495 字符，不拦截任何操作 |
+| `user-prompt-submit-keeper-routing.sh` | UserPromptSubmit | 纯注入**三岔口分诊**（自己做 / 转 debug-keeper / 转 chore-keeper）+ 转发三原则 + 现算的一句"唤醒前怎么办"（三选一：唤醒某个真实 name / 登记已失效当首次派发 / 没有登记当首次派发，见下方「登记 keeper 实例 name」的会话隔离说明），没有登记 363 字符、session 匹配 398 字符、已失效 395 字符（两档同时匹配时约 442 字符），硬上限 800。未启用项目 stdout 全空 |
 | `user-prompt-submit-debug-queue.sh` | UserPromptSubmit | 注入 debug 队列实时快照（open 逐条 + 在飞派生 + done 计数）、重算薄索引 `index.md`（git rebase/bisect/merge 中间态跳过）；`.gitignore` 有整树忽略行或缺四条精确规则时各加一句提醒；存量 v3/v2 布局未迁移时加一句迁移提示；命中 bug 特征词时给出下一个可用 DBG-id（fixer worktree 内不给） |
 | `user-prompt-submit-chore-queue.sh` | UserPromptSubmit | 注入 chore 队列快照（输出预算 ≤900 字符）；`.keeper/` 顶层存在时缺失的 `chore/`（连同 `debug/`）由 `find_queue` 每轮自动补建，不需要手工 mkdir；代注待拍板决策计数（自动补建后 `chore/` 恒存在，debug 快照的兜底注入分支实际只在 fixer worktree 内或补建失败时才会走到，两边判据仍是同一个目录的存在性） |
 | `pre-tool-use-debug-worktree-push.sh` | PreToolUse(Bash) | `git push` 的目标落在 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 内时 deny（fixer 产物只回流不推远端） |
@@ -176,7 +176,7 @@ subagent 拿不到 `AskUserQuestion` 工具（harness 硬限制），所以拍�
 1. 三岔口路由只转发不亲做：bug 原话逐字转给 debug-keeper、杂务转给 chore-keeper，主会话立刻回原任务。
 2. keeper 的 `SendMessage` 一律 ≤3 行指针化（结论 + 文件路径），不往主会话倒正文。
 3. 决策攒批：多条待拍板合成一次 `AskUserQuestion`，不逐条打断。
-4. 注入有字节预算：chore 快照 ≤900 字符、路由注入未启用/已启用两档（~175 / ~792 字符），未启用项目的队列快照零输出。
+4. 注入有字节预算：chore 快照 ≤900 字符、路由注入未启用/已启用两档（~195 / ~495 字符），未启用项目的队列快照零输出。
 5. `index.md` 是薄索引，快照只给 id + 状态一行，细节按需打开单条 issue 文件。
 
 ## 外部工单适配器（公司能力接线口）

@@ -1,6 +1,6 @@
 {
   "name": "insight-addon",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "教学洞察附加件 - 在真正做了技术判断的地方给一个 ★ Insight 框。只加一条规则、不定义整体风格，可与 plain-talk / adhd 等任意输出风格同时开启",
   "author": {
     "name": "zhangq"

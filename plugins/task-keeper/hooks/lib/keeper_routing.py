@@ -79,11 +79,10 @@ except Exception:
     read_keeper_instances = None
 
 NOT_ENABLED = (
-    "task-keeper 未在本项目启用（无 .keeper/ 目录）。启用后可把 bug 转常驻 "
-    "debug-keeper、杂务转 chore-keeper 托管，主会话只做分诊转发。启用："
+    "task-keeper 未启用（无 .keeper/）。启用后 bug 转 debug-keeper、杂务转 "
+    "chore-keeper 常驻处理，主会话只分诊转发。启用："
     "`mkdir -p .keeper/$(basename $(git rev-parse --show-toplevel))/debug`"
-    "（非交付 worktree 用 `_main` 代替 basename）。只需建这一个，"
-    "同级 `chore/` 由每轮 hook 自动补建，不必手工创建。")
+    "（非交付用 `_main` 代替 basename），`chore/` 自动补建。")
 
 # 每轮注入：只放与 system prompt 默认行为对立的部分。改这段前先读模块头
 # 「为什么分两层」——往里加静态参考会让每轮成本白涨且稀释对抗力。
@@ -91,29 +90,29 @@ NOT_ENABLED = (
 # TRIAGE_HEAD/TRIAGE_TAIL 夹着一句现算的动态提示（见 `triage_wake_line`），三选一：
 # 唤醒某个真实 name / 登记已失效当首次派发 / 没有登记当首次派发。三者共用同一个
 # 头尾骨架，只有中间这一句不同——见模块头「为什么现算而不是让 AI 自己读文件」。
-TRIAGE_HEAD = """# task-keeper 分诊（本轮先分诊，再动手）
+TRIAGE_HEAD = """# task-keeper 分诊（先分诊，再动手）
 
-对刚收到的这条用户消息判一次归属。分错代价小，**不要为分类反问用户**：
+判一次归属，不要为分类反问用户：
 
-1. **自己做**：当前主线任务本身、几句话能答的问题、需要你上下文才能做的事。
-2. **转 debug-keeper**：bug / 报错 / 异常行为 → 逐字转发（首次用 `Agent` 派出，之后 `SendMessage` 唤醒）。属于项目既有交付流程的活走该流程。
-3. **转 chore-keeper**：台账 / 沉淀 / 收尾 / 外部系统小操作等杂务 → 逐字转发。
+1. 自己做：主线任务本身、几句话能答的问题、需要你上下文才能做的事。
+2. 转 debug-keeper：bug/报错/异常行为，逐字转发（首次 `Agent` 派出，之后 `SendMessage` 唤醒）。属于既有交付流程的活走该流程。
+3. 转 chore-keeper：台账/沉淀/收尾/外部系统小操作等杂务，逐字转发。
 
 """
 
 TRIAGE_TAIL = """
 
-三原则：**逐字**（不改写用户原话）、**即回**（转完回主线，不追问 keeper 进度）、**不越位**（`.keeper/` 队列文件你只读，写者是 keeper）。
+三原则：逐字（不改写原话）、即回（转完回主线不追问进度）、不越位（`.keeper/` 队列你只读）。
 
-最常见的失效方式是「这个我顺手做了更快」。转发的目的不是省你的时间——是不让这条任务的状态只活在本轮上下文里，compact 一次就没了。"""
+最常见失效是「这个我顺手做了更快」——转发是为了不让任务状态只活在本轮上下文里，compact 一次就没了。"""
 
 # 分支 1：没有任何登记（本会话与之前任何会话都没派过）——保持原有措辞。
-WAKE_LINE_NONE = "还没有 keeper 登记记录：首次转发时用 `Agent` 派出，name 自己生成 4 位随机短哈希后缀。"
+WAKE_LINE_NONE = "还没有登记：首次转发用 `Agent` 派出，name 自带 4 位随机短哈希后缀。"
 
 # 分支 3：登记存在但不属于本会话（session_id 不一致，或是加会话隔离之前落的旧格式、
 # 压根没有 session_id 键）——一律当陈旧处理，判据见 keeper_paths.read_keeper_instance_name。
-WAKE_LINE_STALE = ("`.keeper-instance.json` 里的登记来自上一个会话、name 已失效：这是首次"
-                    "派发，直接用 `Agent` 派出并自己生成新的 4 位随机短哈希后缀。")
+WAKE_LINE_STALE = ("`.keeper-instance.json` 的登记来自上一个会话，已失效：当首次派发，"
+                    "用 `Agent` 派出并生成新的 4 位随机短哈希后缀。")
 
 KIND_LABELS = (("debug", "debug-keeper"), ("chore", "chore-keeper"))
 
@@ -170,17 +169,17 @@ def build_triage(wake_line):
 # SessionStart：静态参考。刻意不复述三岔口（那份每轮注入）。
 ENABLED = """# task-keeper 主会话侧参考
 
-三岔口分诊规则每轮随 `UserPromptSubmit` 注入，此处不复述。以下是需要时查的静态部分。
+三岔口分诊每轮随 UserPromptSubmit 注入，此处不复述，以下是按需查的静态部分。
 
 ## 决策打包（主会话侧职责）
 
-keeper 需要 Human 拍板时会写 `<交付>/decisions/<stamp>-<keeper>.md` 并 SendMessage 打铃。你的动作：**攒批**（待拍板 ≥3 条 / 出现 blocking / 用户问起 / 停顿点，四触发点命中才处理），一次 AskUserQuestion 把多条并列问完（必须用工具本体，禁止文本选项块——手机推送只认工具调用），答复**原文**写 `<交付>/decisions/answers/<同名>.md` 并 SendMessage 通知对应 keeper。每轮注入的「待拍板 N 条」计数由磁盘现算，比你的记忆可靠。
+keeper 待拍板会写 `<交付>/decisions/<stamp>-<keeper>.md` 并 SendMessage 打铃。攒批处理（待拍板 ≥3 条/出现 blocking/用户问起/停顿点才处理）：一次 AskUserQuestion 并列问完（不用文本选项块），原文写 `<交付>/decisions/answers/<同名>.md` 并通知 keeper。「待拍板 N 条」由磁盘现算。
 
 ## 布局（v4）
 
-`<worktree 根>/.keeper/<交付id>/{debug,chore,decisions}/`，交付 id 取 worktree 根 basename、非交付 worktree 用 `_main`。一条 bug 的 issue.md / receipts.md / 截图 / fixer worktree 全在 `debug/<DBG-id>/` 一个目录里。文本入库、截图与 worktree 不入库。
+`<worktree 根>/.keeper/<交付id>/{debug,chore,decisions}/`，交付 id 取 worktree 根 basename，非交付用 `_main`。一条 bug 全在 `debug/<DBG-id>/`，文本入库、截图与 worktree 不入库。
 
-指针：协议正典 skills/tk-decisions；队列状态看每轮注入或各队列 index.md（薄索引，按需开单条正文）。"""
+指针：skills/tk-decisions；状态看每轮注入或各队列 index.md。"""
 
 
 def main():

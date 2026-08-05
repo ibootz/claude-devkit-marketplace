@@ -107,8 +107,8 @@ function main() {
   const prompt = [
     '# codegraph 已建图仓（devkit-tool）',
     '',
-    '- 本仓已建 codegraph 代码图。找符号定义 / 调用方 / 改动影响面，**先跑** `codegraph query|callers|impact <英文符号名>`；跨层链路或「这块怎么工作」用 `codegraph explore "<含英文类名的问题>"`。图只认英文标识符 token，纯中文提问查不到。',
-    '- 在本仓用 `Grep`/`Glob` 全仓搜符号名、或为「找代码在哪」而整读文件，**属于绕路**：只有 codegraph 返回空、或目标是配置 / 文档 / md（图不索引这些）时，才回退到内置检索工具。codegraph 结果可直接用于定位，但作为结论证据引用前仍需 Read 原文核对行号。',
+    '- 找符号定义/调用方/影响面先跑 `codegraph query|callers|impact <英文符号名>`；跨层链路或原理问题用 `codegraph explore "<含英文类名的问题>"`。只认英文 token，纯中文查不到。',
+    '- 全仓搜符号名/整读文件找代码属于绕路：仅 codegraph 返回空、或目标是配置/文档/md 时才回退 Grep/Glob。结果引用为结论证据前仍需 Read 核对行号。',
   ].join('\n')
 
   process.stdout.write(

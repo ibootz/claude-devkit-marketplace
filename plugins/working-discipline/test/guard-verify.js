@@ -60,7 +60,7 @@ const F = {
   claudeMd200: put(path.join(PROJECT, 'CLAUDE.md'), lines(200)),
   claudeMd201: put(path.join(PROJECT, 'docs/CLAUDE.md'), lines(201)),
   rulesClaudeMd: put(path.join(PROJECT, '.claude/rules/CLAUDE.md'), lines(900)),
-  rulesTopic: put(path.join(PROJECT, '.claude/rules/hook-restraint.md'), lines(900)),
+  rulesTopic: put(path.join(PROJECT, '.claude/rules/project/hook-restraint.md'), lines(900)),
   outsideClaudeMd: put(path.join(OUTSIDE, 'CLAUDE.md'), lines(700)),
 }
 

@@ -20,7 +20,7 @@ stdout = 永远空——本 hook **不拦截任何操作**，不输出 permissio
      可登记的东西，直接放弃，不报错、不用占位值顶替。
 
   这三条都是对 `tool_input`/`tool_name` 字段的直接读取和字符串比较，没有语义猜测，
-  符合本仓 `.claude/rules/hook-restraint.md` 对"可以做成 hook 的判据"的要求。
+  符合本仓 `.claude/rules/project/hook-restraint.md` 对"可以做成 hook 的判据"的要求。
 
 【`session_id` 读取：读不到不影响登记本身】
   `ev.get("session_id")` 是这次 `PreToolUse` 事件所在会话的 id，随 `name` 一起传给

@@ -30,6 +30,6 @@
 ## 维护约定
 
 - 规则文本在 `hooks/session-start.sh` 的 `STYLE` 字符串里，改完新会话生效。
-- 注入走 `additionalContext`，纯注入零拦截，不受 `.claude/rules/hook-restraint.md` 的判据要求约束（见该文件「适用边界」节）。
+- 注入走 `additionalContext`，纯注入零拦截，不受 `.claude/rules/project/hook-restraint.md` 的判据要求约束（见该文件「适用边界」节）。
 - ★ Insight 的格式与「聚焦本代码库特有门道」两点取自官方 `explanatory-output-style`，出处见 `hooks/session-start.sh` 文件头注释。
 - 版本登记三处：本目录 `plugin.json` + 仓库两份 marketplace 清单，改完跑 `node scripts/check-versions.js`。

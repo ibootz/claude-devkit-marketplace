@@ -74,5 +74,5 @@ hook 挂在 `UserPromptSubmit`，每轮只做三件不联网的快事：
 
 - 改判据前先跑回归。测试用 `spawnSync` 喂 JSON 到 stdin、**不经过 shell**（经过 shell 的测试脚本一旦引号失衡，会把测试数据当成真命令）。
 - 端到端验证生成器：`TMPDIR=<沙箱> node hooks/generate-title.js <sessionId> <transcript.jsonl> <turn>`，然后看 `$TMPDIR/claude-auto-title/<sessionId>.json`。
-- 本插件的 hook 不做任何拦截（不输出 `permissionDecision`），只输出 `sessionTitle`，因此不受 `.claude/rules/hook-restraint.md` 的判据要求约束——但它**确实会改变可见状态**，比纯注入类 hook 责任重，改判据仍需谨慎。
+- 本插件的 hook 不做任何拦截（不输出 `permissionDecision`），只输出 `sessionTitle`，因此不受 `.claude/rules/project/hook-restraint.md` 的判据要求约束——但它**确实会改变可见状态**，比纯注入类 hook 责任重，改判据仍需谨慎。
 - 版本登记三处：本目录 `plugin.json` + 仓库两份 marketplace 清单，改完跑 `node scripts/check-versions.js`。

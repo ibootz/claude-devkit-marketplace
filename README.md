@@ -85,10 +85,10 @@ CLI 工具集成，在 Claude Code/Codex 中调用 omp 实现编码、审查、�
 AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`SubagentStart` 注入子代理、`PreToolUse` 硬拦截污染 cwd 的独立 `cd`、缺鉴权或实例超限的 `agent-browser` 启动。零 skill、零命令，适合作为全局基线长期开启。
 
 - 上下文纪律：精确读取、子代理优先、bash 输出限流、macOS 中文路径防漏检（NFC/NFD）
-- 子代理协作：在飞≤16 动态上限、嵌套≤2 软约束、共享骨架文件、结构化回执
-- 表达约束：不自造术语、关键对象点名、引用自带信息、四要素待确认、行号引用、求真、简体中文、列表编号
-- 思维模式：举一反三 / 整体 / 第一性 / 逆向 / 自查自纠 / 读者视角 / 写 md 前受众分辨，按需触发
-- Agent 工具派发：subagent_type × model 四档路由表（haiku/sonnet/opus/fable）、显式 model 指定、成本意识
+- 子代理协作：在飞≤16 动态上限、嵌套≤2 软约束、team 模式下 teammate 不能派下级、共享骨架文件
+- 表达约束：不自造术语（8 类权威来源清单）、关键对象点名、引用自带信息、四要素待确认、行号引用、求真、简体中文
+- 思维模式：写 md 前判受众 / 搬迁重命名验实体到位 / 阻塞面先判必经入口，按需触发（3.22.0 删掉了原先六条无事故支撑的通用思维法）
+- Agent 工具派发：subagent_type × model 三档路由表（sonnet/opus/fable，**无 haiku 档**）、显式 model 指定、`Explore`/`Plan` 按 `agent_type` 跳过派发规范
 - 外部写操作授权：dws 钉钉 CLI 默认只读，写操作须逐批出示清单获用户当次许可
 
 ### 9. discover-unknowns（发现你的未知）
@@ -135,7 +135,7 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 ### 13. plain-talk-output-style（说人话输出风格）
 
-可切换的输出风格插件：一个 SessionStart 注入 hook，要求 AI 一语中的、几句话讲明白、能表格就表格、不专业化/不掉书袋/不自造词。零 skill、零命令。
+可切换的输出风格插件：一个 SessionStart 注入 hook，要求 AI 一语中的、几句话讲明白、能表格就表格、不专业化/不掉书袋/不自造词（新词一律取自权威来源）。零 skill、零命令。
 
 - 与 working-discipline（≥3.10.0）分工：纪律条款（拍板四要素 / 求真 / 简体中文）留在 working-discipline，行文风格归本插件
 - 第 10 条承接拍板材料：四要素（起源 / 差距 / 影响范围 / 带行号的现场证据）在本风格下用完整段落承载，详尽优先于简短

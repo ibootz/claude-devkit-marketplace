@@ -57,13 +57,13 @@ function main() {
 
   const reminder = [
     '<omp-reminder>',
-    '本会话激活了 omp 编排协议（完整版见 SessionStart 注入）。',
+    'omp 协议已激活（完整版见 SessionStart）。',
     '',
-    '决策标准：**这属于机械化执行，还是需要思考/判断/编排？**',
+    '决策标准：机械化执行，还是需要思考/判断/编排？',
     '',
-    '- 你在**想**（分析、设计、编排、审阅、快速定位上下文）→ 自己做，该用工具就用',
-    '- 已经**想好了只需执行**，或执行量会**吃掉大量 token**（长输出、多文件、批量修改）',
-    '  → 派发 omp-explore / omp-plan / omp-task（Agent 工具），不要自己拼 `omp -p`',
+    '- 在想（分析/设计/编排/审阅/定位上下文）→ 自己做',
+    '- 想好只需执行，或执行量大（长输出/多文件/批量修改）→ Agent 工具派发 ' +
+      'omp-explore/omp-plan/omp-task，不自拼 `omp -p`',
     '</omp-reminder>',
   ].join('\n')
 

@@ -11,7 +11,7 @@
 // 本文件里绝大多数判据是**确定字段比较**：`model` 是否在闭合枚举 MODELS 内、`name` 是否
 // 匹配完整锚定正则 NAME_PATTERN、`name` 是否以 `<model>-` / `<model>_` 开头、`description`
 // 是否为空、`description` 字符数是否 > DESC_BODY_MAX。这几条同一输入必得同一结论、可人工
-// 复核，符合 .claude/rules/hook-restraint.md 里"可以做成 hook"的分级。
+// 复核，符合 .claude/rules/project/hook-restraint.md 里"可以做成 hook"的分级。
 //
 // **唯一的例外是 PROMPT_LEAK_PREFIXES**：它靠"正文以某个句式开头"近似判断"这是 prompt
 // 角色设定句而不是任务摘要"，本质是猜语义，不是零误判。已知覆盖边界：
@@ -137,7 +137,7 @@ const EXEMPT_SUBAGENT_TYPES = new Set(['fork', 'statusline-setup', 'output-style
 // keeper 是第一层调度者，triage / 去重 / 合并前对账错一次，整条队列跟着错。
 //
 // 【判据形态】完整锚定正则匹配 subagent_type 小写化后的串 + model 与 'opus' 的等值比较，
-// 二者都是确定字段，同一输入必得同一结论（符合 .claude/rules/hook-restraint.md 的
+// 二者都是确定字段，同一输入必得同一结论（符合 .claude/rules/project/hook-restraint.md 的
 // "可以做成 hook"分级）。**不是**靠扫 prompt 猜"这活难不难"——3.0.0 删掉的那条档位判据
 // 才是那种（见上文【3.0.0 之三】的 (c)），两者性质不同，别混为一谈。
 //
@@ -618,7 +618,7 @@ function main() {
     const generated = autoName(ti, model)
     // keeper 类补的是 check 10 要求的那种形态（固定前缀 + 4 位短哈希），文案要讲清楚
     // 这个名字不可预测、唤醒前要先读登记文件——否则又是一处"效力与描述各自漂移"
-    // （见 .claude/rules/hook-restraint.md 实证 5）。
+    // （见 .claude/rules/project/hook-restraint.md 实证 5）。
     const isFixedKeeper = FIXED_OPUS_PATTERN.test(String(ti.subagent_type || '').toLowerCase())
     allowWithName(
       ti,

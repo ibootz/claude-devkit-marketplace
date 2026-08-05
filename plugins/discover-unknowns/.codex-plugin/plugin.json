@@ -1,6 +1,6 @@
 {
   "name": "discover-unknowns",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "发现你的未知 - 与 Claude 协作挖掘未知的方法论：动手前用盲点扫描/头脑风暴/访谈/参考暴露未知；测验默认跳过、仅在用户明确要求时才出。3个 SKILL + 1个 UserPromptSubmit 未知雷达 hook（brainstorm 优先委派 superpowers:brainstorming，未安装时用内置指令）",
   "author": {
     "name": "zhangq"
