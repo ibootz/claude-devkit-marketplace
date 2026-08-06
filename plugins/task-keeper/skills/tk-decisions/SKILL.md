@@ -34,7 +34,7 @@ when_to_use: |
 from: chore-keeper          # 写者名，也是答复要送回的 SendMessage 目标
 about: CHR-014              # 关联的队列条目 id，没有就写 "-"
 kind: external-write        # external-write 外部写授权 / conflict 冲突让位 / scope 范围取舍 / other
-blocking: true              # true = keeper 停在原地等这条；false = 不急
+blocking: true              # true = 冻结 about 指向的那一条 issue，keeper 继续处理队列其他条目；false = 不急
 options:                    # 2-4 个选项，每个一句说明；自由回答类可省
   - "A：现在就发，全文见正文"
   - "B：改到下个窗口再发"
@@ -49,11 +49,24 @@ recommend: A                # keeper 的推荐，可省
 
 1. **keeper 写文件 + 打铃**：写好决策文件后 `SendMessage(to:"main")`，消息 ≤3 行
    ——一句摘要 + 文件路径，**不粘贴正文**（主会话按需打开，保持精炼）。
-2. **主会话攒批**：命中任一触发点才处理，平时只让计数攒着——
-   a. 待拍板 ≥3 条；
-   b. 出现 `blocking: true`（有 keeper 停着等）；
-   c. 用户主动问「有什么要拍板的」；
-   d. 交付/任务的自然停顿点。
+2. **主会话攒批，a/b 是硬约束、c/d 才是触发点**：
+   a. **待拍板 ≥3 条**——命中即**必须**在本轮就走第 3 步问用户，不允许再攒、
+      不允许推到下一个停顿点。
+   b. **出现 `blocking: true`**（有 keeper 的某条 issue 冻在原地等这条）——命中即
+      **必须**在本轮就走第 3 步，同样不允许再攒。
+   c. 用户主动问「有什么要拍板的」——不足 3 条、也没有 `blocking: true` 时，用它
+      主动清空积压。
+   d. 交付/任务的自然停顿点——同 c，不足 3 条时的主动清空时机，不是阈值。
+
+   **a/b 命中却继续攒的后果**：被冻的那几条 issue（`blocking` 的定义见下方——冻的
+   是 `about` 指向的那一条，不是整条队列）在 keeper 那一侧原地不动，而新的 bug 还会
+   持续报进来，待拍板队列只会越攒越厚。攒批的收益是「少打扰用户一次」，这个收益在
+   3 条这个点上已经被「keeper 侧积压 + 待拍板还在继续增长」的成本盖过——所以 a/b
+   不是「够了可以处理」的建议，是「够了必须处理」的硬约束。
+
+   **什么时候不触发**：待拍板不足 3 条且没有任何 `blocking: true` 时，照旧只让计数
+   攒着，不要为了凑够 c/d 的触发条件主动去问用户「有什么要拍板的」——那是用户或
+   停顿点自己触发的时机，不是主会话该抢先做的事。
 3. **一次 AskUserQuestion 并列问完**：逐个打开决策文件，把每条压成一个 question
    （header 用 about 的条目 id，options 照抄文件里的 options，正文要点进
    question 文字）。一次调用最多 4 问，超出分批、blocking 优先。

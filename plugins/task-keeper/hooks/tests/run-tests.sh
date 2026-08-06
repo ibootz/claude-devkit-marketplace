@@ -8,9 +8,9 @@
 #
 # 【文件结构】本文件是入口，只负责：算路径变量、source 共享 helper
 #   （lib/harness.sh）、按固定顺序 source 每个 H 节的用例文件
-#   （cases/01-... 到 cases/16-...）、最后汇总 pass/fail。可移植性约束
+#   （cases/01-... 到 cases/20-...）、最后汇总 pass/fail。可移植性约束
 #   （mktemp 模板、不用 sed -i、python3 写死路径、日期不写字面量）随 helper
-#   实现一起搬进了 lib/harness.sh，此处不再重复。16 个用例文件与下面
+#   实现一起搬进了 lib/harness.sh，此处不再重复。20 个用例文件与下面
 #   source 列表逐一对应，新增/调整用例节时两处要一起改。
 #
 # 【来源】本文件搬迁自 radnove-core 插件的
@@ -102,6 +102,7 @@ HOOK_CHORE="$HOOK_DIR/user-prompt-submit-chore-queue.sh"
 ROUTING="$HOOK_DIR/session-start-keeper-routing.sh"
 TRIAGE_HOOK="$HOOK_DIR/user-prompt-submit-keeper-routing.sh"
 KEEPER_INSTANCE_HOOK="$HOOK_DIR/pre-tool-use-keeper-instance.sh"
+SUBAGENT_START_HOOK="$HOOK_DIR/subagent-start-debug-keeper.sh"
 LIBDIR="$HOOK_DIR/lib"
 
 # 本文件自己所在目录（.../hooks/tests），用来定位 lib/harness.sh 与
@@ -141,6 +142,7 @@ source "$TESTS_DIR/cases/16-h21-keeper-instance-registry.sh"
 source "$TESTS_DIR/cases/17-h22-keeper-routing-session.sh"
 source "$TESTS_DIR/cases/18-h23-sdlc-routing.sh"
 source "$TESTS_DIR/cases/19-h24-board-report.sh"
+source "$TESTS_DIR/cases/20-h25-subagent-start-inject.sh"
 
 echo
 printf '通过 %d / 失败 %d\n' "$pass" "$fail"

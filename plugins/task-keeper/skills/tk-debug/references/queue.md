@@ -254,7 +254,7 @@ hard`），完整的判据语义（单文件明确锚点 / 跨 2-3 文件 / 跨�
 ### 这三个字段都不决定派发顺序
 
 v2 写的是「它决定派发顺序与模型档位」，后来删掉了前半句。理由是 worktree
-物理隔离 + 并发上限之后，「顺序」几乎不产生可观察的差别：open 有 7 条、同时在飞 5
+物理隔离 + 并发上限之后，「顺序」几乎不产生可观察的差别：open 有 10 条、同时在飞 8
 个，那么排序只决定哪 2 条晚一轮，而不是哪几条会被修。真正影响结果的是**并发上限**
 （§4 末）与**收官时谁被推迟**（`priority` 的用途）。
 
@@ -304,17 +304,30 @@ worktree 让这个问题消失：每个 fixer 在自己的工作区里改，两�
 
 ### 派发步骤
 
-**一条 `init` 命令搞定全部**：建父仓工作区 → 记住源 worktree → 全量递归供给所有
-submodule 层（含嵌套）→ 自校验。不要自己先 `git worktree add` 再单独调供给——
-`init` 的落点是它自己算的，手动建的目录它认不了。
+**一条 `init` 命令建完本批全部 worktree**：建父仓工作区 → 记住源 worktree → 全量递归供给
+所有 submodule 层（含嵌套）→ 自校验，本批 K 条 issue 一次建完，不要循环调 K 次。这是派发
+前**唯一**的串行前置——它跑完之后，K 个 `Agent` 调用才一次性发出（同消息批量发出的硬规则
+见下一节「两轨派发」）。真正的瓶颈从来不是 `Agent` 本身（默认后台起跑），而是每派一个前
+串行等一次这条命令；把 K 次 `--id` 压成 1 次 `--ids` 才是省下来的那部分时间。不要自己先
+`git worktree add` 再单独调供给——`init` 的落点是它自己算的，手动建的目录它认不了。
 
 ```bash
 ROOT="$(git -C . rev-parse --show-toplevel)"
 WT_SUPPLY="$(find ~/.claude/plugins/cache -maxdepth 6 \
   -path '*/task-keeper/*/skills/tk-worktree/scripts/wt_supply.py' 2>/dev/null | head -1)"
-python3 "$WT_SUPPLY" init --source "$ROOT" --id DBG-017
-WT="$ROOT/.keeper/<交付id>/debug/DBG-017/worktree"   # init 把落点固定算在 <source>/.keeper/<交付id>/debug/<DBG-id>/worktree/<id>/，分支 fix/<交付id>-DBG-017
+python3 "$WT_SUPPLY" init --source "$ROOT" --ids DBG-017,DBG-018,DBG-019 --jobs 3 --quiet
+WT_017="$ROOT/.keeper/<交付id>/debug/DBG-017/worktree"   # 每条 issue 各自的落点仍是 <source>/.keeper/<交付id>/debug/<DBG-id>/worktree/<id>/，分支 fix/<交付id>-DBG-017
+WT_018="$ROOT/.keeper/<交付id>/debug/DBG-018/worktree"
+WT_019="$ROOT/.keeper/<交付id>/debug/DBG-019/worktree"
 ```
+
+`--ids` 逗号分隔批量建（本例 3 条），`--jobs` 控制并行度（默认 3），`--quiet` **不打印
+逐层供给明细与自校验清单、只留每个 id 一行结论**（实测 3 层仓、3 个 id：73 行 → 9 行）。
+它省的只是**成功路径**的输出——自校验照跑，非全绿仍退出 `2`，且那时会自动把完整逐层清单
+打全，不需要你再跑一次去看详情。旧的
+`--id`（单值）参数仍保留兼容，只建一条 issue 时可以继续用它，但**本批待派 issue 有 K≥2 条
+时一律走 `--ids` 一条命令**，不要为省事循环调 K 次 `--id`——循环调用会把本该消失的串行
+瓶颈重新引入。
 
 **落点不可配**，`--worktree` 之类的参数在 `init` 上不存在。核心原因是很多工具链
 （hook、状态注入、路径识别）靠 **cwd 的路径字面量**反推「当前处于哪个工作区」——
@@ -331,6 +344,11 @@ WT="$ROOT/.keeper/<交付id>/debug/DBG-017/worktree"   # init 把落点固定算
 
 `init` 是**幂等**的：目标已存在且分支一致就跳过创建、直接续跑供给。自校验没全绿时
 退出码 `2`，**已建出的部分刻意不回滚**（保留现场排查），修掉根因后重跑同一条命令即可。
+批量场景下退出码 `2` 可能只代表 K 条里的某一条没过自校验，其余都建好了。**哪一条没过不用
+另外去查**——`--quiet` 在非全绿时会自动把完整的逐层清单打出来，直接读那份输出即可，
+**不要去掉 `--quiet` 重跑一遍**（那次重跑什么新信息都拿不到，还会让已建好的 id 各自再走
+一遍全树 `classify()`）。重跑只针对没过的那几个 id，用 `--ids` 单独列出它们，不必整批推倒
+重来——`init` 幂等，但整批重跑等于让已经建好的那些白走一遍。
 另外源 worktree 里未提交的改动**不会**进目标 worktree（`worktree add ... HEAD` 只带走
 HEAD 内容），`init` 会把这些改动列出来警告，看到就要判断 fixer 是否依赖它们。
 
@@ -398,9 +416,10 @@ prompt 模板，先看下一节按 `difficulty` 分的两条路径。
 - **`easy` → 一次性 subagent**。改一个 `v-if`、补一个字段序列化这类无需拍板的
   机械修复走这条，`Agent` 发出去就不用再管，出问题时对账阶段（§5）会发现。
 - **`medium` / `hard` → 交互式 subagent**。需要确认意图的改法、跨模块、改数据
-  结构这类走这条：`Agent` 多传 `name`（必须带模型档次前缀）与
-  `run_in_background: true`，并在 prompt 里加一段交互纪律，让它在真正卡住时
-  用 `SendMessage` 问 keeper 自己的 name。keeper 的 name 带随机短哈希（形态
+  结构这类走这条：两版模板都要传 `name`（必须带模型档次前缀）与
+  `run_in_background: true`，medium/hard 版在此之上额外在 prompt 里加一段交互
+  纪律，让它在真正卡住时用 `SendMessage` 问 keeper 自己的 name。keeper 的 name
+  带随机短哈希（形态
   `opus-debug-keeper-<4位>`），fixer 拿不到 keeper 自己的调度元数据，所以
   debug-keeper 派发 fixer 之前要先读一次 `.keeper/<交付id>/.keeper-instance.json`
   的 `debug` 键，把真实 name 写进 prompt 里替换掉占位符，而不是自己拍板续做。这份
@@ -408,6 +427,20 @@ prompt 模板，先看下一节按 `difficulty` 分的两条路径。
   写的"，完整说明见 `agents/debug-keeper.md` §0），但 debug-keeper 读自己这一份时
   不需要比对——写它的正是这次派发/唤醒本身，必然属于当前会话，会话隔离要处理的是
   主会话跨会话唤醒的场景，不是这里。
+
+#### 同消息批量发出（硬约束）
+
+**本批要派 K 个 fixer 时，K 个 `Agent` 调用必须放进同一条消息里发出。** 理由：`Agent`
+默认后台执行，一条消息里发 K 个 tool_use 就是 K 个并发起跑；一轮只发一个的话，每轮之间
+还要等一次模型往返，K 条 issue 里除第一条，其余 K-1 条都在白等对应的轮次——瓶颈不在
+`Agent` 本身慢，在发送节奏把本可并发的任务拆成了串行。
+
+这条对两轨都适用：easy 的一次性 subagent 与 medium/hard 的交互式 subagent 可以混在同
+一条消息里一起发出，不必先发完一轨再发另一轨。
+
+**什么时候不触发**：本批只有一条 issue 可派时（没有「批量」可言，无需凑消息）；某条
+issue 在上一节批量建 worktree 时没通过自校验时（那一条跳过，其余仍在同一条消息里照发，
+不要因为一条建失败就把整批也拆成逐个发送）。
 
 **为什么这样设计（实测支撑）**：
 
@@ -418,7 +451,7 @@ prompt 模板，先看下一节按 `difficulty` 分的两条路径。
    from transcript in the background with your message.`——说明该 subagent
    发完问题后**任务已终结、不占并发槽**，是「结束 + 被消息唤醒」而非「挂起
    等待」。所以**多个 fixer 同时挂着问题等 keeper 不会挤占 §4 末尾的并发上限**
-   ——这条改变了「同时在飞最多 5 个」的计数口径：正在等待答复的
+   ——这条改变了「同时在飞最多 8 个」的计数口径：正在等待答复的
    交互式 subagent 不计入这个数字。
 3. 代价：每次唤醒都要重放 transcript，token 成本比真正挂起高——所以 `easy`
    档不必用交互式 subagent，一次性 subagent 更省。
@@ -435,6 +468,7 @@ Agent(
   name: "sonnet-fix-dbg017-step3-style",
   description: "修 DBG-017 样式对齐",
   model: "sonnet",
+  run_in_background: true,
   prompt: "【目标】修 DBG-017。
            【上下文】你的工作区是 <worktree 绝对路径>。所有文件操作用该前缀下的
             绝对路径，git 操作用 `git -C <worktree 绝对路径>`。**不要 cd**。
@@ -477,6 +511,15 @@ Agent(
             缺这一段的回执一律视为未完成、会被打回。"
 )
 ```
+
+`run_in_background: true` 不是因为「不传就变成同步等待」——`Agent` 不传它默认也是后台
+执行，行为不会变。补上这一行是为了不让读这份模板的人凡事从字面猜：easy 档模板里没有
+这一行时，容易被误读成「easy 档是同步等待、只有 medium/hard 才后台」，而实际两轨都
+后台，区别只在于 medium/hard 额外需要 `name` 支持 `SendMessage` 的 addressing、easy 档
+不需要。**这是两件独立的事**——`run_in_background` 管要不要占着等结果，`name` 管日后
+能不能用 `SendMessage({to: name})` 唤醒它；easy 档不需要后者，不代表可以省前者。上面
+的模板本来就带着 `name`（用于在飞面板可辨识、以及 §5 对账阶段回查），继续保留，不要因为
+「easy 档不需要 addressing」把它删掉。
 
 #### medium / hard 档模板：交互式 subagent
 
@@ -542,9 +585,13 @@ Agent(
 
 两版模板都保留「禁止修改 `.keeper/<交付id>/debug/` 与 `.keeper/<交付id>/debug/index.md`」
 「改完不要自己重启本地服务」「回执写进 `<worktree>/.keeper/<交付id>/debug/<DBG-id>/receipts.md
-DBG-NNN.md`」这些既有约束——两条轨道都要遵守，只是 medium/hard 版多了 `name`
-（addressing 用，缺了 `SendMessage({to: name})` 唤醒不到它）、`run_in_background:
-true`、交互纪律那一段，以及「等拍板前也要先 commit」这半句。
+DBG-NNN.md`」这些既有约束，以及 `name` 与 `run_in_background: true` 这两个字段本身——两条
+轨道都要传。真正的差别不在字段有没有，在字段的**用途**与多出来的那一段内容：medium/hard
+版的 `name` 是**功能性**的——`SendMessage({to: name})` 唤醒它就靠这个值；easy 档的 `name`
+只用于在飞面板可辨识与 §5 对账阶段回查，不会被拿来做 addressing（easy 档一次性发出就不再
+管，不存在被唤醒这一步）。medium/hard 版多出来的是交互纪律那一整段（【约束】里教它怎么用
+`SendMessage` 问 keeper）与「等拍板前也要先 commit」这半句，这两处 easy 档没有，因为 easy
+档从不会走到「等待答复」这个状态。
 
 **「退出前必须逐层 commit」这条不是可以裁掉的客套话，删了它就等于恢复产物丢失
 的旧行为。** 实测（真实项目一次高强度批处理）：三个 fixer 交回执宣称完成，改动
@@ -580,8 +627,9 @@ triage 结论仍有疑问（比如截图转录不够精确、怀疑现象已经�
    有没有出现 `--headed` 或 `--headed false` 这个字面片段，不解析真实意图）。
 2. **必须传独立的 `--profile`**，路径建议 `/tmp/agent-browser-profiles/<DBG-id>/`，
    不要用 Human 的个人 Chrome Profile，也不要与其他并发 fixer 共用同一个目录——
-   本轮最多同时在飞 5 个 fixer（见下一小节），如果都指向同一份 profile，Chrome
-   的 profile 锁会让并发实例互相冲突、报「profile 正被另一进程占用」之类的错误。
+   同一时刻最多有 3 个 fixer 在开浏览器（见下一小节「并行度」，这个 3 管的是浏览器
+   并发上限，不是同时在飞的 fixer 总数），如果都指向同一份 profile，Chrome 的
+   profile 锁会让并发实例互相冲突、报「profile 正被另一进程占用」之类的错误。
 3. **只能看，不能替代运行时验证**：这次确认只用于「改代码前弄清楚现象」，不能
    当成「改完之后已经验证过」——修复是否真的生效，仍然只由本轮全部 issue 合并
    回主分支后 debug-keeper 的统一实测（§6「合并后统一实测」）来判定。
@@ -615,14 +663,27 @@ triage 结论仍有疑问（比如截图转录不够精确、怀疑现象已经�
 
 ### 并行度
 
-同时在飞的 fixer **最多 5 个**（2026-07-30 Human 立规：一批最多同时修复 5 个
-bug）。约束不只来自文件冲突（worktree 已解决）与审阅带宽（5 个回执同时回来时，
-逐个核对 diff、判断有没有偏离诉求、决定哪些能合并，这件事本身有上限，超过就会
-开始「看着像对的就 accept」），也来自上一小节「修复前比对确认」新增的 headless
-`agent-browser` 并发限制——5 个是这两条约束共同定死的硬上限，不要因为审阅带宽
-还有余量就突破它。
+同时在飞的 fixer **最多 8 个**（原 2026-07-30 立规的 5 个已放宽；判据变化见下面两条
+拆开之后的独立约束）。这条上限不来自文件冲突——worktree 已经把它物理隔离掉了（见本节
+前面「为什么是物理隔离而不是调度」）——只来自**审阅带宽**：8 个回执同时回来时，逐个
+核对 diff、判断有没有偏离诉求、决定哪些能合并，这件事本身有上限，超过就会开始「看着
+像对的就 accept」。
 
-**正在等待答复的交互式 subagent 不占这个额度**——上一节已给出实测依据
+**另一条独立约束：同一时刻正在调用 headless `agent-browser` 的 fixer 不超过 3 个。**
+这个 3 与上面的 8 是**正交**的两个数字——8 管同时在飞几个 fixer，3 管这些在飞的 fixer
+里同时有几个正在开浏览器做上一小节「修复前比对确认」。3 的来源是全机唯一那道
+`agent-browser` 并发护栏：working-discipline 插件 `hooks/guards/bash-guard.js:252` 写死
+`const INSTANCE_LIMIT = 4`，挂在 `PreToolUse(Bash)` 上、只拦命令行里的 `agent-browser
+open/connect/chat`，与 `Agent` 派发本身无关。撞满 4 之后，第 5 个发起 `agent-browser
+open` 的 Bash 调用会被这道闸 `deny`——**卡点是那次 Bash 调用本身（浏览器启动这一步），
+不是这条 fixer 被派发的那一步**：fixer 已经在跑，只是走到开浏览器这一步才被拦。留 1 个
+名额给主会话自己可能同时开着的 `agent-browser` 会话，分给 fixer 的额度因此是 4-1=3。
+**修复前比对确认本身是可选动作**（上一小节原文用的是「允许」不是「必须」），大多数
+批次里同时要开浏览器的 fixer 远少于 3，只有 8 个在飞 fixer 里凑巧有超过 3 个在同一
+时刻都要做这次比对确认时才会撞到这条上限——撞到时晚发起的那个等前面的关闭再开，
+不是任务失败。
+
+**正在等待答复的交互式 subagent 不占「8 个」这个额度**——上一节已给出实测依据
 （`SendMessage` 返回 `had no active task`，说明它是「结束 + 被唤醒」而非挂起）。
 所以并发计数只统计真正在跑的 fixer，不含挂着问题等拍板的交互式 subagent。
 

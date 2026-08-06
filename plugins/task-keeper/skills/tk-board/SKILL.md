@@ -85,3 +85,41 @@ python3 .../board.py --queue-dir <worktree根>/.keeper/<交付id>/debug
 
 脚本会打印「找不到 debug 队列目录」而不是报错。这说明本项目还没启用 task-keeper，
 按每轮注入里那句启用命令建目录即可，不要用 `--queue-dir` 指到别的项目的队列上去。
+
+## `pending_dispatch.py`：漏派体检（`board.py` 看不出来的那一层）
+
+`board.py` 的「未解决」桶混着两种性质完全不同的条目——**还没 triage**（keeper 的正常
+待办，不该催）与**triage 完了却没派 fixer、也没在等拍板**（漏派：keeper 登记完一条 bug
+后被后来的条目挤掉了注意力，纯粹忘了捡）。`pending_dispatch.py` 只挑后一种，纯只读，
+判据全机械：
+
+```
+漏派 = status == open 且 priority/difficulty 都非空（triage 已完成）
+       且不在 `git worktree list` 的 DBG-* 集合里（没派 fixer）
+       且不在「未答复 decisions」的 about 字段集合里（不是在等拍板）
+```
+
+```bash
+# 人/AI 读：每条一行，无漏派时输出「无漏派」
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/tk-board/scripts/pending_dispatch.py"
+
+# 机器读：JSON，含 id/priority/difficulty/summary 与总数
+python3 .../pending_dispatch.py --json
+
+# 塞进 hook additionalContext：压成一行，无漏派时是空字符串，可直接拿「输出非空」当判据
+python3 .../pending_dispatch.py --oneline
+
+# 多交付场景（.keeper/*/debug 有多个）：默认只算当前交付（.keeper-active 指向的那个），
+# 要全扫加这个 flag
+python3 .../pending_dispatch.py --all-deliveries
+```
+
+退出码：`0` = 正常执行完（不管有没有漏派——「有漏派」是正常产出）；非 `0` 只在真正执行
+不下去时出现（依赖模块导入失败、显式给的 `--queue-dir` 不存在）。**不要**靠退出码判断
+有没有漏派，靠输出内容判断。
+
+**什么时候不该用它**：它不判断「这条 issue 该不该派」，只判断「已经 triage 的有没有被
+派出去」——未 triage 的条目一律不算漏派，那是 keeper 排队里的正常待办，`pending_dispatch.py`
+对它保持沉默，催的话应该催 triage 本身，不是催这个脚本。它也不是 `board.py` 的替代品：
+要看整体进度、四态分布、陈旧 worktree 告警仍然用 `board.py`；`pending_dispatch.py` 只回答
+一个更窄的问题。

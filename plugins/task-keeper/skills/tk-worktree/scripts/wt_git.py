@@ -21,6 +21,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # ---------------------------------------------------------------- fail-loud
@@ -37,15 +38,29 @@ class Fail(Exception):
         self.hint = hint
 
 
-def die(exc: Fail) -> None:
-    print(f"\n[wt_supply] 失败：{exc.msg}", file=sys.stderr)
+def fail_lines(exc: Fail, prefix: str = "") -> list[str]:
+    """把一个 `Fail` 渲染成「实际命令 / stderr 原文 / 建议下一步」三段文本行。
+
+    单独抽出来是给**批量 init** 用的：批量下某个 id 失败不能直接 `die()`
+    （那会 `sys.exit` 掉整个进程、把其余 id 一起带走），得先收集、最后统一打印，
+    每行带 `[<id>] ` 前缀。`die()` 自己也复用它，保证两条路径的格式逐字一致。
+    """
+    out = [f"{prefix}失败：{exc.msg}"]
     if exc.cmd:
-        print(f"  实际执行：{exc.cmd}", file=sys.stderr)
+        out.append(f"{prefix}  实际执行：{exc.cmd}")
     if exc.stderr:
         for line in str(exc.stderr).rstrip().splitlines():
-            print(f"  stderr> {line}", file=sys.stderr)
+            out.append(f"{prefix}  stderr> {line}")
     if exc.hint:
-        print(f"  建议下一步：{exc.hint}", file=sys.stderr)
+        out.append(f"{prefix}  建议下一步：{exc.hint}")
+    return out
+
+
+def die(exc: Fail) -> None:
+    lines = fail_lines(exc)
+    print(f"\n[wt_supply] {lines[0]}", file=sys.stderr)
+    for line in lines[1:]:
+        print(line, file=sys.stderr)
     sys.exit(1)
 
 
@@ -53,10 +68,71 @@ def fmt(args) -> str:
     return " ".join(str(a) for a in args)
 
 
+# ---------------------------------------------------------------- 锁冲突退避
+#
+# 批量 init 并行跑多个 id 时，所有 id 都从**同一个源仓**派生：父仓层的
+# `worktree add` 写同一个 `<source>/.git/`，每个 submodule 层的 `worktree add` 写同一个
+# 源侧 submodule 目录的 gitdir。git 对 index / refs / config 都用「建 `<file>.lock`」
+# 做互斥，撞上时直接非零退出，**不自旋、不等待**。所以并行化必须自己退避重试。
+#
+# 判据一律是 stderr 里的**确定字符串**（`lock_conflict()`），不是「非零退出码」——
+# 把所有非零退出都当可重试会把真实业务失败（gitlink 对象不存在、路径已占用、分支已
+# 存在）重试 5 遍再报同一个错，既慢又掩盖因果。
+#
+# 取值理由：单次 `worktree add` 持锁时间是「写几个小文件」级别（毫秒到几十毫秒），
+# 冲突窗口极窄，指数退避从 0.1s 起已经远大于持锁时长、第一次重试就大概率成功；
+# 上限 2s 避免罕见的长事务把等待拖成分钟级；5 次重试的累计等待是
+# 0.1+0.2+0.4+0.8+1.6 = 3.1s，足以熬过 8 个并行 id 排队写同一个仓，又不至于在真的
+# 有陈留 `.lock` 文件（进程被 kill 后残留、重试永远不会成功）时白等太久。
+LOCK_RETRIES = 5
+LOCK_BACKOFF_BASE = 0.1
+LOCK_BACKOFF_CAP = 2.0
+
+
+def lock_conflict(stderr) -> bool:
+    """stderr 是否是 git 的**瞬时**加锁/竞态失败（可退避重试），判据为确定字符串。
+
+    前四条是**写侧**：git 用「建 `<file>.lock`」互斥 index / refs / config，撞上直接
+    非零退出。第五条是**读侧**，2026-08-05 在 `--jobs 6` 压测里实测出来的：
+
+        git -C <源侧某层> worktree list --porcelain
+        fatal: failed to read '<gitdir>/worktrees/n20/locked': No such file or directory
+
+    成因是 `git worktree add` 在建 `<gitdir>/worktrees/<id>/` 期间会先写一个 `locked`
+    标记文件、装配完再删掉；并发跑的 `worktree list` 恰好在「readdir 已看到这个目录」
+    与「open 那个 locked 文件」之间撞上删除动作，就 fatal 128。本工具的
+    `worktree_entries()` / `branch_in_use()` / `classify()` 都会调 `worktree list`，
+    所以多个 id 同时供给同一个源侧 submodule 时这条必踩。窗口只有毫秒级（不是整个
+    checkout 时长——`locked` 存在期间读得到、不报错，只有写/删的瞬间才撞），退一下
+    重读即可。
+    """
+    s = str(stderr or "")
+    if "index.lock" in s:
+        return True
+    if "cannot lock ref" in s or "Cannot lock ref" in s:
+        return True
+    if "could not lock config file" in s:
+        return True
+    if ".lock" in s and ("Unable to create" in s or "unable to create" in s):
+        return True
+    if "failed to read" in s and "/locked'" in s:
+        return True
+    return False
+
+
 def git(repo, *args, check=True, hint=None):
-    """在 repo 里跑 git（显式 -C，不 cd）。check=True 时失败即 Fail。"""
+    """在 repo 里跑 git（显式 -C，不 cd）。check=True 时失败即 Fail。
+
+    命中 `lock_conflict()` 时按 `LOCK_RETRIES` / `LOCK_BACKOFF_*` 指数退避重试；
+    其他失败一律照原样返回（或抛 `Fail`），不重试。
+    """
     cmd = ["git", "-C", str(repo), *[str(a) for a in args]]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    for attempt in range(LOCK_RETRIES + 1):
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode == 0 or attempt == LOCK_RETRIES \
+                or not lock_conflict(proc.stderr):
+            break
+        time.sleep(min(LOCK_BACKOFF_CAP, LOCK_BACKOFF_BASE * (2 ** attempt)))
     if check and proc.returncode != 0:
         raise Fail(
             f"git 命令返回 {proc.returncode}",

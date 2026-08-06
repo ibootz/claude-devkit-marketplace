@@ -19,7 +19,7 @@ gitdir: /path/to/source/.git/modules/libs/b/worktrees/b
 
 这样子模块的对象库与源侧**共享**，源侧那些只存在本地、还没 push 的提交在新 worktree 里可见，回流也不会失败。
 
-脚本：`scripts/wt_supply.py`（Python 3 标准库，无第三方依赖）+ `scripts/wt_git.py`（git 原语）+ `scripts/wt_scope.py`（`explain-scope` 的实现）。
+脚本：`scripts/wt_supply.py`（Python 3 标准库，无第三方依赖）+ `scripts/wt_git.py`（git 原语）+ `scripts/wt_levels.py`（层级遍历与供给）+ `scripts/wt_par.py`（批量的并发底座）+ `scripts/wt_scope.py`（`explain-scope` 的实现）。
 
 **源 worktree（source）** 是本 skill 的基准概念：它可以是主 checkout，也可以本身就是个 linked worktree（从 worktree 再派生 worktree 完全合法）。所有供给都从源侧发起，因此**主 checkout 的 submodule 初始化状态全程不被触碰**。
 
@@ -57,14 +57,19 @@ git -C <主checkout> rev-parse :<submodule相对路径>   # ❌ 已知同类工�
 
 ## 六个子命令
 
-### init —— 主入口，一条命令建出完整聚合仓 worktree
+### init —— 主入口，一条命令建出完整聚合仓 worktree（支持批量并行）
 
 ```bash
+# 单个 id
 python3 scripts/wt_supply.py init --source <源worktree绝对路径> --id <ID> \
     [--branch <name>] [--dry-run]
+
+# 批量：一条命令并发建多个 id 的 worktree（keeper 派 fixer 前的标准形态）
+python3 scripts/wt_supply.py init --source "$ROOT" --ids DBG-017,DBG-018,DBG-019 \
+    --jobs 3 --quiet
 ```
 
-做四件事：建父仓工作区（`git -C <source> worktree add <target> -b <branch> HEAD`）→ 把源路径记进目标 worktree 的 gitdir → 全量递归供给所有 submodule 层 → 自校验（等价 `status`）。
+做四件事：建父仓工作区（`git -C <source> worktree add <target> -b <branch> HEAD`）→ 把源路径记进目标 worktree 的 gitdir → 全量递归供给所有 submodule 层 → 自校验（等价 `status`）。批量时每个 id 各自完整走这四件事。
 
 - **落点固定 `<source>/.keeper/<交付id>/debug/<id>/worktree/`，不可配。** 核心原因：很多工具链（hook、状态注入、路径识别）靠 **cwd 的路径字面量**反推"当前处于哪个工作区"——目标 worktree 落在源 worktree **内部**时，它的绝对路径天然包含源 worktree 的完整路径前缀，这类识别全部照常工作；落到外部（比如与源平级的目录）会被静默判成另一个无关工作区，没有任何报错。一个真实例子：某交付框架的路径识别常量是 `MARKER = '/.sdlc/worktrees/'` + slug 白名单（只认 `^D-\d+` / `^hotfix-` 开头），fixer worktree 若直接落到 `.sdlc/worktrees/DBG-021`，MARKER 命中但 slug 校验不认，一整串依赖 cwd 判断的 hook 集体失准；落在源 worktree 内部的 `.keeper/<交付id>/debug/DBG-021/worktree/` 则前缀完整保留、识别不受任何影响。这条约束在"落点必须在源 worktree 内部"之上又收紧一级：**落进它所属那条 issue 自己的目录**——v3 曾放在与队列数据平级的 `.keeper/worktrees/<id>/`，同一条 bug 的 issue / receipts / 截图 / worktree 分散在四棵子树里，删一条要记四处；v4 收进 `debug/<id>/worktree/` 之后，一条 issue 的全部东西就是一个目录。**挪走这个落点会静默破坏宿主工具链的 worktree 识别。**
 - `--id` 只接受 `^[A-Za-z0-9][A-Za-z0-9._-]*$`（字母数字开头，由字母数字与 `.` `_` `-` 组成），因为它直接当目录名用，不接受路径分隔符。
@@ -73,6 +78,32 @@ python3 scripts/wt_supply.py init --source <源worktree绝对路径> --id <ID> \
 - 记源之后，`supply` / `status` / `remove` / `merge-back` 的 `--source` 都**可以省略**。
 - **幂等**：目标已登记为 worktree 且分支一致 → 跳过创建、直接续跑供给；分支不一致 → fail-loud，要么先 `remove --yes`，要么用 `--branch` 指定成已有的那个续跑。
 - 自校验非全绿 → 退出码 `2`，且**已建出的部分刻意不回滚**，保留现场供排查；修掉根因后重跑同一条 `init` 即可。
+
+#### 批量三参数：`--ids` / `--jobs` / `--quiet`
+
+| 参数 | 语义 |
+|---|---|
+| `--ids` | 逗号分隔的多个 id。与 `--id` **二者至少给一个**；**同时给报错**（不静默取其一）。`--ids` 里有空元素（多写了逗号）或重复 id 也报错——这三类是整条命令级的错用，什么都不建就退出 `1` |
+| `--jobs N` | 并行度，**缺省 3**。`--jobs 1` 等价串行（压根不建线程池，可用它把「并行引入的问题」与「本来就有的问题」切开）。`< 1` 报错。实际并行度取 `min(N, id 个数)` |
+| `--quiet` | 不打印逐层供给与自校验清单，只留每个 id 一行结论。**自校验本身照跑**——非全绿仍然退出 `2`，且此时把完整逐层清单打全（省的是成功路径的输出，不是失败路径的信息） |
+
+- **`--branch` 与批量互斥**：`--ids` 给了两个以上 id 时再给 `--branch` 直接报错。多个 id 共用一个分支名不合理，而静默忽略它同样是坑。要自定义分支名就一个一个用 `--id` 跑。
+- **一个 id 失败不牵连其他 id**：每个 id 的失败被独立捕获、独立汇报，其余 id 照常建完。退出码汇总规则是 **有任一 id 失败 → `1`；没有失败但有 id 自校验非全绿 → `2`；全绿 → `0`**（单 id 时这套规则与批量化之前逐字等价）。失败详情打到 stderr、每行带 `[<id>] ` 前缀；stdout 末尾恒有一段汇总：
+
+  ```
+  [wt_supply] init 汇总：3 个 id → 成功 2 / 自校验非全绿 0 / 失败 1
+    ok      DBG-030  新建 3 / 跳过 0 层 → /abs/.../debug/DBG-030/worktree
+    fail    BAD/ID  id 只接受字母数字开头、由字母数字与 . _ - 组成的名字，收到：'BAD/ID'
+    ok      DBG-031  新建 3 / 跳过 0 层 → /abs/.../debug/DBG-031/worktree
+  ```
+
+  失败后**只需重跑失败的那几个 id**（`init` 幂等，已建好的层再跑是 no-op）。**id 的形态校验刻意放在单个 id 的任务里**而不是命令入口，就是为了让一个 id 拼错不把整批打回去。
+- **输出按 id 分组，不是实时交错**：多 id 时每个 id 的输出先攒在自己的缓冲区里，跑完整块吐出、每行带 `[<id>] ` 前缀。逐层输出靠缩进表达嵌套深度，实时交错会把树形打散。代价是一个 id 跑完才见到它的输出——批量的调用方是 subagent，不是盯屏的人。
+- **并行安全靠三处机制**（改这三处前先读对应函数的注释，它们是踩出来的）：
+  1. `wt_git.git()` 的**锁冲突退避重试**（`LOCK_RETRIES=5`、指数退避 `0.1s` 起、上限 `2s`，累计约 3.1s）。判据是 stderr 里的确定字符串，**不是非零退出码**——`index.lock` / `cannot lock ref` / `could not lock config file` / `Unable to create …*.lock` 这四条是写侧；第五条 `failed to read '…/locked'` 是读侧竞态：`worktree list` 撞上并发 `worktree add` 正在建删的 `locked` 标记文件（`--jobs 6` 压测实测踩到）。其他失败一律照原样 fail-loud，不重试。
+  2. `wt_levels.reserve_branch()` 的**按源仓 realpath 的进程内互斥锁**，解 `pick_branch()` 的 check-then-act 竞态。它把「定名 + 建分支 ref」放进临界区（毫秒级），耗时的 checkout 留在锁外并行跑——所以 `worktree add` 用的是 `<path> <已存在分支>` 形态而不是 `-b`。若改回 `-b`，临界区就会包含整棵工作树的 checkout，所有 id 在同一个 submodule 上串行、并行度归零。
+  3. 每个 id 的落点与分支名天然按 id 隔离（`debug/<id>/worktree/`、`fix/<交付id>-<id>`），不同 id 之间没有共享的目标状态。
+- **实测量级**（3 层测试仓：父仓 + 2 个 submodule + 1 个嵌套）：8 个 id × `--jobs 8` 连跑 3 轮共 24 个 worktree、72 层，全绿；6 个 id 的 `--jobs 6` 对 `--jobs 1` 是 0.71s 对 2.56s。`--quiet` 把 3 个 id 的输出从 73 行压到 9 行。
 
 ### supply —— 全量递归供给（不改任何 gitlink 指针）
 
@@ -203,6 +234,10 @@ W=$S/.keeper/$DID/debug/DBG-017/worktree
 # 建：一条命令搞定父仓工作区 + 全部 submodule 层 + 自校验
 python3 scripts/wt_supply.py init --source "$S" --id DBG-017
 
+# 建一批（3-8 条 issue 同时开工时用这条，不要 for 循环调 N 次上面那条）
+python3 scripts/wt_supply.py init --source "$S" --ids DBG-017,DBG-018,DBG-019 \
+    --jobs 3 --quiet
+
 # 查（--source 已被 init 记住，可省）
 python3 scripts/wt_supply.py status --worktree "$W"
 
@@ -216,6 +251,9 @@ python3 scripts/wt_supply.py remove --worktree "$W" --yes
 
 ## 什么时候不触发
 
+- **只建一个 worktree 时不要用 `--ids`**：一个 id 就用 `--id <ID>`。判据是 id 个数，不是"要不要快"。`--ids DBG-017` 这种单元素形态虽然能跑，但它不会带来任何并行收益，只会让输出形态与既有文档、既有调用方不一致（单 id 走的是「不加前缀、流式打印」，和批量的「按 id 缓冲 + `[<id>] ` 前缀」是两套）。
+- **`--jobs` 不要往大调**：并行度受益的是「等 git 退出」这段 I/O，不是 CPU。id 个数以内取 3（缺省值）足够；调到远大于 id 个数没有意义（实际取 `min(--jobs, id 个数)`），而所有 id 都写同一个源仓，并行度越高撞锁越频繁、越依赖退避重试。
+- **失败重跑时只重跑失败的 id**，不要整批重来。`init` 幂等，但整批重跑会让已建好的 N-1 个 id 各自再走一遍全树 `classify()`，纯浪费。
 - **仓里没有 submodule**：`.gitmodules` 不存在 / `git submodule status` 空输出（注意它此时 **exit 0**，不报错）。脚本会直接打印"无 submodule 需要供给"并退出 0，不用特意先检测。
 - **只是想移动 gitlink 指针**（把父仓记录的子模块提交从旧 commit 改成新 commit，即 bump / 拉齐 / 同步到最新）：那是 `submodule-gitlink-update` skill 的事，不是本 skill。本 skill 的 `supply` 是**按源侧已记录的 gitlink 原样把内容拉出来**，不改指针。
 - **目标是主 checkout 而不是 linked worktree**：直接 `git submodule update --init <path>` 即可，脚本会 fail-loud 拒绝。

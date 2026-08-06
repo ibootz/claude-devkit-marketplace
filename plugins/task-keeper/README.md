@@ -16,12 +16,12 @@
 | skill | `tk-chore` | 杂务队列：主会话判是杂务就转 chore-keeper，自己立刻回原任务 |
 | skill | `tk-sdlc` | sdlc 流程产物派发：切割线、按 feature 的分片规则、prompt 模板、回执收尾 |
 | skill | `tk-decisions` | 决策打包 HITL 协议正典（keeper 与主会话之间怎么攒批问人） |
-| skill | `tk-worktree` | 为 `git worktree` 建的工作区供给 submodule 内容（含嵌套递归），4 个子命令 |
-| skill | `tk-board` | 进度看板：每条一行（编号 + 20 字说明 + 四态）+ 计数占比 + 告警段，纯只读、不唤醒 keeper |
+| skill | `tk-worktree` | 为 `git worktree` 建的工作区供给 submodule 内容（含嵌套递归），6 个子命令；`init` 支持 `--ids` 批量 + `--jobs` 并行建多个 issue 的 worktree |
+| skill | `tk-board` | 进度看板：每条一行（编号 + 20 字说明 + 四态）+ 计数占比 + 告警段，纯只读、不唤醒 keeper。同目录另有 `pending_dispatch.py`——只算「漏派」一件事（已 triage 但既不在飞、也不在等拍板），三种输出模式 |
 | agent | `debug-keeper` | 独占 `.keeper/debug/` 写权限，承接 bug 报告全流程 |
 | agent | `chore-keeper` | 独占 `.keeper/chore/` 写权限，承接杂务登记与攒批执行 |
 | agent | `sdlc-writer` | **非 keeper**，一次性：写 Gate 后的 sdlc 文档正文，不常驻、不登记、无队列 |
-| hook × 7 | 见下表 | 注入路由/队列快照 + 三道窄判据守卫 + 1 个 keeper 实例登记 |
+| hook × 8 | 见下表 | 注入路由/队列快照 + 三道窄判据守卫 + 1 个 keeper 实例登记 + 1 个 debug-keeper 专属的漏派清单注入 |
 
 ## hooks（挂载事件与实际行为）
 
@@ -35,6 +35,7 @@
 | `pre-tool-use-debug-worktree-destroy.sh` | PreToolUse(Bash) | 强制删除形态（`rm -rf` / `worktree remove --force` / `clean -fdx`）命中 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 路径时 ask 弹确认框 |
 | `pre-tool-use-debug-evidence.sh` | PreToolUse(Write\|Edit) | 只对 `.keeper/<交付id>/debug/*.md` 介入：新内容含 `image-cache` 会话级临时路径时 deny（跨会话必 404），带次数熔断，`origin_path` 留档豁免 |
 | `pre-tool-use-keeper-instance.sh` | PreToolUse(Agent) | 命中 keeper 类 `subagent_type`（`debug-keeper`/`chore-keeper`）的派发时，把 `tool_input.name` 连同这次派发所在的 `session_id` 写进 `.keeper/<交付id>/.keeper-instance.json` 对应键，另一个键原样保留；**纯写文件，不拦截任何操作**，不输出 permissionDecision，写不进去就静默放弃 |
+| `subagent-start-debug-keeper.sh` | SubagentStart（matcher `task-keeper:debug-keeper`） | 跑 `skills/tk-board/scripts/pending_dispatch.py --oneline`，输出非空时注入一段「漏派体检」（那一行 + 处置指引）。**无漏派时零输出**、未启用项目零输出、坏 payload 零输出，恒 exit 0。matcher 精确到单个 agent_type，**不是 `*`**——写 `*` 会把 debug 队列的清单灌给本机每一个子代理 |
 
 三道守卫的判据都是路径子串 + 命令形态的机械判定，未启用队列的项目全部零输出零成本。
 `pre-tool-use-keeper-instance.sh` 不是守卫——它不拦下任何动作，只有"顺手写一个登记

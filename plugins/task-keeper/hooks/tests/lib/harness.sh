@@ -31,7 +31,9 @@ mtime() {
 # （形如 <worktree根>/.keeper/<交付id>/debug，调用方自己按 keeper_paths 的解析
 # 规则拼好这个路径——裸临时目录一律落 _main 兜底桶）$2=id $3=status $4=priority
 # $5=summary $6=reported_at（可省略，默认 2026-07-29；H17 的超龄归档用例需要
-# 显式传一个 >14 天前的日期）
+# 显式传一个 >14 天前的日期）$7=difficulty（可省略，默认不写这一行；H25 的
+# 「已 triage」判据需要 priority 与 difficulty 都非空，其余 18 个用例文件都不传
+# 这个参数，向后兼容）。
 mkissue() {
   mkdir -p "$1/$2"
   {
@@ -40,6 +42,7 @@ mkissue() {
     echo "summary: $5"
     echo "status: $3"
     [ -n "$4" ] && echo "priority: $4"
+    [ -n "${7:-}" ] && echo "difficulty: ${7:-}"
     echo "reported_at: ${6:-2026-07-29}"
     echo "---"
     echo
@@ -113,6 +116,19 @@ if len(sys.argv) > 2 and sys.argv[2]:
     ev["session_id"] = sys.argv[2]
 print(json.dumps(ev))
 ' "$1" "${2:-}" | bash "$TRIAGE_HOOK"
+}
+
+run_subagent_start() {   # $1=cwd $2=hook_event_name(可省，默认 SubagentStart) $3=agent_type(可省，默认 task-keeper:debug-keeper)
+  # 与 run_routing 同一条 heredoc-stdin 回归约束，不要改写成 heredoc 形态。
+  /usr/bin/python3 -c '
+import json,sys
+ev = {
+    "hook_event_name": sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else "SubagentStart",
+    "cwd": sys.argv[1],
+    "agent_type": sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else "task-keeper:debug-keeper",
+}
+print(json.dumps(ev))
+' "$1" "${2:-}" "${3:-}" | bash "$SUBAGENT_START_HOOK"
 }
 
 run_keeper_instance() {   # $1=cwd $2=subagent_type(可省) $3=name(可省) $4=tool_name(可省，默认 Agent) $5=session_id(可省)

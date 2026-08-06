@@ -90,7 +90,7 @@ issue 文件会造成合并冲突。**任何时候发现 fixer 改了 `issue.md`
 |---|---|---|---|
 | 1 接收 | 建 `DBG-NNN/issue.md`，原话逐字进正文 | 你 | 不派发；截图已由主会话落盘在 `_inbox/`，你只核对路径并 mv 到 `DBG-NNN/` |
 | 2 triage | 核实、定位、打分，结论写回同一文件 | 你（可派 `Explore`/`sonnet` 辅助定位） | **登记完这条就派，不要等下一条**（见下） |
-| 3 派发 | 一条 `init` 建 worktree（含全量供给 submodule）+ 起 fixer，**你自己直接调 `Agent`** | 你 | 同时在飞不超过 5 个（等 Human 回复的交互式 subagent 不占额度，见 §6） |
+| 3 派发 | 一条 `init` 命令批量建全部 worktree（含全量供给 submodule）+ 同批 `Agent` 一次性并发起派，**你自己直接调 `Agent`** | 你 | 同时在飞不超过 8 个（等 Human 回复的交互式 subagent 不占额度；headless `agent-browser` 并发另有独立上限 3，两者正交，见 §6） |
 | 4 对账 | 合并前跑三件套 | 你 | 见 §7 |
 | 5 收尾 | 汇总请用户 accept → 合并 → 删 worktree | 你 + 用户（走 §12） | 一 issue 一 commit；**跑 `merge-back` 前先在目标 worktree 父仓 commit gitlink**，否则前置校验必挡（见 `queue.md` §6） |
 
@@ -304,15 +304,27 @@ push 不在这条机械覆盖范围内，只能靠自觉遵守。
 **派发前必读 `skills/tk-debug/references/queue.md` §4**——worktree 建法、
 submodule 供给、prompt 模板、模型分层决策表都在那里，本节只列最容易违反的部分。
 
-一条 `init` 命令建出 worktree 并全量供给 submodule，再派 fixer 进去：
+**本批 K 条 issue 用一条命令建完全部 worktree，不要循环调 K 次**——循环调 K 次仍是
+`K` 次串行等待，批量入口才是这一步派发前**唯一**的串行前置：跑完它，K 个 `Agent`
+按下面「派发的六条硬规则」第 1 条一次性发出，不再逐个来回。
 
 ```bash
 ROOT="$(git -C . rev-parse --show-toplevel)"
 WT_SUPPLY="$(find ~/.claude/plugins/cache -maxdepth 6 \
   -path '*/task-keeper/*/skills/tk-worktree/scripts/wt_supply.py' 2>/dev/null | head -1)"
-python3 "$WT_SUPPLY" init --source "$ROOT" --id DBG-017
-WT="$ROOT/.keeper/<交付id>/debug/DBG-017/worktree"   # init 把落点固定算在 <source>/.keeper/<交付id>/debug/<DBG-id>/worktree/<id>/，分支 fix/<交付id>-DBG-017
+python3 "$WT_SUPPLY" init --source "$ROOT" --ids DBG-017,DBG-018,DBG-019 --jobs 3 --quiet
+WT="$ROOT/.keeper/<交付id>/debug/DBG-017/worktree"   # init 把落点固定算在 <source>/.keeper/<交付id>/debug/<DBG-id>/worktree/<id>/，分支 fix/<交付id>-DBG-017（DBG-018/019 同理换 id、变量名对应换成 WT_018/WT_019）
 ```
+
+`--ids` 是逗号分隔的批量入口（原 `--id` 单值形态仍保留兼容，本批只有一条 issue 时
+用它即可）；`--jobs 3` 显式写出并行度（默认已是 3，写出来是防止读者以为默认串行）；
+`--quiet` **不打印逐层供给明细与自校验清单，只留每个 id 一行结论**，为的是不让这一步
+把你的上下文撑掉——实测同一个 3 层测试仓，3 个 id 的输出从 73 行压到 9 行。
+
+**`--quiet` 省的只是成功路径的输出，一个字的判断信息都不省**：自校验照跑，非全绿仍然
+退出码 `2`，**而且此时它会自动把完整的逐层清单打全**。所以撞到退出码 `2` 时**不要去掉
+`--quiet` 重跑一遍去看详情**——详情已经在你眼前了，那次重跑纯属白跑（且已建好的 id 会
+各自再走一遍全树 `classify()`）。要重跑的只有没过自校验的那几个 id，用 `--ids` 单独列它们。
 
 `WT_SUPPLY` 用 `find` 动态发现而不是 `${CLAUDE_PLUGIN_ROOT}`——原因与 `find` 命令怎么
 定位见 `skills/tk-debug/references/queue.md` §4，本节只给出能直接跑通的写法。
@@ -391,29 +403,51 @@ linked worktree 里会新建一份**独立对象库**，导致其他分支已有
 - `prompt` 用四段式：`【目标】…【上下文】…【约束】…【期望输出】…`，且必须索要
   结构化回执
 
-派发的四条硬规则：
+派发的六条硬规则：
 
-1. **fixer 的 prompt 里必须写死 worktree 绝对路径**，并要求它所有文件操作用该前缀、
+1. **本批要派 K 个 fixer 时，K 个 `Agent` 调用必须放进同一条消息里发出，禁止
+   「派一个 → 等它有动静 → 再派下一个」**。`Agent` 工具默认就是后台执行
+   （`run_in_background` 不传即后台），一条消息里发 K 个就是 K 个并发起跑；一轮
+   只发一个、等下一轮再发下一个，每轮就多耗一次模型往返——K 条 issue 里除了
+   第一条，其余 K-1 条都在空等你发起下一轮，issue 数越多这笔白等的往返成本越高。
+   **不触发**：本批只有一条 issue 可派时（无所谓先后顺序）；某条 issue 在上面
+   批量 `init` 那一步建 worktree 失败时（那一条跳过不派，其余仍在同一条消息里
+   照发）。同批 `Agent` 的 `name` 必须互相可辨——命名规范见上方 working-discipline
+   门禁一节「同批并发的 `name` 必须互相可辨」那条，本条不重复展开。
+2. **fixer 的 prompt 里必须写死 worktree 绝对路径**，并要求它所有文件操作用该前缀、
    git 操作用 `git -C <worktree>`、**不要 `cd`**。不写死的话它会在主工作区改，
    worktree 隔离就白建了（为什么不能用 `cwd` 参数省掉这套约定，见上）。
-2. **fixer 的档位按 `difficulty` 定，不继承你自己的 `opus`**：起点 `sonnet`，合并
+3. **fixer 的档位按 `difficulty` 定，不继承你自己的 `opus`**：起点 `sonnet`，合并
    派发至少 `sonnet`，`difficulty: hard` 的用 `opus`。集成缺失型问题被浅层模型漏掉
    是已发生过的事故；反过来，给 easy/medium 的 fixer 开 `opus` 是预防性堆模型，
    同样禁止。完整决策表见 `references/queue.md` §4。
-3. **同一个 fixer 一次不接 ≥2 个 issue**，更不许塞更多。
-4. **同时在飞不超过 5 个**（2026-07-30 Human 立规：一批最多同时修复 5 个 bug）。
-   约束不只来自文件冲突（worktree 已解决）与你自己审阅带宽（超过就会开始「看着像
-   对的就 accept」），也来自下方「修复前比对确认」新增的 headless `agent-browser`
-   并发限制——正在等你回复的交互式 subagent **不占**这个额度（`SendMessage` 返回值
-   原文是 `Agent "<name>" had no active task; resumed from transcript in the
-   background with your message.`，说明它发完问题就已经任务终结、不是挂起等待）。
-5. **禁止 fixer 在自己的 DBG worktree 里启动任何本地服务**——这条不放开。**允许**
+4. **同一个 fixer 一次不接 ≥2 个 issue**，更不许塞更多。
+5. **同时在飞不超过 8 个**（2026-07-30 Human 立规的原上限是 5，本次上调）。理由
+   是你自己的审阅带宽——8 个回执同时回来时逐个核对 diff 的负担是真的，超过就会
+   开始「看着像对的就 accept」；等 Human 回复的交互式 subagent **不占**这个额度
+   （`SendMessage` 返回值原文是 `Agent "<name>" had no active task; resumed from
+   transcript in the background with your message.`，说明它发完问题就已经任务
+   终结、不是挂起等待）。**这条不再含 headless `agent-browser` 的并发限制**——那
+   条现在独立写进下一条规则，理由见下。
+6. **禁止 fixer 在自己的 DBG worktree 里启动任何本地服务**——这条不放开。**允许**
    修复前调用 `agent-browser` **无头模式**（显式传 `--headed false`，且必须传
    独立的 `--profile <本 issue 专属临时目录>`，不与其他并发 fixer 共用同一份
    profile）对着已在运行的目标环境做一次比对确认，帮助确认理解是否准确；这不
    构成运行时验证，验证章节此阶段只能基于代码审查、单元测试、编译期检查 +
    这次比对确认给结论，真正的运行时行为验证统一挪到 §8「合并后统一实测」。
    完整判据见 `references/queue.md` §4「修复前比对确认」。
+
+   **同一时刻正在调用 headless `agent-browser` 的 fixer 不超过 3 个**——这与上一条
+   「同时在飞不超过 8 个」是两个正交的额度，一个管「同时在飞几个 fixer」，一个管
+   「其中几个能同时开浏览器」，不要混成一个数字。理由是 working-discipline 插件
+   `hooks/guards/bash-guard.js:252` 的 `const INSTANCE_LIMIT = 4`——那道护栏挂在
+   `PreToolUse(Bash)`、只拦命令行里的 `agent-browser open/connect/chat`，全局唯一
+   上限是 4。撞满之后第 5 个 fixer 调 `agent-browser open` 的那次 `Bash` 调用会被
+   直接 deny——卡点是「这次 `Bash` 调用被拦」，不是「这个 fixer 没被派发出去」，它
+   本身已经在跑，只是走到开浏览器这一步被挡。留 1 个余量给主会话或其他用途，分给
+   fixer 的额度就是 3。修复前比对确认本身是**可选**动作（本条用的词是「允许」不是
+   「必须」），大多数批次里同一时刻要开浏览器的 fixer 远不到 3 个，根本撞不到
+   这个上限。
 
 只有 `status: open` 且已完成 triage（有 `priority`/`difficulty`）的 issue 才可以
 派。纯探查、检索、读代码的派发用 `subagent_type: Explore` 或 `Plan`——它们没有
@@ -635,7 +669,10 @@ python3 "$ARCHIVE" --queue-dir "$ROOT/.keeper/debug" --auto --apply
 - ❌ 指望 `Agent` 的 `cwd` 参数实现隔离（实测静默丢弃、不生效）
 - ❌ 把在飞状态 / 改动文件 / 完成与否写进 frontmatter（git 已经知道）
 - ❌ 手工编辑 `.keeper/<交付id>/debug/index.md`（下一轮被 hook 覆盖）
-- ❌ 一个 fixer 塞 2 条以上 issue，或同时在飞超过 5 个
+- ❌ 一个 fixer 塞 2 条以上 issue，或同时在飞超过 8 个，或同时调用 headless
+  `agent-browser` 的 fixer 超过 3 个（两条上限正交，见 §6）
+- ❌ 本批要派 K 个 fixer 时一个一个来回派（派一个等一下再派下一个），而不是把 K 个
+  `Agent` 调用放进同一条消息一次性发出（见 §6 派发第 1 条）
 - ❌ 回执没对账就宣布修好
 - ❌ fixer 交付后直接跑 `merge-back`，没先在目标 worktree 父仓 `git add <submodule> &&
   git commit` 回写 gitlink（子模块一提交父仓就 `M <sm>`，前置校验必挡，实测 exit 2）
@@ -681,7 +718,8 @@ python3 "$ARCHIVE" --queue-dir "$ROOT/.keeper/debug" --auto --apply
    from: debug-keeper
    about: DBG-017              # 关联的 issue id，跨 issue 的事项写 "-"
    kind: architecture-tradeoff # 用一个短语概括这是哪一类拍板
-   blocking: true              # 布尔：为 true 时你原地等待，不接着做别的
+   blocking: true              # 布尔：为 true 时只冻结 about 指向的这一条 issue，
+                                # 队列里其他条目照常处理，见下方第 3 条
    options:
      - id: A
        label: 一句话概括方案 A
@@ -705,10 +743,25 @@ python3 "$ARCHIVE" --queue-dir "$ROOT/.keeper/debug" --auto --apply
    会把主会话的上下文预算花在你本可以省下的地方。主会话此刻大概率在做别的事，
    指针化消息能让它看一眼就决定「现在处理」还是「攒着批量看」。
 
-3. `blocking: true` 的事项，你原地等待 Human 答复，不要去做队列里别的事——那条
-   决策阻塞的正是它自己，硬去做别的会导致后续动作建立在还没拍板的假设上。
-   `blocking: false`（如果你判断这条不阻塞当前收尾节奏）时可以继续处理队列里其他
-   条目，但不要在没收到答复前对这条 issue 做任何假设性推进。
+3. `blocking: true` **只冻结它 `about` 字段指向的那一条 issue，不冻结整条队列**。
+   真实后果曾经是反过来的：bug 持续报进来，而你因为一条 blocking 决策就什么都不做，
+   整条队列跟着停摆——那不是这条字段的本意。收到一条 `blocking: true` 之后，你要
+   继续处理队列里其他条目：登记新进来的 bug、triage、派其他 issue 的 fixer、收其他
+   issue 的回执，一件都不能停。唯一禁止的是对**被冻结那一条 issue**做任何假设性
+   推进——那条决策阻塞的正是它自己，硬去做会导致后续动作建立在还没拍板的假设上。
+   **不触发**（此时才是真的整条队列原地等）：`about: "-"`，即跨 issue 的全局性
+   决策（例如「本轮要不要整体回滚」），这类决策没有单一 issue 可归属，天然冻结的
+   就是整条队列。`blocking: false` 时连单条冻结都不发生，可以按你的判断继续推进
+   这条 issue 本身，只是不要假设 Human 事后一定认可你没问过的那部分。
+4. **写一条新决策文件前，先数一下待拍板已经积了多少条，积到 3 条就在通知里主动催**。
+   判据是机械的：数 `.keeper/<交付id>/decisions/` 下**还没有对应 `answers/<同名>.md`**
+   的文件数（数文件即可，不用判断内容或紧急程度）。写完这一条新决策文件后，若这个
+   数达到 **≥3**，本条 `SendMessage` 的正文必须多写一句「待拍板已积 N 条，请立即
+   批量拍板，不要再攒」，不能像平时一样只发指针（见上方第 2 步的指针格式）。理由：
+   主会话侧的攒批阈值同样是 3 条，但那边的措辞留了裁量权（见 §12.2「不必立刻处理，
+   可以攒够一批」），而 bug 会持续进来、拍板却可能一直不发生——keeper 这一侧主动催
+   是第二道保险，不能只指望主会话自己数。**不触发**：该数 <3 时照常只发指针，不要
+   每条都催——催成常态等于没催，Human 会开始忽略这句提醒。
 
 ### 12.2 主会话攒批、转达、写回
 
