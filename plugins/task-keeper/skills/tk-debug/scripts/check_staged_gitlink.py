@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """提交队列前的机械校验：暂存区里有没有新增的野生 gitlink。
 
-## 为什么需要它
+## v5（2026-08-06 用户拍板「不要公开」）起：本脚本降级为存量仓专用
 
-v4 队列文本入库，keeper 每个窗口结束会跑一次 `git add -A && git commit`。而 fixer
-的 worktree 就嵌在队列目录里（`.keeper/<交付id>/debug/DBG-NNN/worktree/`）——
-`.gitignore` 里那条 `.keeper/**/worktree/` 一旦缺失或写错，`git add -A` 不会报错、
-只会打一行 warning 就把整个 worktree 种成一条 **gitlink**（mode `160000`，值是
-子仓某次提交的 SHA）。实测：
+v4 队列文本入库，keeper 每个窗口结束会跑一次 `git add -A && git commit`；v5 改为
+`.keeper/` 整树 gitignore 之后，全新初始化的仓从一开始就不会把嵌套 fixer worktree
+纳入 `git add -A` 的范围，本脚本要防的风险不再发生。**唯一例外**：v4 期间队列文本
+已被 git 跟踪的存量仓，`.gitignore` 新增的整树规则只管未跟踪文件、对已跟踪队列不
+生效且不报错，那种仓里下面描述的风险仍然成立，本脚本仍有意义，继续保留调用。
+
+## 为什么需要它（v4 期间的原始动机，v5 存量仓同样适用）
+
+fixer 的 worktree 就嵌在队列目录里（`.keeper/<交付id>/debug/DBG-NNN/worktree/`）——
+`.gitignore` 里那条排除规则（v4 是精确的 `.keeper/**/worktree/`；v5 存量仓通常还留着
+v4 那三条精确规则，见上）一旦缺失或写错，`git add -A` 不会报错、只会打一行 warning
+就把整个 worktree 种成一条 **gitlink**（mode `160000`，值是子仓某次提交的 SHA）。实测：
 
     $ git add -A -n
     warning: adding embedded git repository: .keeper/D-001-x/debug/DBG-001/worktree
@@ -90,7 +97,9 @@ def main():
     print("\n修复（逐条撤出暂存区，再补 .gitignore 规则）：")
     for p in hits:
         print("    git -C %s rm --cached -r --quiet -- %s" % (repo, p))
-    print("    # 确认 .gitignore 里有这三行（判据 6）：")
+    print("    # 确认 .gitignore 里有整树忽略规则（v5，覆盖本脚本要防的风险）：")
+    print("    #   .keeper/")
+    print("    # 存量仓可能还留着 v4 的精确规则，两者不冲突，留着无害：")
     print("    #   .keeper/**/worktree/")
     print("    #   .keeper/**/*.png")
     print("    #   .keeper/**/*.jpg")

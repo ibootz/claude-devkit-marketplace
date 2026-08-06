@@ -144,11 +144,14 @@ def init_one(args, source: Path, did: str, wid: str) -> dict:
     bug 的 issue / receipts / 截图 / worktree 分散在四棵子树里，删一条要记得删四处。
     v4 收进 `debug/<id>/worktree/` 之后，一条 issue 的全部东西就是一个目录。
 
-    v3 时 `.keeper/` 整树 gitignore、worktree 无需单独排除；**v4 队列文本入库**，
-    所以 `.gitignore` 必须有 `.keeper/**/worktree/`（判据 6）。缺这条规则时
-    `git add -A` 会把嵌套 worktree 种成幽灵 gitlink（实测 `git add -n` 报
+    v3 时 `.keeper/` 整树 gitignore、worktree 无需单独排除；v4 队列文本入库，改为要求
+    `.gitignore` 必须有精确规则 `.keeper/**/worktree/`（判据 6），缺它时 `git add -A`
+    会把嵌套 worktree 种成幽灵 gitlink（实测 `git add -n` 报
     `warning: adding embedded git repository`），而聚合仓真有 submodule，野生
-    gitlink 会让 `merge_into` 的冲突白名单判定整体阻断。
+    gitlink 会让 `merge_into` 的冲突白名单判定整体阻断。**v5（2026-08-06 用户拍板
+    「不要公开」）绕回 v3 的整树 gitignore**——一条 `.keeper/` 规则天然覆盖
+    `worktree/`，本节这条精确规则的必要性随之消失（除非落在 v4 期间队列文本已被
+    跟踪的存量仓，那种仓里这条精确规则仍有意义，见 `check_staged_gitlink.py`）。
 
     分支名同样带交付前缀：`fix/<交付id>-<id>`。编号虽然全局唯一（`next_id` 扫所有
     交付目录），但多人并行时各自的扫描看不到对方未合并的 issue，两人可能拿到同一个

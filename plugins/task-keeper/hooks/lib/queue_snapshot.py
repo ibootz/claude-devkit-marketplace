@@ -31,11 +31,18 @@ v2 的注入体有五个分组：在飞 / 待调度 / 已 triage 待登记 / 待
 ## v3 → v4：队列改为跟随交付 worktree
 
 路径从 `<某个根>/.keeper/debug/issues/DBG-NNN.md` 变成
-`<worktree 根>/.keeper/<交付id>/debug/DBG-NNN/issue.md`，且**文本入库**。
-本文件的三处相应改动：根解析委托给 `keeper_paths`（不再自带一份）、
-`gitignore_*` 语义反转（整树忽略从「期望」变成「要告警的错误配置」）、
+`<worktree 根>/.keeper/<交付id>/debug/DBG-NNN/issue.md`。本文件的三处相应改动：
+根解析委托给 `keeper_paths`（不再自带一份）、`gitignore_*` 语义反转、
 `next_id` 纳入 fixer worktree 保护范围。成因见 `keeper_paths.py` 与
 `queue_files.py` 的模块头。
+
+## v4 → v5：队列整树不入库（2026-08-06 用户拍板「不要公开」）
+
+`gitignore_*` 第二次反转、绕回 v3：整树忽略行从「要告警的错误配置」变回「期望配置」，
+四条精确规则（worktree / png / jpg / instance.json）被整树规则完全覆盖，已删。
+v4 让文本入库图的是可搜，代价是队列里的 bug 细节、内部系统坐标、决策原文全部推到远端；
+用户选了不公开。可搜性改用**约束**兜底而非 gitignore：搜队列一律把搜索根设进
+`.keeper/`——ugrep 只读递归下降途中遇到的 `.gitignore`、不向上找，这样正常命中。
 
 ## 零成本保证不变
 
@@ -75,23 +82,16 @@ MAX_PER_GROUP = 8       # 注入体里每个分组最多列出的 issue 数
 PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 LEGACY_QUEUE = ".debug"  # radnove-core 时代的旧队列目录，仅用于迁移提示
 
-# 会把整棵队列吞掉的 `.keeper` 忽略写法。**v4 起这是要告警的错误配置，不是期望配置**
-# ——语义相对 v3 完全反转：v3 队列是纯本机产物、整树 gitignore 才对；v4 队列文本入库
-# （否则 Claude Code 的影子 grep 带 `--ignore-files`，搜队列静默零命中而不报错）。
+# 整树忽略 `.keeper` 的等价写法。**v5（2026-08-06）起这是期望配置**，语义相对 v4
+# 再次反转，绕回 v3：v4 让队列文本入库，v5 由用户拍板「队列不要公开」改回整树不入库。
+# 队列含 bug 细节、内部系统坐标、决策原文，推到远端等于把它们公开。
 # strip 后整行相等才算命中，不解析通配符语义。
-GITIGNORE_SWALLOW = {".keeper/", ".keeper", "/.keeper/", "/.keeper", ".keeper/**"}
+GITIGNORE_WANT_ANY = {".keeper/", ".keeper", "/.keeper/", "/.keeper", ".keeper/**"}
 
-# v4 期望的四条规则（判据 6）。用 `**` 而非 `*/debug/*/`——后者在 `_main` 兜底桶
-# 那一层少一级会漏网（实测）。第四条（2026-08-05 补）排除的是
-# `.keeper-instance.json`——它是会话级运行时状态，跨会话即失效（见
-# `keeper_paths.py` 模块头「`.keeper-instance.json` 的会话隔离」），入库既产生
-# 噪音 diff（每派一个新 keeper 实例就一次），也会把已失效的 name 同步给协作者。
-GITIGNORE_WANT = (
-    ".keeper/**/worktree/",
-    ".keeper/**/*.png",
-    ".keeper/**/*.jpg",
-    ".keeper/**/.keeper-instance.json",
-)
+# v5 冷启动写入的固定两行。**文案逐字写死**——v4 当初禁止自动追加的唯一理由就是
+# 「两个分支各自 EOF 追加内容不同的注释即冲突」（实测过）；内容逐字相同则 git 视为
+# 同一处改动、不冲突。keeper 的 agent 定义里贴的是同一份字节，改这里要同步改那两处。
+GITIGNORE_BLOCK = "\n# task-keeper 队列（本地私有，不入库）\n.keeper/\n"
 
 # bug 报告特征词。命中即追加 register-first 提醒。
 # 只在 `.keeper/` 顶层已存在（= 该项目显式 opt-in）时生效，避免污染其他项目；
@@ -340,21 +340,18 @@ def gitignore_findings(queue_dir):
     """检查 worktree 根 `.gitignore`，返回告警文案列表（全对时返回空列表）。
 
     worktree 根 = 队列目录上溯三级（`<根>/.keeper/<交付id>/debug` → `<根>`）。
-    **v4 比 v3 多一级**——漏改这里会把 `.keeper/` 自己当成项目根去找 `.gitignore`。
+    **v4 起比 v3 多一级**——漏改这里会把 `.keeper/` 自己当成项目根去找 `.gitignore`。
 
-    两类问题分开报，因为改法完全不同：
-      · 整树忽略（`.keeper/`）**存在** → 它会把入库的 issue 一起吞掉。而 Claude
-        Code 把 `grep` 影子成自带 ugrep 且参数写死 `--ignore-files`，被 ignore 的
-        文件搜起来**静默零命中、不报错**——「搜一下有没有类似 issue」会得到错误
-        的「没有」。删这一行是 v4 能成立的前提。
-      · 四条精确规则**缺失** → worktree 与截图会被 `git add -A` 一起提交。嵌套
-        worktree 尤其糟：它会被种成幽灵 gitlink（实测 `git add -n` 报
-        `warning: adding embedded git repository`），而这个场景下的宿主仓真的有
-        submodule，野生 gitlink 会让 `wt_supply.merge_into` 的冲突白名单整体阻断；
-        第四条（`.keeper-instance.json`）缺失则是把会话级死 name 同步进 git 历史。
+    v5 只剩一条判据：**整树忽略行缺失** → 队列会被 `git add -A` 提交上去，而队列里
+    有 bug 细节、内部系统坐标、决策原文，推到远端等于公开。判据是 strip 后整行落在
+    `GITIGNORE_WANT_ANY` 里，不解析通配符语义。
 
-    判据都是 strip 后整行相等，不解析通配符语义。只提醒不代写——v4 起冷启动也
-    **不再自动追加**：两个分支各自 EOF 追加内容不同的注释即冲突，实测过。
+    **代价在告警文案里一并给出**，因为它不写就会被踩：Claude Code 把 `grep` 影子成
+    自带 ugrep 且参数写死 `--ignore-files`，被 ignore 的文件搜起来**静默零命中、
+    不报错**。规避手段是把搜索根设进 `.keeper/`（ugrep 不向上找 `.gitignore`）。
+
+    这里只提醒不代写——代写由 keeper 冷启动做（它有固定文案，见两个 agent 定义），
+    hook 侧代写会在 hook 未生效的环境里制造「以为写了其实没写」的分叉。
     """
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(queue_dir))))
     gi = os.path.join(root, ".gitignore")
@@ -363,17 +360,11 @@ def gitignore_findings(queue_dir):
             lines = {line.strip() for line in f}
     except Exception:
         lines = set()
-    out = []
-    hit = sorted(lines & GITIGNORE_SWALLOW)
-    if hit:
-        out.append("⚠ `%s/.gitignore` 有整树忽略行 %s——v4 队列文本入库，这一行会把 "
-                   "issue 一起吞掉，且被 ignore 的文件用 grep 搜是**静默零命中**。"
-                   "请删除它，改用下面四条精确规则。" % (root, "、".join("`%s`" % h for h in hit)))
-    missing = [w for w in GITIGNORE_WANT if w not in lines]
-    if missing:
-        out.append("⚠ `%s/.gitignore` 缺 %s——worktree 与截图会被 `git add -A` 提交进去。"
-                   "请补齐并回读验证。" % (root, "、".join("`%s`" % m for m in missing)))
-    return out
+    if lines & GITIGNORE_WANT_ANY:
+        return []
+    return ["⚠ `%s/.gitignore` 缺 `.keeper/`——队列含 bug 细节与内部坐标，会被 "
+            "`git add -A` 推到远端。补法见 keeper 冷启动第 2 步（文案须逐字照抄）。"
+            "补后搜队列一律 `grep -rn \"词\" .keeper/`，从仓库根搜是静默零命中。" % root]
 
 
 # ────────────────────────── 渲染 ──────────────────────────

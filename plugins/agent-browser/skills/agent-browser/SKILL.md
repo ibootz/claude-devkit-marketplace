@@ -98,12 +98,28 @@ agent-browser close
 
 **`--profile` 的两种形态（行为不同）**：
 - 传**名字**（如 `--profile Default`）= 只读快照那个 Chrome profile，不改原数据；适合"借一下登录态用完即弃"
-- 传**路径**（如 `--profile ~/.ab-profile` 或 `/Users/.../Chrome/Profile 1`）= 持久化目录，跨重启存全状态（cookies/IndexedDB/cache）；**推荐用于长期复用登录态**
+- 传**路径**（如 `--profile ~/.ab-profile` 或 `/Users/.../Chrome/Profile 1`）= 持久化目录，跨重启存全状态（cookies/IndexedDB/cache）；**推荐用于长期复用登录态，但仅限同一时刻只有一个实例用它**——多 agent 并发时改用传名字的只读快照形态，理由见下面的 SingletonLock 段
 
 **SingletonLock 硬约束（必须替用户避坑）**：macOS 上用户日常 Chrome 正在运行时，它当前打开的 profile 目录会被 `SingletonLock` 独占。CFT 若用**同一个**目录起，会**强制关掉用户日常 Chrome 或干脆起不来**。故：
 
 - **绝不**把 `--profile` 指向用户日常主力 profile（通常是 `Default` 对应的磁盘目录）。若用户给的路径疑似日常 profile，先确认"这是不是你平时在用的 Chrome 窗口的 profile？"，是就让他另建一个。
 - 纯隔离测试（匿名公开页、不需要登录态）用 `--profile "$(mktemp -d)"` 起干净临时目录，零冲突。
+
+**同一个 profile 路径不能被两个实例同时打开**（2026-08-06 实测，非推断）。上一条讲的是 CFT 与用户日常 Chrome 争目录，这一条讲的是**两个 agent-browser 实例之间**——同样撞，而且更容易撞，因为并行派多个 agent 是常态。实测：两个不同 `--session` 指向同一个 `--profile <路径>`，第二个直接退出，`exit code 21`，Chrome 原生报错逐字如下：
+
+```
+Failed to create /private/tmp/ab-lock-test/SingletonLock: File exists (17)
+Failed to create a ProcessSingleton for your profile directory. This means that
+running multiple instances would start multiple browser processes rather than
+opening a new window in the existing process. Aborting now to avoid profile corruption.
+```
+
+判据与后果：
+
+- **不排队、不自动复制、不降级**。agent-browser 自身没有锁检测逻辑，只按 500ms 间隔重试几次，然后把 Chrome 的 stderr 原样抛出。所以表现是**硬失败**，不是变慢。
+- **登录态本身不会被写坏**——Chrome 中止的理由就写在报错里（`to avoid profile corruption`）。这是唯一的好消息：撞了只是起不来，不必担心预热好的身份被并发写烂。
+- 因此**「建一个固定 profile 给所有 agent 共用」这个方案不成立**。要多 agent 并发复用同一份登录态，只有两条路：(a) 各 agent 用 `--profile <名字>`（传名字会拷只读快照到临时目录，天然互不冲突）；(b) 先从真身目录派生副本，每个 agent 各用一份副本路径。
+- **`--session` 不解决这件事**，它隔离的是浏览器实例不是磁盘目录。反过来还有个更早的坑：两个 agent 都不传 `--session` 时会共用名为 `default` 的同一个实例、抢同一批 tab，**且不报错**。并发时 `--session` 必须各自给稳定且互异的名字。
 
 **用户还没有独立 profile 时**：引导他建一个专用的（如 `AI Testing`），手动登录一次目标系统，再从 `chrome://version/` 的「个人资料路径」拿到磁盘路径交给你（注意磁盘目录名是 `Profile N`，不是 UI 显示名）。拿到后落到 `--profile <路径>`，并建议他把路径记进项目 `CLAUDE.md` / memory 方便下次复用。一次性的 UI 点击步骤由用户完成，你只负责拿到路径、注入 `--profile`、并在路径看起来是日常 profile 时拦一下。
 

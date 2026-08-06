@@ -324,19 +324,23 @@ def dirty_lines(repo: Path) -> list[str]:
 
     为什么必须剔除：本工具刻意把目标 worktree 建在
     `<源>/.keeper/<交付id>/debug/<id>/worktree/`（理由见 wt_supply.py `cmd_init`），
-    它在源 worktree 眼里就是一个未跟踪目录。task-keeper 的约定是 `.gitignore` 里有
-    `.keeper/**/worktree/`（判据 6），此时 `git status` 本来就不会列出它——**这段剔除
-    是那条规则缺失时的兜底**：缺行时 `git status` 恒输出
+    它在源 worktree 眼里就是一个未跟踪目录。task-keeper 现行约定（v5，2026-08-06
+    用户拍板「不要公开」）是 `.gitignore` 里有整树规则 `.keeper/`（历史上 v4 期间是
+    精确规则 `.keeper/**/worktree/`，判据 6 同样成立），此时 `git status` 本来就不会
+    列出它——**这段剔除是那条规则缺失时的兜底**：缺行时 `git status` 恒输出
     `?? .keeper/<交付id>/debug/<id>/worktree/`，不剔除的话源 worktree 永远「不干净」，
     merge-back 的前置校验会 100% 误拦。剔除逻辑靠 `worktree_entries()` 现算的登记路径
-    做匹配，不写死具体层级——v3→v4 落点整体搬家，这段逻辑一行没改，只有下面举例的
-    路径字面量需要同步。
+    做匹配，不写死具体层级——v3→v4→v5 落点与 gitignore 形态几经变化，这段逻辑一行
+    没改，只有下面举例的路径字面量需要同步。
 
-    **v4 的新情况：队列文本本身入库了**，所以 `.keeper/<交付id>/debug/*/issue.md`
-    这类文件的修改会**正常出现在这里**，且不该被剔除——它们是真实的工作区改动。
-    源侧因此改用 `source_dirty_check()` 的收窄判据（只有与本次合并路径相交才拦）；
-    目标侧仍走本函数的全树严格检查，靠「fixer worktree 里不写 index.md」
-    （`queue_snapshot.in_fixer_worktree`）来保证那份副本不会被 hook 改脏。
+    **v4 期间的特殊情况（v5 已不再成立）**：v4 队列文本本身入库，所以
+    `.keeper/<交付id>/debug/*/issue.md` 这类文件的修改会**正常出现在这里**，且不该
+    被剔除——它们是真实的工作区改动。源侧因此改用 `source_dirty_check()` 的收窄判据
+    （只有与本次合并路径相交才拦）；目标侧仍走本函数的全树严格检查，靠「fixer
+    worktree 里不写 index.md」（`queue_snapshot.in_fixer_worktree`）来保证那份副本
+    不会被 hook 改脏。**v5 起 `.keeper/` 整树未跟踪，`issue.md` 等文件的修改不会再
+    出现在 `git status` 里**，`source_dirty_check()` 的收窄判据因此在 v5 下大多数
+    情况已无实际命中面（对 v4 存量仓仍然有效），但两套判据都未删除，逻辑保持不变。
 
     为什么用 `-uall` 而不是默认的 `-unormal`：默认模式会把未跟踪目录**折叠**成
     `?? .keeper/`（实测，折叠到未跟踪链的最上层目录），一旦折叠就无法区分「折叠掉的

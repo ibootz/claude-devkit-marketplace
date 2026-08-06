@@ -236,9 +236,9 @@ ENABLED = """# task-keeper 主会话侧参考
 
 keeper 待拍板会写 `<交付>/decisions/<stamp>-<keeper>.md` 并 SendMessage 打铃。攒批处理（待拍板 ≥3 条/出现 blocking/用户问起/停顿点才处理）：一次 AskUserQuestion 并列问完（不用文本选项块），原文写 `<交付>/decisions/answers/<同名>.md` 并通知 keeper。「待拍板 N 条」由磁盘现算。
 
-## 布局（v4）
+## 布局（v5）
 
-`<worktree 根>/.keeper/<交付id>/{debug,chore,decisions}/`，交付 id 取 worktree 根 basename，非交付用 `_main`。一条 bug 全在 `debug/<DBG-id>/`，文本入库、截图与 worktree 不入库。
+`<worktree 根>/.keeper/<交付id>/{debug,chore,decisions}/`，交付 id 取 worktree 根 basename，非交付用 `_main`。一条 bug 全在 `debug/<DBG-id>/`，整树不入库（issue 文本、截图、worktree 均不入库）。
 
 指针：skills/tk-decisions；状态看每轮注入或各队列 index.md。"""
 

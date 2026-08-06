@@ -18,10 +18,16 @@ v3 一条 issue 的东西分散在 `issues/DBG-007.md`、`receipts/DBG-007.md`�
 
 ## 为什么用 shutil.move 而不是 git mv
 
-**v4 队列文本已入库，但归档仍走文件系统**：一次归档动辄搬几十个目录，其中还夹着
-未跟踪的截图（`.keeper/**/*.png` 在 gitignore 里），`git mv` 会在第一个未跟踪
-文件上报 `fatal: not under version control` 中途停下，留下搬了一半的状态。
-纯文件系统搬完之后由 keeper 一次 `git add -A` 提交，git 自己会识别成 rename。
+v5（2026-08-06 用户拍板「不要公开」）起 `.keeper/` 整树 gitignore，队列目录里的一切
+（issue.md / receipts.md / 截图等）都是未跟踪文件：一次归档动辄搬几十个目录，
+`git mv` 会在第一个未跟踪文件上报 `fatal: not under version control` 中途停下，
+留下搬了一半的状态。纯文件系统搬移天然绕开这个问题，且不依赖任何文件是否被跟踪。
+**v4 时的原始动机**：那时队列文本已入库，但截图仍是未跟踪的（`.keeper/**/*.png`
+在 gitignore 里），同样会让 `git mv` 中途报错；`git mv` 能处理的部分（issue.md /
+receipts.md）当时确实会在归档后由 keeper 一次 `git add -A` 提交、被 git 识别成
+rename——**这一步在 v5 下不再发生**：整树忽略之后 `git add -A` 对 `.keeper/` 下的
+文件不起作用，归档后的目录移动本身不进 git 历史，与队列其余部分「整树不入库」的
+现行策略一致。
 
 ## 归档前必须确认 worktree 已清理（判据 8）
 

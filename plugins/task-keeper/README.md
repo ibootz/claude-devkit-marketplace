@@ -29,7 +29,7 @@
 |---|---|---|
 | `session-start-keeper-routing.sh` | SessionStart | 纯注入**静态参考**（决策打包主会话侧职责、v4 布局、指针）。未启用 195 字符（一句话介绍 + 启用方式），已启用 495 字符，不拦截任何操作 |
 | `user-prompt-submit-keeper-routing.sh` | UserPromptSubmit | 纯注入**三岔口分诊**（自己做 / 转 debug-keeper / 转 chore-keeper）+ 转发三原则 + 现算的一句"唤醒前怎么办"（三选一：唤醒某个真实 name / 登记已失效当首次派发 / 没有登记当首次派发，见下方「登记 keeper 实例 name」的会话隔离说明），没有登记 363 字符、session 匹配 398 字符、已失效 395 字符（两档同时匹配时约 442 字符）。工作区在跑 ai-sdlc 流程时**追加第 4 支路**「转 sdlc-writer」（判据 `sdlc_present`：worktree 根 + 往上 4 层里任一层有 `sdlc/specs` 或 `sdlc/deliveries`；不命中时输出与没有这条支路时逐字相同），该支路本身 +108 字符，实测无登记那支命中后 471 字符、两档同时匹配时约 550 字符。硬上限 800。未启用项目 stdout 全空 |
-| `user-prompt-submit-debug-queue.sh` | UserPromptSubmit | 注入 debug 队列实时快照（open 逐条 + 在飞派生 + done 计数）、重算薄索引 `index.md`（git rebase/bisect/merge 中间态跳过）；`.gitignore` 有整树忽略行或缺四条精确规则时各加一句提醒；存量 v3/v2 布局未迁移时加一句迁移提示；命中 bug 特征词时给出下一个可用 DBG-id（fixer worktree 内不给） |
+| `user-prompt-submit-debug-queue.sh` | UserPromptSubmit | 注入 debug 队列实时快照（open 逐条 + 在飞派生 + done 计数）、重算薄索引 `index.md`（git rebase/bisect/merge 中间态跳过）；`.gitignore` 缺整树忽略行 `.keeper/` 时加一句提醒；存量 v3/v2 布局未迁移时加一句迁移提示；命中 bug 特征词时给出下一个可用 DBG-id（fixer worktree 内不给） |
 | `user-prompt-submit-chore-queue.sh` | UserPromptSubmit | 注入 chore 队列快照（输出预算 ≤900 字符）；`.keeper/` 顶层存在时缺失的 `chore/`（连同 `debug/`）由 `find_queue` 每轮自动补建，不需要手工 mkdir；代注待拍板决策计数（自动补建后 `chore/` 恒存在，debug 快照的兜底注入分支实际只在 fixer worktree 内或补建失败时才会走到，两边判据仍是同一个目录的存在性） |
 | `pre-tool-use-debug-worktree-push.sh` | PreToolUse(Bash) | `git push` 的目标落在 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 内时 deny（fixer 产物只回流不推远端） |
 | `pre-tool-use-debug-worktree-destroy.sh` | PreToolUse(Bash) | 强制删除形态（`rm -rf` / `worktree remove --force` / `clean -fdx`）命中 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 路径时 ask 弹确认框 |
@@ -42,15 +42,15 @@
 文件"这个副作用，供主会话下次唤醒 keeper 前读取真实 `name`（见下方「登记 keeper
 实例 name」）。
 
-## 产物布局：`.keeper/<交付id>/`，文本入库、截图与 worktree 不入库
+## 产物布局：`.keeper/<交付id>/`，整树不入库（v5）
 
 ```
 <项目根>/.keeper/
 ├── .keeper-active                       ← 单行文本，记当前活跃交付目录名
 └── <交付id>/                            ← worktree 根 basename，非交付一律 `_main`
     ├── debug/
-    │   ├── index.md                     入库（派生视图，hook 每轮重算）
-    │   ├── archive/<批次>/<DBG-id>/     入库（归档整目录搬）
+    │   ├── index.md                     派生视图，hook 每轮重算，不要手改
+    │   ├── archive/<批次>/<DBG-id>/     归档整目录搬
     │   └── DBG-NNN/
     │       ├── issue.md                 入库（唯一信源）
     │       ├── receipts.md              入库（fixer commit 进自己分支）
@@ -67,41 +67,58 @@
 停"——linked worktree 根自己就有一个 `.git` 文件，那样第一轮就返回 None，aisdlc 交付
 跑在 `.sdlc/worktrees/D-NNN-<slug>/` 里时队列恒为空，冷启动还会 mkdir 出第二份。
 
-**文本入库、截图与 worktree 不入库（v4，2026-08-01）**。四条规则划边界：
-`.keeper/**/worktree/`、`.keeper/**/*.png`、`.keeper/**/*.jpg`、
-`.keeper/**/.keeper-instance.json`（第四条 2026-08-05 补，理由见下方「登记 keeper
-实例 name」——它是会话级运行时状态，跨会话即失效，入库只产生噪音 diff）。
+**整树不入库（v5，2026-08-06 用户拍板「不要公开」）**。一条规则划边界，keeper 冷启动
+自动写入：
 
-这一版**推翻了 v3 的「整树不入库」**，而 v3 当初又是推翻前身 radnove-core 的 `.debug/`
-整树入库而来的——所以这里等于绕回了一圈，得说清每一轮各自解决了什么、留下了什么：
+```gitignore
+# task-keeper 队列（本地私有，不入库）
+.keeper/
+```
+
+> **对 v4「文本入库」拍板的覆盖标注**：本文件与两个 keeper 定义里 2026-08-01 那份
+> 「队列文本入库、四条精确规则排除产物」的决定，**已于 2026-08-06 被用户口头拍板
+> 「把所有 `.keeper` 目录默认都加入 gitignore 不要公开」整体覆盖**。被覆盖的范围是
+> 入库策略与那四条规则；v4 关于 ugrep `--ignore-files` 的实测结论**没有**被覆盖，
+> 它仍然成立，只是应对方式从「不 ignore」改成了「换搜索根」。现行执行依据是本节这
+> 一条整树规则加下方的搜索根硬约束。
+
+这一版绕回了 v3 的做法。四轮各自解决了什么、留下了什么：
 
 | 版本 | 做法 | 解决了 | 留下的代价 |
 |---|---|---|---|
 | radnove-core `.debug/` | 整树入库 | issue 有 git 历史、跨 worktree 共享 | 工作区常年挂队列 diff；并行 worktree 在同一个 `index.md` 上互写冲突 |
-| v3 `.keeper/` | 整树 gitignore | 工作区干净、index 抖动消失 | 误删无法恢复、多人不共享；**且被 gitignore 的文件搜不到** |
-| v4 `.keeper/<交付id>/` | 文本入库、截图与 worktree 不入库 | 可搜、可恢复、按交付分目录后 index 冲突面收敛到单个交付内 | 队列是被跟踪文件，`git checkout` 会把它从工作区物理删掉、`git stash` 会把队列改动一起带走 |
+| v3 `.keeper/` | 整树 gitignore | 工作区干净、index 抖动消失 | 误删无法恢复、多人不共享；**且被 gitignore 的文件搜不到**（当时未找到规避手段） |
+| v4 `.keeper/<交付id>/` | 文本入库、四条规则排除产物 | 可搜、可恢复、index 冲突面收敛到单个交付内 | 队列被跟踪，`git checkout` 会把它从工作区物理删掉、`git stash` 会把队列改动一起带走；**且 bug 细节与内部系统坐标随推送公开** |
+| v5 `.keeper/` | 整树 gitignore + 搜索根硬约束 | 不公开、工作区干净 | 误删无法恢复、多人不共享（与 v3 同）；搜队列必须记得换搜索根 |
 
-**压垮 v3 的是可搜性**：Claude Code 把 `grep` 影子成自带 ugrep，参数写死
-`--ignore-files`（`~/.claude/shell-snapshots/snapshot-zsh-*.sh:5160`）。被 ignore 的
-文件搜起来**静默零命中、不报错**——"搜一下有没有类似 issue"给出的"没有"是假的，且
-无从察觉。注意杀手是 `--ignore-files` 不是点前缀：`--hidden` 已经处理了点前缀，所以
-当年"改个不带点的目录名"这个方向从一开始就不成立。`Read` 不走 grep，一直正常。
+**v3 与 v5 做法相同、结论不同，差别只在一条规避手段**。压垮 v3 的是可搜性：Claude Code
+把 `grep` 影子成自带 ugrep，参数写死 `--ignore-files`
+（`~/.claude/shell-snapshots/snapshot-zsh-*.sh:5160`）。被 ignore 的文件搜起来**静默
+零命中、不报错**——"搜一下有没有类似 issue"给出的"没有"是假的，且无从察觉。注意杀手是
+`--ignore-files` 不是点前缀：`--hidden` 已经处理了点前缀，所以当年"改个不带点的目录名"
+这个方向从一开始就不成立。`Read` 不走 grep，一直正常。
 
-这个坑之所以拖了整整一个 v3 才被发现，是因为**它时灵时不灵**——2026-08-01 实测：
-ugrep 只读递归下降途中遇到的 `.gitignore`，**不向上找**。所以从仓库根搜
-（`grep -rn "xxx" .`，AI 的默认动作）是静默零命中；而把搜索根直接设进被忽略的目录
-（`grep -rn "xxx" .keeper/`）反而正常命中，因为那条规则所在的 `.gitignore` 在搜索根
-上一层、压根没被读到。同一份数据、同一个词，换个起点就换个结论。
+2026-08-01 实测找到了规避手段，这是 v5 敢绕回来的全部理由：ugrep 只读递归下降途中遇到
+的 `.gitignore`，**不向上找**。所以：
 
-v4 对上表最后一行代价的缓解：keeper 每个工作窗口结束 commit 一次队列，把未提交窗口
-压到最短。这不能消除风险，只能缩小暴露面——如实记在这里。
+> ### 硬约束：搜队列一律把搜索根设进 `.keeper/`
+>
+> ```bash
+> grep -rn "关键词" .keeper/          # ✅ 正常命中
+> grep -rn "关键词" .                 # ❌ 静默零命中，且不报错
+> ```
+>
+> 从仓库根搜是 AI 的默认动作，所以这条必须写死在两个 keeper 的定义里、不能只留在
+> README。拿不准时用 `Read` / `ls` 正面列举，**不要用否定式检索得出「队列里没有
+> 这条」**——那个「没有」可能是假的。
 
-**gitignore 分工（v4 改为 fail-loud，不再自动追加）**：keeper 冷启动检查这四行是否
-齐备，**缺行就报错停下要求人工补**，不再像 v3 那样自动追加。原因是实测过：两个分支
-各自在 EOF 追加内容不同的注释即产生合并冲突，而脚本追加裸规则、AI 实际执行时会自由
-发挥注释文案。快照 hook 只注入提醒、不代写文件（与 v3 一致）——**这条只是文档级
-约定加一个机械检查（`hooks/lib/queue_snapshot.py` 的 `GITIGNORE_WANT` 缺行时告警），
-没有任何代码会自动往 `.gitignore` 里写入这四行**，需要人工补上。
+**gitignore 分工（v5 恢复自动追加，靠文案写死避免冲突）**：keeper 冷启动检查那一行
+在不在，不在就追加，**注释文案逐字写死**（`GITIGNORE_BLOCK`，
+`hooks/lib/queue_snapshot.py:88`）。v4 当初禁止自动追加的唯一理由是实测过「两个分支各自
+EOF 追加**内容不同**的注释即冲突」——内容逐字相同则 git 视为同一处改动、不冲突，所以
+写死文案就解决了这个问题。快照 hook 仍只注入提醒、不代写文件
+（`GITIGNORE_WANT_ANY` 未命中时告警）——**代写只发生在 keeper 冷启动这一处**，
+两处都代写会在 hook 未生效的环境里制造「以为写了其实没写」的分叉。
 
 ## 登记 keeper 实例 name（2026-08-04 起）
 
@@ -308,17 +325,21 @@ v3 schema 从未记录「这条 issue 属于哪次交付」，所以存量条目
 再跑上面的脚本。漏做迁移时快照 hook 会检测到旧布局目录存在而 v4 队列缺失，注入一句
 迁移提示，不会静默丢队列。
 
-`.gitignore` 四条规则**一次性提交到主分支**，之后各交付分支只读不写：
+`.gitignore` 那两行理想情况**一次性提交到主分支**，之后各交付分支的冷启动检查直接命中、
+什么都不写；即使某个分支自己追加了，因为文案逐字写死、合并时不冲突。
 
-```gitignore
-.keeper/**/worktree/
-.keeper/**/*.png
-.keeper/**/*.jpg
-.keeper/**/.keeper-instance.json
+**v4 → v5 的存量仓要单独处置**：v4 期间队列文本是入库的，`.gitignore` 只管未跟踪文件，
+所以加了整树规则对已跟踪的队列**完全不生效，且不会有任何报错**。先查：
+
+```bash
+git ls-files '.keeper/' | head -n 3       # 有输出=已跟踪
+git log --oneline -- '.keeper/' | wc -l   # 已推送的历史有多少
 ```
 
-若历史上有过整树 `.keeper/` 忽略行，**先删掉它**——两者并存时它会把入库的 issue 一起
-吞掉，而 hook 每轮都会为此告警。
+有输出时**由 Human 拍板**，keeper 与 AI 不得自行处置。三条出路的代价差别很大：
+`git rm -r --cached .keeper` 停止继续入库但历史仍在远端；`git filter-repo` 连历史一起
+清但要 force push、会打断所有协作者；什么都不做则该仓维持 v4 行为。v4 期间那四条精确
+规则（`.keeper/**/worktree/` 等）留着无害，被整树规则完全覆盖。
 
 ## 测试
 
