@@ -1,5 +1,5 @@
 ---
-name: nested-submodule-commit-push
+name: cascade-push
 description: 嵌套 git submodule（多层子模块）项目从最内层向外逐层提交推送，链式更新每一层父仓的 gitlink，push 后逐层写后回读核验远端 SHA。自带 cascade-push.py 探测脚本，默认 dry-run 只打印计划，--apply 才提交、--push 才推送，把不可逆的 push 永远隔成独立显式动作。
 when_to_use: |
   用户说"提交推送 submodule"、"嵌套子模块怎么提交"、"submodule 改了怎么 push 上去"、"多层子模块一层层往外提交"、"submodule 提交顺序"、"gitlink 没更新"、"父仓没记录子模块的改动"、"submodule push 了别人拉不到"、"submodule detached HEAD 怎么提交"、"用 foreach --recursive 提交 submodule 顺序错了"。
@@ -34,11 +34,11 @@ git submodule 嵌套项目里，每个 submodule 自己是独立 git 仓，父�
 脚本随本 skill 提供。先定位它：
 
 ```bash
-SP="$CLAUDE_PLUGIN_ROOT/skills/nested-submodule-commit-push/scripts/cascade-push.py"
+SP="$CLAUDE_PLUGIN_ROOT/skills/cascade-push/scripts/cascade-push.py"
 ls -l "$SP"   # 必须存在再往下走
 ```
 
-拿不到 `$CLAUDE_PLUGIN_ROOT` 时（如直接在源仓里跑），改用绝对路径 `plugins/devkit-tool/skills/nested-submodule-commit-push/scripts/cascade-push.py`。
+拿不到 `$CLAUDE_PLUGIN_ROOT` 时（如直接在源仓里跑），改用绝对路径 `plugins/devkit-tool/skills/cascade-push/scripts/cascade-push.py`。
 
 ### 第一步：dry-run，先看计划再决定
 
