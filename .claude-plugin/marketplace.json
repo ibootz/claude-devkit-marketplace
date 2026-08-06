@@ -94,7 +94,7 @@
       "source": "./plugins/task-keeper",
       "category": "Productivity",
       "description": "keeper 托管 debug/杂务队列 + sdlc 文档编写 + tk-board 进度看板，决策打包 HITL",
-      "version": "2.9.0"
+      "version": "2.10.0"
     },
     {
       "name": "plain-talk-output-style",
