@@ -94,7 +94,7 @@
       "source": "./plugins/task-keeper",
       "category": "Productivity",
       "description": "keeper 托管 debug/杂务/上下文三队列 + sdlc 文档编写，动手前收齐规格再交表销账，决策打包 HITL",
-      "version": "2.14.0"
+      "version": "2.14.1"
     },
     {
       "name": "plain-talk-output-style",

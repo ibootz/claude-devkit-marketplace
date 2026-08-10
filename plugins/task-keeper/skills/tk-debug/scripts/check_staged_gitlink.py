@@ -102,12 +102,15 @@ def main():
     print("\n修复（逐条撤出暂存区，再补 .gitignore 规则）：")
     for p in hits:
         print("    git -C %s rm --cached -r --quiet -- %s" % (repo, p))
-    print("    # 确认 .gitignore 里有整树忽略规则（v5，覆盖本脚本要防的风险）：")
-    print("    #   .keeper/")
-    print("    # 存量仓可能还留着 v4 的精确规则，两者不冲突，留着无害：")
+    print("    # 确认 .gitignore 里有 v6 的三条精确排除规则（逐字，与 hooks/lib/")
+    print("    # queue_snapshot.py 的 GITIGNORE_RULES 同源，改这里要同步改那边）：")
     print("    #   .keeper/**/worktree/")
-    print("    #   .keeper/**/*.png")
-    print("    #   .keeper/**/*.jpg")
+    print("    #   .keeper/**/.keeper-instance.json")
+    print("    #   .keeper/.keeper-active")
+    print("    # 反过来，若 .gitignore 里还留着 v5 的整树忽略行 `.keeper/`，那是 v6 起的")
+    print("    # 错误配置：它静默让整个队列都不入库，与 v6「正文与附件入库、只排除三类")
+    print("    # 本机产物」完全相反，先把它删掉。v4 的 `.keeper/**/*.png`、`*.jpg` 同理——")
+    print("    # v6 要求截图入库，留着会让附件继续漏在版本库外。")
     print("    # 改完重跑本脚本回读验证，不要凭 `git add` 没报错就认为好了")
     return 2
 
