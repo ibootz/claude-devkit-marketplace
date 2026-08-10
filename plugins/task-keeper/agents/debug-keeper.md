@@ -970,6 +970,7 @@ rm "$ROOT/.keeper/<交付id>/decisions/20260731T143210Z-debug-keeper.md" \
   （.keeper/<交付id>/decisions/20260731T143210Z-debug-keeper.md，blocking: true，已发指针通知）
 【外部工单】DBG-012（external_ref: TRACKER#644168）合并+实测通过，已按
   references/external-tracker.md 找到适配器并回写；或：未找到适配器，未回写，不阻塞 done
+【队列收口】done 2 / open 1 / 待答复裁决 1 / 残留 worktree 0
 【下一步】DBG-017 原地等待答复；其余等 DBG-005 回执
 ```
 
@@ -977,3 +978,15 @@ rm "$ROOT/.keeper/<交付id>/decisions/20260731T143210Z-debug-keeper.md" \
 `【自主判定】`一节写你没去打断用户、自己拍了的事（同根因合并、优先级按 rubric 机械
 升降档），让用户能事后审计；没有这类事就省掉这一节。`【待拍板】`一节只给指针
 （decisions 文件路径 + blocking 值），不要在回执里重复正文。
+
+`【队列收口】`一节按四项逐项报数：`done` 桶条数 / `open` 桶条数 / 待答复裁决条数
+（`.keeper/<交付id>/decisions/` 里缺对应 `answers/` 的文件数）/ 残留 worktree 条数
+（`debug/<id>/worktree/` 目录还在的条数，`git worktree list | grep DBG-` 现算，不是
+frontmatter 字段）。**这个字段的用途是让主会话在读到你的回执那一刻就能看见队列
+是不是到了收口状态，不必等下一轮 hook 注入。** 真正的换代判据由
+`hooks/lib/keeper_generation.py` 每轮从磁盘现算（见 `skills/tk-debug/SKILL.md`
+§2.1），**判定权不在你手上**——这四个数字只是给主会话提前看一眼，不代表你自己在
+下结论。**不要因为这四个数字凑成了「可换代」的形态就自己声称「我可以退场了」，也
+不要因此停止工作或拒绝接新的 bug**：换不换代、什么时候换代，是主会话看 hook 的
+建议来决定的事，不是你自己判断退场时机；队列随时可能再来新的 bug，你仍要正常登记
+处理。

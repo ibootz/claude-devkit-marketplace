@@ -645,7 +645,7 @@ const SECTION_AGENT_CALL = [
   '| `name` | 必填（schema 里没有它，靠你自己记）。`<模型名>-<任务语义-kebab>`，模型名与 `model` 逐字一致；只收 ASCII，合 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`；同批并发互相可辨（分片依据写进名字）；`subagent_type` 含冒号时还须含其身份词（`task-keeper:debug-keeper` → 含 `debug` 或 `keeper`） |',
   '| `model` | 必填，禁止默认回落。`sonnet`（默认档）/ `opus`（跨层追根因·高正确性·sonnet 已吃力）/ `fable`（opus 跑 ≥2 轮无进展）。无 `haiku` 档 |',
   '| `subagent_type` | 必填。只读任务一律 `Explore`；要 Edit/Write 才 `general-purpose`；设计与拆解用 `Plan` |',
-  '| `description` | 必填。3-5 词任务摘要，≤60 字符；只写这次任务干什么，不带 `[模型名]` 前缀，不放 `prompt` 原文与"你是第 1 层子代理"这类角色设定句（常驻 keeper 例外：description 是固定值，非当次任务） |',
+  '| `description` | 必填。3-5 词任务摘要，≤60 字符；只写这次任务干什么，不带 `[模型名]` 前缀，不放 `prompt` 原文与"你是第 1 层子代理"这类角色设定句（常驻 keeper 例外：必须以「debug 队列」/「chore 队列」起头，之后接**这一代**接的活而不是某一个动作） |',
   '| `run_in_background` | 选填。要并发多个、或本轮还接着干别的时给 `true`；要拿到结果才能继续时给 `false` |',
   '| `prompt` | 必填。四段式，见上 |',
   '',
@@ -699,7 +699,7 @@ const SECTION_DISPATCH = [
 // `Agent` 那条单独抽出来：它是三条里唯一只对「能派下一层的 agent」有意义的一条，
 // 且它指向「完整调用形态」那一节，必须与那一节同进同出，否则会留下悬空引用。
 const HOOK_ENFORCED_AGENT_BULLET =
-  '- **`Agent`**（`guards/agent-dispatch.js`）校验 `model` / `name` / `description` 的结构，判据就是「派发 `Agent` 的完整调用形态」那张六字段表（主会话每轮注入一份，子代理版在上面第五章里），外加三条 keeper 专项：档位钉 `opus`、`name` 带 4 位短哈希、`description` 钉死为「debug 队列常驻管理」/「chore 队列常驻管理」（逐字，不写当次任务——面板显示的是首次派发那一刻的值，`SendMessage` 唤醒改不了它）。照那张表写就不会撞'
+  '- **`Agent`**（`guards/agent-dispatch.js`）校验 `model` / `name` / `description` 的结构，判据就是「派发 `Agent` 的完整调用形态」那张六字段表（主会话每轮注入一份，子代理版在上面第五章里），外加三条 keeper 专项：档位钉 `opus`、`name` 带 4 位短哈希、`description` 必须以「debug 队列」/「chore 队列」起头、之后接本批摘要（如「debug 队列 · 关三条 + 开工 DBG-140」）。面板显示的是首次派发那一刻的值、`SendMessage` 唤醒改不了它，所以那句描述的是**这一代**而不是当前这一秒；队列做完一批（task-keeper 每轮注入会现算并提示）就新派一代、换新摘要。照那张表写就不会撞'
 
 // `probe-throttle` 那条同样单独抽出来，理由与 `Agent` 那条相反：它**只对主会话生效**。
 // 该 hook 读到 payload.agent_id（仅子代理触发时存在）就直接放行、连计数都不做——因为

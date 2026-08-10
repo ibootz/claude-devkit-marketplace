@@ -1,10 +1,10 @@
 # DevKit-Tool
 
-**版本**: 6.4.2
+**版本**: 6.11.0
 **作者**: zhangq
 **许可证**: MIT
 
-工具技能套件（原 `devkit-core`），当前聚焦 6 个 Skills，覆盖代码库分析、依赖排查、代码知识图谱建图决策、多模型协作与 Claude Code 自身运维辅助工具。
+工具技能套件（原 `devkit-core`），当前聚焦 8 个 Skills，覆盖代码库分析、依赖排查、代码知识图谱建图决策、submodule 仓库同步与提交推送、多模型协作与 Claude Code 自身运维辅助工具。
 
 ---
 
@@ -36,6 +36,18 @@
 - `orphan-process-cleaner`
 - `marketplace-cache-sync` — 市场源 + 已启用插件缓存两层同步，含缓存清理。6.2.1 起修正了「让新版本生效」的判据：默认 `/reload-plugins` 即可（实测能热载 skill / agent / hook 脚本与新增的 `PreToolUse` / `PostToolUse` / `UserPromptSubmit` 挂载点），**只有** `SessionStart` / `SessionEnd` / `PreCompact` 这类生命周期挂载点变动才必须重启会话——`/reload-plugins` 不重放生命周期事件，否则会出现「每轮注入已是新版指针、它引用的静态主体却从未投放」的割裂状态。6.2.2 起补上 project/local scope 插件的刷新：常规刷新循环默认只处理 `user` scope，只装在项目目录下（`project`/`local` scope）的插件会静默刷新失败且无任何报错提示；新增按 (id, projectPath) 逐条 `cd` 进目标项目再刷新的写法，并记录了 `--scope project` 靠 cwd 隐式定位、cwd 不匹配时静默假成功的陷阱。
 
+### submodule 仓库操作（`cascade-*` 配对）
+
+两个 skill 覆盖带 submodule 的仓库在**拉取**与**推送**两个方向上的完整流程，共用 `cascade-` 前缀表示配对关系。**前缀不表示两者的作用域相同——恰恰相反，这是使用前必须先认准的一件事**：
+
+| skill | 方向 | 作用域 | 会不会产生提交 |
+|---|---|---|---|
+| `cascade-pull` | 拉取同步（消费上游） | **只处理父仓 `.gitmodules` 直接声明的一层**，禁止 `--recursive` | 模式 A 不产生；模式 B 在父仓产生一次 gitlink bump |
+| `cascade-push` | 提交推送（生产上游） | **递归全嵌套树**，按路径深度降序由内向外逐层处理 | 每层各一次 commit，`--push` 才推远端 |
+
+- `cascade-pull` — 6.11.0 从 `radnove-core` 搬入（原名 `repo-sync-pull`），内容为纯 Git/submodule 通用语义、无公司特定依赖。核心是**三方差异模型**（G=gitlink / W=工作树 HEAD / R=远端 tip），把"子模块显示 dirty"与"gitlink 该不该前进"分成两件独立的事判断；三条铁律为只处理直接子模块不递归、移动 gitlink 前必须列出新旧 commit message 给用户确认、模式由用户当次选而非 AI 预设。另含 `--is-ancestor` 报"回退"的判读方法（本地缺对象 vs 真分叉是两种成因，merge 壳不等于内容丢失）。三个脚本 `diagnose-sync.sh` / `sync-to-gitlink.sh` / `preview-gitlink-bump.sh` 兼容 bash 3.2。
+- `cascade-push` — 嵌套 submodule 由内向外逐层提交推送，链式更新每层父仓的 gitlink，push 后逐层 `git ls-remote` 回读核验远端 SHA。自带 `cascade-push.py`，默认 dry-run 只打印计划，`--apply` 才提交、`--push` 才推送，把不可逆的 push 隔成独立显式动作。detached HEAD 直接中止不自动切分支。
+
 ## 典型用法
 
 ```bash
@@ -58,6 +70,10 @@ plugins/devkit-tool/
 │   ├── codegraph-hint.js   # 纯注入（双挂 UserPromptSubmit + SubagentStart）：已建图仓才输出两行 codegraph 引导
 │   └── tests/codegraph-hint-gating.sh    # gating 回归用例（13 条，判据两侧都覆盖）
 └── skills/
+    ├── cascade-pull/       # 带 submodule 的仓库同步拉取（只处理直接声明的一层）
+    │   └── scripts/        # diagnose-sync.sh / sync-to-gitlink.sh / preview-gitlink-bump.sh
+    ├── cascade-push/       # 嵌套 submodule 由内向外逐层提交推送（递归全嵌套树）
+    │   └── scripts/        # cascade-push.py
     ├── codegraph-index/
     ├── deps-investigator/
     ├── init-architect/

@@ -544,36 +544,72 @@ agent('cavecrew-reviewer 带任务后缀不受这条约束', ad({ name: 'sonnet-
 // 白名单式枚举：第三方 keeper-like agent 不在表内，名字自由
 agent('第三方 queue-keeper 名字自由', ad({ name: 'sonnet-queue-keeper-anything', subagent_type: 'foo:queue-keeper' }), 'ALLOW')
 
-// ── agent-dispatch check 11：keeper 的 description 钉死成常驻语义 ────────
+// ── agent-dispatch check 11：keeper 的 description 必须带队列前缀 ────────
 //
 // 2026-08-05 用户拍板加。成因：在飞面板渲染的是**首次派发那一刻**的 description，而
 // keeper 是常驻实例、此后一律靠 SendMessage 唤醒接不同的活，SendMessage 又没有任何字段
 // 能更新已派出 agent 的 description——「description 写当次任务」对 keeper 恒错。
 // 实证（会话 b4b5cb3e）：`opus-debug-keeper-7f3a` 面板挂着「关闭三条 + 开工 DBG-140」，
-// 其后 20+ 次唤醒各干各的，那句一直没变。下面两条 DENY 用例就是那次的原样数据。
+// 其后 20+ 次唤醒各干各的，那句一直没变。下面第一条 DENY 用例就是那次的原样数据。
+//
+// **2026-08-10 用户拍板把判据从「逐字等值」放宽为「前缀锚定」**：上面那段实证仍然成立，
+// 被覆盖的只有「所以钉死成一个固定串」这个结论。钉死固定串走到了另一个极端——面板永远
+// 只说得出角色、说不出这一代在干什么。新形态是 `<kind> 队列 · <本批摘要>`，配套 task-keeper
+// 的换代机制（`hooks/lib/keeper_generation.py`：队列做到 done 非空 / open 0 / 无待拍板 /
+// 无残留 worktree 时建议新派一代）。两条必须同时在，只做一条都会退回原问题，细节见
+// agent-dispatch.js 里 KEEPER_DESC_PREFIXES 上方那段。
+//
+// 判据两侧都要有用例：**旧的固定串必须继续放行**（向后兼容，存量文档还在写它），
+// **不带前缀的当次任务必须继续拦**（这是这条闸的本职）。
 
-// 该拦：写当次任务（实证原样）
+// 该拦：写当次任务、不带队列前缀（实证原样）
 const ad11 = agent(
   '实证原样 keeper description 写当次任务',
   adKeeper('debug', { name: 'opus-debug-keeper-7f3a', subagent_type: 'task-keeper:debug-keeper', description: '关闭三条 + 开工 DBG-140' }),
   'DENY'
 )
-check('agent-dispatch: check 11 finding 给出固定值', true, /description 钉死为 "debug 队列常驻管理"/.test(ad11.detail), ad11.detail)
+check('agent-dispatch: check 11 finding 给出必需前缀', true, /description 必须以 "debug 队列" 起头/.test(ad11.detail), ad11.detail)
+// hint 里那句可照抄的模板由下面 ad11n 那条断言覆盖——check 11 的 finding 本身很长，
+// detail 到 hint 处已被截断，在这里断言 hint 会拿到一个与文案无关的假失败。
 agent(
   'chore-keeper 写当次任务同样拦',
   adKeeper('chore', { name: 'opus-chore-keeper-3d7b', subagent_type: 'task-keeper:chore-keeper', description: '登记五项杂务' }),
   'DENY'
 )
-// 该拦：两个 keeper 的固定串不可互换（判据是等值比较，不是"含队列常驻管理即可"）
+// 该拦：两个 keeper 的前缀不可互换（前缀锚定同样区分 debug / chore）
 agent(
-  '两个 keeper 的固定串不可互换',
+  '两个 keeper 的队列前缀不可互换',
   adKeeper('debug', { name: 'opus-debug-keeper-4bb6', subagent_type: 'task-keeper:debug-keeper', description: 'chore 队列常驻管理' }),
+  'DENY'
+)
+// 该拦：前缀出现在正文中间不算（判据是 startsWith，不是 includes）——否则
+// 「本批关三条，属于 debug 队列」这种写法会蒙混过关，面板扫读时前缀不在行首等于没有
+agent(
+  '队列前缀写在正文中间仍拦',
+  adKeeper('debug', { name: 'opus-debug-keeper-4bb6', subagent_type: 'task-keeper:debug-keeper', description: '关三条，属于 debug 队列' }),
   'DENY'
 )
 
 // 不得误杀
-agent('debug 固定串放行', adKeeper('debug', { name: 'opus-debug-keeper-4bb6', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
-agent('chore 固定串放行', adKeeper('chore', { name: 'opus-chore-keeper-0a9z', subagent_type: 'task-keeper:chore-keeper' }), 'ALLOW')
+agent('debug 旧固定串仍放行', adKeeper('debug', { name: 'opus-debug-keeper-4bb6', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('chore 旧固定串仍放行', adKeeper('chore', { name: 'opus-chore-keeper-0a9z', subagent_type: 'task-keeper:chore-keeper' }), 'ALLOW')
+// 新形态：前缀 + 本批摘要。这是 2026-08-10 之后期望的写法，必须放行
+agent(
+  '前缀加本批摘要放行（新形态）',
+  adKeeper('debug', { name: 'opus-debug-keeper-a1c9', subagent_type: 'task-keeper:debug-keeper', description: 'debug 队列 · 关三条 + 开工 DBG-140' }),
+  'ALLOW'
+)
+agent(
+  'chore 前缀加本批摘要放行',
+  adKeeper('chore', { name: 'opus-chore-keeper-9f2a', subagent_type: 'task-keeper:chore-keeper', description: 'chore 队列 · 登记五项杂务' }),
+  'ALLOW'
+)
+// 分隔符不是判据的一部分（有意不查，理由见 agent-dispatch.js 那段「为什么前缀之后不强制分隔符」）
+agent(
+  '不带分隔符直接接摘要也放行',
+  adKeeper('debug', { name: 'opus-debug-keeper-b2d0', subagent_type: 'task-keeper:debug-keeper', description: 'debug 队列本批只清 DBG-141' }),
+  'ALLOW'
+)
 // [模型名] 前缀是容错接受的旧写法，比较用 strip 后的正文（与 check 6 同口径），不该被拦
 agent(
   '带 [opus] 前缀的固定串不误杀',
@@ -592,15 +628,15 @@ agent(
   ad({ name: 'sonnet-queue-keeper-x', subagent_type: 'foo:queue-keeper', description: '登记五项杂务' }),
   'ALLOW'
 )
-// keeper 缺 description 时 check 5 的 hint 必须直接给固定值。给「3-5 词任务摘要」的话
-// AI 照做一遍又会撞 check 11，两轮才改对——这正是 hook-restraint 实证 2 强调的
+// keeper 缺 description 时 check 5 的 hint 必须直接给可照抄的模板。给「3-5 词任务摘要」
+// 的话 AI 照做一遍又会撞 check 11，两轮才改对——这正是 hook-restraint 实证 2 强调的
 // 「判据准 + 文案给模板 = 一次改对」。
 const ad11n = agent(
   'keeper 缺 description 仍 deny',
   { model: 'opus', name: 'opus-debug-keeper-4bb6', subagent_type: 'task-keeper:debug-keeper' },
   'DENY'
 )
-check('agent-dispatch: keeper 缺 description 的 hint 直接给固定值', true, /debug 队列常驻管理/.test(ad11n.detail), ad11n.detail)
+check('agent-dispatch: keeper 缺 description 的 hint 给带前缀的模板', true, /debug 队列 · <本批摘要>/.test(ad11n.detail), ad11n.detail)
 
 // ── 收尾 ────────────────────────────────────────────────────────────
 fs.rmSync(FIXTURE_ROOT, { recursive: true, force: true })

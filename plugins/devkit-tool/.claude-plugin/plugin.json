@@ -1,7 +1,7 @@
 {
   "name": "devkit-tool",
-  "version": "6.10.0",
-  "description": "工具技能集：代码库分析、依赖排查、CLAUDE.md/.claude rules 初始化、codegraph 建图、插件缓存刷新、嵌套 submodule 提交推送、孤儿进程清理（7 技能）",
+  "version": "6.11.0",
+  "description": "工具技能集：代码库分析、依赖排查、CLAUDE.md/.claude rules 初始化、codegraph 建图、插件缓存刷新、submodule 拉取同步与嵌套提交推送、孤儿进程清理（8 技能）",
   "author": {
     "name": "zhangq"
   },

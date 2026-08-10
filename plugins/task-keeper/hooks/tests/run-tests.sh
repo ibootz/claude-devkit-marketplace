@@ -167,6 +167,7 @@ source "$TESTS_DIR/cases/20-h25-subagent-start-inject.sh"
 source "$TESTS_DIR/cases/21-h26-spec-status.sh"
 source "$TESTS_DIR/cases/22-h27-context-queue.sh"
 source "$TESTS_DIR/cases/23-h28-gitignore-v6.sh"
+source "$TESTS_DIR/cases/24-h29-keeper-generation.sh"
 
 echo
 printf '通过 %d / 失败 %d\n' "$pass" "$fail"

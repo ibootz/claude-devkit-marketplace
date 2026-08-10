@@ -62,8 +62,28 @@ cwd）就读不到了——2026-07-31 实测踩过，遂独立成文件。
     AI "这份登记已失效，当首次派发处理"。
   · 没有任何登记 → 保持原来的措辞，首次派发。
 
-三选一，同一轮只注入其中一种——预算是每轮成本，三种都注等于把预算浪费在另外
+同一轮只注入当下成立的那一种——预算是每轮成本，把三种都注等于把预算浪费在另外
 两种当下不成立的分支上。
+
+## 第 4 种状态：登记有效但这一代已经收口，建议换代（2026-08-10 加）
+
+上面第一支「唤醒它」在 2026-08-10 起再分两路：`keeper_generation.retirable_kinds`
+现算这个 kind 的队列是不是已经收口（done 非空 / open 空 / unknown 空 / 无待答复裁决
+/ debug 还要求无残留 worktree），收口了就改成建议**新派一代**而不是继续唤醒。
+
+为什么要有代际：在飞面板那一行的 description 在派发那一刻就永久定格，SendMessage
+与 SubagentStart hook 两条通道都写不回它（对 CLI 2.1.226 逐条核实过）。常驻实例活
+整场会话，那一行就定格整场会话，看板价值归零。换代把定格的粒度从「一场会话」缩小
+到「一批活」，配套 working-discipline 的 check 11 把 description 判据从「逐字固定串」
+放宽为「`<kind> 队列` 前缀 + 本批摘要」，两者缺一都不成立。
+
+**这一支给的是建议不是命令**：判据看不见「keeper 正在推理、活还没落盘」这一瞬间，
+所以措辞用「可退场」而不是「必须重派」。主会话若明知刚转过活过去，照常唤醒即可。
+
+判定失败（import 不到、解析异常）一律回落到「全部唤醒」——那是加换代之前的行为。
+
+`debug`/`chore` 两档可以各自处在不同状态（一个还在跑、另一个已收口），此时两段话
+同时出现在同一句里，H29 的 [134] 断言这个形态。
 
 ## 第 4 支路（sdlc-writer）为什么是条件注入（2026-08-05 加）
 
@@ -95,6 +115,11 @@ except Exception:
     resolve_delivery_id = None
     read_keeper_instances = None
 
+try:
+    from keeper_generation import retirable_kinds
+except Exception:
+    retirable_kinds = None
+
 NOT_ENABLED = (
     "task-keeper 未启用（无 .keeper/）。启用后 bug 转 debug-keeper、杂务转 "
     "chore-keeper 常驻处理，主会话只分诊转发。启用："
@@ -125,16 +150,27 @@ TRIAGE_TAIL = """
 最常见失效是「这个我顺手做了更快」——转发是为了不让任务状态只活在本轮上下文里，compact 一次就没了。"""
 
 # 分支 1：没有任何登记（本会话与之前任何会话都没派过）——保持原有措辞。
-# 句尾补一句 description 提示（≤25 汉字）：working-discipline 的 agent-dispatch
-# check 11 把 keeper 的 description 钉死成固定串，首次派发就写对可省一轮 deny。
+# 句尾补一句 description 提示（≤30 汉字）：working-discipline 的 agent-dispatch
+# check 11 要求 keeper 的 description 以 `<kind> 队列` 起头，首次派发就写对可省一轮 deny。
+# 2026-08-10 起前缀之后可以（也应该）接本批摘要，见 keeper_generation 模块头「为什么需要换代」。
 WAKE_LINE_NONE = ("还没有登记：首次转发用 `Agent` 派出，name 自带 4 位随机短哈希后缀，"
-                   "description 固定填『<kind> 队列常驻管理』。")
+                   "description 写『<kind> 队列 · <本批摘要>』，前缀不可省。")
 
 # 分支 3：登记存在但不属于本会话（session_id 不一致，或是加会话隔离之前落的旧格式、
 # 压根没有 session_id 键）——一律当陈旧处理，判据见 keeper_paths.read_keeper_instance_name。
 WAKE_LINE_STALE = ("`.keeper-instance.json` 的登记来自上一个会话，已失效：当首次派发，"
                     "用 `Agent` 派出并生成新的 4 位随机短哈希后缀，"
-                    "description 固定填『<kind> 队列常驻管理』。")
+                    "description 写『<kind> 队列 · <本批摘要>』。")
+
+# 分支 4（2026-08-10 加）：登记有效、实例还在，但这一代手上的活已经全部收口——
+# 建议换代而不是继续唤醒。判据在 `keeper_generation.retirable_kinds`（四项全过），
+# 那边的模块头写清了为什么换代不需要「作废登记」这个动作（覆盖写即代际交替）。
+#
+# **这一支是建议不是命令**：判据看不见「keeper 正在推理、活还没落盘」这一瞬间，
+# 所以主会话若明知刚转过活过去，照常唤醒即可。措辞用「可以」不用「必须」。
+WAKE_LINE_RETIRE = ("%s 手上的活已收口（open 0 / 无待拍板 / 无残留 worktree），"
+                    "这一代可退场：本次改用 `Agent` 新派（name 换新短哈希，"
+                    "description 写『%s 队列 · <本批摘要>』），旧登记会被自动覆盖。")
 
 # 与 `keeper_instance_register.KEEPER_SUBAGENT_KIND` 是一对必须同增同减的清单：
 # 那边决定 name 落不落盘，这边决定落了盘的 name 会不会被读出来注进三岔口。
@@ -209,13 +245,29 @@ def triage_wake_line(worktree_root, session_id):
             continue
         entry_session_id = entry.get("session_id")
         if session_id and isinstance(entry_session_id, str) and entry_session_id == session_id:
-            matched.append((label, name))
+            matched.append((kind, label, name))
         else:
             stale.append((label, name))
 
     if matched:
-        parts = "、".join("%s（name `%s`）" % (label, name) for label, name in matched)
-        return "本会话已有 %s在跑，用 `SendMessage` 唤醒它，不要重派。" % parts
+        # 有效实例再分两路：手上活已收口的建议换代（分支 4），其余照旧唤醒。
+        # 判定失败一律回落到「全部唤醒」——那是加换代之前的行为，安全方向。
+        retire_set = set()
+        if retirable_kinds is not None:
+            try:
+                retire_set = retirable_kinds(
+                    os.path.join(worktree_root, ".keeper", delivery_id))
+            except Exception:
+                retire_set = set()
+        wake = [(l, n) for k, l, n in matched if k not in retire_set]
+        retire = [(k, l, n) for k, l, n in matched if k in retire_set]
+        segs = []
+        if wake:
+            parts = "、".join("%s（name `%s`）" % (l, n) for l, n in wake)
+            segs.append("本会话已有 %s在跑，用 `SendMessage` 唤醒它，不要重派。" % parts)
+        for kind, label, _name in retire:
+            segs.append(WAKE_LINE_RETIRE % (label, kind))
+        return " ".join(segs)
     if stale:
         return WAKE_LINE_STALE
     return WAKE_LINE_NONE

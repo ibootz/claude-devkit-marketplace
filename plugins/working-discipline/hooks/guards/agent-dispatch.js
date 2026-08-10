@@ -153,7 +153,8 @@ const EXEMPT_SUBAGENT_TYPES = new Set(['fork', 'statusline-setup', 'output-style
 const FIXED_OPUS_PATTERN = /(^|:)(debug|chore)-keeper$/
 const FIXED_OPUS_MODEL = 'opus'
 
-// keeper 类常驻 agent 的 description 固定值（check 11，2026-08-05 用户拍板加）。
+// keeper 类常驻 agent 的 description 必需前缀（check 11，2026-08-05 用户拍板加；
+// 2026-08-10 用户拍板把判据从「逐字等值」放宽为「前缀锚定」，配套 task-keeper 的换代机制）。
 // 键取自 FIXED_OPUS_PATTERN 的第 2 个捕获组（`debug` / `chore`），两个值与
 // task-keeper 的 `skills/tk-debug/SKILL.md` / `skills/tk-chore/SKILL.md` 派发样例
 // 里写的 description **逐字一致**——改任一处都要三处同步（含本仓 README 的 check 表）。
@@ -171,31 +172,58 @@ const FIXED_OPUS_MODEL = 'opus'
 //
 // 【漂移成因是两条指令打架，不是 AI 疏忽】本插件每轮注入的字段表写的是
 // 「`description`：3-5 词任务摘要，只写这次任务干什么」——那条对一次性 subagent 完全正确，
-// 对常驻 keeper 恰好相反。两份 SKILL.md 早给了正确样例（"debug 队列常驻管理"），但它们
-// 只在主会话调过对应 skill 时才在场，而字段表每轮都在。软文本斗软文本斗不过，故加闸。
+// 对常驻 keeper 只对了一半。两份 SKILL.md 早给了正确样例，但它们只在主会话调过对应 skill
+// 时才在场，而字段表每轮都在。软文本斗软文本斗不过，故加闸。
 //
-// 【判据形态】`subagent_type` 命中 FIXED_OPUS_PATTERN（完整锚定正则）+ description 正文与
-// 固定串的**等值比较**，两个都是确定字段，同一输入必得同一结论。不猜语义、不看 prompt。
+// ─────────────────────────────────────────────────────────────────────────────
+// 【2026-08-10 用户拍板：判据从「逐字等值」放宽为「前缀锚定」，本条上方的实证全部仍然成立，
+//   被覆盖的只有「所以钉死成一个固定串」这个结论】
+//
+// 原判据要求 description **逐字等于** `debug 队列常驻管理` / `chore 队列常驻管理`。它确实
+// 消灭了「面板永久定格在某次任务」这个问题，但代价是走到另一个极端：面板那一行**永远**只
+// 说得出角色，说不出这一代 keeper 在干什么，看板价值同样归零。用户原话是「已经失去了它实际
+// 工作的意义」。
+//
+// 新方案两条腿，本条只是其中一条：
+//   (a) **本条**：description 只锚定前缀 `debug 队列` / `chore 队列`，前缀之后可以（也应该）
+//       接本批摘要，例如 `debug 队列 · 关三条 + 开工 DBG-140`。前缀保证面板一眼能分辨这是
+//       哪个队列的常驻实例，摘要保证它携带当次信息。
+//   (b) **换代**（在 task-keeper 侧，`hooks/lib/keeper_generation.py`）：一代 keeper 把队列
+//       做到 open 0 / 无待拍板 / 无残留 worktree 时，每轮注入建议主会话新派一个实例而不是继续
+//       唤醒旧的。于是「派发那一刻定格」这个约束还在，但定格的间隔从「整场会话」缩短到「一批活」。
+//
+// 只做 (a) 不做 (b) 会退回原问题——描述仍会定格在第一批活上。只做 (b) 不做 (a) 则新实例的
+// description 照样只能写固定串，换代白换。两条必须同时在，改其中一条前先看另一条。
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 【判据形态】`subagent_type` 命中 FIXED_OPUS_PATTERN（完整锚定正则）+ description 正文对
+// 前缀串做 `startsWith`，两个都是确定字段，同一输入必得同一结论。不猜语义、不看 prompt。
+// 前缀之后的内容一概不校验——那是任务摘要，机械层面无从判断写得对不对，长度由 check 7 兜。
+//
+// 【为什么前缀之后不强制分隔符】用户拍板时给的形态是 `<kind> 队列 · <摘要>`，但判据只查前缀、
+// 不查那个 `·`。两个理由：一是旧写法 `debug 队列常驻管理` 必须继续放行（存量文档、存量习惯、
+// 以及本次改造漏改的任何一处样例都会写它，为一个装饰性分隔符制造 deny 不值），二是分隔符是
+// 排版偏好而非语义边界，把偏好写进硬闸只会多一个误杀面。
 //
 // 【覆盖边界（如实记录，勿删）】
-//   - **假阳性**：想在面板上区分两个同类 keeper 的场景会被硬拦。目前不成立——同一会话同一
-//     交付只允许一个 debug-keeper（单一写者模式，见 check 10 的事故），要区分实例靠 name 的
-//     4 位短哈希，不靠 description。日后真出现多实例需求，正确处置是整条降级为 ask，不是
-//     在这里加白名单。
+//   - **假阳性**：想给 keeper 起一个完全不含队列名的 description（例如纯英文 `debug queue`）
+//     会被硬拦。这是有意的——中文前缀是面板上区分 keeper 与普通 subagent 的唯一标记。
+//   - **假阴性**：`debug 队列` 之后可以写任何东西，包括把 prompt 原文抄进去。前缀锚定不防
+//     提示词泄漏，那由 check 6（角色设定句）与 check 7（长度）各自兜一部分，本条不重复。
 //   - **假阴性**：改用 `general-purpose` 派 keeper 可绕过——但那连 check 9 / check 10 一起
 //     绕过了，是既有边界，本条不新增。
 //   - 比较用的是 **strip 掉 `[模型名]` 前缀后的正文**（与 check 6 同口径），`[opus] debug
-//     队列常驻管理` 不会被这条拦下；面板多显示一个前缀无害，不值得多一个误杀面。
-const KEEPER_FIXED_DESCRIPTIONS = {
-  debug: 'debug 队列常驻管理',
-  chore: 'chore 队列常驻管理',
+//     队列 · xxx` 不会被这条拦下；面板多显示一个前缀无害，不值得多一个误杀面。
+const KEEPER_DESC_PREFIXES = {
+  debug: 'debug 队列',
+  chore: 'chore 队列',
 }
 
-// keeper 的固定 description；非 keeper（或表内没登记的新 keeper）返回空串，
+// keeper 的 description 必需前缀；非 keeper（或表内没登记的新 keeper）返回空串，
 // 调用方据此整条跳过（fail-open，与 FIXED_OPUS_PATTERN 的白名单口径一致）。
-function keeperFixedDescription(stLower) {
+function keeperDescPrefix(stLower) {
   const m = String(stLower || '').match(FIXED_OPUS_PATTERN)
-  return (m && KEEPER_FIXED_DESCRIPTIONS[m[2]]) || ''
+  return (m && KEEPER_DESC_PREFIXES[m[2]]) || ''
 }
 
 // 身份词校验（check 8）的通用词黑名单：这些词出现在 subagent_type 的 slug 里不携带
@@ -407,7 +435,9 @@ function checkNaming(ti) {
   // 非空即说明这是白名单内的常驻 keeper，其 description 被 check 11 钉死成这个值。
   // check 5 的 hint 也要用它——否则缺 description 时会教 AI 去写「3-5 词任务摘要」，
   // 它照做之后下一轮又撞上 check 11，两轮才改对。
-  const keeperDesc = keeperFixedDescription(stLower)
+  // 变量名沿用 keeperDesc，但 2026-08-10 起它存的是**必需前缀**而非完整固定串，
+  // 判据也从等值比较改成 startsWith，理由见 KEEPER_DESC_PREFIXES 上方那段。
+  const keeperDesc = keeperDescPrefix(stLower)
 
   const findings = []
   const hints = []
@@ -589,7 +619,7 @@ function checkNaming(ti) {
     findings.push('缺 description')
     hints.push(
       keeperDesc
-        ? `description 填 "${keeperDesc}"（常驻 keeper 的 description 是固定值,不写当次任务,理由见 check 11）`
+        ? `description 写 "${keeperDesc} · <本批摘要>"（常驻 keeper 必须带队列前缀,前缀之后写这一代接的活,理由见 check 11）`
         : 'description 填 "<3-5 词任务摘要>"（模型档次由 name 前缀体现,description 不带 [模型名] 前缀）'
     )
   } else {
@@ -603,7 +633,7 @@ function checkNaming(ti) {
       findings.push('description 没有任务摘要正文')
       hints.push(
         keeperDesc
-          ? `description 填 "${keeperDesc}"（常驻 keeper 的 description 是固定值,不写当次任务,理由见 check 11）`
+          ? `description 写 "${keeperDesc} · <本批摘要>"（常驻 keeper 必须带队列前缀,前缀之后写这一代接的活,理由见 check 11）`
           : 'description 填 3-5 词任务摘要（不带 [模型名] 前缀）'
       )
     }
@@ -628,22 +658,22 @@ function checkNaming(ti) {
     hints.push(`description 压到 ${DESC_BODY_MAX} 字符以内(带 [模型名] 前缀的话前缀也算在内,直接删掉前缀最省)`)
   }
 
-  // 11. keeper 类常驻 agent 的 description 钉死成常驻语义（2026-08-05 用户拍板加，
-  //     判据、成因与覆盖边界见 KEEPER_FIXED_DESCRIPTIONS 上方的整段注释）。
-  //     与 check 7（长度）叠加时两条会同时报，hint 方向一致（都是改成那个固定串），
-  //     AI 一次改全。
-  if (keeperDesc && descBody && descBody !== keeperDesc) {
+  // 11. keeper 类常驻 agent 的 description 必须带队列前缀（2026-08-05 用户拍板加，
+  //     2026-08-10 用户拍板把判据从逐字等值放宽为前缀锚定；判据、成因与覆盖边界见
+  //     KEEPER_DESC_PREFIXES 上方的整段注释）。与 check 7（长度）叠加时两条会同时报，
+  //     hint 方向一致（都是重写 description），AI 一次改全。
+  if (keeperDesc && descBody && !descBody.startsWith(keeperDesc)) {
     findings.push(
-      `subagent_type="${ti.subagent_type}" 是常驻 keeper,description 钉死为 "${keeperDesc}",` +
+      `subagent_type="${ti.subagent_type}" 是常驻 keeper,description 必须以 "${keeperDesc}" 起头,` +
         `本次写的是 "${descBody}";在飞面板渲染的是**首次派发那一刻**的 description,` +
-        `而 keeper 此后一律靠 SendMessage 唤醒、反复接不同的活,` +
+        `而 keeper 派出后一律靠 SendMessage 唤醒,` +
         `SendMessage 只有 to/summary/message 三个字段,没有任何入口能更新已派出 agent 的 description——` +
-        `写当次任务会让面板永久定格在派发那一刻(2026-08-05 实证:某 keeper 面板挂着"关闭三条 + 开工 DBG-140",` +
-        `其后 20+ 次唤醒各干各的,那句一直没变)`
+        `不带队列前缀就没法在面板上把它与一次性 subagent 区分开`
     )
     hints.push(
-      `description 改成 "${keeperDesc}"(逐字照抄);` +
-        `"面板显示它当前在干什么"做不到,别在 description 里试——当次任务那句写进 SendMessage 的 summary`
+      `description 改成 "${keeperDesc} · <本批摘要>"(前缀逐字照抄,之后接这一代接的活,如 "${keeperDesc} · 关三条 + 开工 DBG-140");` +
+        `注意面板那句在派发后改不了,所以它描述的是**这一代**而不是"当前这一秒"——` +
+        `队列做到 open 0 / 无待拍板 / 无残留 worktree 时,每轮注入会建议你新派一代,那时再换新摘要`
     )
   }
 
