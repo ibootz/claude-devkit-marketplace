@@ -18,16 +18,21 @@ v3 一条 issue 的东西分散在 `issues/DBG-007.md`、`receipts/DBG-007.md`�
 
 ## 为什么用 shutil.move 而不是 git mv
 
-v5（2026-08-06 用户拍板「不要公开」）起 `.keeper/` 整树 gitignore，队列目录里的一切
-（issue.md / receipts.md / 截图等）都是未跟踪文件：一次归档动辄搬几十个目录，
-`git mv` 会在第一个未跟踪文件上报 `fatal: not under version control` 中途停下，
-留下搬了一半的状态。纯文件系统搬移天然绕开这个问题，且不依赖任何文件是否被跟踪。
-**v4 时的原始动机**：那时队列文本已入库，但截图仍是未跟踪的（`.keeper/**/*.png`
-在 gitignore 里），同样会让 `git mv` 中途报错；`git mv` 能处理的部分（issue.md /
-receipts.md）当时确实会在归档后由 keeper 一次 `git add -A` 提交、被 git 识别成
-rename——**这一步在 v5 下不再发生**：整树忽略之后 `git add -A` 对 `.keeper/` 下的
-文件不起作用，归档后的目录移动本身不进 git 历史，与队列其余部分「整树不入库」的
-现行策略一致。
+**v6（2026-08-10 用户拍板）起队列正文与附件入库，但本脚本仍用 `shutil.move`，行为
+不变。** 判据是「不依赖跟踪状态」而不是「文件入不入库」：
+
+  · 一次归档动辄搬几十个目录，只要其中**任何一个**文件未被跟踪，`git mv` 就会在它
+    上面报 `fatal: not under version control` 中途停下，留下搬了一半的状态。
+  · v6 下这种混合态照样出现：keeper 刚写的新截图、刚生成的 `index.md`、以及尚未
+    commit 的 `receipts.md` 都是未跟踪的，而归档时机与 commit 时机并不同步。
+  · `worktree/` 永远被排除（归档前要求已清理，判据 8，但清理失败时它就在那里）。
+
+纯文件系统搬移天然绕开这个问题。代价是 git 不会把它识别成 rename——归档后的 `git add`
+表现为「旧路径删除 + 新路径新增」而不是一条 rename 记录。这个代价是明知的：rename
+识别只影响 `git log --follow` 的可读性，而搬了一半的状态会让归档动作无法重跑。
+
+（v5 期间的旧理由是「整树 gitignore、一切都是未跟踪文件」，那个前提已作废，但结论
+不变——只是理由从「全都没跟踪」换成了「跟踪状态混合且不可预测」。）
 
 ## 归档前必须确认 worktree 已清理（判据 8）
 

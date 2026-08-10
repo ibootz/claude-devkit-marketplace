@@ -59,10 +59,15 @@ try:
 except Exception:
     keeper_paths = None
 
-# 白名单枚举——只认这两个值，不做「含 keeper 就算」的模糊匹配。
+# 白名单枚举——只认这三个值，不做「含 keeper 就算」的模糊匹配。
+#
+# 漏登记某一类的后果不是「少存一个名字」：它的 name 永不落盘 → 每次唤醒前读不到登记 →
+# 每次都当首次派发 → 同一个交付目录出现两个实例抢独占写权。所以新增常驻 keeper 时
+# 这里必须同步加，它与 `keeper_routing.KIND_LABELS` 是一对必须同增同减的清单。
 KEEPER_SUBAGENT_KIND = {
     "debug-keeper": "debug",
     "chore-keeper": "chore",
+    "context-keeper": "context",
 }
 
 

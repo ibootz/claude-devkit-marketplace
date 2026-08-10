@@ -16,8 +16,8 @@ v2 把 22 条 issue 塞在一个 `issues.yaml` 里，实测长到 1492 行 / 725
 └── DBG-NNN/
     ├── issue.md            唯一信源：frontmatter 管状态，正文管全生命周期
     ├── receipts.md         fixer 的处置记录
-    ├── 01-xxx.png          截图（落盘但 gitignore，不入库）
-    └── worktree/           fixer 的 git worktree（不入库）
+    ├── 01-xxx.png          截图（v6 起入库；含敏感信息则不落盘，见 screenshot.md §4）
+    └── worktree/           fixer 的 git worktree（不入库，v6 三条精确排除之一）
 ```
 
 v3 与 v4 的两处形态差异，改代码时最容易漏：
@@ -100,12 +100,14 @@ DEBUG = QueueSpec(
         "priority",      # P0 阻断 / P1 主流程 / P2 体验
         "difficulty",    # easy | medium | hard
         "type",          # bug | ux | perf | arch
+        "spec_status",   # violation | gap | conformant | unchecked ← triage 的规格溯源结论
         "reported_at",   # YYYY-MM-DD
         "reopen_count",  # 整数，0 表示没 reopen 过
         "external_ref",  # 外部工单号（如 TRACKER#644168），可选
     ],
     index_title="Debug 队列索引",
-    index_cols=[("priority", "优先级"), ("difficulty", "难度"), ("type", "类型")],
+    index_cols=[("priority", "优先级"), ("difficulty", "难度"), ("type", "类型"),
+                ("spec_status", "规格")],
     generated_by="task-keeper hook",
 )
 
@@ -126,6 +128,38 @@ CHORE = QueueSpec(
     ],
     index_title="Chore 队列索引",
     index_cols=[("kind", "类别"), ("external_write", "外部写")],
+    generated_by="task-keeper hook",
+)
+
+# CONTEXT 与前两个的形态差异：条目目录里是**三份**文件而不是一份正文加附件——
+# `context.md`（keeper 写的上下文包）/ `ledger.md`（**外部实现者**填的销账表）/
+# `reconcile.md`（keeper 事后核对）。`item_file` 只登记第一份，另两份与 debug 的
+# `receipts.md` 同地位：由 agent 指令约定文件名，不进 QueueSpec。
+#
+# 之所以不把 item_file 扩成列表：本文件所有函数（`item_path` / `iter_items` /
+# `render_index`）都按「一个目录一份正文」取值，扩成列表要改全部签名，换来的只是把
+# 一个 agent 侧约定搬进数据结构。判据是**hook 要不要机械读它**——hook 只读
+# frontmatter 出 index，只读 `context.md` 一份就够。
+CONTEXT = QueueSpec(
+    key="context",
+    dir_name="context",
+    item_file="context.md",
+    prefix="CTX",
+    pad=3,
+    fm_order=[
+        "id",            # CTX-NNN，与目录名一致
+        "summary",       # 一句话摘要，index.md 直接用
+        "status",        # open | done ← done 表示已跑过事后核对且 reconcile.md 已落盘
+        "stage",         # implement | debug ← 决定要不要做同构扩散面
+        "about",         # 对应的工作单元：DBG-NNN / task id / feature 名
+        "sources",       # 实际参与印证的信源数，只能是 5 或 3（3 = 降级，须可见）
+        "assertions",    # 断言条数 = ledger.md 的行数
+        "inconsistent",  # 四态里非「一致」的条数 ← 本包最有价值的那个数字
+        "created_at",    # YYYY-MM-DD
+        "external_ref",  # 外部工单号，可选
+    ],
+    index_title="Context 队列索引",
+    index_cols=[("stage", "阶段"), ("sources", "信源"), ("inconsistent", "不一致")],
     generated_by="task-keeper hook",
 )
 

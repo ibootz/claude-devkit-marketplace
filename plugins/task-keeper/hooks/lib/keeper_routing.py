@@ -114,6 +114,7 @@ TRIAGE_HEAD = """# task-keeper 分诊（先分诊，再动手）
 1. 自己做：主线任务本身、几句话能答的问题、需要你上下文才能做的事。
 2. 转 debug-keeper：bug/报错/异常行为，逐字转发（首次 `Agent` 派出，之后 `SendMessage` 唤醒）。属于既有交付流程的活走该流程。
 3. 转 chore-keeper：台账/沉淀/收尾/外部系统小操作等杂务，逐字转发。
+4. 转 context-keeper：**动手前**收齐某功能单元的规格/约束（implement 前、debug 派 fixer 前），转发用户原话 + 单元边界。
 
 """
 
@@ -127,20 +128,24 @@ TRIAGE_TAIL = """
 # 句尾补一句 description 提示（≤25 汉字）：working-discipline 的 agent-dispatch
 # check 11 把 keeper 的 description 钉死成固定串，首次派发就写对可省一轮 deny。
 WAKE_LINE_NONE = ("还没有登记：首次转发用 `Agent` 派出，name 自带 4 位随机短哈希后缀，"
-                   "description 固定填『debug/chore 队列常驻管理』。")
+                   "description 固定填『<kind> 队列常驻管理』。")
 
 # 分支 3：登记存在但不属于本会话（session_id 不一致，或是加会话隔离之前落的旧格式、
 # 压根没有 session_id 键）——一律当陈旧处理，判据见 keeper_paths.read_keeper_instance_name。
 WAKE_LINE_STALE = ("`.keeper-instance.json` 的登记来自上一个会话，已失效：当首次派发，"
                     "用 `Agent` 派出并生成新的 4 位随机短哈希后缀，"
-                    "description 固定填『debug/chore 队列常驻管理』。")
+                    "description 固定填『<kind> 队列常驻管理』。")
 
-KIND_LABELS = (("debug", "debug-keeper"), ("chore", "chore-keeper"))
+# 与 `keeper_instance_register.KEEPER_SUBAGENT_KIND` 是一对必须同增同减的清单：
+# 那边决定 name 落不落盘，这边决定落了盘的 name 会不会被读出来注进三岔口。
+# 只加一边的后果是「登记了但永远不提示唤醒」或「提示唤醒一个从未登记的 kind」。
+KIND_LABELS = (("debug", "debug-keeper"), ("chore", "chore-keeper"),
+               ("context", "context-keeper"))
 
 # 第 4 支路：只在工作区真有 sdlc 流程目录时注入，判据见模块头「第 4 支路」。
 # sdlc-writer 不是 keeper（一次性、不登记、不唤醒、档位不锁 opus），所以它既不进
 # KIND_LABELS，也不进 keeper_instance_register 的白名单——那两处只管常驻实例。
-SDLC_LINE = ("4. **转 sdlc-writer**：sdlc 流程文档编写（Gate 已放行、AI 自主落盘那段）"
+SDLC_LINE = ("5. **转 sdlc-writer**：sdlc 流程文档编写（Gate 已放行、AI 自主落盘那段）"
              "→ 派 `Agent`，分片与 prompt 见 tk-sdlc skill。Gate 交互与拍板仍你自己做。\n")
 
 # sdlc 流程目录的判定深度：worktree 根本身 + 往上 4 层。交付跑在
@@ -238,7 +243,7 @@ keeper 待拍板会写 `<交付>/decisions/<stamp>-<keeper>.md` 并 SendMessage 
 
 ## 布局（v5）
 
-`<worktree 根>/.keeper/<交付id>/{debug,chore,decisions}/`，交付 id 取 worktree 根 basename，非交付用 `_main`。一条 bug 全在 `debug/<DBG-id>/`，整树不入库（issue 文本、截图、worktree 均不入库）。
+`<worktree 根>/.keeper/<交付id>/{debug,chore,context,decisions}/`，交付 id 取 worktree 根 basename，非交付用 `_main`。一条 bug 全在 `debug/<DBG-id>/`，一个上下文包全在 `context/<CTX-id>/`。**v6 起队列正文与附件入库**（issue/receipts/index/decisions/截图都进版本库），只精确排除三类本机产物：`worktree/`、`.keeper-instance.json`、`.keeper-active`。所以截图脱敏是红线——落盘即公开。
 
 指针：skills/tk-decisions；状态看每轮注入或各队列 index.md。"""
 

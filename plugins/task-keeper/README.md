@@ -15,26 +15,29 @@
 | skill | `tk-debug` | debug 队列全流程指引（登记 → triage → 一 issue 一 worktree 派发 → 合并前对账 → 归档） |
 | skill | `tk-chore` | 杂务队列：主会话判是杂务就转 chore-keeper，自己立刻回原任务 |
 | skill | `tk-sdlc` | sdlc 流程产物派发：切割线、按 feature 的分片规则、prompt 模板、回执收尾 |
+| skill | `tk-context` | **动手前**收齐某功能单元的规格/约束：五方并行查（需求/原型/spec/ontology/代码）相互印证 → 上下文包 + 空销账表 → 事后差异核对。只收集与汇报，不参与实现 |
 | skill | `tk-decisions` | 决策打包 HITL 协议正典（keeper 与主会话之间怎么攒批问人） |
 | skill | `tk-worktree` | 为 `git worktree` 建的工作区供给 submodule 内容（含嵌套递归），6 个子命令；`init` 支持 `--ids` 批量 + `--jobs` 并行建多个 issue 的 worktree |
 | skill | `tk-board` | 进度看板：每条一行（编号 + 20 字说明 + 四态）+ 计数占比 + 告警段，纯只读、不唤醒 keeper。同目录另有 `pending_dispatch.py`——只算「漏派」一件事（已 triage 但既不在飞、也不在等拍板），三种输出模式 |
 | agent | `debug-keeper` | 独占 `.keeper/debug/` 写权限，承接 bug 报告全流程 |
 | agent | `chore-keeper` | 独占 `.keeper/chore/` 写权限，承接杂务登记与攒批执行 |
+| agent | `context-keeper` | 独占 `.keeper/<交付id>/context/` 写权限，五方并行收集 → 归一印证 → 排空销账表 → 事后核对。**只汇报不实现**：不写业务代码、不派实现者、不写 `sdlc/`、不拦截 ai-sdlc |
 | agent | `sdlc-writer` | **非 keeper**，一次性：写 Gate 后的 sdlc 文档正文，不常驻、不登记、无队列 |
-| hook × 8 | 见下表 | 注入路由/队列快照 + 三道窄判据守卫 + 1 个 keeper 实例登记 + 1 个 debug-keeper 专属的漏派清单注入 |
+| hook × 9 | 见下表 | 注入路由/队列快照 + 三道窄判据守卫 + 1 个 keeper 实例登记 + 1 个 debug-keeper 专属的漏派清单注入 |
 
 ## hooks（挂载事件与实际行为）
 
 | 脚本 | 事件 | 行为（按动作描述，不是按愿望描述） |
 |---|---|---|
 | `session-start-keeper-routing.sh` | SessionStart | 纯注入**静态参考**（决策打包主会话侧职责、v4 布局、指针）。未启用 195 字符（一句话介绍 + 启用方式），已启用 495 字符，不拦截任何操作 |
-| `user-prompt-submit-keeper-routing.sh` | UserPromptSubmit | 纯注入**三岔口分诊**（自己做 / 转 debug-keeper / 转 chore-keeper）+ 转发三原则 + 现算的一句"唤醒前怎么办"（三选一：唤醒某个真实 name / 登记已失效当首次派发 / 没有登记当首次派发，见下方「登记 keeper 实例 name」的会话隔离说明），没有登记 363 字符、session 匹配 398 字符、已失效 395 字符（两档同时匹配时约 442 字符）。工作区在跑 ai-sdlc 流程时**追加第 4 支路**「转 sdlc-writer」（判据 `sdlc_present`：worktree 根 + 往上 4 层里任一层有 `sdlc/specs` 或 `sdlc/deliveries`；不命中时输出与没有这条支路时逐字相同），该支路本身 +108 字符，实测无登记那支命中后 471 字符、两档同时匹配时约 550 字符。硬上限 800。未启用项目 stdout 全空 |
-| `user-prompt-submit-debug-queue.sh` | UserPromptSubmit | 注入 debug 队列实时快照（open 逐条 + 在飞派生 + done 计数）、重算薄索引 `index.md`（git rebase/bisect/merge 中间态跳过）；`.gitignore` 缺整树忽略行 `.keeper/` 时加一句提醒；存量 v3/v2 布局未迁移时加一句迁移提示；命中 bug 特征词时给出下一个可用 DBG-id（fixer worktree 内不给） |
+| `user-prompt-submit-keeper-routing.sh` | UserPromptSubmit | 纯注入**四岔口分诊**（自己做 / 转 debug-keeper / 转 chore-keeper / 转 context-keeper）+ 转发三原则 + 现算的一句"唤醒前怎么办"（三选一：唤醒某个真实 name / 登记已失效当首次派发 / 没有登记当首次派发，见下方「登记 keeper 实例 name」的会话隔离说明）。实测长度：没有登记 479 字符、已失效 511 字符；session 匹配那支随实际 name 长度浮动。工作区在跑 ai-sdlc 流程时**追加第 5 支路**「转 sdlc-writer」（判据 `sdlc_present`：worktree 根 + 往上 4 层里任一层有 `sdlc/specs` 或 `sdlc/deliveries`；不命中时输出与没有这条支路时逐字相同），该支路 +108 字符，实测无登记 587 字符、已失效 619 字符。硬上限 800。未启用项目 stdout 全空 |
+| `user-prompt-submit-debug-queue.sh` | UserPromptSubmit | 注入 debug 队列实时快照（open 逐条 + 在飞派生 + done 计数）、重算薄索引 `index.md`（git rebase/bisect/merge 中间态跳过）；`.gitignore` 缺 v6 那三条精确排除、或还留着 v5 的整树忽略行时加一句提醒；存量 v3/v2 布局未迁移时加一句迁移提示；命中 bug 特征词时给出下一个可用 DBG-id（fixer worktree 内不给） |
 | `user-prompt-submit-chore-queue.sh` | UserPromptSubmit | 注入 chore 队列快照（输出预算 ≤900 字符）；`.keeper/` 顶层存在时缺失的 `chore/`（连同 `debug/`）由 `find_queue` 每轮自动补建，不需要手工 mkdir；代注待拍板决策计数（自动补建后 `chore/` 恒存在，debug 快照的兜底注入分支实际只在 fixer worktree 内或补建失败时才会走到，两边判据仍是同一个目录的存在性） |
+| `user-prompt-submit-context-queue.sh` | UserPromptSubmit | 注入 context 队列快照（open 逐条：id + `stage` + 降级为三方印证的标记 + 不一致条数；`ledger.md` 一行没填时告警并给出未填行数；done 计数），重算 `context/index.md`。**刻意不做三件事**：不报待拍板计数、不报 gitignore 告警（这两项由 debug/chore 二元分工，第三方加入只会重复注入同样文案）、不做特征词提醒（「这次算不算一个功能单元」是语义判断，做成关键词会大面积误报） |
 | `pre-tool-use-debug-worktree-push.sh` | PreToolUse(Bash) | `git push` 的目标落在 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 内时 deny（fixer 产物只回流不推远端） |
 | `pre-tool-use-debug-worktree-destroy.sh` | PreToolUse(Bash) | 强制删除形态（`rm -rf` / `worktree remove --force` / `clean -fdx`）命中 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 路径时 ask 弹确认框 |
 | `pre-tool-use-debug-evidence.sh` | PreToolUse(Write\|Edit) | 只对 `.keeper/<交付id>/debug/*.md` 介入：新内容含 `image-cache` 会话级临时路径时 deny（跨会话必 404），带次数熔断，`origin_path` 留档豁免 |
-| `pre-tool-use-keeper-instance.sh` | PreToolUse(Agent) | 命中 keeper 类 `subagent_type`（`debug-keeper`/`chore-keeper`）的派发时，把 `tool_input.name` 连同这次派发所在的 `session_id` 写进 `.keeper/<交付id>/.keeper-instance.json` 对应键，另一个键原样保留；**纯写文件，不拦截任何操作**，不输出 permissionDecision，写不进去就静默放弃 |
+| `pre-tool-use-keeper-instance.sh` | PreToolUse(Agent) | 命中 keeper 类 `subagent_type`（`debug-keeper`/`chore-keeper`/`context-keeper`）的派发时，把 `tool_input.name` 连同这次派发所在的 `session_id` 写进 `.keeper/<交付id>/.keeper-instance.json` 对应键，另一个键原样保留；**纯写文件，不拦截任何操作**，不输出 permissionDecision，写不进去就静默放弃 |
 | `subagent-start-debug-keeper.sh` | SubagentStart（matcher `task-keeper:debug-keeper`） | 跑 `skills/tk-board/scripts/pending_dispatch.py --oneline`，输出非空时注入一段「漏派体检」（那一行 + 处置指引）。**无漏派时零输出**、未启用项目零输出、坏 payload 零输出，恒 exit 0。matcher 精确到单个 agent_type，**不是 `*`**——写 `*` 会把 debug 队列的清单灌给本机每一个子代理 |
 
 三道守卫的判据都是路径子串 + 命令形态的机械判定，未启用队列的项目全部零输出零成本。
@@ -42,7 +45,7 @@
 文件"这个副作用，供主会话下次唤醒 keeper 前读取真实 `name`（见下方「登记 keeper
 实例 name」）。
 
-## 产物布局：`.keeper/<交付id>/`，整树不入库（v5）
+## 产物布局：`.keeper/<交付id>/`，正文与附件入库（v6）
 
 ```
 <项目根>/.keeper/
@@ -54,7 +57,7 @@
     │   └── DBG-NNN/
     │       ├── issue.md                 入库（唯一信源）
     │       ├── receipts.md              入库（fixer commit 进自己分支）
-    │       ├── 01-xxx.png               落盘但 **不入库**
+    │       ├── 01-xxx.png               入库（v6 起；含敏感信息则**不落盘**，见下）
     │       └── worktree/                **不入库**，tk-worktree init 的固定落点
     ├── chore/{index.md, CHR-NNN/item.md, archive/}
     ├── decisions/{<stamp>-<keeper>.md, answers/<同名>.md}
@@ -67,22 +70,35 @@
 停"——linked worktree 根自己就有一个 `.git` 文件，那样第一轮就返回 None，aisdlc 交付
 跑在 `.sdlc/worktrees/D-NNN-<slug>/` 里时队列恒为空，冷启动还会 mkdir 出第二份。
 
-**整树不入库（v5，2026-08-06 用户拍板「不要公开」）**。一条规则划边界，keeper 冷启动
+**正文与附件入库，只精确排除三类本机产物（v6，2026-08-10 用户拍板）**。keeper 冷启动
 自动写入：
 
 ```gitignore
-# task-keeper 队列（本地私有，不入库）
-.keeper/
+# task-keeper 队列：正文与附件入库，只排除三类本机产物
+.keeper/**/worktree/
+.keeper/**/.keeper-instance.json
+.keeper/.keeper-active
 ```
 
-> **对 v4「文本入库」拍板的覆盖标注**：本文件与两个 keeper 定义里 2026-08-01 那份
-> 「队列文本入库、四条精确规则排除产物」的决定，**已于 2026-08-06 被用户口头拍板
-> 「把所有 `.keeper` 目录默认都加入 gitignore 不要公开」整体覆盖**。被覆盖的范围是
-> 入库策略与那四条规则；v4 关于 ugrep `--ignore-files` 的实测结论**没有**被覆盖，
-> 它仍然成立，只是应对方式从「不 ignore」改成了「换搜索根」。现行执行依据是本节这
-> 一条整树规则加下方的搜索根硬约束。
+> **对 v5「整树不入库」拍板的覆盖标注**：本文件与两个 keeper 定义里 2026-08-06 那份
+> 「`.keeper/` 整树 gitignore、不要公开」的决定，**已于 2026-08-10 被用户拍板整体
+> 覆盖**，原话是「`.keeper` 之前把它从整个项目中忽略了，现在看来还是需要提交到远端
+> 纳入版本控制，除了少数内容比如里面的 worktree 之外，其他都可以（包括当时的问题
+> 附件/图片/文件等）纳入版本控制」。
+>
+> 被覆盖的是入库策略。**连带反转的下游判据有五条**，每条都在对应文件里改过，读到旧
+> 措辞不要照旧行动：截图脱敏（从「额外谨慎」升级为红线）、`check_staged_gitlink.py`
+> （从「存量仓专用」恢复主线）、receipts 对账（从 `cat` 回到 `git show HEAD:`）、
+> 清理 worktree 前手工 `cp` receipts（已作废）、`decisions/` 留痕（恢复版本库兜底）。
+>
+> ugrep `--ignore-files` 那条实测结论**没有被覆盖**，仍然成立，只是适用范围从「整个
+> `.keeper/` 搜不到」收窄到「只有那三类搜不到」。
+>
+> 排除清单里 `worktree/` 是用户点名的；另两条是技术判断——`.keeper-instance.json` 含
+> `session_id` 与随机 agent name，跨机器无意义且多人并行必冲突，`.keeper-active` 是
+> 本机活跃交付指针。`decisions/` 经 2026-08-10 用户拍板**入库**。
 
-这一版绕回了 v3 的做法。四轮各自解决了什么、留下了什么：
+五轮各自解决了什么、留下了什么：
 
 | 版本 | 做法 | 解决了 | 留下的代价 |
 |---|---|---|---|
@@ -90,6 +106,7 @@
 | v3 `.keeper/` | 整树 gitignore | 工作区干净、index 抖动消失 | 误删无法恢复、多人不共享；**且被 gitignore 的文件搜不到**（当时未找到规避手段） |
 | v4 `.keeper/<交付id>/` | 文本入库、四条规则排除产物 | 可搜、可恢复、index 冲突面收敛到单个交付内 | 队列被跟踪，`git checkout` 会把它从工作区物理删掉、`git stash` 会把队列改动一起带走；**且 bug 细节与内部系统坐标随推送公开** |
 | v5 `.keeper/` | 整树 gitignore + 搜索根硬约束 | 不公开、工作区干净 | 误删无法恢复、多人不共享（与 v3 同）；搜队列必须记得换搜索根 |
+| **v6（现行）** | 正文与附件入库 + 三条精确排除 | 可搜、可恢复、跨 worktree 共享、receipts 随 merge 自动带回 | **bug 细节、内部坐标、截图随推送公开**——所以截图脱敏成了红线；幽灵 gitlink 这条路重开，`check_staged_gitlink.py` 必跑；`index.md` 每轮重算会造工作区 diff |
 
 **v3 与 v5 做法相同、结论不同，差别只在一条规避手段**。压垮 v3 的是可搜性：Claude Code
 把 `grep` 影子成自带 ugrep，参数写死 `--ignore-files`
@@ -112,13 +129,17 @@
 > README。拿不准时用 `Read` / `ls` 正面列举，**不要用否定式检索得出「队列里没有
 > 这条」**——那个「没有」可能是假的。
 
-**gitignore 分工（v5 恢复自动追加，靠文案写死避免冲突）**：keeper 冷启动检查那一行
-在不在，不在就追加，**注释文案逐字写死**（`GITIGNORE_BLOCK`，
-`hooks/lib/queue_snapshot.py:88`）。v4 当初禁止自动追加的唯一理由是实测过「两个分支各自
-EOF 追加**内容不同**的注释即冲突」——内容逐字相同则 git 视为同一处改动、不冲突，所以
-写死文案就解决了这个问题。快照 hook 仍只注入提醒、不代写文件
-（`GITIGNORE_WANT_ANY` 未命中时告警）——**代写只发生在 keeper 冷启动这一处**，
-两处都代写会在 hook 未生效的环境里制造「以为写了其实没写」的分叉。
+**gitignore 分工（自动追加，靠文案写死避免冲突）**：keeper 冷启动检查那三条在不在，
+缺就整块追加，**注释与 pattern 逐字写死**（`GITIGNORE_BLOCK`，
+`hooks/lib/queue_snapshot.py`）。v4 当初禁止自动追加的唯一理由是实测过「两个分支各自
+EOF 追加**内容不同**的注释即冲突」——内容逐字相同则 git 视为同一处改动、不冲突。
+**三处必须逐字同步**（该常量 + 两个 agent 定义里的 `printf`），回归用例 H28 [121] 锁
+这一条，且反向验证过它真能抓到失同步。
+
+快照 hook 只注入提醒、不代写文件——**代写只发生在 keeper 冷启动这一处**，两处都代写
+会在 hook 未生效的环境里制造「以为写了其实没写」的分叉。它报两类：v5 整树忽略行残留
+（`GITIGNORE_LEGACY_ALL` 命中，它覆盖三条精确规则且静默生效）、三条里缺了哪几条
+（`GITIGNORE_RULES` 逐条比对）。
 
 ## 登记 keeper 实例 name（2026-08-04 起）
 
@@ -229,6 +250,125 @@ fixer 又卡在等人答复，此时该突出需要人动作的那一面。
 `external_ref` 与 `ones` 两种字段名，两个都读；`priority` 出现过小写 `p1`，upper() 后
 再比。`summary` 前导的 `【已关闭 —— …】` 状态块在显示时剥掉——20 字的说明列被状态叙述
 占满就一条也看不出讲什么，而状态本身已经在状态列里。
+
+## 动手前的上下文收集（2.14.0 新增 · `tk-context` + `context-keeper`）
+
+与下一节是同一件事的两端：**下一节是诊断侧**（已经坏了，回头查规格上原本怎么写），
+**本节是预防侧**（还没动手，先把规格收齐）。
+
+### 它要防的那件事
+
+某次交付的事后归因里最大的一类是「**规格写了，但没照着做**」——55 条、占 27.9%。
+根因不是能力问题：实现只看了原型，那几份文字规格 md 没人读，整片规格就此失效。
+
+上游也没兜住：ai-sdlc 的三道机械硬闸基线全是原型 html，覆盖文字规格的 `spec-sync-audit`
+轴是 advisory 不阻断、且明文排除 UI 元素——**UI 文字规格在整条链路里唯一被校验的是
+「原型存不存在」，不是「原型内容忠不忠于它」**。
+
+### 对策：不保证遵守，只让不遵守可见
+
+保证遵守做不到——没有任何机械判据能判「这段代码是不是符合这句中文规格」。所以本通道
+改追一个做得到的目标：动手前把约束一条条排成表，实现完逐行核。**只要那一行还是空的，
+不遵守就是可见的。**
+
+### 五方并行，相互印证
+
+需求 / 原型 / sdlc spec / ontology / 代码，**同批并发派五个只读 `Explore`**，回来后
+归一并出印证矩阵。
+
+**刻意不走「ontology 为主入口」**：那等于让一个未经确认的中间层决定该看什么，它漏收的
+元素会静默传播成「查过了、没有」，且全程无信号。ontology 是**第四个平等信源**，不是索引。
+涉及其他领域知识、读不到代码时降级为三方（需求/原型/ontology），降级必须落在产物的
+`sources` 字段上——参与方数量要可见，不能埋在正文里。
+
+### 产物三件套与谁填哪一份
+
+```
+.keeper/<交付id>/context/CTX-001/
+├── context.md      ← 上下文包 + 印证矩阵      （keeper 写）
+├── ledger.md       ← 空销账表                  （**外部实现者填**）
+└── reconcile.md    ← 事后差异核对              （keeper 写）
+```
+
+**销账表必须由写代码的那个人填**，keeper 一行状态列都不预填——预填等于替实现者做了
+声明，而它并没有看过对方的代码；事后核对时它还要拿这份表当基线，等于自己印证自己。
+
+`status` 翻 `done` 的唯一判据：**跑过一次事后核对且 `reconcile.md` 已落盘**。不接受
+「实现者说做完了」（那是声明不是核对）、「挂太久了」（挂久不改变它没被核对这个事实）。
+
+### 职责边界：只收集与汇报
+
+四条硬约束，写进了 agent 定义与 skill 正文：
+
+1. **不写业务代码**——实现是 ai-sdlc 的 implement 或 debug 的 fixer 的职责。
+2. **不拦截、不阻断任何流程。** 判据一句话：**产物存在与否，不改变 ai-sdlc 任何一步的
+   行为。** 这是唯一不会让两套流程互相甩锅的形态。
+3. **不写 `sdlc/` 下任何文件，`sdlc/ontology/` 尤其不写**——那边有自己的收口闸与 sync
+   脚本。发现 ontology 漏收，写成建议留在包里。
+4. **不填销账表状态列、不催填。**
+
+### 两个入口，都不自动触发
+
+| 入口 | 谁叫 | 时机 |
+|---|---|---|
+| A | 主会话 | 用户说要做 X 功能 / 改 Y，尚未动手 |
+| B | debug-keeper | triage 完成、派 fixer 之前（`agents/debug-keeper.md` §6.0） |
+
+**不做成 hook 是有意的**：「这次动作算不算一个功能单元」是语义判断，做成关键词闸只会
+误杀与漏放同时发生（见本仓 `.claude/rules/project/hook-restraint.md` 的强度阶梯）。
+
+入口 B 有一条豁免，由 debug-keeper 自己判：`difficulty: easy` **且**
+`spec_status: violation` **且**已有明确规格锚——规格已在手，不必再收。三个条件缺一
+不豁免；`spec_status: unchecked` 一律不豁免，那说明规格根本没查过。
+
+### 何为「一个功能单元」
+
+> **共享同一份规格来源、且必须一起验证的那组断言 = 一个功能单元。**
+
+31 条错误提示文案共享同一份需求表格、少一条就是没做完 → 一个单元、31 条断言、销账表
+31 行，**不是 31 个单元、也不是压成一行「按需求文档的表格实现」**。
+
+拆错的代价不对称：拆太细的成本是重复劳动 + 漏掉跨条目冲突；**拆太粗的成本是整条机制
+空转**——断言上百条、表没人填得完、最后空着交回来，比不做还糟，因为留下了「做过了」
+的痕迹。拿不准时偏细。
+
+判据细则见 `skills/tk-context/references/collect.md`（五路分片与停止条件、归一锚点
+优先序、矩阵四态、同构扩散面）与 `artifacts.md`（三件套模板与填写纪律）。
+
+## 规格溯源与收官归因（2.13.0 新增）
+
+**解决的问题**：bug 台账天然只记「什么坏了、怎么修的」，不记「规格上原本怎么写」。于是
+「规格写了、实现没照着做」这一类在事后归因里完全不可见——它会被摊进「基本功不扎实」和
+「需求没写清」两个筐，而这两个筐指向的改进动作（加培训 / 催产品写细）对它一个都不管用。
+真实量级：某次交付里这一类占 27.9%、共 55 条、为最大的一类，而同一批数据上不带规格栏的
+那轮归因把它统计成了零。
+
+**三处改动**：
+
+1. `issue.md` frontmatter 新增第 10 个键 `spec_status`，四态 `violation` / `gap` /
+   `conformant` / `unchecked`（判据见 `skills/tk-debug/references/queue.md` §3.1），
+   `index.md` 的 open 表格随之新增「规格」列。
+2. triage 多一个必做落点——定位完「代码在哪出的错」，还要定位「规格原本怎么写的」，依据
+   逐条写进正文新增的「规格依据」章节。判 `gap`（规格空白）前必须把八类来源全查过并**逐条
+   列出结果**，因为「没有」是唯一无法自证的检索结果：它可能是事实，也可能是正则写错 / 被
+   gitignore 静默吞掉 / NFC-NFD 路径形态对不上。判为 `gap` 的条目**不派 fixer**，退回主
+   会话转 chore 队列问产品——规格空白派 fixer，它会凭直觉补一个同样没人确认过的行为，把
+   空白伪装成已定案。
+3. `spec_status: violation` 的 fixer prompt 带规格原文摘录与出处，**修复判据从「现象不再
+   复现」换成「与规格逐条一致」**，回执要给规格逐条核对表。
+
+**为什么修复判据必须换锚**：实测过一次——需求表格逐条给全了 31 条导入错误提示文案，用户
+只报了其中 1 条。按「现象消失」口径修完即收工，剩下 30 条原样落空。
+
+**一个已知的上游盲区，§3.1 要求把 view spec 与原型分开查正是为它**：ai-sdlc 的三道机械
+硬闸（写 `.vue` 前的原型消费证据登记、G4 的实现↔原型渲染比对、写原型时的保真校验）基线
+全是原型 html；覆盖文字规格的 `spec-sync-audit` 轴是 advisory 不阻断，且明文声明 UI 元素
+不在其值域内。所以「文字规格写了、只是没画进原型」这类偏差，在「原型存在」这个前提下不会
+被任何一层拦住——**原型命中不等于规格命中**。
+
+**收官归因**：交付收官时 debug-keeper 产出一张「规格失守清单」（`agents/debug-keeper.md`
+§9.1），四项缺一不可——`violation` 占比 / 按规格文件聚合（同一份 md 上挂 5 条以上，说明它
+整片没被读，而不是有人漏了一条）/ 原型缺口条数 / `gap` 攒批待问产品清单。
 
 ## sdlc-writer：不是 keeper 的第三个 agent（2.7.0 新增）
 

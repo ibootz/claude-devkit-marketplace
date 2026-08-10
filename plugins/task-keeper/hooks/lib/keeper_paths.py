@@ -403,7 +403,8 @@ def all_queue_dirs(keeper_root, spec):
 def git_midstate(worktree_root):
     """rebase / bisect / merge 进行中返回 True——此时不该改动已跟踪的 index.md。
 
-    队列入库后 `index.md` 是被跟踪文件，每轮重算会把工作区改脏；而 rebase 的
+    队列入库后 `index.md` 是被跟踪文件（v4 如此，v5 一度不是，**v6 起又是**），每轮
+    重算会把工作区改脏；而 rebase 的
     `--continue`、bisect 的 `good/bad` 都要做 checkout，遇到本地修改直接拒绝。
     """
     if not worktree_root:

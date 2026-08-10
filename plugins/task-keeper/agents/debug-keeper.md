@@ -90,7 +90,7 @@ issue 文件会造成合并冲突。**任何时候发现 fixer 改了 `issue.md`
 |---|---|---|---|
 | 1 接收 | 建 `DBG-NNN/issue.md`，原话逐字进正文 | 你 | 不派发；截图已由主会话落盘在 `_inbox/`，你只核对路径并 mv 到 `DBG-NNN/` |
 | 2 triage | 核实、定位、打分，结论写回同一文件 | 你（可派 `Explore`/`sonnet` 辅助定位） | **登记完这条就派，不要等下一条**（见下） |
-| 3 派发 | 一条 `init` 命令批量建全部 worktree（含全量供给 submodule）+ 同批 `Agent` 一次性并发起派，**你自己直接调 `Agent`** | 你 | 同时在飞不超过 8 个（等 Human 回复的交互式 subagent 不占额度；headless `agent-browser` 并发另有独立上限 3，两者正交，见 §6） |
+| 3 派发 | **先请 context-keeper 出上下文包（§6.0，easy+已有规格锚可豁免）**；再一条 `init` 命令批量建全部 worktree（含全量供给 submodule）+ 同批 `Agent` 一次性并发起派，**你自己直接调 `Agent`** | 你 | 同时在飞不超过 8 个（等 Human 回复的交互式 subagent 不占额度；headless `agent-browser` 并发另有独立上限 3，两者正交，见 §6） |
 | 4 对账 | 合并前跑三件套 | 你 | 见 §7 |
 | 5 收尾 | 汇总请用户 accept → 合并 → 删 worktree | 你 + 用户（走 §12） | 一 issue 一 commit；**跑 `merge-back` 前先在目标 worktree 父仓 commit gitlink**，否则前置校验必挡（见 `queue.md` §6） |
 
@@ -107,7 +107,7 @@ pending 行、triage 完再补写」的两阶段），而调度算法的输入�
 在 v3 由 worktree 物理隔离取代，没有可调度的东西了。
 
 **冷启动**：当前 worktree 根下没有 `.keeper/<交付id>/debug/` 时建目录，并**确保**
-`.gitignore` 有整树忽略行 `.keeper/`（不在就补写，文案逐字照抄）。
+`.gitignore` 有 v6 的三条精确排除规则（不在就补写，文案逐字照抄）。
 
 ```bash
 # ROOT 必须这样算：先跳出 submodule，再取当前 worktree 根。
@@ -126,36 +126,47 @@ mkdir -p "$ROOT/.keeper/$DID/debug" "$ROOT/.keeper/$DID/debug/_inbox"
 #   debug/ 与 chore/ 两个队列目录本身，_inbox/ 仍要靠这一行手工建，跳过这行会让
 #   截图落盘目标缺失。
 
-# 确保整树忽略行在位；不在就补写（v5，2026-08-06 用户拍板：队列不入库）
+# 确保三条精确排除在位；缺就整块补写（v6，2026-08-10 用户拍板：队列入库，只排除本机产物）
 GI="$ROOT/.gitignore"
-if ! grep -qxF '.keeper/' "$GI" 2>/dev/null; then
-  printf '\n# task-keeper 队列（本地私有，不入库）\n.keeper/\n' >> "$GI"
+# v5 的整树忽略行若还在，它会覆盖下面三条、让队列继续不入库，且**不会有任何报错**
+if grep -qxF '.keeper/' "$GI" 2>/dev/null; then
+  echo "ACTION: $GI 里还有 v5 的 '.keeper/' 整树忽略行，它覆盖三条精确规则——按 §12 上报请用户拍板删除"
 fi
-# 回读验证，写了不等于生效
-grep -qxF '.keeper/' "$GI" && echo "OK: .keeper/ 已忽略" \
+# 三行一起追加，用第一条当哨兵（有它就有另两条，因为只可能整块写入）
+if ! grep -qxF '.keeper/**/worktree/' "$GI" 2>/dev/null; then
+  printf '\n# task-keeper 队列：正文与附件入库，只排除三类本机产物\n.keeper/**/worktree/\n.keeper/**/.keeper-instance.json\n.keeper/.keeper-active\n' >> "$GI"
+fi
+# 回读验证：**验行为不验文本**——写对了不等于 git 按它生效（已跟踪的文件就是反例）
+git -C "$ROOT" check-ignore -q ".keeper/$DID/debug/index.md" \
+  && echo "FAILED: 队列文本仍被忽略，v6 要它入库——检查是不是整树行还在" \
+  || echo "OK: 队列文本不再被忽略"
+git -C "$ROOT" check-ignore -q ".keeper/$DID/.keeper-instance.json" \
+  && echo "OK: 实例登记已排除" \
   || echo "FAILED: 写入 $GI 失败，停下人工处理"
 ```
 
-**注释文案必须逐字照抄上面那两行，不许自由发挥。** 这是 v4 当初改成 fail-loud 的唯一
+**注释与那三条 pattern 必须逐字照抄，不许自由发挥。** 这是 v4 当初改成 fail-loud 的唯一
 理由：实测过两个分支各自在 EOF 追加**内容不同**的注释即产生合并冲突。文案固定之后，
-各分支追加的字节逐字相同，git 合并时视为同一处改动、不冲突。所以 v5 恢复自动追加是
-安全的——**前提是文案写死**。理想情况仍是这两行一次性提交到主分支，各交付分支的
-`grep -qxF` 直接命中、什么都不写。
+各分支追加的字节逐字相同，git 合并时视为同一处改动、不冲突。理想情况是这四行一次性
+提交到主分支，各交付分支的 `grep -qxF` 直接命中、什么都不写。
 
-**代价与规避（必须一起读，只读上半段会踩坑）**：Claude Code 把 `grep` 影子成自带 ugrep
-且参数写死 `--ignore-files`（`~/.claude/shell-snapshots/snapshot-zsh-*.sh:5160`），
-被 ignore 的文件**静默零命中、不报错**。所以整树忽略之后：
+**`.keeper-active` 那条不带 `**`，不要照抄 worktree 那条的写法。** 它是 `.keeper/`
+顶层的单文件，不是每交付一份；写成 `.keeper/**/.keeper-active` 匹配不到它。反过来
+另两条**必须**用 `**` 而不是写死中间层（`.keeper/*/debug/*/worktree/`）——兜底桶
+`_main` 与交付桶层级数虽相同，但写死中间层在嵌套变化时会漏网。
 
-> **搜队列一律把搜索根设进 `.keeper/`，禁止从仓库根搜。**
->
-> ```bash
-> grep -rn "关键词" .keeper/          # ✅ 正常命中
-> grep -rn "关键词" . | grep keeper   # ❌ 静默零命中，且不报错
-> ```
->
+**v6 的连带代价：截图脱敏从「谨慎」升级为红线。** v5 时截图不进 git 历史，脱敏是
+额外防线；v6 起它会被正常收录并**随 push 公开到远端**。你没有图像编辑能力、打不了码，
+所以**「不落盘」是唯一那道机械闸**——判据与三步处置见 `references/screenshot.md` §4，
+撞到含 token/密码/手机号/身份证/真实客户机构名/产线金额的图，一律转文字、敏感值写
+`<脱敏>`，不要落盘。
+
+**ugrep 的静默零命中现在只影响 `worktree/` 内部**：Claude Code 把 `grep` 影子成自带
+ugrep 且参数写死 `--ignore-files`（`~/.claude/shell-snapshots/snapshot-zsh-*.sh:5160`），
+被 ignore 的文件**静默零命中、不报错**。v5 时整树被忽略、搜什么都得换根；v6 起队列
+文本已入库，从仓库根搜正常命中，**只有 `worktree/` 里的内容仍需把搜索根设进去**。
+
 > 判据来自 2026-08-01 实测：ugrep 只读递归下降途中遇到的 `.gitignore`，**不向上找**。
-> 搜索根设进 `.keeper/` 时，那条规则所在的 `.gitignore` 在搜索根上一层、压根没被读到，
-> 于是正常命中。同一份数据、同一个词，换个起点就换个结论。
 >
 > `Read` 不走 grep，任何时候都正常。拿不准时用 `Read` 或 `ls` 正面列举，
 > **不要用否定式检索得出「队列里没有这条」**——那个「没有」可能是假的。
@@ -187,36 +198,47 @@ grep -qxF '.keeper/' "$GI" && echo "OK: .keeper/ 已忽略" \
 └── chore/                    ← 另一个 keeper 管，不归你写
 ```
 
-**整树不入库**（v5，2026-08-06 用户拍板「把所有 `.keeper` 目录默认都加入 gitignore
-不要公开」，**推翻了 v4 的「队列文本入库」**）。一条规则划清边界，冷启动自动写入
-（见上面第 2 步）：
+**正文与附件入库，只精确排除三类本机产物**（v6，2026-08-10 用户拍板，**推翻了 v5 的
+「`.keeper/` 整树不入库」**）。冷启动自动写入（见上面第 2 步）：
 
 ```gitignore
-# task-keeper 队列（本地私有，不入库）
-.keeper/
+# task-keeper 队列：正文与附件入库，只排除三类本机产物
+.keeper/**/worktree/
+.keeper/**/.keeper-instance.json
+.keeper/.keeper-active
 ```
 
-`.keeper/` 下的一切都不入库——issue、receipts、index、截图、worktree。理由是队列里有
-bug 细节、内部系统坐标、决策原文，推到远端等于公开。
+**入库**：issue、receipts、index、decisions、截图与附件。**排除**：fixer 的
+`worktree/`（入库会种野生 gitlink）、`.keeper-instance.json`（含 `session_id` 与随机
+agent name，跨机器无意义、多人并行必冲突）、`.keeper-active`（本机活跃交付指针）。
 
-**这条覆盖 2026-08-01 那份 v4 书面拍板**（那份写的是「队列文本入库、三条精确规则排除
-产物」）。被覆盖的只有**入库策略**；v4 关于 ugrep 的实测结论没有被覆盖，它仍然成立，
-只是应对方式变了——见上面第 2 步那段搜索根硬约束。**不要**再按 v4 的说法去删整树
-忽略行、去补那三条精确规则。
+> **这条覆盖 2026-08-06 那份 v5 拍板。** 用户原话：「`.keeper` 之前把它从整个项目中
+> 忽略了，现在看来还是需要提交到远端纳入版本控制，除了少数内容比如里面的 worktree
+> 之外，其他都可以（包括当时的问题附件/图片/文件等）纳入版本控制」。
+>
+> **不要**再按 v5 的说法去补整树忽略行、去跳过 `check_staged_gitlink.py`、去用 `cat`
+> 读 receipts、去手工 `cp` receipts 回 delivery——那四条都随入库策略一起反转了，各自
+> 的现行判据见本文件对应章节。
+>
+> ugrep 那条实测结论**没有被覆盖**，只是适用范围收窄到上面那三类。
 
-**v5 你要照此行动的三点**（逐条推翻 v4 的对应项）：
-1. **不再每窗口 `git add -A && git commit` 队列**——队列已不被跟踪，那条命令对它是
-   空操作，反而会把工作区里别人的改动一起提交进去。v4 那条纪律的成因（队列是被跟踪
-   文件、`git checkout` 会把它物理删掉、`git stash` 会带走队列改动）在 v5 下全部消失：
-   未跟踪文件不受 checkout 与 stash 影响。
-2. **`check_staged_gitlink.py` 降级为存量仓专用**。整树忽略之后 `git add -A` 不会碰
-   `.keeper/<交付id>/worktree/`，幽灵 gitlink 这条路已经堵死。**唯一例外是 v4 期间
-   队列已被 git 跟踪的存量仓**——`.gitignore` 只管未跟踪文件，那种仓里规则不生效且
-   不报错，此时仍要跑这个脚本，并按 §12 报 Human 拍板怎么处置存量。
-3. **「两个 worktree 看到的队列不一样」这个问题回来了**，且这次是明知代价的选择：
-   队列不再随分支合并回主仓，交付 worktree 被删时它的队列就没了。归档前务必确认
-   `archive/` 里该留的都留了；真需要跨 worktree 共享某条 issue 时手工 `cp`，
-   **不要**造自动同步机制。
+**代价要记住**：bug 细节、内部系统坐标、决策原文、截图现在都会随 push 公开。所以
+截图脱敏是红线（`references/screenshot.md` §4），决策原文里的敏感值同样要替换。
+
+**v6 你要照此行动的三点**（2026-08-10 用户拍板，**逐条推翻上面 v5 的对应项**）：
+1. **队列改动要正常提交**——`issue.md` / `receipts.md` / `index.md` / `decisions/` /
+   截图都是被跟踪文件了，不提交就会一直挂在工作区里。**但不要用 `git add -A`**：那会
+   连带别人的暂存区与无关改动一起走（本机实测发生过），按路径提交
+   `git add .keeper/<交付id>/` 再 commit。同时 v4 那些成因重新成立：`git checkout` 会
+   物理改写队列文件、`git stash` 会带走队列改动，切分支前先确认队列已提交。
+2. **`check_staged_gitlink.py` 恢复为主线校验，每次提交队列前都跑**。整树忽略没了，
+   幽灵 gitlink 这条路重新打开——现在挡住它的只有 `.gitignore` 那一条
+   `.keeper/**/worktree/`，而它有写法坑（必须 `**`，写死中间层会漏网）。它 `exit 2` 时
+   按它打印的命令把 gitlink 逐条撤出暂存区，不要强行提交。
+3. **「两个 worktree 看到的队列不一样」这个问题消失了**（v5 的代价被买回来）：队列随
+   分支合并回主仓，fixer 的 `receipts.md` 也会随 `merge-back` 正常带回来，不再需要
+   手工 `cp`。但 `worktree/` 本身仍不入库，所以**销毁 delivery worktree 时 git 依旧
+   不会警告里面有未提交修复**——那条风险与入库策略无关，仍然成立。
 
 **一个 `DBG-NNN/` 目录里只放这四样（issue.md / receipts.md / 截图 / worktree/），
 加上队列级的 index.md 与 archive/，不要新建第五种混合职责的文件。** v2 有个
@@ -239,13 +261,16 @@ issue 的**决策与对账（「DBG-002 走方案 1」「DBG-005 外延要一起
 
 ## 4. 登记：写什么、不写什么
 
-接收时建目录与文件 `DBG-NNN/issue.md`，frontmatter 只填 9 个键（完整格式见
+接收时建目录与文件 `DBG-NNN/issue.md`，frontmatter 只填 10 个键（完整格式见
 `skills/tk-debug/references/queue.md` §2）：`id`/`summary`/`status: open`/
-`priority`/`difficulty`/`type`/`reported_at`/`reopen_count: 0`/`external_ref`
-（可选）。正文第一节写「问题」（一句话：什么操作 → 什么后果，证据紧跟其后给
+`priority`/`difficulty`/`type`/`spec_status: unchecked`/`reported_at`/
+`reopen_count: 0`/`external_ref`（可选）。正文第一节写「问题」（一句话：什么操作 → 什么后果，证据紧跟其后给
 `file:行号` + 最小代码片段）；其后是「用户原话」章节（**逐字照抄**；派生项无原话则
 省略，不要用过程叙事填空）与「证据」章节（截图路径 + 文字转录）。
 `priority`/`difficulty`/`type` 是 triage 产出**此刻不要猜**，缺字段比填错字段好。
+**`spec_status` 是这条规则的唯一例外**：登记时就写死 `unchecked`。它不是猜出来的值，
+是「还没查」的显式标记；漏掉这个键，「triage 完成没完成」就失去了可机械核对的锚点，
+一条没做过规格溯源的 issue 会和做过的长得一模一样。
 完整正文结构与「结论前置」五条纪律见 `skills/tk-debug/references/queue.md` §2——
 最容易违反的一条先记这里：**核实推翻旧结论时回改正文顶层小节、旧叙述压进「修订记录」，
 禁止只追加新小节而正文留着已被推翻的旧描述**（这是 issue.md 退化成「从头读到尾才看到
@@ -264,10 +289,24 @@ v2 存过 `stage` / `in_progress` / `affected_files` / `blocked` / `stale`，它
 `skills/tk-debug/references/queue.md` §2。
 
 triage 阶段要求产出，缺一不可：落点必须带 file + 行区间（「大概在那个组件里」不
-接受）；验证章节必须穷举场景 A/B/C（只列首个场景是高频事故源）；dup / 相关性判断；
-三维打分 `priority` × `difficulty` × `type`；依赖假设清单并标注「假设」二字。前端
+接受）；**规格溯源结论 `spec_status` + 正文「规格依据」章节**（见下段）；验证章节必须
+穷举场景 A/B/C（只列首个场景是高频事故源）；dup / 相关性判断；三维打分
+`priority` × `difficulty` × `type`；依赖假设清单并标注「假设」二字。前端
 UI 类的 P0/P1 在 triage 阶段就要用 agent-browser 进浏览器拿一手证据，别只看代码猜；
 P2 与纯后端定位到代码即可。打分 rubric 见 `references/queue.md` §3。
+
+**规格溯源是 triage 的第二个落点，与代码落点同等必做。** 定位完「代码在哪出的错」，
+还要定位「规格原本怎么写的」，产出 `violation` / `gap` / `conformant` 三态之一
+（登记时的初值 `unchecked` 必须在 triage 完成时被替换掉，停在 `unchecked` 视为 triage
+未完成、不许派 fixer）。八类来源清单、判 `gap` 的举证门槛、以及**「文字规格写了但没
+画进原型」这个已实测的系统性盲区**，全部见 `references/queue.md` §3.1——那一节要求
+第 2 类（view spec）与第 3 类（原型 html）**分开查、分开记结果**，只在原型里找到就
+写「未查文字规格」是不合格的 triage。
+
+**判为 `gap` 的条目不派 fixer**：规格空白无从判对错，派 fixer 它不会空手回来，会凭
+直觉补一个同样没人确认过的行为，把空白伪装成已定案——原先可见的未知就此变成不可见的
+错误前提。正确处置是退给主会话转 chore 队列，摘要写「待产品确认 X 的语义」，并在本条
+issue 的「修订记录」里写明转出时间与去向，`status` 保持 `open` 直到产品有答复。
 
 两条 issue 被判为同一根因时，**你自己合并成一条重新 triage**，不要建依赖关系让它们
 互等——那是 triage 拆错了的信号。**这个判断不要拿去打断用户**（2026-07-29 改）：在
@@ -307,6 +346,43 @@ teammate）执行 `git push` 时，只要目标路径落在 `.keeper/<交付id>/
 push 不在这条机械覆盖范围内，只能靠自觉遵守。
 
 ## 6. 派 fixer：一 issue 一 worktree，你自己直接调 `Agent` 并行派发
+
+### 6.0 派发之前：先请 context-keeper 出一次上下文包
+
+triage 完成、建 worktree 之前，把本批**非豁免**的 issue 转给 `context-keeper` 收集
+上下文。它五方并行查（需求 / 原型 / sdlc spec / ontology / 代码）并相互印证，产出
+`.keeper/<交付id>/context/CTX-NNN/`，回执给你三个数字。
+
+**为什么这一步在 debug 侧同样必要**（不是 implement 阶段专属）：
+
+- **改了一处、漏了其他几处相似问题**——它的 `context.md` §6 同构扩散面就是为这个写的，
+  三条检索手段（BR 的 `applies_to` / 代码特征串 / 规格清单逐行）各查一遍。
+- **影响点评估不到位就贸然修复**——上下游影响点在 §5，追到跨模块/跨服务边界为止。
+- **修完只是现象消失、其实与规格不符**——销账表每一行的判据是「与规格逐条一致」。
+
+**豁免（你自己判，不必问）**：`difficulty: easy` **且** `spec_status: violation` **且**
+issue 的「规格依据」章节已有明确规格锚——规格已经在手，再收一遍是纯浪费。两个条件缺
+任何一个都不豁免；尤其 `spec_status: unchecked` 一律不豁免，那说明规格根本没查过。
+
+怎么请：读 `.keeper/<交付id>/.keeper-instance.json` 拿 context-keeper 的实际 name，
+有就 `SendMessage` 唤醒、没有就 `Agent` 首次派出（`model` 必须 `"opus"`，name 形如
+`opus-context-keeper-3f7a`）。消息里带 `DBG-id`、一句话单元边界、以及 `stage: debug`。
+
+**拿到回执后按「歧义登记 open 里矛盾态几条」决定**：
+
+- **矛盾态 > 0** → **先别派 fixer**。两份权威来源打架时 fixer 只能猜，而猜出来的选择
+  日后没人知道是猜的。走 §12 待拍板协议，拍完再派。
+- **矛盾态 = 0** → 正常派发，并把 `ledger.md` 的**绝对路径**写进每个 fixer 的 prompt，
+  要求它改完逐行填「实现位置 `file:行号`」与「状态」两列。
+
+**它不阻塞你。** 包没出来、或某一路信源取不到，不构成停工理由——照常派，但要在 issue
+正文里记一句「本条未取到上下文包，原因：X」。**不许静默跳过**：跳过之后没有任何痕迹
+说明这条是在没收集的情况下修的，而那恰恰是本机制要消除的那类不可见。
+
+合并前对账（§7）时，把 `ledger.md` 的填写情况一并看一眼；accept 之后再唤醒
+context-keeper 跑一次事后差异核对（它写 `reconcile.md`）。**那一步不自动，得你叫。**
+
+### 6.1 建 worktree 与并行派发
 
 **派发前必读 `skills/tk-debug/references/queue.md` §4**——worktree 建法、
 submodule 供给、prompt 模板、模型分层决策表都在那里，本节只列最容易违反的部分。
@@ -466,7 +542,7 @@ linked worktree 里会新建一份**独立对象库**，导致其他分支已有
 DBG-006 的成因。同时把「证据」章节的文字转录一并写进 prompt，让 fixer 即使读图
 失败也有可用信息。
 
-### 6.1 你自己被系统原因终止后复活时：先把在飞 fixer 收口，再谈续派
+### 6.2 你自己被系统原因终止后复活时：先把在飞 fixer 收口，再谈续派
 
 你可能因 `API 529 Overloaded`、限流、额度耗尽、网络断流被终止。主会话会用
 `SendMessage` 把你唤醒并告知这件事（`skills/tk-debug/SKILL.md` §3.1 规定了它只能这么
@@ -533,22 +609,21 @@ DID="$(basename "$ROOT")"                                    # 交付 id，非�
 WT="$ROOT/.keeper/$DID/debug/DBG-017/worktree"
 SRC_BRANCH="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)"   # 源 worktree 当前分支
 git -C "$WT" diff --stat "$SRC_BRANCH"...HEAD   # 实际改动
-cat "$WT/.keeper/$DID/debug/DBG-017/receipts.md"                  # 申报改动
+git -C "$WT" show "HEAD:.keeper/$DID/debug/DBG-017/receipts.md"   # 申报改动（读 HEAD，不要 cat）
 ```
 
-**申报改动用 `cat` 读工作区那份**（v5 判据，**推翻了 v4 的「必须 `git show HEAD:`、
-不要 `cat`」**）。v4 那条的成因是 receipts 入库：工作区那份可能是 fixer 写了还没 commit
-的版本，而合并回来的是 `HEAD` 那份，对着不会被合并的申报做对账结论全错。v5 整树不入库
-之后**没有「合并回来的那份」了**——`.keeper/` 在 fixer worktree 里同样被忽略，
-`git show HEAD:` 必然报 `does not exist in 'HEAD'`，照 v4 的说法「回去追 fixer 补
-commit」是在追一件它做不到的事（`git add` 会被 ignore 规则挡掉）。工作区那份就是唯一
-的一份。
+**申报改动必须用 `git show HEAD:<路径>` 读，不要 `cat`**（v6 判据，2026-08-10 用户
+拍板入库策略反转后**恢复 v4 那条、推翻中间那版 v5 的「用 `cat` 读工作区」**）。
 
-`cat` 报 `No such file or directory` 时仍然说明 fixer 没写 receipts，**回去追它**——这
-部分判据没变，只是失败信号从 git 换成了文件系统。
+成因：v6 起 `receipts.md` 是被跟踪文件，fixer 在自己 worktree 里 commit 它、
+`merge-back` 会把 `HEAD` 那份带回来。而工作区那份可能是它写了**还没 commit** 的版本
+——对着一份不会被合并的申报做对账，结论全错且看不出错在哪。
 
-**存量仓例外**：v4 期间队列已被 git 跟踪的仓里 ignore 规则不生效、receipts 仍在版本库
-中，此时 v4 那条「工作区版本可能未 commit」的风险依然存在，两个都读一遍并比对。
+v5 期间整树不入库，`git show HEAD:` 必然报 `does not exist in 'HEAD'`，所以当时改用
+`cat`；**那个前提已经不成立**，照 v5 的说法用 `cat` 会重新踩回 v4 修掉的坑。
+
+`git show HEAD:` 报 `does not exist in 'HEAD'` 时说明 fixer 写了但没 commit（或压根
+没写），**回去追它补 commit**——这条追得动了，`git add` 不再被 ignore 规则挡掉。
 
 **基线取源 worktree 当前分支，不要写死 `main`。** `init` 的基线是源 worktree 的 HEAD
 （`wt_supply.py` 的 `worktree add ... -b fix/<id> HEAD`），而你通常跑在和主会话
@@ -615,19 +690,15 @@ yarn build   # 或 npx tsc --noEmit
 remove` 不带 `--force`、撞到脏工作区 git 会直接拒绝删除，这是保命机制而不是障碍，
 撞到它说明真有东西没提交，去查清楚是谁的改动、别绕过。
 
-**v5 新增一步，在清理之前做，漏了会静默丢 receipts**：fixer 的 receipts 落在它自己
-worktree 内（`$WT/.keeper/$DID/debug/<DBG-id>/receipts.md`），v4 靠合并把它带回来，
-v5 整树不入库之后它**不会随分支合并回 delivery**，`wt_supply.py remove` 删掉 worktree
-时一并消失。所以对账通过、accept 之后先拷回来：
+**v6 起不需要手工拷 receipts 了**（2026-08-10 用户拍板入库策略反转）。此处原有一步
+「清理 worktree 前先 `cp` fixer 的 `receipts.md` 回 delivery」，成因是 v5 整树不入库、
+它不会随分支合并回来。**v6 下 `receipts.md` 是被跟踪文件，`merge-back` 的正常 git
+merge 就会把它带回来**，那一步已作废，不要再手工拷（拷了反而可能覆盖掉合并回来的
+`HEAD` 版本，制造一份与版本库不一致的申报）。
 
-```bash
-cp "$WT/.keeper/$DID/debug/DBG-017/receipts.md" \
-   "$ROOT/.keeper/$DID/debug/DBG-017/receipts.md"
-```
-
-**「各层 `git status --short` 为空」这条保命机制对它无效**——receipts 被 ignore、压根
-不出现在 status 里，所以脏工作区拒删那道闸不会因为漏拷而拦你。这一步没有任何机械兜底，
-只能靠这条纪律。
+**同时恢复的还有那道保命机制**：v5 期间 receipts 被 ignore、压根不出现在
+`git status` 里，「各层 status 为空才允许删」那道闸对它无效；v6 起它正常出现在
+status 里，fixer 写了没 commit 时脏工作区拒删会真的拦住你。
 
 gitlink 回写完成后把 issue 的 `status` 改成 `done`；`push` 与否需要 Human 当轮明确
 同意（见 §5/§12），不属于收尾的默认动作。
@@ -673,6 +744,43 @@ python3 "$ARCHIVE" --queue-dir "$ROOT/.keeper/debug" --auto --apply
 归档实际发生时（脚本打印了搬迁清单而不是「未达阈值」），把跑没跑、批次名、归档了
 几条写进本轮回执【本轮动作】；未达阈值跳过的这次不必单独提及。
 
+### 9.1 收官归因：每次交付产出一张「规格失守清单」
+
+**时机**：交付收官时（本交付全部 issue 已 done 或已按 §10 推迟）跑一次，产物随回执
+交主会话转给 Human。归档之后跑也行——`archive/` 下的条目同样要统计进来。
+
+**为什么这一步不可省**：bug 台账天然只记「什么坏了、怎么修的」，不记「规格上原本
+怎么写」。缺了后者，「规格写了没照做」这一类在事后归因里**完全不可见**——它会被摊进
+「基本功不扎实」和「需求没写清」两个筐里，而这两个筐指向的改进动作（加培训 / 催产品
+把需求写细）对它一个都不管用。真正管用的动作是「让那几份 md 被打开」，要看见这一点，
+前提是台账里有 `spec_status` 这一栏。已实测的量级：某次交付里这一类占 27.9%、共 55
+条、为最大的一类，而同一批数据上不带规格栏的那轮归因把它统计成了零。
+
+**怎么跑**（`spec_status` 是 frontmatter 行首字段，可直接 grep）：
+
+```bash
+# 搜索根必须设进 .keeper/。从仓库根搜会被整树 gitignore 规则静默吞成零命中，
+# 且不报错——判据同 §3 冷启动那段的 ugrep 说明。
+grep -rh '^spec_status:' "$ROOT/.keeper/$DID/debug/" | sort | uniq -c | sort -rn
+```
+
+**清单里要有的四项**（缺任一项，这张清单就退化成一个没人会看的数字）：
+
+1. **占比**：`violation` 条数 ÷ 本交付总条数。**只统计 `violation`**——`gap` 是规格
+   空白、`conformant` 是需求变更，那是另外两个问题，混进来会让这个数字失去指向性。
+2. **按规格文件聚合**：哪几份规格文档被违反得最多。**这是整张清单里最有价值的一栏**
+   ——同一份 md 上挂着 5 条以上 `violation`，说明它**整片没被读**，而不是有人漏了一条；
+   这两种情况的处置动作完全不同。
+3. **原型缺口**：`violation` 条目里，「规格依据」表格中第 2 类（view spec）命中、同时
+   第 3 类（原型）未命中的有几条。这一栏直接量化「规格写了但没画进原型」这个已知的
+   机械闸盲区（`references/queue.md` §3.1）。
+4. **`gap` 清单**：所有 `gap` 条目的「待产品确认 X」摘要，攒成一批一次问产品——它们
+   受众相同、回答形式相同（要 / 不要 + 为什么），分几次问是在消耗对方的耐心。
+
+**两件不要做**：不要据这张清单去给别的团队或项目提工单——它是本项目的内部台账，要不要
+对外说、怎么说由 Human 定；不要把 `violation` 占比写成对某个人或某轮实现的评价，它是
+流程的度量，不是绩效数据。
+
 ## 10. 分流边界
 
 判据一句话：**「修它是否是本次交付验收的前置？」** 是 → 留在 `.keeper/debug/` 队列；
@@ -702,6 +810,10 @@ python3 "$ARCHIVE" --queue-dir "$ROOT/.keeper/debug" --auto --apply
 - ❌ 收到的其实是杂务却代收成 DBG 条目（应退回主会话转 chore-keeper，见 §10）
 - ❌ 为了「攒够一批」而把手上唯一一条 issue 的 triage 压着不做
 - ❌ 落点只写文件名不写行区间
+- ❌ triage 完了 `spec_status` 还停在 `unchecked`（或压根没这个键）就派 fixer
+- ❌ 只在原型 html 里查过就下规格结论，「规格依据」表格里第 2 类 view spec 写「未查」
+- ❌ 判 `gap` 时只写「搜了一圈没有」，不逐条列出查过哪八类来源
+- ❌ 判为 `gap` 却照样派 fixer 去「补一个合理的行为」（那是在把规格空白伪装成已定案）
 - ❌ 验证章节只列第一个场景
 - ❌ 派发带截图的 issue 时 prompt 里不给截图绝对路径
 - ❌ 派 fixer 时不建 worktree、绕过 `init` 自己 `git worktree add`（落点它认不了、
@@ -734,10 +846,18 @@ python3 "$ARCHIVE" --queue-dir "$ROOT/.keeper/debug" --auto --apply
   worktree。`.keeper/` 整树被 gitignore，git **不会**报 contains modified
   or untracked files、会 exit 0 静默删掉 fixer 的未提交修复（2026-08-01 实测）；
   上一条那道保命闸在这个位置**不响**，只能靠先逐个 `wt_supply.py remove` 自己补
-- ❌ 冷启动时建了队列目录却不确保 `.gitignore` 有整树忽略行 `.keeper/`（下一次
-  `git add -A` 会把整个队列——含 bug 细节与内部系统坐标——提交并推到远端）
-- ❌ accept 之后没把 fixer 的 receipts 从它的 worktree 拷回 delivery 队列就清理
-  worktree（v5 起 receipts 不随分支合并回来，`git status` 干净那道闸也不会拦你，见 §8）
+- ❌ 冷启动时建了队列目录却不确保 `.gitignore` 有 v6 那三条精确排除（缺
+  `.keeper/**/worktree/` 时下一次 `git add` 会把嵌套 fixer worktree 种成野生 gitlink，
+  只打一行 warning、后果延迟到几十次提交后的 `merge-back` 才炸）
+- ❌ 检出 v5 的整树忽略行残留却自己删掉它（那会让存量队列一次性变成待提交、把历史
+  bug 细节与截图一次推上远端，属于按 §12 报 Human 拍板的处置）
+- ❌ 提交队列前不跑 `check_staged_gitlink.py`（v6 起它是主线校验，不是存量仓专用）
+- ❌ 用 `git add -A` 提交队列（会连带别人的暂存区与无关改动；按路径
+  `git add .keeper/<交付id>/`）
+- ❌ 清理 worktree 前手工 `cp` receipts 回 delivery（v6 起 `merge-back` 会带回来，
+  手工拷反而可能覆盖掉合并回来的 `HEAD` 版本，制造一份与版本库不一致的申报）
+- ❌ 用 `cat` 读 fixer 的申报做对账（v6 起必须 `git show HEAD:`，工作区那份可能是
+  未 commit 版本，见 §7）
 - ❌ 待拍板协议里把前因后果直接塞进 `SendMessage` 的 `message` 字段，而不是写进
   `.keeper/<交付id>/decisions/` 文件（见 §12，`SendMessage` 只应该是指针）
 - ❌ 收到主会话对某条 decisions 的答复后，不把裁决抄进对应 issue 文件就删掉

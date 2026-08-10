@@ -8,9 +8,9 @@
 #
 # 【文件结构】本文件是入口，只负责：算路径变量、source 共享 helper
 #   （lib/harness.sh）、按固定顺序 source 每个 H 节的用例文件
-#   （cases/01-... 到 cases/20-...）、最后汇总 pass/fail。可移植性约束
+#   （cases/01-... 到 cases/21-...）、最后汇总 pass/fail。可移植性约束
 #   （mktemp 模板、不用 sed -i、python3 写死路径、日期不写字面量）随 helper
-#   实现一起搬进了 lib/harness.sh，此处不再重复。20 个用例文件与下面
+#   实现一起搬进了 lib/harness.sh，此处不再重复。21 个用例文件与下面
 #   source 列表逐一对应，新增/调整用例节时两处要一起改。
 #
 # 【来源】本文件搬迁自 radnove-core 插件的
@@ -90,6 +90,27 @@
 #   向上三层找到 sdlc/（这正是最需要它的场景，只看当前根会全部漏掉）、空的同名
 #   `sdlc/` 目录与超出查找深度都不命中。
 #
+# 【2026-08-10 新增 H26，编号 [112]-[113]】
+#   DEBUG 这个 QueueSpec 新增 frontmatter 字段 spec_status（fm_order 在 "type" 与
+#   "reported_at" 之间插入、index_cols 追加 ("spec_status", "规格")）。H26 锁两件事：
+#   render_frontmatter 按 fm_order 固定位置渲染它（不是被当未知键排到末尾）、
+#   index.md 的 open 表格新增「规格」列且取值取自 issue 的 spec_status。
+#
+# 【2026-08-10 新增 H27，编号 [114]-[120]】
+#   第三条队列 context（上下文收集包）接线：queue_files 新增 CONTEXT spec、
+#   新增 lib/context_snapshot.py 与 user-prompt-submit-context-queue.sh。H27 锁
+#   fm_order 键位与 index_cols 三列（失效形态同 H26）、`ledger_progress` 的两侧
+#   （数得对 + 格式一变就 fail-soft 返回 None 而不是谎报「0 行已填」）、以及
+#   端到端注入里三方降级标记与「销账表无人填」告警的两侧。
+#
+# 【2026-08-10 新增 H28，编号 [121]-[127]】
+#   入库策略 v5 → v6 反转（队列正文与附件入库，只精确排除 worktree/instance.json/
+#   keeper-active 三类）。**此前 v4→v5→v6 三次反转都改同一组常量与同一段冷启动
+#   bash，却一条测试都没有**——改错的表现是「队列悄悄没进版本库」或「本机状态文件
+#   天天产生 diff」，两者都不报错。H28 锁三处文案逐字同步（分支各自追加不同注释会
+#   产生合并冲突，实测过）、四行 pattern 的写法坑（两条要 `**`、`.keeper-active`
+#   不能带 `**`）、以及 gitignore_findings 的五种配置。
+#
 # 【测试用真实进程跑，不 mock】直接把 JSON 喂给 hook 脚本的 stdin、断言 stdout，
 #   与 harness 的调用方式完全一致，因此能覆盖 bash 外壳、python 定位、编码等
 #   全链路，而不只是 python 函数。
@@ -143,6 +164,9 @@ source "$TESTS_DIR/cases/17-h22-keeper-routing-session.sh"
 source "$TESTS_DIR/cases/18-h23-sdlc-routing.sh"
 source "$TESTS_DIR/cases/19-h24-board-report.sh"
 source "$TESTS_DIR/cases/20-h25-subagent-start-inject.sh"
+source "$TESTS_DIR/cases/21-h26-spec-status.sh"
+source "$TESTS_DIR/cases/22-h27-context-queue.sh"
+source "$TESTS_DIR/cases/23-h28-gitignore-v6.sh"
 
 echo
 printf '通过 %d / 失败 %d\n' "$pass" "$fail"

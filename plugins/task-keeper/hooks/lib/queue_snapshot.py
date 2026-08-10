@@ -44,6 +44,40 @@ v4 让文本入库图的是可搜，代价是队列里的 bug 细节、内部系
 用户选了不公开。可搜性改用**约束**兜底而非 gitignore：搜队列一律把搜索根设进
 `.keeper/`——ugrep 只读递归下降途中遇到的 `.gitignore`、不向上找，这样正常命中。
 
+## v5 → v6：默认入库，只精确排除三类本机产物（2026-08-10 用户拍板）
+
+**上面那节 v5 的入库策略已整体作废**，原话是「`.keeper` 之前把它从整个项目中忽略了，
+现在看来还是需要提交到远端纳入版本控制，除了少数内容比如里面的 worktree 之外，其他都
+可以（包括当时的问题附件/图片/文件等）纳入版本控制」。v5 那节保留在此仅作沿革，
+**不要再按它行动**。
+
+第三次反转，方向与 v4 同侧但排除清单不同。现在的期望配置是**三条精确规则**：
+
+  · `.keeper/**/worktree/`——用户明确点名。它同时是技术必需：fixer 的 worktree 嵌在
+    队列目录里，入库会被 `git add -A` 种成野生 gitlink（`160000` 模式），后果延迟到
+    几十次提交之后的 `merge-back` 才炸，且报错指向 merge 冲突、完全看不出根因。
+  · `.keeper/**/.keeper-instance.json`——运行时状态（`session_id` + 当次 subagent 的
+    随机 name）。跨机器、跨会话无意义，每次派发都产生 diff 噪音，多人并行必冲突。
+  · `.keeper/.keeper-active`——本机当前活跃交付指针，同上。注意它是 `.keeper/` **顶层
+    单文件**，pattern 不带 `**`；照抄 worktree 那条的 `**` 写法会写错。
+
+其余一律入库，含 `issue.md` / `receipts.md` / `index.md` / `decisions/` / 截图与附件。
+
+**两个直接后果，改动这条时必须一并处理**（不处理就是把风险从可见变不可见）：
+
+  1. **截图脱敏从「谨慎」升级为红线**。v5 时截图不进历史，脱敏是额外防线；v6 起它会
+     被正常收录并随 push 公开。AI 没有图像编辑能力、打不了码，**「不落盘」是唯一那道
+     机械闸**。判据与三步处置见 `skills/tk-debug/references/screenshot.md` §4。
+  2. **`check_staged_gitlink.py` 从「存量仓专用」恢复为主线校验**。整树忽略没了之后，
+     野生 gitlink 这条路重新打开——它只被那条 `**/worktree/` 精确规则堵着，而该规则
+     有实测过的写法坑（必须用 `**`，写死中间层会漏网）。
+
+**v5 → v6 的存量仓要单独处置**：v5 期间队列是未跟踪的，删掉整树行只是让它们变成
+「未跟踪但不再被忽略」，`git add` 才会真正收录；反过来 v4 存量仓里已跟踪的文件不受
+gitignore 影响。判据用行为验，不要验文件内容：
+`git check-ignore -q <队列里的 issue.md>` 应 **exit=1**（不再被忽略），
+`git check-ignore -q <某个 worktree/ 路径>` 应 **exit=0**。
+
 ## 零成本保证不变
 
 本 hook 随插件装到所有项目、每轮触发。当前 worktree 根下没有
@@ -82,16 +116,37 @@ MAX_PER_GROUP = 8       # 注入体里每个分组最多列出的 issue 数
 PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 LEGACY_QUEUE = ".debug"  # radnove-core 时代的旧队列目录，仅用于迁移提示
 
-# 整树忽略 `.keeper` 的等价写法。**v5（2026-08-06）起这是期望配置**，语义相对 v4
-# 再次反转，绕回 v3：v4 让队列文本入库，v5 由用户拍板「队列不要公开」改回整树不入库。
-# 队列含 bug 细节、内部系统坐标、决策原文，推到远端等于把它们公开。
-# strip 后整行相等才算命中，不解析通配符语义。
-GITIGNORE_WANT_ANY = {".keeper/", ".keeper", "/.keeper/", "/.keeper", ".keeper/**"}
+# v6（2026-08-10）的期望配置：三条精确排除，其余队列内容一律入库。判据见模块头
+# 「v5 → v6」。每条给一组等价写法，strip 后整行落进该组即算在位——**不解析通配符
+# 语义**，所以 `.keeper/*/debug/*/worktree/` 这种写死中间层的等价物不算命中，这是
+# 有意的：写死中间层在嵌套层数变化时会漏网，属于要报出来的错误配置而非等价写法。
+GITIGNORE_RULES = (
+    ("fixer worktree（入库会种野生 gitlink）",
+     ".keeper/**/worktree/",
+     {".keeper/**/worktree/", ".keeper/**/worktree",
+      "/.keeper/**/worktree/", "/.keeper/**/worktree"}),
+    ("keeper 实例登记（含 session_id，跨机器无意义且必冲突）",
+     ".keeper/**/.keeper-instance.json",
+     {".keeper/**/.keeper-instance.json", "/.keeper/**/.keeper-instance.json"}),
+    ("活跃交付指针（本机状态）",
+     ".keeper/.keeper-active",
+     {".keeper/.keeper-active", "/.keeper/.keeper-active"}),
+)
 
-# v5 冷启动写入的固定两行。**文案逐字写死**——v4 当初禁止自动追加的唯一理由就是
+# v5 的整树忽略行。**v6 起它是错误配置**：留着会让整个队列继续不入库，与新策略完全
+# 相反，而且它静默生效——git 不会告诉你「你那三条精确规则被这一行覆盖了」，表现只是
+# 队列一直没进版本库，没有任何人会收到信号。所以它排在 findings 的最前面。
+GITIGNORE_LEGACY_ALL = {".keeper/", ".keeper", "/.keeper/", "/.keeper", ".keeper/**"}
+
+# v6 冷启动写入的固定四行。**文案逐字写死**——v4 当初禁止自动追加的唯一理由就是
 # 「两个分支各自 EOF 追加内容不同的注释即冲突」（实测过）；内容逐字相同则 git 视为
 # 同一处改动、不冲突。keeper 的 agent 定义里贴的是同一份字节，改这里要同步改那两处。
-GITIGNORE_BLOCK = "\n# task-keeper 队列（本地私有，不入库）\n.keeper/\n"
+GITIGNORE_BLOCK = (
+    "\n# task-keeper 队列：正文与附件入库，只排除三类本机产物\n"
+    ".keeper/**/worktree/\n"
+    ".keeper/**/.keeper-instance.json\n"
+    ".keeper/.keeper-active\n"
+)
 
 # bug 报告特征词。命中即追加 register-first 提醒。
 # 只在 `.keeper/` 顶层已存在（= 该项目显式 opt-in）时生效，避免污染其他项目；
@@ -190,10 +245,10 @@ def _sibling_queue_names():
     目录会让那条队列继续困在死循环里。
     """
     try:
-        from queue_files import CHORE
-        names = [DEBUG.dir_name, CHORE.dir_name]
+        from queue_files import CHORE, CONTEXT
+        names = [DEBUG.dir_name, CHORE.dir_name, CONTEXT.dir_name]
     except Exception:
-        names = ["debug", "chore"]
+        names = ["debug", "chore", "context"]
     return [n for n in names if n]
 
 
@@ -342,13 +397,16 @@ def gitignore_findings(queue_dir):
     worktree 根 = 队列目录上溯三级（`<根>/.keeper/<交付id>/debug` → `<根>`）。
     **v4 起比 v3 多一级**——漏改这里会把 `.keeper/` 自己当成项目根去找 `.gitignore`。
 
-    v5 只剩一条判据：**整树忽略行缺失** → 队列会被 `git add -A` 提交上去，而队列里
-    有 bug 细节、内部系统坐标、决策原文，推到远端等于公开。判据是 strip 后整行落在
-    `GITIGNORE_WANT_ANY` 里，不解析通配符语义。
+    v6 起有两类判据（判据来源见模块头「v5 → v6」）：
 
-    **代价在告警文案里一并给出**，因为它不写就会被踩：Claude Code 把 `grep` 影子成
-    自带 ugrep 且参数写死 `--ignore-files`，被 ignore 的文件搜起来**静默零命中、
-    不报错**。规避手段是把搜索根设进 `.keeper/`（ugrep 不向上找 `.gitignore`）。
+      1. **v5 的整树忽略行还在** → 它覆盖一切，整个队列继续不入库。这条排最前面，
+         因为它静默生效：git 不会提示「你那三条精确规则被这一行盖住了」，表现只是
+         队列一直没进版本库，没有任何人收到信号。
+      2. **三条精确排除规则缺了哪条** → 逐条报，各自给出该补的字面 pattern。
+
+    判据都是 strip 后整行落在对应集合里，**不解析通配符语义**。所以写死中间层的
+    「等价物」（`.keeper/*/debug/*/worktree/`）不算命中——那是有意的，它在嵌套层数
+    变化时会漏网，属于要报出来的错误配置。
 
     这里只提醒不代写——代写由 keeper 冷启动做（它有固定文案，见两个 agent 定义），
     hook 侧代写会在 hook 未生效的环境里制造「以为写了其实没写」的分叉。
@@ -360,11 +418,19 @@ def gitignore_findings(queue_dir):
             lines = {line.strip() for line in f}
     except Exception:
         lines = set()
-    if lines & GITIGNORE_WANT_ANY:
-        return []
-    return ["⚠ `%s/.gitignore` 缺 `.keeper/`——队列含 bug 细节与内部坐标，会被 "
-            "`git add -A` 推到远端。补法见 keeper 冷启动第 2 步（文案须逐字照抄）。"
-            "补后搜队列一律 `grep -rn \"词\" .keeper/`，从仓库根搜是静默零命中。" % root]
+
+    out = []
+    if lines & GITIGNORE_LEGACY_ALL:
+        out.append("⚠ `%s/.gitignore` 还留着 v5 的整树忽略行（`.keeper/` 一类）"
+                   "——它覆盖三条精确规则，整个队列继续不入库，而且**不会有任何报错**。"
+                   "v6 起队列正文与附件要入库，删掉那一行。" % root)
+    missing = [(why, pat) for why, pat, ok in GITIGNORE_RULES if not (lines & ok)]
+    if missing:
+        out.append("⚠ `%s/.gitignore` 缺 %d 条精确排除：%s。补法见 keeper 冷启动第 2 步"
+                   "（文案须逐字照抄，否则各分支追加内容不同会冲突）。"
+                   % (root, len(missing),
+                      "；".join("`%s`（%s）" % (pat, why) for why, pat in missing)))
+    return out
 
 
 # ────────────────────────── 渲染 ──────────────────────────

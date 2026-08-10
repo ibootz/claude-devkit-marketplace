@@ -25,8 +25,9 @@ debug-keeper 需要回写某条 issue 的 `external_ref` 时，按下列顺序�
 适配器 skill，命中即停止：
 
 1. **项目配置声明**：读取项目根 `.claude/task-keeper.local.md`（**注意不是**
-   `.keeper/` 下的任何路径——`.keeper/` 是 gitignore 掉的纯本机产物，而这份配置
-   要能被团队共享、入库跟踪，所以必须放在会被 git 跟踪的位置）。若其中声明了
+   `.keeper/` 下的任何路径。理由不是入库与否——v6 起 `.keeper/` 下多数内容已入库——
+   而是**归属**：这份配置是项目级的、与具体交付无关，而 `.keeper/<交付id>/` 跟着交付
+   走，交付 worktree 删掉它就没了）。若其中声明了
    `external_tracker_skill: <skill 名>`，直接用该 skill。
 2. **按能力发现**：配置缺失时，遍历当前会话可用的 skill 列表，找 `name` 含
    `-writeback` 且 `description` 明确声明「实现 task-keeper 外部工单回写契约」

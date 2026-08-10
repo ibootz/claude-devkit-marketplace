@@ -148,10 +148,11 @@ def init_one(args, source: Path, did: str, wid: str) -> dict:
     `.gitignore` 必须有精确规则 `.keeper/**/worktree/`（判据 6），缺它时 `git add -A`
     会把嵌套 worktree 种成幽灵 gitlink（实测 `git add -n` 报
     `warning: adding embedded git repository`），而聚合仓真有 submodule，野生
-    gitlink 会让 `merge_into` 的冲突白名单判定整体阻断。**v5（2026-08-06 用户拍板
-    「不要公开」）绕回 v3 的整树 gitignore**——一条 `.keeper/` 规则天然覆盖
-    `worktree/`，本节这条精确规则的必要性随之消失（除非落在 v4 期间队列文本已被
-    跟踪的存量仓，那种仓里这条精确规则仍有意义，见 `check_staged_gitlink.py`）。
+    gitlink 会让 `merge_into` 的冲突白名单判定整体阻断。v5 绕回整树 gitignore、判据 6
+    一度失去必要性；**v6（2026-08-10 用户拍板）把入库策略反转回来之后，判据 6 恢复为
+    主线判据**——`.keeper/**/worktree/` 又是唯一挡住幽灵 gitlink 的东西，且它带写法坑
+    （必须用 `**`，写死中间层在嵌套变化时漏网）。配套的 `check_staged_gitlink.py`
+    同步恢复为每次提交队列前都要跑的常规校验，不再是存量仓专用。
 
     分支名同样带交付前缀：`fix/<交付id>-<id>`。编号虽然全局唯一（`next_id` 扫所有
     交付目录），但多人并行时各自的扫描看不到对方未合并的 issue，两人可能拿到同一个

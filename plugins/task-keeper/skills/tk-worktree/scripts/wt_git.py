@@ -338,9 +338,11 @@ def dirty_lines(repo: Path) -> list[str]:
     被剔除——它们是真实的工作区改动。源侧因此改用 `source_dirty_check()` 的收窄判据
     （只有与本次合并路径相交才拦）；目标侧仍走本函数的全树严格检查，靠「fixer
     worktree 里不写 index.md」（`queue_snapshot.in_fixer_worktree`）来保证那份副本
-    不会被 hook 改脏。**v5 起 `.keeper/` 整树未跟踪，`issue.md` 等文件的修改不会再
-    出现在 `git status` 里**，`source_dirty_check()` 的收窄判据因此在 v5 下大多数
-    情况已无实际命中面（对 v4 存量仓仍然有效），但两套判据都未删除，逻辑保持不变。
+    不会被 hook 改脏。v5 期间 `.keeper/` 整树未跟踪，`issue.md` 等文件的修改不出现在
+    `git status` 里，`source_dirty_check()` 的收窄判据一度失去命中面；**v6（2026-08-10
+    用户拍板）把入库策略反转回来之后，那些文件又是被跟踪的，收窄判据恢复为主线场景**
+    ——每轮 hook 重算 `index.md` 都会让源侧变脏，若走全树严格检查就会把每一次合并都
+    拦下来。两套判据一直都在、逻辑未改，只是命中面随入库策略来回摆动。
 
     为什么用 `-uall` 而不是默认的 `-unormal`：默认模式会把未跟踪目录**折叠**成
     `?? .keeper/`（实测，折叠到未跟踪链的最上层目录），一旦折叠就无法区分「折叠掉的

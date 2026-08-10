@@ -1,7 +1,7 @@
 {
   "name": "task-keeper",
-  "version": "2.12.0",
-  "description": "常驻 keeper 托管 debug/杂务队列（跟随交付 worktree、整树不入库、自动归档）+ sdlc-writer 承接 sdlc 流程文档编写，决策打包 HITL，tk-board 出进度看板，细节见 README",
+  "version": "2.14.0",
+  "description": "常驻 keeper 托管 debug/杂务/上下文三队列 + sdlc-writer 写 sdlc 文档；动手前五方并行收齐规格再交表销账，triage 带规格溯源，决策打包 HITL，细节见 README",
   "author": {
     "name": "zhangq"
   },
@@ -35,6 +35,11 @@
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit-chore-queue.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit-context-queue.sh",
             "timeout": 10
           }
         ]

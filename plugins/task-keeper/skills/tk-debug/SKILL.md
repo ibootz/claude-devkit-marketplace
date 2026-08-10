@@ -4,8 +4,8 @@ description: >-
   Debug 队列工程化处理（主会话侧入口）。把「Human 报 bug → AI 立刻派 subagent 修」
   改造成「主会话只转发 → debug-keeper agent 独立跑完登记/triage/派发/对账/收尾，
   自己直接并行派第二层 fixer subagent」的并行流水线。队列落在项目根
-  `.keeper/<交付id>/debug/`（一 issue 一个目录，跨 session 持久；v5 整树不入库，
-  issue 文本、截图与 fixer worktree 均不入库）。**主会话在本流程里只做三件事：截图落盘（如果用户附了图）→ 把原话转给
+  `.keeper/<交付id>/debug/`（一 issue 一个目录，跨 session 持久；v6 起 issue 文本、
+  receipts 与截图入库，只有 fixer worktree 等三类本机产物排除在外）。**主会话在本流程里只做三件事：截图落盘（如果用户附了图）→ 把原话转给
   debug-keeper → 立刻回到原任务。** 不做 triage、不写 issue 文件、不派 fixer、
   不对账，这些全部由 debug-keeper 在独立上下文里完成，避免打断主会话手上的工作。
 when_to_use: |
@@ -114,10 +114,10 @@ cp "<照抄来的源路径>" "$DST"
 
 ### 1.2 图里可能含敏感信息时：不落盘
 
-v5 起 `.keeper/` 整树不入库，截图与同目录的 `issue.md` 都不进 git 历史——但**不进
-历史不等于安全**：文件仍会长期留在磁盘上，可能被其他工具打包、被误 `cp` 出去共享，
-或在这条整树 gitignore 规则被调整、变窄时被一并纳入历史。所以处置口径不因「不入库」
-而放松。图里出现 token / cookie / 密码 / 密钥、
+**v6 起截图与同目录的 `issue.md` 会进 git 历史、会随 push 公开到远端**（2026-08-10
+用户拍板，推翻 v5 的整树不入库）。所以「不落盘」不再是额外谨慎，而是**唯一那道拦得住
+敏感信息公开的机械闸**——你没有图像编辑能力、打不了码，闸只有这一道，而 git 历史
+删不干净：即使之后 `rm` 掉文件，那次提交仍在。图里出现 token / cookie / 密码 / 密钥、
 手机号 / 邮箱 / 身份证 / 员工工号、真实客户机构名称、产线金额 / 成单数据 / 用户
 明细时**不要落盘**。
 
@@ -251,7 +251,7 @@ SendMessage(
 登记的 `session_id` 必然与当前一致，不需要走 §2 那套跨会话比对），用 `SendMessage`
 唤醒那个 name（**不是**字面量 `opus-debug-keeper`——name 带随机短哈希，凭记忆拼写
 不出来），把"你上一轮因 <具体原因> 被终止"这个事实告诉它，然后回到原任务。它的
-transcript 完整保留，会照 `agents/debug-keeper.md` §6.1 自己把在飞 fixer 收口。
+transcript 完整保留，会照 `agents/debug-keeper.md` §6.2 自己把在飞 fixer 收口。
 
 **三件不许做**：
 
@@ -324,6 +324,17 @@ issue 作跨 worktree 接力棒，记下引用写进 `external_ref`，`status` �
 **没有错误行为、只是需要有人跟进的事**走 chore-keeper（`tk-chore` skill）。拿不准
 时按这条判据分：能不能指出「预期是什么、实际是什么、怎么复现」——能，进 debug 队列；
 不能，进 chore 队列。
+
+**有一条反向流转，你要认得出来**：debug-keeper 可能把一条已登记的 DBG 条目退回给你、
+请你转 chore。判据不是「它没有错误行为」——它有可复现的现象，当初进 debug 队列是对的；
+而是 triage 查完八类规格来源后发现**没有任何一份文档定义过正确行为是什么**
+（`references/queue.md` §3.1 的 `spec_status: gap`）。这种条目在 debug 队列里收不了口
+——「修好了」没有判据，派 fixer 只会让它凭直觉补一个同样没人确认过的行为，把规格空白
+伪装成已定案。
+
+收到这类退回时照常走 `tk-chore` 转 chore-keeper，摘要**逐字用 keeper 给的「待产品确认
+X 的语义」，不要改写成「修复 X」**——改写一次，这条就又变回一个看起来该由工程解决的
+问题了。原 DBG 条目仍由 debug-keeper 持有、保持 `open`，等产品答复，不必你跟进。
 
 ## 8. 配套 hook（task-keeper 插件内，与 `plugin.json` 注册一致）
 
