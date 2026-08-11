@@ -177,6 +177,22 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - 三个约束：会永久接管标题（内建从此不工作）、必须挂 `UserPromptSubmit`（挂 `SessionStart` 只改内存不落盘）、agent-team 模式下不生效
 - 成本约 1e-4 美元/次，50 轮会话约 5-6 次
 
+### 18. worktree-flow（主分支保护）
+
+`main` / `master` 上禁止直接改代码：这两个分支上的 `Write` / `Edit` / `MultiEdit` /
+`NotebookEdit` 与 `git commit` 被 `PreToolUse` **硬拦**。改动一律走「`EnterWorktree` 开临时
+分支 → 在里面改并提交 → `git merge --no-ff` 合回 → `worktree remove` + `branch -d` 清理」，
+**临时分支不 push remote**。
+
+- **为什么是 deny 不是 ask**：本机 `defaultMode` 为 `bypassPermissions`，`ask` 档实测全部
+  失效，可用强度只剩「注入提醒」与「硬拒」两档。故配 `WORKTREE_GUARD=off` 逃生阀
+- **Bash 侧只认 `git commit` 一种形态**：`sed -i` / 重定向 / heredoc 写文件算不算写操作要
+  猜语义，仓内 hook 克制原则明令这类判据不得做成 deny，故有意收窄；漏报面在插件 README 里
+  逐条列明，靠注入的软约束兜
+- **豁免**：非 git 目录、detached HEAD、`.claude/` `.keeper/` `.git/` 下的文件、仓正处于
+  merge/rebase/cherry-pick 进行中（解决冲突按设计就在主分支上做）
+- 26 条回归用例两侧都覆盖：`node plugins/worktree-flow/tests/main-branch-guard.test.js`
+
 ## 安装
 
 ### Claude Code
@@ -239,6 +255,9 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 # 会话标题自动跟随话题
 /plugin install session-auto-title@claude-devkit-marketplace
+
+# 主分支保护（改动一律走 worktree 临时分支）
+/plugin install worktree-flow@claude-devkit-marketplace
 ```
 
 ### Codex CLI
@@ -381,7 +400,8 @@ claude-devkit-marketplace/
 │   ├── adhd-output-style/
 │   ├── wenyan-output-style/
 │   ├── insight-addon/
-│   └── session-auto-title/
+│   ├── session-auto-title/
+│   └── worktree-flow/
 ├── .githooks/
 │   └── pre-commit             # 提交前强制跑版本四方校验（需 git config core.hooksPath .githooks）
 ├── scripts/

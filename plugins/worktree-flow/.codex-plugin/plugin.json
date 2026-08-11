@@ -1,0 +1,13 @@
+{
+  "name": "worktree-flow",
+  "version": "1.0.0",
+  "description": "主分支保护 - main/master 上禁止直接改代码，强制 worktree 临时分支 → --no-ff 合回 → 清理。Codex 侧只有 skill 生效，PreToolUse 硬拦为 Claude Code 专有",
+  "author": {
+    "name": "zhangq"
+  },
+  "interface": {
+    "displayName": "主分支保护 (worktree-flow)",
+    "shortDescription": "改动一律走 worktree 临时分支，不在 main 上落笔",
+    "category": "Development"
+  }
+}
