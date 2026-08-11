@@ -1,0 +1,53 @@
+{
+  "name": "worktree-flow",
+  "version": "1.0.0",
+  "description": "主分支保护 - main/master 上禁止直接改代码，强制 worktree 临时分支 → --no-ff 合回 → 清理。硬拦 Edit/Write/git commit，WORKTREE_GUARD=off 可关",
+  "author": {
+    "name": "zhangq"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/main-branch-guard.js"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/worktree-flow-inject.js"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/worktree-flow-inject.js"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/worktree-flow-inject.js"
+          }
+        ]
+      }
+    ]
+  }
+}
