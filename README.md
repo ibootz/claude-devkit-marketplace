@@ -4,7 +4,7 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 
 ## 概述
 
-本市场包含 17 个插件，覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论、输出风格等场景。
+本市场包含 **20 个插件**（以两份市场清单为准），覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论、输出风格等场景。下面的编号清单只有 19 节——`clickable-paths` 至今只登记在市场清单与目录树里，没有单独的介绍段落，属于既有遗漏。
 
 原 `devkit-git`、`devkit-dev`、`devkit-issue` 已从市场移除，不再作为独立插件提供。
 
@@ -85,7 +85,7 @@ CLI 工具集成，在 Claude Code/Codex 中调用 omp 实现编码、审查、�
 
 ### 8. working-discipline
 
-AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`SubagentStart` 注入子代理、`PreToolUse` 硬拦截污染 cwd 的独立 `cd`、缺鉴权或实例超限的 `agent-browser` 启动。零 skill、零命令，适合作为全局基线长期开启。
+AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`SubagentStart` 注入子代理、`PreToolUse` 硬拦截缺鉴权或实例超限的 `agent-browser` 启动、派发 `Agent` 的结构字段不合规、串行只读检索过线。零 skill、零命令，适合作为全局基线长期开启。（3.26.0 起「污染 cwd 的独立 `cd`」拆给下面第 19 个插件 `cd-blocker`。）
 
 - 上下文纪律：精确读取、子代理优先、bash 输出限流、macOS 中文路径防漏检（NFC/NFD）
 - 子代理协作：在飞≤16 动态上限、嵌套≤2 软约束、team 模式下 teammate 不能派下级、共享骨架文件
@@ -192,6 +192,23 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - **豁免**：非 git 目录、detached HEAD、`.claude/` `.keeper/` `.git/` 下的文件、仓正处于
   merge/rebase/cherry-pick 进行中（解决冲突按设计就在主分支上做）
 - 26 条回归用例两侧都覆盖：`node plugins/worktree-flow/tests/main-branch-guard.test.js`
+
+### 19. cd-blocker（独立 cd 拦截）
+
+顶层片段以裸 `cd` 开头、目标不是 no-op 时 `PreToolUse` **硬拦**，finding 里回灌可照抄的两个
+改法（`(cd /abs/path && cmd)` 子 shell、`git -C <path> <cmd>`）。Bash 工具的 cwd 在多次调用
+之间持久保留，中途一次 `cd /tmp` 会让后续所有相对路径操作失准。
+
+- **为什么独立成插件**：1.0.0 从 `working-discipline` 3.25.0 拆出。这条约束会与写侧约束顶死
+  ——从 worktree 会话改主仓常驻产物时，写侧要求先 `cd` 到主仓，而它给的两种改法在定义上都
+  不改变会话 cwd。合并在一个 hook 里时想关掉 cd 就得连 `agent-browser` 四护栏一起关；拆出来
+  之后按项目停用即可。代价是 `Bash` 变成两道闸，两类违规不再一次报清
+- **放行**：子 shell、命令替换、字符串内的 `cd`、heredoc 正文、`&` 后台化片段、no-op cd
+  （含符号链接等价与 APFS 大小写等价）
+- **判据是文本形态匹配，不是"cwd 是否被污染"这个语义**：只拦得住裸 `cd` 开头一族，`pushd` /
+  `source` / `eval 'cd'` 等 19 类真污染写法实测放行，按用户拍板不补，清单在插件 README
+- 逃生阀 `CD_GUARD=off`（单次）；35 条回归用例两侧都覆盖：
+  `node plugins/cd-blocker/tests/cd-guard.test.js`
 
 ## 安装
 
@@ -401,7 +418,9 @@ claude-devkit-marketplace/
 │   ├── wenyan-output-style/
 │   ├── insight-addon/
 │   ├── session-auto-title/
-│   └── worktree-flow/
+│   ├── clickable-paths/
+│   ├── worktree-flow/
+│   └── cd-blocker/
 ├── .githooks/
 │   └── pre-commit             # 提交前强制跑版本四方校验（需 git config core.hooksPath .githooks）
 ├── scripts/

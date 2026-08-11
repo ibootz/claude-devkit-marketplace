@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude DevKit Pro Marketplace - 精简后的 Claude Code / Codex 插件市场，聚焦核心开发、Spec 工作流与高价值生产力插件",
-    "version": "2.10.0"
+    "version": "2.11.0"
   },
   "renames": {
     "devkit-core": "devkit-tool"
@@ -66,7 +66,7 @@
       "source": "./plugins/working-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒。零 skill，适合全局开启",
-      "version": "3.25.0"
+      "version": "3.26.0"
     },
     {
       "name": "agent-browser",
@@ -143,6 +143,13 @@
       "source": "./plugins/worktree-flow",
       "category": "Development",
       "description": "主分支保护 - main/master 禁止直接改代码，改动走 worktree 临时分支再合回",
+      "version": "1.0.0"
+    },
+    {
+      "name": "cd-blocker",
+      "source": "./plugins/cd-blocker",
+      "category": "Development",
+      "description": "独立 cd 拦截 - 裸 cd 污染会话 cwd 时硬拦并给改法模板，可按项目单独停用",
       "version": "1.0.0"
     }
   ]

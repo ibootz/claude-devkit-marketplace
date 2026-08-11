@@ -105,41 +105,12 @@ function write(label, filePath, cwd, expect) {
 const BLOCK = 2
 const PASS = 0
 
-// ── bash-guard / 独立 cd ────────────────────────────────────────────
-// 3.6.0 前误杀，现在应放行
-bash('heredoc: ssh 远端 cd', "ssh prod bash -s <<'EOF'\ncd /srv/app\ngit pull\nEOF", PROJECT, PASS)
-bash('heredoc: python 正文 cd', "python3 - <<'EOF'\nprint(1)\ncd /tmp\nEOF", PROJECT, PASS)
-bash('heredoc: 无引号定界符', 'cat <<EOF\ncd /tmp\nEOF', PROJECT, PASS)
-bash('heredoc: <<- 形态', 'cat <<-END\n\tcd /tmp\n\tEND', PROJECT, PASS)
-bash('heredoc: 双引号定界符', 'cat <<"EOF"\ncd /tmp\nEOF', PROJECT, PASS)
-bash('后台化 `cd /tmp &`', 'cd /tmp &', PROJECT, PASS)
-bash('cd $PWD', 'cd $PWD', PROJECT, PASS)
-bash('cd "$PWD"', 'cd "$PWD"', PROJECT, PASS)
-bash('cd ${PWD}', 'cd ${PWD}', PROJECT, PASS)
-if (process.platform === 'darwin') {
-  // macOS 上 /tmp 是 /private/tmp 的符号链接；旧实现只做字符串归一
-  bash('符号链接等价 (/tmp ↔ /private/tmp)', 'cd /tmp', '/private/tmp', PASS)
-  // APFS 默认大小写不敏感
-  bash('大小写等价路径', `cd ${PROJECT.replace('/Users/', '/users/')}`, PROJECT, PASS)
-}
-
-// 回归：仍必须拦
-bash('裸 cd', 'cd /tmp', PROJECT, BLOCK)
-bash('链尾 cd', 'ls && cd /tmp', PROJECT, BLOCK)
-bash('换行后 cd', 'npm run build\ncd dist && ls', PROJECT, BLOCK)
-bash('cd ..', 'cd ..', PROJECT, BLOCK)
-bash('cd 无参数(回 home)', 'cd', PROJECT, BLOCK)
-bash('子 shell 之后仍有裸 cd', '(cd /tmp && ls) && cd /var', PROJECT, BLOCK)
-bash('heredoc 结束之后的真 cd', "cat <<'EOF'\nhello\nEOF\ncd /tmp", PROJECT, BLOCK)
-
-// 回归：原本正确放行，不得因收窄而回归成误杀
-bash('子 shell', '(cd /tmp && ls)', PROJECT, PASS)
-bash('嵌套子 shell', '(cd /tmp && (cd /var && ls))', PROJECT, PASS)
-bash('命令替换 $()', 'X=$(cd /tmp && pwd)', PROJECT, PASS)
-bash('字符串内的 cd', 'echo "cd /tmp" | bash', PROJECT, PASS)
-bash('cd .', 'cd .', PROJECT, PASS)
-bash('cd 当前目录绝对路径', `cd ${PROJECT}`, PROJECT, PASS)
-bash('here-string 不是 heredoc', 'bash <<< "echo hi"', PROJECT, PASS)
+// ── bash-guard / 独立 cd：3.26.0 起不在本套件 ────────────────────────
+// cd 检查搬去了 `cd-blocker` 插件，用例随之搬到
+// `plugins/cd-blocker/tests/cd-guard.test.js`（35 条，判据两侧齐全）。
+// 这里留一条**反向断言**：bash-guard 必须已经不再管 cd。少了它，哪天 cd 判据被误合回来
+// 就没人发现，两个插件会对同一条命令各拦一次。
+bash('裸 cd 不再由 bash-guard 拦', 'cd /tmp', PROJECT, PASS)
 
 // ── bash-guard / agent-browser（3.7.0：默认 headless + 四护栏）─────────
 // 模型变更：3.6.0 强制 --headed + --profile；3.7.0 删 --headed，改为

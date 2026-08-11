@@ -105,6 +105,9 @@ echo "grep -P test in a string..."     # 只是输出一段说明文字
 ### 实证 2：判据抓形态不抓风险，同时误报和漏报
 
 `plugins/working-discipline/hooks/guards/bash-guard.js` 禁止"污染 cwd 的独立 `cd`"。
+（**坐标更新**：这段判据 2026-08-11 整体搬去了独立插件 `plugins/cd-blocker/hooks/guards/cd-guard.js`，
+下面的实测结论逐条仍成立，只是要去那个文件里看代码；`bash-guard.js` 现在只剩 `agent-browser`
+那半。搬迁动因是它与写侧约束顶死时需要一个可单独停用的开关，见 `cd-blocker` 的 README。）
 2026-07-31 同一会话内的两次真实调用：
 
 ```sh

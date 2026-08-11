@@ -68,7 +68,8 @@
 // 只有行数是纯计数，另两条是对命令字符串做近似解析后的形态匹配）：
 //   - 派发 subagent 的**结构**校验（model 必填 / name 的模型前缀一致性 /
 //     name 合原生正则 / 提示词泄露 / 完整场景路由表）→ guards/agent-dispatch.js
-//   - 独立 cd 污染 cwd + agent-browser 启动参数        → guards/bash-guard.js
+//   - agent-browser 启动参数                          → guards/bash-guard.js
+//     （原先还含"独立 cd 污染 cwd"，3.26.0 拆成独立插件 cd-blocker，见文件头该条沿革）
 //   - 源码 >1000 行 + CLAUDE.md >200 行               → guards/write-guard.js
 //   - dws 钉钉 CLI 写操作授权（原第六章整章）          → 移交 radnove-core 插件的
 //     hooks/pre-tool-use-dws-write.sh（走 permissionDecision: "ask" 强制用户确认），
@@ -86,7 +87,8 @@
 //     对应的纪律没有丢：回执 / 截图 / 写后回读进了 5.6，档位在 5.1 / 5.2，md 受众判定在
 //     第 4.7 条，NFC/NFD 在第一章末条。
 // (2) **挂载拓扑按拦截对象收敛**：Agent → agent-dispatch.js，Bash → bash-guard.js
-//     （合并原 block-cd.js + agent-browser-launch.js），Write|Edit → write-guard.js
+//     （合并原 block-cd.js + agent-browser-launch.js——**其中 cd 那半已于 3.26.0 拆成
+//     独立插件 cd-blocker，本条只在 3.0.0～3.25.0 区间成立**），Write|Edit → write-guard.js
 //     （合并原 max-source-lines.js + claude-md-max-lines.js）。原先多个 guard 串行挂同一
 //     matcher 有个结构性缺陷：**一批只报最前面那道闸**，AI 补完第一处才看见第二处，多轮
 //     往返是拓扑的产物而不是 AI 每轮新犯一个错。收敛后一次解析、一次报清全部 finding。
@@ -246,8 +248,9 @@
 //     agent-browser 都是**对命令字符串做近似 shell 解析后的正则判断**，与被删掉的关键词
 //     guard 差别是程度而非性质（关键词猜意图，这里猜语法结构）。这条出入是 hook-restraint
 //     规则的第一手实证，也是它第 4 条"判据改动必须用户拍板"的由来。
-// 用户对三个 guard 逐条拍板，四项全选"修误杀 + 收窄，不删"。已落地：heredoc 剥离（新增
-// lib/shell-parse.js 的 stripHeredocs）、no-op cd 的 realpath 与 $PWD 识别、后台化片段
+// 用户对三个 guard 逐条拍板，四项全选"修误杀 + 收窄，不删"。已落地：heredoc 剥离（当时
+// 新增 lib/shell-parse.js 的 stripHeredocs，3.26.0 随 cd 检查一起搬去 cd-blocker 插件，
+// 本插件这份 shell-parse.js 里已经没有它）、no-op cd 的 realpath 与 $PWD 识别、后台化片段
 // 放行、finding 违规片段截断 120 字符、agent-browser 判定收窄到单次调用的 tail、--help
 // 放行、命令名位置判定、行数 +1 偏移、依赖与产物路径排除、源码扩展名补齐、CLAUDE.md 限定
 // 当前项目树内、prompt-prefix-overlap 检查移除、autoName 哈希补 description。43 条回归
@@ -316,6 +319,20 @@
 //       「编号 3.1/3.2/3.6 空缺是有意的」同步改为「3.1/3.2 空缺是有意的；3.6 已删除」。
 // 三条全部只在这一个文件与 README 里出现，全仓普查未发现其他文件引用这三条的编号或原文
 // （搜索模式与结果见 README「判为可删但未删」小节下方的删除记录）。
+//
+// 【2026-08-11（3.26.0）独立 cd 检查整体拆成 cd-blocker 插件】
+// 起因是两条约束在一条真实路径上顶死：从 worktree 会话改主仓的常驻产物时，写侧约束要求先
+// cd 到主仓，而 bash-guard 把独立 cd 判为阻断、它给的两种改法（绝对路径 / 子 shell）在定义上
+// 都不改变会话 cwd——两条都成立、交集为空。合并在一个 hook 里时想关掉 cd，就得连 agent-browser
+// 四护栏一起关，或停掉整个纪律插件。用户拍板拆出独立插件 `cd-blocker`：判据与文案逐字搬走、
+// 行为不变，撞上顶死的项目里单独停用它即可。
+// 本插件同批动四处：bash-guard.js 删 checkCd 及五个辅助函数与对应文件头段落；lib/shell-parse.js
+// 删掉随之无消费者的 stripSubshells / stripHeredocs（副本在 cd-blocker 那份里）；guard-verify.js
+// 的 cd 用例搬去 cd-blocker/tests/cd-guard.test.js，原地只留一条**反向断言**（裸 cd 必须已经
+// 不被 bash-guard 拦，防判据哪天被误合回来、两个插件对同一条命令各拦一次）；六章 Bash 条目
+// 改写为「只查 agent-browser」+「cwd 纪律独立于这道闸」。
+// 代价如实记住：**Bash 现在是两道闸**，两插件同装时两类违规不再一次报清——而 3.0.0 收敛挂载
+// 拓扑正是为了消除这种多轮往返，这里把它换成了「可单独停用」。
 //
 // 【verify】改完必跑，三个事件都要看长度（数字符，不是 `wc -c` 的字节）：
 //   for e in SessionStart UserPromptSubmit SubagentStart; do \
@@ -715,7 +732,7 @@ const SECTION_HOOK_ENFORCED = [
   '',
   'hook 按**拦截对象**收敛：一个对象一道闸，多条违规**一次报清**，撞到照 finding 一次改全。**判据是文本形态匹配或纯计数，而非语义判定**，每道闸都有实测过或已声明的误杀面：finding 明显对不上你的真实意图时按 hint 改一次，改完仍被拦而你确信无害就**报告用户拍板**，不要多轮试探正则边界。',
   '',
-  '- **`Bash`**（`guards/bash-guard.js`）拦独立 `cd`，并查 `agent-browser` 启动类子命令（`open` / `connect` / 带 URL 的 `chat`）。**写 Bash 前先套模板**：`(cd /abs/path && cmd)` 或 `git -C <path> <cmd>` 或全用绝对路径——这道闸只认「裸 `cd` 开头」一种形态，`pushd` / `source` 含 cd 的脚本 / `eval "cd …"` 同样污染 cwd 却拦不住，要守的是 cwd 干净不是躲过这道闸。`agent-browser` 默认 headless（人类无法中途登录），启动前必须已备好登录态（`--profile` / `--headers` / `--state` / `--restore` 任一），且先 `agent-browser session list` 数活动实例、≥4 时先 `close` 再开；另建议带 `--allowed-domains` + `--content-boundaries`（缺失仅提醒不阻断）。完整工作流见 `agent-browser` 插件 SKILL.md',
+  '- **`Bash`**（`guards/bash-guard.js`）只查 `agent-browser` 启动类子命令（`open` / `connect` / 带 URL 的 `chat`）：默认 headless、人类无法中途登录，故启动前必须已备好登录态（`--profile` / `--headers` / `--state` / `--restore` 任一），且先 `agent-browser session list` 数活动实例、≥4 时先 `close` 再开；另建议带 `--allowed-domains` + `--content-boundaries`（缺失仅提醒不阻断）。完整工作流见 `agent-browser` 插件 SKILL.md。**cwd 纪律独立于这道闸**：写 Bash 一律用 `(cd /abs/path && cmd)` / `git -C <path> <cmd>` / 全绝对路径，别发裸 `cd`——`pushd`、`source` 含 cd 的脚本、`eval "cd …"` 同样污染会话 cwd。裸 `cd` 由独立插件 `cd-blocker` 硬拦（3.26.0 从本插件拆出，可按项目单独停用；它只认「裸 `cd` 开头」一种形态）',
   HOOK_ENFORCED_AGENT_BULLET,
   HOOK_ENFORCED_PROBE_BULLET,
   '- **`Write` / `Edit`**（`guards/write-guard.js`）：单一源码文件 >1000 行、当前项目内 `CLAUDE.md` >200 行会给提示。**它挂 `PostToolUse`，触发时文件已经写完了**——不回滚这次写入、也不停住本轮，指望不上它兜底，动笔前就要判断该不该拆（`CLAUDE.md` 拆到 `.claude/rules/{topic}.md`，不要靠压缩正文过闸——那会丢约束）',

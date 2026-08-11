@@ -1,0 +1,21 @@
+{
+  "name": "cd-blocker",
+  "version": "1.0.0",
+  "description": "独立 cd 拦截 - 裸 cd 开头污染会话 cwd 时硬拦并回灌可照抄改法，与写侧约束顶死的项目里可单独停用。CD_GUARD=off 单次逃生",
+  "author": {
+    "name": "zhangq"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/cd-guard.js"
+          }
+        ]
+      }
+    ]
+  }
+}

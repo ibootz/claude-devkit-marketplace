@@ -1,7 +1,7 @@
 {
   "metadata": {
     "description": "Claude DevKit Pro Marketplace - 精简后的 Claude Code / Codex 插件市场，聚焦核心开发、Spec 工作流与高价值生产力插件",
-    "version": "2.10.0"
+    "version": "2.11.0"
   },
   "name": "claude-devkit-marketplace",
   "interface": {
@@ -155,7 +155,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "3.25.0"
+      "version": "3.26.0"
     },
     {
       "author": {
@@ -348,6 +348,24 @@
       "source": {
         "source": "local",
         "path": "./plugins/worktree-flow"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "version": "1.0.0"
+    },
+    {
+      "author": {
+        "name": "zhangq"
+      },
+      "category": "Development",
+      "description": "独立 cd 拦截 - 裸 cd 污染会话 cwd 时硬拦并给改法模板，可按项目单独停用",
+      "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
+      "name": "cd-blocker",
+      "source": {
+        "source": "local",
+        "path": "./plugins/cd-blocker"
       },
       "policy": {
         "installation": "AVAILABLE",
