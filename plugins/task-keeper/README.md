@@ -4,9 +4,10 @@
 登记、triage、修复派发、对账、归档全流程都在 keeper 的独立上下文里跑，不占用主会话窗口。
 通用、机构无关——公司专属能力（如 ONES 工单回写）通过适配器接线，不进本插件。
 
-2.7.0 起多一个**非 keeper** 的 agent `sdlc-writer`：跑 ai-sdlc 流程时，Gate 已放行后
-那一大段由 AI 自主落盘的文档（scope / behaviors / contracts / entities / ui …）交它写，
-主会话只留 Gate 交互、Human 拍板与审查汇报。它与两个 keeper 的区别见下方专节。
+> **3.0.0 起 `sdlc-writer` 整体迁出**：agent + `tk-sdlc` skill +
+> `pre-tool-use-sdlc-writer-guard` + 三岔口第 5 支路一并迁到 radnove 市场的
+> `radnove-sdlc` 插件（与公司内部 ai-sdlc 流程绑定，不属于公开 devkit）。本插件回到
+> debug / chore / context 三 keeper 纯净态。
 
 ## 组成
 
@@ -14,7 +15,6 @@
 |---|---|---|
 | skill | `tk-debug` | debug 队列全流程指引（登记 → triage → 一 issue 一 worktree 派发 → 合并前对账 → 归档） |
 | skill | `tk-chore` | 杂务队列：主会话判是杂务就转 chore-keeper，自己立刻回原任务 |
-| skill | `tk-sdlc` | sdlc 流程产物派发：切割线、按 feature 的分片规则、prompt 模板、回执收尾 |
 | skill | `tk-context` | **动手前**收齐某功能单元的规格/约束：五方并行查（需求/原型/spec/ontology/代码）相互印证 → 上下文包 + 空销账表 → 事后差异核对。只收集与汇报，不参与实现 |
 | skill | `tk-decisions` | 决策打包 HITL 协议正典（keeper 与主会话之间怎么攒批问人） |
 | skill | `tk-worktree` | 为 `git worktree` 建的工作区供给 submodule 内容（含嵌套递归），6 个子命令；`init` 支持 `--ids` 批量 + `--jobs` 并行建多个 issue 的 worktree |
@@ -22,22 +22,20 @@
 | agent | `debug-keeper` | 独占 `.keeper/debug/` 写权限，承接 bug 报告全流程 |
 | agent | `chore-keeper` | 独占 `.keeper/chore/` 写权限，承接杂务登记与攒批执行 |
 | agent | `context-keeper` | 独占 `.keeper/<交付id>/context/` 写权限，五方并行收集 → 归一印证 → 排空销账表 → 事后核对。**只汇报不实现**：不写业务代码、不派实现者、不写 `sdlc/`、不拦截 ai-sdlc |
-| agent | `sdlc-writer` | **非 keeper**，一次性：写 Gate 后的 sdlc 文档正文，不常驻、不登记、无队列 |
-| hook × 9 | 见下表 | 注入路由/队列快照 + 三道窄判据守卫 + 1 个 keeper 实例登记 + 1 个 debug-keeper 专属的漏派清单注入 |
+| hook × 8 | 见下表 | 注入路由/队列快照 + 三道窄判据守卫 + 1 个 keeper 实例登记 + 1 个 debug-keeper 专属的漏派清单注入 |
 
 ## hooks（挂载事件与实际行为）
 
 | 脚本 | 事件 | 行为（按动作描述，不是按愿望描述） |
 |---|---|---|
 | `session-start-keeper-routing.sh` | SessionStart | 纯注入**静态参考**（决策打包主会话侧职责、v4 布局、指针）。未启用 195 字符（一句话介绍 + 启用方式），已启用 495 字符，不拦截任何操作 |
-| `user-prompt-submit-keeper-routing.sh` | UserPromptSubmit | 纯注入**四岔口分诊**（自己做 / 转 debug-keeper / 转 chore-keeper / 转 context-keeper）+ 转发三原则 + 现算的一句"唤醒前怎么办"（三选一：唤醒某个真实 name / 登记已失效当首次派发 / 没有登记当首次派发，见下方「登记 keeper 实例 name」的会话隔离说明）。实测长度：没有登记 479 字符、已失效 511 字符；session 匹配那支随实际 name 长度浮动。工作区在跑 ai-sdlc 流程时**追加第 5 支路**「转 sdlc-writer」（判据 `sdlc_present`：worktree 根 + 往上 4 层里任一层有 `sdlc/specs` 或 `sdlc/deliveries`；不命中时输出与没有这条支路时逐字相同），该支路 +108 字符，实测无登记 587 字符、已失效 619 字符。硬上限 800。未启用项目 stdout 全空 |
+| `user-prompt-submit-keeper-routing.sh` | UserPromptSubmit | 纯注入**四岔口分诊**（自己做 / 转 debug-keeper / 转 chore-keeper / 转 context-keeper）+ 转发三原则 + 现算的一句"唤醒前怎么办"（三选一：唤醒某个真实 name / 登记已失效当首次派发 / 没有登记当首次派发，见下方「登记 keeper 实例 name」的会话隔离说明）。实测长度：没有登记 479 字符、已失效 511 字符；session 匹配那支随实际 name 长度浮动。硬上限 800。未启用项目 stdout 全空 |
 | `user-prompt-submit-debug-queue.sh` | UserPromptSubmit | 注入 debug 队列实时快照（open 逐条 + 在飞派生 + done 计数）、重算薄索引 `index.md`（git rebase/bisect/merge 中间态跳过）；`.gitignore` 缺 v6 那三条精确排除、或还留着 v5 的整树忽略行时加一句提醒；存量 v3/v2 布局未迁移时加一句迁移提示；命中 bug 特征词时给出下一个可用 DBG-id（fixer worktree 内不给） |
 | `user-prompt-submit-chore-queue.sh` | UserPromptSubmit | 注入 chore 队列快照（输出预算 ≤900 字符）；`.keeper/` 顶层存在时缺失的 `chore/`（连同 `debug/`）由 `find_queue` 每轮自动补建，不需要手工 mkdir；代注待拍板决策计数（自动补建后 `chore/` 恒存在，debug 快照的兜底注入分支实际只在 fixer worktree 内或补建失败时才会走到，两边判据仍是同一个目录的存在性） |
 | `user-prompt-submit-context-queue.sh` | UserPromptSubmit | 注入 context 队列快照（open 逐条：id + `stage` + 降级为三方印证的标记 + 不一致条数；`ledger.md` 一行没填时告警并给出未填行数；done 计数），重算 `context/index.md`。**刻意不做三件事**：不报待拍板计数、不报 gitignore 告警（这两项由 debug/chore 二元分工，第三方加入只会重复注入同样文案）、不做特征词提醒（「这次算不算一个功能单元」是语义判断，做成关键词会大面积误报） |
 | `pre-tool-use-debug-worktree-push.sh` | PreToolUse(Bash) | `git push` 的目标落在 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 内时 deny（fixer 产物只回流不推远端） |
 | `pre-tool-use-debug-worktree-destroy.sh` | PreToolUse(Bash) | 强制删除形态（`rm -rf` / `worktree remove --force` / `clean -fdx`）命中 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 路径时 ask 弹确认框 |
 | `pre-tool-use-debug-evidence.sh` | PreToolUse(Write\|Edit) | 只对 `.keeper/<交付id>/debug/*.md` 介入：新内容含 `image-cache` 会话级临时路径时 deny（跨会话必 404），带次数熔断，`origin_path` 留档豁免 |
-| `pre-tool-use-sdlc-writer-guard.sh` | PreToolUse(Write\|Edit) | 主会话（payload 无 `agent_id`）写 `sdlc/(specs\|deliveries)/` 下非 `_index.md` 文件时 deny，逼派 sdlc-writer（文案给派发照抄形态 + 四条出路）；`_index.md` 放行（承载 gate 状态 frontmatter，是主会话/Human 门禁动作）；子代理带 `agent_id` 一律放行（sdlc-writer 写自己的产物不拦）；带次数熔断。第 5 支路软提醒压不过「顺手写更快」，故上机械闸 |
 | `pre-tool-use-keeper-instance.sh` | PreToolUse(Agent) | 命中 keeper 类 `subagent_type`（`debug-keeper`/`chore-keeper`/`context-keeper`）的派发时，把 `tool_input.name` 连同这次派发所在的 `session_id` 写进 `.keeper/<交付id>/.keeper-instance.json` 对应键，另一个键原样保留；**纯写文件，不拦截任何操作**，不输出 permissionDecision，写不进去就静默放弃 |
 | `subagent-start-debug-keeper.sh` | SubagentStart（matcher `task-keeper:debug-keeper`） | 跑 `skills/tk-board/scripts/pending_dispatch.py --oneline`，输出非空时注入一段「漏派体检」（那一行 + 处置指引）。**无漏派时零输出**、未启用项目零输出、坏 payload 零输出，恒 exit 0。matcher 精确到单个 agent_type，**不是 `*`**——写 `*` 会把 debug 队列的清单灌给本机每一个子代理 |
 
@@ -371,53 +369,12 @@ fixer 又卡在等人答复，此时该突出需要人动作的那一面。
 §9.1），四项缺一不可——`violation` 占比 / 按规格文件聚合（同一份 md 上挂 5 条以上，说明它
 整片没被读，而不是有人漏了一条）/ 原型缺口条数 / `gap` 攒批待问产品清单。
 
-## sdlc-writer：不是 keeper 的第三个 agent（2.7.0 新增）
+## sdlc-writer 已迁出（3.0.0）
 
-跑 ai-sdlc 流程时，一次 Define 展开要落十几份文档（`scope.md`、`specs/features/<name>/`
-下的 `_index.md` / `behaviors/*.gherkin` / `contracts.md` / `entities.md` / `ui/views/`
-/ `nfr.md` …）。主会话若自己逐份写，每份全文都进它的窗口，几份之后就 auto-compact，
-而它真正该保留的是与用户的需求对话和 Gate 判断。`sdlc-writer` 承接的就是这一段。
-
-**为什么不做成第三类 keeper。** keeper 是「队列托管 + 跨会话唤醒 + 独占写域」模型，
-代价是三处硬编码白名单（`keeper_routing.KIND_LABELS`、
-`keeper_instance_register.KEEPER_SUBAGENT_KIND`、`queue_snapshot._sibling_queue_names`）
-加一套快照 hook 与队列目录。而 sdlc 文档编写是**一次交付内一口气写完的流程内 fan-out**，
-没有「跨会话回来接着处理待办」的需求——用不上队列，也就不该付队列的代价。三处白名单
-因此**都不动**，它们只管常驻实例。
-
-| | 两个 keeper | sdlc-writer |
-|---|---|---|
-| 生命周期 | 常驻，`.keeper-instance.json` 登记 + `SendMessage` 唤醒 | 一次性，做完即销 |
-| 写域 | 独占 `.keeper/<交付id>/{debug,chore}/` | 派发时点名的那些 sdlc 文档 |
-| 档位 | 钉死 `opus`（`agent-dispatch.js` 白名单强制） | 默认 `sonnet`，跨 feature 契约一致性等场景升 `opus` |
-| `name` | `opus-(debug\|chore)-keeper-[0-9a-z]{4}` | `sonnet-sdlc-writer-<分片名>`，只要求含身份词 |
-| 待拍板 | 写 `decisions/` 信箱 | 写进回执，主会话攒批问 |
-
-**切割线**（`skills/tk-sdlc/SKILL.md` 有完整表）：需求收集、G1–G5 门禁确认、翻
-`gates.g*.status`、Gate 审查汇报（Inline Digest）、调 `spec-reviewer` 与各类 audit、
-`git commit` —— 全部留主会话；**只有往 `sdlc/` 下落盘文档正文这一件事**派出去。
-Define 阶段的切割点是 G1，取自 ai-sdlc 的 `define/SKILL.md` 原文「G1 通过后 AI 自主
-展开、不需再确认」，不是本插件自定的。
-
-**这条切割线有机械闸兜底（2.16.0 新增）**：第 5 支路（UserPromptSubmit 每轮注入的
-「转 sdlc-writer」）是软提醒，压不过主会话「顺手写更快」的默认行为——实测主会话在
-「写」的瞬间会把自己归到三岔口第 1 条「自己做：……需要你上下文才能做的事」。`pre-tool-use-sdlc-writer-guard.sh` 在主会话用 Write/Edit 写 `sdlc/(specs|deliveries)/`
-下非 `_index.md` 文件时 deny，文案给派 sdlc-writer 的照抄形态；`_index.md`（gate 状态）
-与子代理发起（`agent_id` 真值）放行。判据、四条出路与为什么用 deny 不用 ask 见
-`hooks/lib/sdlc_writer_guard.py` 模块文档。
-
-**分片只能按 feature 切，单 feature 内串行。** Define 的产出物有依赖链
-`behaviors → contracts → entities → prototype`，`validate-prototype.js` 会强制后两者
-的字段与前面一致。按文档类型分片（一个写所有 behaviors、另一个写所有 contracts）必然
-字段对不上。所以第 1 波先串行写交付级的 `scope.md`，第 2 波再按 feature 并行（≤6）。
-
-**最大的风险点是散文级 MUST 静默失效。** ai-sdlc 的校验分两类：挂在
-`PreToolUse`/`PostToolUse(Write|Edit)` 的机械 hook（`write-guard.js`、
-`validate-gherkin.js`、`validate-prototype.js` …）对 subagent 同样生效，因为它们绑的是
-工具调用不是会话；但另有一批只写在 SKILL.md 正文里、靠执行者读了照做的 MUST，跳过了
-不报错、没有 finding。所以 `agents/sdlc-writer.md` 的第一条硬性前置是**整读目标阶段
-SKILL.md 全文**（不许 Grep 后定点读——规范有跨段约束），并在回执里逐条交代执行了哪些、
-跳过了哪些及原因。
+`sdlc-writer` 整套（agent + `tk-sdlc` skill + `pre-tool-use-sdlc-writer-guard` + 三岔口
+第 5 支路）已于 3.0.0 迁到 radnove 市场的 `radnove-sdlc` 插件——它与公司内部 ai-sdlc
+流程绑定，不属于公开 devkit。本插件回到 debug / chore / context 三 keeper 纯净态，
+三岔口不再有 sdlc 支路。
 
 ## 主会话保持精炼的手段（设计目标，已写进各文档）
 
@@ -501,7 +458,4 @@ chore 快照字节预算、决策信箱计数、双队列互不串号、自动�
 keeper 实例登记的写入与放弃两侧（白名单命中/不命中、name 缺失、目录不存在时自动建出、
 另一个键保留）、会话隔离两侧（`session_id` 写入/同会话读得到/跨会话读不到/旧格式
 无 `session_id` 键当陈旧处理/payload 缺 `session_id` 时仍正常登记 name、三岔口注入
-按会话状态三选一各自的措辞）、sdlc 第 4 支路的条件注入两侧（无 sdlc 目录时逐字不变、
-`specs` 与 `deliveries` 两个子目录各自命中、交付跑在 `.sdlc/worktrees/D-NNN-*/` 里时
-向上三层仍命中、空的同名 `sdlc/` 与超出查找深度都不命中、命中后总长度仍 ≤800）。
-236 条用例，覆盖见 `hooks/tests/run-tests.sh` 头部按 H 编号的分节说明。
+按会话状态三选一各自的措辞）。覆盖见 `hooks/tests/run-tests.sh` 头部按 H 编号的分节说明。

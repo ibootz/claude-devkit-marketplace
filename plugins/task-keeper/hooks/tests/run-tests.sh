@@ -80,15 +80,12 @@
 #   在真实 hook 外壳下的注入文案（无登记 / session 匹配直接带出 name / session
 #   不匹配或旧格式当陈旧 / 两档同时匹配 / payload 缺 session_id 时的安全降级）。
 #
-# 【2026-08-05 新增 H23，编号 [93]-[98]】
-#   三岔口加了第 4 支路「sdlc 流程文档编写 → 派 sdlc-writer」，但它是**条件注入**：
-#   只在工作区确实在跑 ai-sdlc 流程时才出现，判据是 `keeper_routing.sdlc_present`
-#   （worktree 根 + 往上 4 层里任一层存在 `sdlc/specs` 或 `sdlc/deliveries`，纯目录
-#   存在性）。H23 测两侧：不命中时输出与加这条支路之前逐字相同（不含 sdlc-writer
-#   字样，原三支路完好）；命中时支路出现且总长度仍 ≤800。另外三条覆盖判据边界——
-#   `deliveries` 子目录同样命中、交付跑在 `.sdlc/worktrees/D-NNN-<slug>/` 里时能
-#   向上三层找到 sdlc/（这正是最需要它的场景，只看当前根会全部漏掉）、空的同名
-#   `sdlc/` 目录与超出查找深度都不命中。
+# 【2026-08-12 sdlc-writer 整体迁出 radnove-sdlc】原 H23（sdlc-routing，[93]-[98]）与
+#   H30（sdlc-writer-guard，[135]-[141]）两节随 sdlc-writer 全套（agent + tk-sdlc skill +
+#   guard + keeper_routing 第 4 支路）迁到 radnove 市场的 radnove-sdlc 插件（1.0.0）。
+#   本文件 source 列表已摘除这两条，编号留 gap 不复用（同 H5/H13 留空档的先例）。
+#   三岔口 build_triage 回到纯三 keeper（去掉 sdlc_line 形参），H19/H22 等既有断言
+#   不受影响（314 用例全过）。
 #
 # 【2026-08-10 新增 H26，编号 [112]-[113]】
 #   DEBUG 这个 QueueSpec 新增 frontmatter 字段 spec_status（fm_order 在 "type" 与
@@ -110,18 +107,6 @@
 #   天天产生 diff」，两者都不报错。H28 锁三处文案逐字同步（分支各自追加不同注释会
 #   产生合并冲突，实测过）、四行 pattern 的写法坑（两条要 `**`、`.keeper-active`
 #   不能带 `**`）、以及 gitignore_findings 的五种配置。
-#
-# 【2026-08-12 新增 H30，编号 [135]-[141]】
-#   主会话直接写 sdlc 文档正文（sdlc/specs/ 或 sdlc/deliveries/ 下、非 _index.md）时
-#   deny 逼派 sdlc-writer。原先派发纯靠 UserPromptSubmit 第 5 支路软提醒，压不过「顺手
-#   写更快」的默认行为（keeper_routing.py 模块头实测过同类软约束压不过 base 指令）。
-#   判据三项全机械：tool_name ∈ Write|Edit|MultiEdit、file_path 命中 sdlc 正文区且非
-#   _index.md、payload 顶层 agent_id 缺省（主会话；Claude Code 2.1.228 二进制明文
-#   agent_id「Absent for the main thread, even in --agent sessions」，禁用 agent_type
-#   做此区分）。子代理带 agent_id 一律放行（sdlc-writer 写自己的产物不拦）。H30 覆盖：
-#   范围窄（非 sdlc 放行）、_index.md 豁免（gate 翻转合法）、主会话写正文 deny 且文案
-#   给派 writer 照抄形态 + why + 四条出路、子代理放行、Edit 同样命中、熔断降级、
-#   sdlc/ 下非 specs|deliveries 路径不命中。
 #
 # 【测试用真实进程跑，不 mock】直接把 JSON 喂给 hook 脚本的 stdin、断言 stdout，
 #   与 harness 的调用方式完全一致，因此能覆盖 bash 外壳、python 定位、编码等
@@ -173,14 +158,12 @@ source "$TESTS_DIR/cases/14-h19-userprompt-triage.sh"
 source "$TESTS_DIR/cases/15-h20-queue-autocreate.sh"
 source "$TESTS_DIR/cases/16-h21-keeper-instance-registry.sh"
 source "$TESTS_DIR/cases/17-h22-keeper-routing-session.sh"
-source "$TESTS_DIR/cases/18-h23-sdlc-routing.sh"
 source "$TESTS_DIR/cases/19-h24-board-report.sh"
 source "$TESTS_DIR/cases/20-h25-subagent-start-inject.sh"
 source "$TESTS_DIR/cases/21-h26-spec-status.sh"
 source "$TESTS_DIR/cases/22-h27-context-queue.sh"
 source "$TESTS_DIR/cases/23-h28-gitignore-v6.sh"
 source "$TESTS_DIR/cases/24-h29-keeper-generation.sh"
-source "$TESTS_DIR/cases/25-h30-sdlc-writer-guard.sh"
 
 echo
 printf '通过 %d / 失败 %d\n' "$pass" "$fail"
