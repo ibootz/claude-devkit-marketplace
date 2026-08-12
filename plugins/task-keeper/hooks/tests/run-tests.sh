@@ -111,6 +111,18 @@
 #   产生合并冲突，实测过）、四行 pattern 的写法坑（两条要 `**`、`.keeper-active`
 #   不能带 `**`）、以及 gitignore_findings 的五种配置。
 #
+# 【2026-08-12 新增 H30，编号 [135]-[141]】
+#   主会话直接写 sdlc 文档正文（sdlc/specs/ 或 sdlc/deliveries/ 下、非 _index.md）时
+#   deny 逼派 sdlc-writer。原先派发纯靠 UserPromptSubmit 第 5 支路软提醒，压不过「顺手
+#   写更快」的默认行为（keeper_routing.py 模块头实测过同类软约束压不过 base 指令）。
+#   判据三项全机械：tool_name ∈ Write|Edit|MultiEdit、file_path 命中 sdlc 正文区且非
+#   _index.md、payload 顶层 agent_id 缺省（主会话；Claude Code 2.1.228 二进制明文
+#   agent_id「Absent for the main thread, even in --agent sessions」，禁用 agent_type
+#   做此区分）。子代理带 agent_id 一律放行（sdlc-writer 写自己的产物不拦）。H30 覆盖：
+#   范围窄（非 sdlc 放行）、_index.md 豁免（gate 翻转合法）、主会话写正文 deny 且文案
+#   给派 writer 照抄形态 + why + 四条出路、子代理放行、Edit 同样命中、熔断降级、
+#   sdlc/ 下非 specs|deliveries 路径不命中。
+#
 # 【测试用真实进程跑，不 mock】直接把 JSON 喂给 hook 脚本的 stdin、断言 stdout，
 #   与 harness 的调用方式完全一致，因此能覆盖 bash 外壳、python 定位、编码等
 #   全链路，而不只是 python 函数。
@@ -168,6 +180,7 @@ source "$TESTS_DIR/cases/21-h26-spec-status.sh"
 source "$TESTS_DIR/cases/22-h27-context-queue.sh"
 source "$TESTS_DIR/cases/23-h28-gitignore-v6.sh"
 source "$TESTS_DIR/cases/24-h29-keeper-generation.sh"
+source "$TESTS_DIR/cases/25-h30-sdlc-writer-guard.sh"
 
 echo
 printf '通过 %d / 失败 %d\n' "$pass" "$fail"

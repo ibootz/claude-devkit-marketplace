@@ -1,6 +1,6 @@
 {
   "name": "task-keeper",
-  "version": "2.15.0",
+  "version": "2.16.0",
   "description": "常驻 keeper 托管 debug/杂务/上下文三队列 + sdlc-writer 写 sdlc 文档；动手前五方并行收齐规格再交表销账，triage 带规格溯源，决策打包 HITL，细节见 README",
   "author": {
     "name": "zhangq"
@@ -79,6 +79,11 @@
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use-debug-evidence.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool-use-sdlc-writer-guard.sh",
             "timeout": 5
           }
         ]

@@ -37,6 +37,7 @@
 | `pre-tool-use-debug-worktree-push.sh` | PreToolUse(Bash) | `git push` 的目标落在 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 内时 deny（fixer 产物只回流不推远端） |
 | `pre-tool-use-debug-worktree-destroy.sh` | PreToolUse(Bash) | 强制删除形态（`rm -rf` / `worktree remove --force` / `clean -fdx`）命中 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 路径时 ask 弹确认框 |
 | `pre-tool-use-debug-evidence.sh` | PreToolUse(Write\|Edit) | 只对 `.keeper/<交付id>/debug/*.md` 介入：新内容含 `image-cache` 会话级临时路径时 deny（跨会话必 404），带次数熔断，`origin_path` 留档豁免 |
+| `pre-tool-use-sdlc-writer-guard.sh` | PreToolUse(Write\|Edit) | 主会话（payload 无 `agent_id`）写 `sdlc/(specs\|deliveries)/` 下非 `_index.md` 文件时 deny，逼派 sdlc-writer（文案给派发照抄形态 + 四条出路）；`_index.md` 放行（承载 gate 状态 frontmatter，是主会话/Human 门禁动作）；子代理带 `agent_id` 一律放行（sdlc-writer 写自己的产物不拦）；带次数熔断。第 5 支路软提醒压不过「顺手写更快」，故上机械闸 |
 | `pre-tool-use-keeper-instance.sh` | PreToolUse(Agent) | 命中 keeper 类 `subagent_type`（`debug-keeper`/`chore-keeper`/`context-keeper`）的派发时，把 `tool_input.name` 连同这次派发所在的 `session_id` 写进 `.keeper/<交付id>/.keeper-instance.json` 对应键，另一个键原样保留；**纯写文件，不拦截任何操作**，不输出 permissionDecision，写不进去就静默放弃 |
 | `subagent-start-debug-keeper.sh` | SubagentStart（matcher `task-keeper:debug-keeper`） | 跑 `skills/tk-board/scripts/pending_dispatch.py --oneline`，输出非空时注入一段「漏派体检」（那一行 + 处置指引）。**无漏派时零输出**、未启用项目零输出、坏 payload 零输出，恒 exit 0。matcher 精确到单个 agent_type，**不是 `*`**——写 `*` 会把 debug 队列的清单灌给本机每一个子代理 |
 
@@ -397,6 +398,13 @@ fixer 又卡在等人答复，此时该突出需要人动作的那一面。
 `git commit` —— 全部留主会话；**只有往 `sdlc/` 下落盘文档正文这一件事**派出去。
 Define 阶段的切割点是 G1，取自 ai-sdlc 的 `define/SKILL.md` 原文「G1 通过后 AI 自主
 展开、不需再确认」，不是本插件自定的。
+
+**这条切割线有机械闸兜底（2.16.0 新增）**：第 5 支路（UserPromptSubmit 每轮注入的
+「转 sdlc-writer」）是软提醒，压不过主会话「顺手写更快」的默认行为——实测主会话在
+「写」的瞬间会把自己归到三岔口第 1 条「自己做：……需要你上下文才能做的事」。`pre-tool-use-sdlc-writer-guard.sh` 在主会话用 Write/Edit 写 `sdlc/(specs|deliveries)/`
+下非 `_index.md` 文件时 deny，文案给派 sdlc-writer 的照抄形态；`_index.md`（gate 状态）
+与子代理发起（`agent_id` 真值）放行。判据、四条出路与为什么用 deny 不用 ask 见
+`hooks/lib/sdlc_writer_guard.py` 模块文档。
 
 **分片只能按 feature 切，单 feature 内串行。** Define 的产出物有依赖链
 `behaviors → contracts → entities → prototype`，`validate-prototype.js` 会强制后两者
