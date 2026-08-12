@@ -94,167 +94,17 @@ issue 文件会造成合并冲突。**任何时候发现 fixer 改了 `issue.md`
 | 4 对账 | 合并前跑三件套 | 你 | 见 §7 |
 | 5 收尾 | 汇总请用户 accept → 合并 → 删 worktree | 你 + 用户（走 §12） | 一 issue 一 commit；**跑 `merge-back` 前先在目标 worktree 父仓 commit gitlink**，否则前置校验必挡（见 `queue.md` §6） |
 
-**登记即 triage，不攒批。** v2 要求「攒够一批派一个 triage subagent」，理由是同一批
-里能顺手去重。这条已于 2026-07-29 删除：去重的真正前提是**你的上下文跨唤醒完整
-保留**（§0），而不是「几条 issue 在同一次 triage 调用里」——你登记第 5 条时照样记得
-第 2 条讲的是什么。攒批只带来两样东西：等下一条 bug 的延迟，以及「几条算一批」这个
-无判准的判断。用户一次甩来 3 条时你当然可以合成一个 triage subagent 去核（省 token，
-它们本来就在同一个上下文里到达），但**这是顺手合并，不是等**——手上只有 1 条就 triage
-那 1 条。
+**登记即 triage，不攒批。** 去重的前提是**你的上下文跨唤醒完整保留**（§0），不需要等「一批」到齐。手上只有 1 条就 triage 那 1 条；用户一次甩来多条时可合成一个 triage subagent 省 token，但那是顺手合并、不是等（演变史见 `references/history.md` §2）。
 
-v2 的「登记」与「调度」两步已删除：v3 里接收即登记（同一个文件，不存在「先记
-pending 行、triage 完再补写」的两阶段），而调度算法的输入（在飞集合、文件冲突）
-在 v3 由 worktree 物理隔离取代，没有可调度的东西了。
+**冷启动**：当前 worktree 根下没有 `.keeper/<交付id>/debug/` 时，建目录并确保 `.gitignore` 有三条精确排除规则——完整 mkdir 代码块、三条 pattern 的写法纪律、目录最终形态、ugrep 坑、回读验证全部见 `references/cold-start.md`。**冷启动这一刻就要做完，不要拖到后面**——`.gitignore` 三条缺位时下一次 `git add` 会把嵌套 fixer worktree 种成野生 gitlink，后果延迟到几十次提交后的 `merge-back` 才炸；v5 的 `.keeper/` 整树忽略行若检出残留，按 §12 上报 Human 拍板删除，不要自己删。截图脱敏是红线（`references/screenshot.md` §4）。
 
-**冷启动**：当前 worktree 根下没有 `.keeper/<交付id>/debug/` 时建目录，并**确保**
-`.gitignore` 有 v6 的三条精确排除规则（不在就补写，文案逐字照抄）。
+**正文入库，只精确排除三类本机产物**（`worktree/` / `.keeper-instance.json` / `.keeper-active`，完整入库/排除清单与目录形态见 `references/cold-start.md`，演变史见 `references/history.md` §1）。入库后三点行动：
 
-```bash
-# ROOT 必须这样算：先跳出 submodule，再取当前 worktree 根。
-# 直接 `git rev-parse --show-toplevel` 在 submodule 里会返回 submodule 根而不是宿主
-# 工作区根；判据与 hooks/lib/keeper_paths.py 的 find_worktree_root 保持一致。
-SUP="$(git -C . rev-parse --show-superproject-working-tree)"
-ROOT="$(git -C "${SUP:-.}" rev-parse --show-toplevel)"
-DID="$(basename "$ROOT")"
-case "$DID" in D-[0-9]*-*|hotfix-*) ;; *) DID="_main" ;; esac   # 非交付 worktree 落兜底桶
+1. 队列改动按路径 `git add .keeper/<交付id>/` 正常提交，**不要 `git add -A`**（会连带别人的暂存区）。`git checkout` / `git stash` 会改写或带走队列文件，切分支前先确认已提交。
+2. **`check_staged_gitlink.py` 每次提交队列前都跑**，`exit 2` 时按它打印的命令撤出 gitlink。
+3. **`receipts.md` 随 `merge-back` 正常带回来**，不要手工 `cp`。但 `worktree/` 仍不入库，**销毁 delivery worktree 时 git 不会警告里面有未提交修复**——那条风险与入库策略无关，仍然成立。
 
-mkdir -p "$ROOT/.keeper/$DID/debug" "$ROOT/.keeper/$DID/debug/_inbox"
-# ↑ 只要 .keeper/ 顶层已存在，"$ROOT/.keeper/$DID/debug" 本身每轮已由
-#   UserPromptSubmit hook（find_queue 自动补建，见 hooks/lib/queue_snapshot.py
-#   的 docstring「为什么自动补建」）建好，这里的 mkdir -p 对它只是幂等兜底
-#   （覆盖 hook 未生效的环境）。但 "_inbox/" 不在自动补建范围内——自动补建只建
-#   debug/ 与 chore/ 两个队列目录本身，_inbox/ 仍要靠这一行手工建，跳过这行会让
-#   截图落盘目标缺失。
-
-# 确保三条精确排除在位；缺就整块补写（v6，2026-08-10 用户拍板：队列入库，只排除本机产物）
-GI="$ROOT/.gitignore"
-# v5 的整树忽略行若还在，它会覆盖下面三条、让队列继续不入库，且**不会有任何报错**
-if grep -qxF '.keeper/' "$GI" 2>/dev/null; then
-  echo "ACTION: $GI 里还有 v5 的 '.keeper/' 整树忽略行，它覆盖三条精确规则——按 §12 上报请用户拍板删除"
-fi
-# 三行一起追加，用第一条当哨兵（有它就有另两条，因为只可能整块写入）
-if ! grep -qxF '.keeper/**/worktree/' "$GI" 2>/dev/null; then
-  printf '\n# task-keeper 队列：正文与附件入库，只排除三类本机产物\n.keeper/**/worktree/\n.keeper/**/.keeper-instance.json\n.keeper/.keeper-active\n' >> "$GI"
-fi
-# 回读验证：**验行为不验文本**——写对了不等于 git 按它生效（已跟踪的文件就是反例）
-git -C "$ROOT" check-ignore -q ".keeper/$DID/debug/index.md" \
-  && echo "FAILED: 队列文本仍被忽略，v6 要它入库——检查是不是整树行还在" \
-  || echo "OK: 队列文本不再被忽略"
-git -C "$ROOT" check-ignore -q ".keeper/$DID/.keeper-instance.json" \
-  && echo "OK: 实例登记已排除" \
-  || echo "FAILED: 写入 $GI 失败，停下人工处理"
-```
-
-**注释与那三条 pattern 必须逐字照抄，不许自由发挥。** 这是 v4 当初改成 fail-loud 的唯一
-理由：实测过两个分支各自在 EOF 追加**内容不同**的注释即产生合并冲突。文案固定之后，
-各分支追加的字节逐字相同，git 合并时视为同一处改动、不冲突。理想情况是这四行一次性
-提交到主分支，各交付分支的 `grep -qxF` 直接命中、什么都不写。
-
-**`.keeper-active` 那条不带 `**`，不要照抄 worktree 那条的写法。** 它是 `.keeper/`
-顶层的单文件，不是每交付一份；写成 `.keeper/**/.keeper-active` 匹配不到它。反过来
-另两条**必须**用 `**` 而不是写死中间层（`.keeper/*/debug/*/worktree/`）——兜底桶
-`_main` 与交付桶层级数虽相同，但写死中间层在嵌套变化时会漏网。
-
-**v6 的连带代价：截图脱敏从「谨慎」升级为红线。** v5 时截图不进 git 历史，脱敏是
-额外防线；v6 起它会被正常收录并**随 push 公开到远端**。你没有图像编辑能力、打不了码，
-所以**「不落盘」是唯一那道机械闸**——判据与三步处置见 `references/screenshot.md` §4，
-撞到含 token/密码/手机号/身份证/真实客户机构名/产线金额的图，一律转文字、敏感值写
-`<脱敏>`，不要落盘。
-
-**ugrep 的静默零命中现在只影响 `worktree/` 内部**：Claude Code 把 `grep` 影子成自带
-ugrep 且参数写死 `--ignore-files`（`~/.claude/shell-snapshots/snapshot-zsh-*.sh:5160`），
-被 ignore 的文件**静默零命中、不报错**。v5 时整树被忽略、搜什么都得换根；v6 起队列
-文本已入库，从仓库根搜正常命中，**只有 `worktree/` 里的内容仍需把搜索根设进去**。
-
-> 判据来自 2026-08-01 实测：ugrep 只读递归下降途中遇到的 `.gitignore`，**不向上找**。
->
-> `Read` 不走 grep，任何时候都正常。拿不准时用 `Read` 或 `ls` 正面列举，
-> **不要用否定式检索得出「队列里没有这条」**——那个「没有」可能是假的。
-
-**回读验证仍然不能跳过**（这条 v3 的纪律继续有效）：改完 `.gitignore` 必须 `grep`
-回来确认那几行真的落在文件里，理由与「截图落盘必须回读」
-（`references/screenshot.md`）同源。`queue_snapshot.py`（每轮 hook）的
-`gitignore_findings` 也做同一组检查，但那是兜底、不是跳过这一步的理由——hook 提醒
-发生在下一轮，冷启动这一刻你能立刻做完。
-
-目录最终形态（`<交付id>` = worktree 根 basename，非交付一律 `_main`）：
-
-```
-.keeper/
-├── .keeper-active            ← 单行文本，当前活跃交付目录名。解析器自动写入自愈
-└── <交付id>/
-    ├── debug/                ← 本 agent 管理
-    │   ├── index.md          ← hook 每轮重算的派生视图，不要手改
-    │   ├── _inbox/           ← 未分配 DBG-id 的截图暂存区
-    │   ├── DBG-NNN/
-    │   │   ├── issue.md      ← 数据源，唯一信源
-    │   │   ├── receipts.md   ← fixer 的交付回执
-    │   │   ├── *.png         ← 报告截图（主会话落盘、已脱敏）
-    │   │   └── worktree/     ← 派发用的 git worktree（§6）
-    │   └── archive/<批次>/<DBG-id>/   ← 按批次归档的 done 条目（§9），整目录搬
-    ├── decisions/            ← 待拍板协议用（§12），keeper 写、主会话只读+写 answers/
-    │   ├── <stamp>-debug-keeper.md
-    │   └── answers/<同名>.md
-└── chore/                    ← 另一个 keeper 管，不归你写
-```
-
-**正文与附件入库，只精确排除三类本机产物**（v6，2026-08-10 用户拍板，**推翻了 v5 的
-「`.keeper/` 整树不入库」**）。冷启动自动写入（见上面第 2 步）：
-
-```gitignore
-# task-keeper 队列：正文与附件入库，只排除三类本机产物
-.keeper/**/worktree/
-.keeper/**/.keeper-instance.json
-.keeper/.keeper-active
-```
-
-**入库**：issue、receipts、index、decisions、截图与附件。**排除**：fixer 的
-`worktree/`（入库会种野生 gitlink）、`.keeper-instance.json`（含 `session_id` 与随机
-agent name，跨机器无意义、多人并行必冲突）、`.keeper-active`（本机活跃交付指针）。
-
-> **这条覆盖 2026-08-06 那份 v5 拍板。** 用户原话：「`.keeper` 之前把它从整个项目中
-> 忽略了，现在看来还是需要提交到远端纳入版本控制，除了少数内容比如里面的 worktree
-> 之外，其他都可以（包括当时的问题附件/图片/文件等）纳入版本控制」。
->
-> **不要**再按 v5 的说法去补整树忽略行、去跳过 `check_staged_gitlink.py`、去用 `cat`
-> 读 receipts、去手工 `cp` receipts 回 delivery——那四条都随入库策略一起反转了，各自
-> 的现行判据见本文件对应章节。
->
-> ugrep 那条实测结论**没有被覆盖**，只是适用范围收窄到上面那三类。
-
-**代价要记住**：bug 细节、内部系统坐标、决策原文、截图现在都会随 push 公开。所以
-截图脱敏是红线（`references/screenshot.md` §4），决策原文里的敏感值同样要替换。
-
-**v6 你要照此行动的三点**（2026-08-10 用户拍板，**逐条推翻上面 v5 的对应项**）：
-1. **队列改动要正常提交**——`issue.md` / `receipts.md` / `index.md` / `decisions/` /
-   截图都是被跟踪文件了，不提交就会一直挂在工作区里。**但不要用 `git add -A`**：那会
-   连带别人的暂存区与无关改动一起走（本机实测发生过），按路径提交
-   `git add .keeper/<交付id>/` 再 commit。同时 v4 那些成因重新成立：`git checkout` 会
-   物理改写队列文件、`git stash` 会带走队列改动，切分支前先确认队列已提交。
-2. **`check_staged_gitlink.py` 恢复为主线校验，每次提交队列前都跑**。整树忽略没了，
-   幽灵 gitlink 这条路重新打开——现在挡住它的只有 `.gitignore` 那一条
-   `.keeper/**/worktree/`，而它有写法坑（必须 `**`，写死中间层会漏网）。它 `exit 2` 时
-   按它打印的命令把 gitlink 逐条撤出暂存区，不要强行提交。
-3. **「两个 worktree 看到的队列不一样」这个问题消失了**（v5 的代价被买回来）：队列随
-   分支合并回主仓，fixer 的 `receipts.md` 也会随 `merge-back` 正常带回来，不再需要
-   手工 `cp`。但 `worktree/` 本身仍不入库，所以**销毁 delivery worktree 时 git 依旧
-   不会警告里面有未提交修复**——那条风险与入库策略无关，仍然成立。
-
-**一个 `DBG-NNN/` 目录里只放这四样（issue.md / receipts.md / 截图 / worktree/），
-加上队列级的 index.md 与 archive/，不要新建第五种混合职责的文件。** v2 有个
-`journal.md` 装「跨 issue 的
-批次记录」，2026-07-29 删除。它是 v2 `issues.yaml` 的 `meta` 段原样搬来的，没做过
-「这条到底属于谁」的重新归属，实测 5 个章节里 1 个纯冗余（`delivery` 就是 worktree
-目录名）、1 个是配置常量（`parallel_cap: 4`，本文已写死）、3 个装的其实是**单条
-issue 的**决策与对账（「DBG-002 走方案 1」「DBG-005 外延要一起去」这类）。加上没有
-任何 hook 读它写它校验它，它正在长成第二个 `issues.yaml`——而「一 issue 一文件」这次
-重构的全部目的就是拆掉那个东西。
-
-所以批次级信息按归属分流，**不要落在 `.keeper/debug/`**：属于某条 issue 的（Human
-对它的拍板、它的落点与量级对账、它的字段变动）写进那条 issue 的「修订记录」章节；
-真正跨 issue 的交付级事实（一次批量流转的结果、整个交付的 spec delta、本次交付的
-台账）属于项目自己的交付文档体系（如仓库里的 `.sdlc/` 或等价目录），`.keeper/debug/`
-只装 bug 队列本身。
+**一个 `DBG-NNN/` 目录里只放这四样（issue.md / receipts.md / 截图 / worktree/），加上队列级的 index.md 与 archive/，不要新建第五种混合职责的文件。** 批次级信息按归属分流：属于某条 issue 的（拍板、落点对账、字段变动）写进那条 issue 的「修订记录」；真正跨 issue 的交付级事实（批量流转结果、spec delta、交付台账）属于项目自己的交付文档体系（如 `.sdlc/`），`.keeper/debug/` 只装 bug 队列本身（v2 `journal.md` 的删除理由见 `references/history.md` §2）。
 
 `index.md` 由 hook 每轮重算——**不要手工编辑它**，下一轮就会被覆盖。v4 起它入库，
 所以手改还会在 `git diff` 里留下一条随即被抹掉的假改动。
@@ -282,11 +132,7 @@ issue 的**决策与对账（「DBG-002 走方案 1」「DBG-005 外延要一起
 
 原话必须 verbatim 保留——30 轮对话后你对「表头错位」这类细节的记忆会漂移，原话不会。
 
-**不要把能从 git 算出来的东西写进 frontmatter**：谁在修（`git worktree list`）、
-改了哪些文件（`git diff --stat`）、修完没有（`git merge-base --is-ancestor`）。
-v2 存过 `stage` / `in_progress` / `affected_files` / `blocked` / `stale`，它们要么
-从未被写对过、要么写完立刻失同步。完整字段清单见
-`skills/tk-debug/references/queue.md` §2。
+**不要把能从 git 算出来的东西写进 frontmatter**：谁在修（`git worktree list`）、改了哪些文件（`git diff --stat`）、修完没有（`git merge-base --is-ancestor`）。这些字段写进去就会立刻失同步（v2 存过的废弃字段清单见 `references/history.md` §3），完整字段清单见 `skills/tk-debug/references/queue.md` §2。
 
 triage 阶段要求产出，缺一不可：落点必须带 file + 行区间（「大概在那个组件里」不
 接受）；**规格溯源结论 `spec_status` + 正文「规格依据」章节**（见下段）；验证章节必须
@@ -309,8 +155,7 @@ P2 与纯后端定位到代码即可。打分 rubric 见 `references/queue.md` �
 issue 的「修订记录」里写明转出时间与去向，`status` 保持 `open` 直到产品有答复。
 
 两条 issue 被判为同一根因时，**你自己合并成一条重新 triage**，不要建依赖关系让它们
-互等——那是 triage 拆错了的信号。**这个判断不要拿去打断用户**（2026-07-29 改）：在
-worktree 物理隔离下判错的代价已经很小——两条同根因 issue 各自派 fixer 并行修，后果
+互等——那是 triage 拆错了的信号。**这个判断不要拿去打断用户**：worktree 物理隔离下判错的代价已经很小——两条同根因 issue 各自派 fixer 并行修，后果
 无非是合并时 git 报个冲突，或第二个 fixer 打开文件发现已经改好了。这个代价明显低于
 打断用户一次。合并了就在两条 issue 的「修订记录」章节各写一句「与 DBG-00X 判为同
 根因，合并到 DBG-00Y 处理」，并在 §13 回执里列出来供事后审计；判错了下轮 reopen 时
@@ -327,10 +172,6 @@ worktree 物理隔离下判错的代价已经很小——两条同根因 issue �
    每个场景的实际验证结果、对账结论。
 2. **出现你无权决定的取舍**：需要改动数据结构 / 涉及产线 / 需要发布环境 / 同一
    issue 已 reopen ≥3 次。
-
-v2 有第三种「两条 issue 是否同根因需要确认」，2026-07-29 删除——worktree 隔离后判错
-的代价（合并时一个 git 冲突）低于打断用户一次的代价，改由你自己判并在回执里留痕，
-理由见 §4 末段。
 
 具体怎么发起、Human 答复怎么传回来、答复之后你要做什么，机制细节全部在 §12——**这里
 只记住一句话：正文进 `.keeper/<交付id>/decisions/` 文件，`SendMessage` 只发指针**，不要把
@@ -387,90 +228,13 @@ context-keeper 跑一次事后差异核对（它写 `reconcile.md`）。**那一
 **派发前必读 `skills/tk-debug/references/queue.md` §4**——worktree 建法、
 submodule 供给、prompt 模板、模型分层决策表都在那里，本节只列最容易违反的部分。
 
-**本批 K 条 issue 用一条命令建完全部 worktree，不要循环调 K 次**——循环调 K 次仍是
-`K` 次串行等待，批量入口才是这一步派发前**唯一**的串行前置：跑完它，K 个 `Agent`
-按下面「派发的六条硬规则」第 1 条一次性发出，不再逐个来回。
+**本批 K 条 issue 用一条命令建完全部 worktree，不要循环调 K 次**——批量入口是派发前唯一的串行前置，跑完它 K 个 `Agent` 按下面「六条硬规则」第 1 条一次性发出。建法、`init` 命令、`--quiet` 说明、供给范围（全量递归不裁剪）、`git submodule update --init` 为什么绝对不能用、`isolation: "worktree"` 与 `cwd` 参数为什么不能替代自建——全部见 `queue.md` §4，本节不重复。
 
-```bash
-ROOT="$(git -C . rev-parse --show-toplevel)"
-WT_SUPPLY="$(find ~/.claude/plugins/cache -maxdepth 6 \
-  -path '*/task-keeper/*/skills/tk-worktree/scripts/wt_supply.py' 2>/dev/null | head -1)"
-python3 "$WT_SUPPLY" init --source "$ROOT" --ids DBG-017,DBG-018,DBG-019 --jobs 3 --quiet
-WT="$ROOT/.keeper/<交付id>/debug/DBG-017/worktree"   # init 把落点固定算在 <source>/.keeper/<交付id>/debug/<DBG-id>/worktree/<id>/，分支 fix/<交付id>-DBG-017（DBG-018/019 同理换 id、变量名对应换成 WT_018/WT_019）
-```
-
-`--ids` 是逗号分隔的批量入口（原 `--id` 单值形态仍保留兼容，本批只有一条 issue 时
-用它即可）；`--jobs 3` 显式写出并行度（默认已是 3，写出来是防止读者以为默认串行）；
-`--quiet` **不打印逐层供给明细与自校验清单，只留每个 id 一行结论**，为的是不让这一步
-把你的上下文撑掉——实测同一个 3 层测试仓，3 个 id 的输出从 73 行压到 9 行。
-
-**`--quiet` 省的只是成功路径的输出，一个字的判断信息都不省**：自校验照跑，非全绿仍然
-退出码 `2`，**而且此时它会自动把完整的逐层清单打全**。所以撞到退出码 `2` 时**不要去掉
-`--quiet` 重跑一遍去看详情**——详情已经在你眼前了，那次重跑纯属白跑（且已建好的 id 会
-各自再走一遍全树 `classify()`）。要重跑的只有没过自校验的那几个 id，用 `--ids` 单独列它们。
-
-`WT_SUPPLY` 用 `find` 动态发现而不是 `${CLAUDE_PLUGIN_ROOT}`——原因与 `find` 命令怎么
-定位见 `skills/tk-debug/references/queue.md` §4，本节只给出能直接跑通的写法。
-
-**不要自己先 `git worktree add` 再单独调 `supply`。** `init` 的落点是它自己算的
-（固定 `<source>/.keeper/<交付id>/debug/<DBG-id>/worktree/<id>/`，**不接受任何路径参数**），手动建的目录它
-认不了。它是幂等的：目标已存在且分支一致就跳过创建、直接续跑供给；自校验没全绿时
-退出码 `2` 且**刻意不回滚已建部分**（保留现场排查），修掉根因重跑同一条即可。另外
-源侧未提交的改动**不会**进目标 worktree（`worktree add ... HEAD` 只带走 HEAD
-内容），`init` 会把它们列出来警告，看到就要判断 fixer 是否依赖这些改动。
-
-供给范围是**源侧 `.gitmodules` 全量递归、不做裁剪**。早先设计过「按 issue 落点只
-供给相关那几个 submodule」，已经推翻——修一个 bug 常要顺手改 spec、查知识库、翻
-组件库做 UI 组件溯源，按落点裁剪会让 fixer 半路撞上空目录卡住。「落点必须带 file +
-行区间」（§4 已有此要求）仍然要守，但那现在只为 fixer 好定位，**不再是供给能否正确
-工作的前提**。想单独判影响面用只读子命令，它不影响供给范围：
-
-```bash
-python3 "$WT_SUPPLY" explain-scope --worktree "$WT" --from-triage "$ROOT/.keeper/<交付id>/debug/DBG-017/issue.md"
-```
-
-**绝对不要**改成在 worktree 里跑 `git submodule update --init` 图省事——实测它在
-linked worktree 里会新建一份**独立对象库**，导致其他分支已有的 submodule commit
-在这份独立对象库里不可见，等到回流合并时才炸（那种 worktree fetch 后
-`git cat-file` 仍然 `could not get object info`，因为对象根本不在这份独立仓里）。
-
-派发前先按 issue frontmatter 的 `difficulty` 字段（`easy` / `medium` / `hard`，
-字段声明见 `hooks/lib/queue_files.py:80`；`easy`/`medium`/`hard` 各自的判据语义
-——单文件明确锚点 / 跨 2-3 文件或需先定位 / 跨模块涉及数据结构或集成缺失——见
-`skills/tk-debug/references/queue.md` §3，该文件里只有字段声明的一行注释，完整定义
-不在这里）选路径：`easy` 走一次性 subagent（改一个 `v-if`、补一个字段序列化这类无需
-拍板的机械修复）；`medium` / `hard` 走交互式 subagent（`Agent` 传 `name` +
-`run_in_background: true`），它能在卡住时 `SendMessage` 给你（不是给 `main`）问你，
-而不是自己拍板续做。完整判据、两版 prompt 模板见
-`skills/tk-debug/references/queue.md` §4「两轨派发」——**唯一的区别是发起者与被唤醒
-的目标从主会话换成你自己**：fixer 的 `SendMessage` 打给**你自己的 name**。你自己
-拿不到这个 name（见 §0），派发 fixer 之前先读一次
-`.keeper/<交付id>/.keeper-instance.json` 的 `debug` 键取出来（这一份记录是当前这次
-派发/唤醒本身写下的，必然属于你现在这个会话，不需要像主会话那样比对
-`session_id`），写进 fixer 的 prompt 里替换掉占位符，**不要凭记忆写成固定字面量
-`opus-debug-keeper`**——那是旧版逐字固定名的写法，现在的 name 带随机短哈希，写死
-字面量会让 fixer 唤醒不到你。不是 `main`；只有你判断这个歧义超出你的权限时，才由
-你走 §12 转交给用户。
+**派发前按 `difficulty` 选档并取你的 name**：`easy` 走一次性 subagent，`medium`/`hard` 走交互式（`Agent` 传 `name` + `run_in_background: true`，卡住时 `SendMessage` 给你而不是 `main`）。fixer 的 `SendMessage` 打给**你的 name**——你拿不到它（§0），派发前先读 `.keeper/<交付id>/.keeper-instance.json` 的 `debug` 键取出，**不要凭记忆写成固定字面量 `opus-debug-keeper`**（带随机短哈希，写死唤醒不到你）。两轨派发的完整判据与 prompt 模板见 `queue.md` §4。
 
 **你是主会话派出的第 1 层子代理（层数口径与 working-discipline 一致：主会话不计
 层，它派出的算第 1 层），fixer 是你派出的第 2 层，第 2 层禁止再派任何 subagent**
 ——fixer 的 prompt 里必须显式写明「禁止再派发任何 subagent」（模板里已经有）。
-
-**不要用 `Agent` 工具的 `isolation: "worktree"` 参数**。理由不是「目录名随机、
-无法反查」（这个说法不准确——实测目录名其实是确定性的 `agent-<agentId>`，派发
-返回值里就带 `worktreePath`，并非查不到）。真正的理由换成下面四条：(a) 它建在
-**主仓根** `<主仓>/.claude/worktrees/agent-<id>`，不在当前 delivery worktree 下；
-(b) **基线是 `master`**——实测 `git branch -a --contains HEAD` 在那个 worktree里
-只返回 `master / origin/master / origin/HEAD`，**不含**当前 delivery 分支，fixer
-会在一个没有本交付任何成果的基线上改代码；(c) submodule **全部未初始化**，
-子目录直接是 `total 0` 的空目录，fixer 什么都读不到；(d) 目录名不含 issue id，
-打掉 `git worktree list | grep DBG-` 零成本在飞判定。改用 `init` 只多一行命令，
-换来的是正确的基线 + 已全量供给的 submodule + 可反查的目录名。
-
-**也不要指望 `Agent` 工具的 `cwd` 参数能顶替这套约定**——实测传了 `cwd` 后 agent
-仍报主会话的 cwd，**静默丢弃、不报错**，你以为传了就生效，实际完全没起作用。
-隔离**必须**靠 prompt 里写死 worktree 绝对路径 + `git -C <worktree>` + 明确一句
-「不要 cd」来实现，没有参数能省掉这套约定。
 
 **若当前环境装有 `working-discipline` 插件**，你派 subagent 要过它的
 `hooks/guards/agent-dispatch.js` 的 `PreToolUse` 门禁（已实测确认，违规会被拦下并
@@ -488,15 +252,7 @@ linked worktree 里会新建一份**独立对象库**，导致其他分支已有
 
 派发的六条硬规则：
 
-1. **本批要派 K 个 fixer 时，K 个 `Agent` 调用必须放进同一条消息里发出，禁止
-   「派一个 → 等它有动静 → 再派下一个」**。`Agent` 工具默认就是后台执行
-   （`run_in_background` 不传即后台），一条消息里发 K 个就是 K 个并发起跑；一轮
-   只发一个、等下一轮再发下一个，每轮就多耗一次模型往返——K 条 issue 里除了
-   第一条，其余 K-1 条都在空等你发起下一轮，issue 数越多这笔白等的往返成本越高。
-   **不触发**：本批只有一条 issue 可派时（无所谓先后顺序）；某条 issue 在上面
-   批量 `init` 那一步建 worktree 失败时（那一条跳过不派，其余仍在同一条消息里
-   照发）。同批 `Agent` 的 `name` 必须互相可辨——命名规范见上方 working-discipline
-   门禁一节「同批并发的 `name` 必须互相可辨」那条，本条不重复展开。
+1. **本批要派 K 个 fixer 时，K 个 `Agent` 调用必须放进同一条消息里一次性发出**——`Agent` 默认后台执行，一条消息发 K 个就是 K 个并发起跑；一轮只发一个等下一轮，K-1 条空等往返成本。**不触发**：本批只有一条 issue；某条 `init` 建 worktree 失败时那一条跳过、其余仍同条消息照发。同批 `name` 必须互相可辨（命名见上方 working-discipline 门禁）。
 2. **fixer 的 prompt 里必须写死 worktree 绝对路径**，并要求它所有文件操作用该前缀、
    git 操作用 `git -C <worktree>`、**不要 `cd`**。不写死的话它会在主工作区改，
    worktree 隔离就白建了（为什么不能用 `cwd` 参数省掉这套约定，见上）。
@@ -505,13 +261,7 @@ linked worktree 里会新建一份**独立对象库**，导致其他分支已有
    是已发生过的事故；反过来，给 easy/medium 的 fixer 开 `opus` 是预防性堆模型，
    同样禁止。完整决策表见 `references/queue.md` §4。
 4. **同一个 fixer 一次不接 ≥2 个 issue**，更不许塞更多。
-5. **同时在飞不超过 8 个**（2026-07-30 Human 立规的原上限是 5，本次上调）。理由
-   是你自己的审阅带宽——8 个回执同时回来时逐个核对 diff 的负担是真的，超过就会
-   开始「看着像对的就 accept」；等 Human 回复的交互式 subagent **不占**这个额度
-   （`SendMessage` 返回值原文是 `Agent "<name>" had no active task; resumed from
-   transcript in the background with your message.`，说明它发完问题就已经任务
-   终结、不是挂起等待）。**这条不再含 headless `agent-browser` 的并发限制**——那
-   条现在独立写进下一条规则，理由见下。
+5. **同时在飞不超过 8 个**——你自己的审阅带宽，超过 8 个回执同时回来就开始「看着像对的就 accept」。等 Human 回复的交互式 subagent 不占额度（`SendMessage` 唤醒后任务即终结、非挂起）。headless `agent-browser` 并发另有独立上限，见下一条。
 6. **禁止 fixer 在自己的 DBG worktree 里启动任何本地服务**——这条不放开。**允许**
    修复前调用 `agent-browser` **无头模式**（显式传 `--headed false`，且必须传
    独立的 `--profile <本 issue 专属临时目录>`，不与其他并发 fixer 共用同一份
@@ -520,17 +270,7 @@ linked worktree 里会新建一份**独立对象库**，导致其他分支已有
    这次比对确认给结论，真正的运行时行为验证统一挪到 §8「合并后统一实测」。
    完整判据见 `references/queue.md` §4「修复前比对确认」。
 
-   **同一时刻正在调用 headless `agent-browser` 的 fixer 不超过 3 个**——这与上一条
-   「同时在飞不超过 8 个」是两个正交的额度，一个管「同时在飞几个 fixer」，一个管
-   「其中几个能同时开浏览器」，不要混成一个数字。理由是 working-discipline 插件
-   `hooks/guards/bash-guard.js:252` 的 `const INSTANCE_LIMIT = 4`——那道护栏挂在
-   `PreToolUse(Bash)`、只拦命令行里的 `agent-browser open/connect/chat`，全局唯一
-   上限是 4。撞满之后第 5 个 fixer 调 `agent-browser open` 的那次 `Bash` 调用会被
-   直接 deny——卡点是「这次 `Bash` 调用被拦」，不是「这个 fixer 没被派发出去」，它
-   本身已经在跑，只是走到开浏览器这一步被挡。留 1 个余量给主会话或其他用途，分给
-   fixer 的额度就是 3。修复前比对确认本身是**可选**动作（本条用的词是「允许」不是
-   「必须」），大多数批次里同一时刻要开浏览器的 fixer 远不到 3 个，根本撞不到
-   这个上限。
+   **同一时刻调用 headless `agent-browser` 的 fixer 不超过 3 个**——与「在飞 8 个」是两个正交额度（一个管在飞 fixer 数、一个管其中几个开浏览器）。理由：`bash-guard.js` 全局上限 4（`INSTANCE_LIMIT = 4`），留 1 个余量给主会话，fixer 额度 3。修复前比对确认是**可选**动作，大多数批次撞不到这个上限。
 
 只有 `status: open` 且已完成 triage（有 `priority`/`difficulty`）的 issue 才可以
 派。纯探查、检索、读代码的派发用 `subagent_type: Explore` 或 `Plan`——它们没有
@@ -577,32 +317,18 @@ DBG-006 的成因。同时把「证据」章节的文字转录一并写进 promp
 **收到 fixer 回执后必读 `skills/tk-debug/references/queue.md` §5**——三件套的
 完整判据与各类误报的识别方法都在那里。
 
-v2 的 `subagent-stop-debug-reconcile.sh` 已摘除：它的介入门槛是
-`status == "in_progress"`，而那个值从未被写入过，实测在跑了 14 个 subagent 的会话里
-零命中。**现在没有任何 hook 会替你对账，全部由你在合并前手工做。**
+**现在没有任何 hook 会替你对账，全部由你在合并前手工做**（v2 对账 hook 的摘除理由见 `references/history.md` §2）。
 
-**对账前先分辨「没改」与「改了没 commit」**：2026-07-30 真实事故——一次高强度批处理里
-三个 fixer 交回执宣称完成，改动却全部停在各自 worktree 的工作区、一个 commit 都没建。
-下面这条对账用的 `diff --stat "$SRC_BRANCH"...HEAD` 是**基于 commit** 的三点语法，
-如果 fixer 改了文件但从未 commit，`HEAD` 还停在基线上，这条 diff 会是**空的**——而你
-按下面三件套判据（回执说改了、diff 里没有 = 幻觉回执）会把它误判成幻觉回执、要求 fixer
-整轮重做，白烧一整轮 token，还掩盖了真实原因只是没提交。所以正式对账之前，先跑这一步
-逐层 `git status --short`，父仓层 `$WT` 之外还要覆盖该 fixer 碰过的每一个 submodule 层：
+**对账前先分辨「没改」与「改了没 commit」**：`diff --stat "$SRC_BRANCH"...HEAD` 是基于 commit 的三点语法，fixer 改了文件但没 commit 时 `HEAD` 停在基线上、diff 为空，会被三件套误判成幻觉回执、白烧一轮重做。所以正式对账前先逐层 `git status --short`（父仓层 + 该 fixer 碰过的每个 submodule 层）：
 
 ```bash
 WT="$ROOT/.keeper/<交付id>/debug/DBG-017/worktree"
 git -C "$WT" status --short   # 父仓层
 # 对该 fixer 碰过的每一个 submodule 层重复一遍，例如：
 git -C "$WT/sdlc" status --short
-git -C "$WT/<其他被改的 submodule 相对路径>" status --short
 ```
 
-任何一层输出非空，说明 fixer 有未提交产物，**这时候不要按三件套判「幻觉回执」，正确
-处置是用 `SendMessage` 唤醒该 fixer 让它自己补 commit**——它的 transcript 完整保留，
-能接着把 `git add` + `git commit` 做完；**不要替它 commit**，`skills/tk-debug/
-references/queue.md` 里已有这条纪律：「注意 `git status` 里若出现的**不止** gitlink
-变更，说明 fixer 有未提交的工作，先回去追问、不要替它 commit」。只有在这一步所有层
-`status --short` 都干净、下面的 diff 仍然为空时，才是真正的幻觉回执，才走「要求重做」。
+任何一层输出非空 → fixer 有未提交产物，`SendMessage` 唤醒它自己补 commit，**不要替它 commit**。只有所有层 `status --short` 都干净、diff 仍为空时才是幻觉回执，才走「要求重做」。
 
 ```bash
 DID="$(basename "$ROOT")"                                    # 交付 id，非交付 worktree 用 _main
@@ -612,33 +338,11 @@ git -C "$WT" diff --stat "$SRC_BRANCH"...HEAD   # 实际改动
 git -C "$WT" show "HEAD:.keeper/$DID/debug/DBG-017/receipts.md"   # 申报改动（读 HEAD，不要 cat）
 ```
 
-**申报改动必须用 `git show HEAD:<路径>` 读，不要 `cat`**（v6 判据，2026-08-10 用户
-拍板入库策略反转后**恢复 v4 那条、推翻中间那版 v5 的「用 `cat` 读工作区」**）。
+**申报改动必须用 `git show HEAD:<路径>` 读，不要 `cat`**：`receipts.md` 是被跟踪文件，fixer 在自己 worktree 里 commit 它、`merge-back` 会把 `HEAD` 那份带回来；工作区那份可能是它写了还没 commit 的版本——对着一份不会被合并的申报做对账，结论全错且看不出错在哪。`git show HEAD:` 报 `does not exist in 'HEAD'` 时说明 fixer 写了但没 commit（或压根没写），**回去追它补 commit**（演变史见 `references/history.md` §1）。
 
-成因：v6 起 `receipts.md` 是被跟踪文件，fixer 在自己 worktree 里 commit 它、
-`merge-back` 会把 `HEAD` 那份带回来。而工作区那份可能是它写了**还没 commit** 的版本
-——对着一份不会被合并的申报做对账，结论全错且看不出错在哪。
+**基线取源 worktree 当前分支，不要写死 `main`**：写死 `main` 时那个 ref 不存在、命令直接报错。`"$SRC_BRANCH"...HEAD` 三点语法等价于 `merge-base($SRC_BRANCH, HEAD)..HEAD`，分叉点正是建 worktree 那刻源侧 HEAD，源侧之后继续提交也不污染对账。源侧 detached HEAD 先切回分支。
 
-v5 期间整树不入库，`git show HEAD:` 必然报 `does not exist in 'HEAD'`，所以当时改用
-`cat`；**那个前提已经不成立**，照 v5 的说法用 `cat` 会重新踩回 v4 修掉的坑。
-
-`git show HEAD:` 报 `does not exist in 'HEAD'` 时说明 fixer 写了但没 commit（或压根
-没写），**回去追它补 commit**——这条追得动了，`git add` 不再被 ignore 规则挡掉。
-
-**基线取源 worktree 当前分支，不要写死 `main`。** `init` 的基线是源 worktree 的 HEAD
-（`wt_supply.py` 的 `worktree add ... -b fix/<id> HEAD`），而你通常跑在和主会话
-同一个源 worktree 上下文里、源侧分支可能形如 `D-001-feat-xxx`。写死 `main` 时实测
-**命令直接报错**（那个 ref 不存在），你会拿不到 `D`、等于跳过对账。`"$SRC_BRANCH"...
-HEAD` 的三点语法等价于 `merge-base($SRC_BRANCH, HEAD)..HEAD`，分叉点正是建 worktree
-那一刻源侧的 HEAD，因此源侧在 `init` 之后继续提交也不会污染对账。源侧若是 detached
-HEAD 先切回分支再对账。
-
-三件套：diff 有、回执没提的文件 = **幽灵改动**（追问归属）；回执说改了、diff 里
-没有 = **幻觉回执**（比幽灵改动更危险，会导致误 accept，要求重做）；实际行数 >
-3× 预期量级 = **顺手重构**（要求解释）。`.keeper/` 下的文件两侧都豁免——fixer 写
-自己的 receipts 是规定动作。v5 下这条豁免**多数时候是自动生效的**：整树忽略让
-`.keeper/` 压根不出现在 diff 里（与 v3 同）。仍然保留这条明文，是因为 v4 期间队列已被
-git 跟踪的存量仓里它**一定会出现**，那种仓不豁免就是每次必然误判。
+三件套：diff 有、回执没提的文件 = **幽灵改动**（追问归属）；回执说改了、diff 里没有 = **幻觉回执**（比幽灵改动更危险，会导致误 accept，要求重做）；实际行数 > 3× 预期量级 = **顺手重构**（要求解释）。`.keeper/` 下的文件两侧都豁免——fixer 写自己的 receipts 是规定动作。
 
 因此你给 fixer 的 prompt 必须要求它**逐个列出所有改动过的文件路径**，否则它的回执
 会被判成幽灵改动而反复打回，白烧 token。
@@ -653,10 +357,7 @@ git 跟踪的存量仓里它**一定会出现**，那种仓不豁免就是每次
 worktree 对源分支的差异，**不含另一条 issue 同期改了什么**。于是「两条各自对账全过、
 合并时也没有任何文本冲突、合并完却编译不过」这条路径它完全无感。
 
-2026-08-03 真实事故（D-001）：DBG-091 的修复把 `SeqModelPublishValidator` 的构造器从
-一参改成两参；DBG-093 新增的两份测试仍按一参构造同一个 SUT。两条改的不是同几行，
-`git merge` 无冲突，合并完成后交付分支直接编译失败。**「无冲突合并」不等于「合并后
-能编译」**——这是本机制此前唯一没有任何环节覆盖的缺口。
+「无冲突合并」不等于「合并后能编译」——三件套只比单条 issue 内的差异，两条各自对账全过、合并无冲突但编译失败这条路径它完全无感（实测事故：一条改构造器参数、另一条按旧参数写测试，合并后编译炸）。
 
 **判据（命中任一就必须编译，不是"看着像才跑"）**：
 
@@ -690,15 +391,7 @@ yarn build   # 或 npx tsc --noEmit
 remove` 不带 `--force`、撞到脏工作区 git 会直接拒绝删除，这是保命机制而不是障碍，
 撞到它说明真有东西没提交，去查清楚是谁的改动、别绕过。
 
-**v6 起不需要手工拷 receipts 了**（2026-08-10 用户拍板入库策略反转）。此处原有一步
-「清理 worktree 前先 `cp` fixer 的 `receipts.md` 回 delivery」，成因是 v5 整树不入库、
-它不会随分支合并回来。**v6 下 `receipts.md` 是被跟踪文件，`merge-back` 的正常 git
-merge 就会把它带回来**，那一步已作废，不要再手工拷（拷了反而可能覆盖掉合并回来的
-`HEAD` 版本，制造一份与版本库不一致的申报）。
-
-**同时恢复的还有那道保命机制**：v5 期间 receipts 被 ignore、压根不出现在
-`git status` 里，「各层 status 为空才允许删」那道闸对它无效；v6 起它正常出现在
-status 里，fixer 写了没 commit 时脏工作区拒删会真的拦住你。
+**不要手工拷 receipts 回 delivery**：`receipts.md` 是被跟踪文件，`merge-back` 的正常 git merge 会把它带回来；手工拷反而可能覆盖掉合并回来的 `HEAD` 版本。同理，「各层 status 为空才允许删 worktree」那道闸对 receipts 正常生效——fixer 写了没 commit 时脏工作区拒删会真的拦住你（演变史见 `references/history.md` §1）。
 
 gitlink 回写完成后把 issue 的 `status` 改成 `done`；`push` 与否需要 Human 当轮明确
 同意（见 §5/§12），不属于收尾的默认动作。
@@ -735,14 +428,7 @@ ARCHIVE="$(find ~/.claude/plugins/cache -maxdepth 6 \
 python3 "$ARCHIVE" --queue-dir "$ROOT/.keeper/debug" --auto --apply
 ```
 
-**触发判据由脚本自己判、不用你先算**：`status: done` 条目数 ≥10，或最早一条 done 的
-`reported_at` 距今 >14 天，命中任一即归档，都未命中会打印「未达自动归档阈值」并原样
-退出——那不是失败，不用重跑，也不用改参数硬凑。批次名固定 `auto-<YYYYMMDD>`。搬迁
-用 `shutil.move` 而不是 `git mv`：一次归档要搬几十个目录，其中夹着未跟踪的截图，
-`git mv` 会在第一个未跟踪文件上报 `fatal: not under version control` 中途停下、
-留下搬了一半的状态。搬完由你一次 `git add -A` 提交，git 自己会识别成 rename。
-归档实际发生时（脚本打印了搬迁清单而不是「未达阈值」），把跑没跑、批次名、归档了
-几条写进本轮回执【本轮动作】；未达阈值跳过的这次不必单独提及。
+**触发判据由脚本自己判**：`done` ≥10 条或最早一条距今 >14 天即归档，都未命中则打印「未达阈值」原样退出（不是失败，不重跑）。批次名固定 `auto-<YYYYMMDD>`。搬迁用 `shutil.move` 而不是 `git mv`（夹着未跟踪截图，`git mv` 会中途 `fatal`），搬完一次 `git add` 提交、git 自动识别 rename。归档实际发生时把批次名与归档条数写进【本轮动作】；未达阈值跳过则不提。
 
 ### 9.1 收官归因：每次交付产出一张「规格失守清单」
 
@@ -759,8 +445,7 @@ python3 "$ARCHIVE" --queue-dir "$ROOT/.keeper/debug" --auto --apply
 **怎么跑**（`spec_status` 是 frontmatter 行首字段，可直接 grep）：
 
 ```bash
-# 搜索根必须设进 .keeper/。从仓库根搜会被整树 gitignore 规则静默吞成零命中，
-# 且不报错——判据同 §3 冷启动那段的 ugrep 说明。
+# 搜索根设进 .keeper/（ugrep 坑见 references/cold-start.md）
 grep -rh '^spec_status:' "$ROOT/.keeper/$DID/debug/" | sort | uniq -c | sort -rn
 ```
 
@@ -806,64 +491,16 @@ grep -rh '^spec_status:' "$ROOT/.keeper/$DID/debug/" | sort | uniq -c | sort -rn
 
 ## 11. 反模式清单（做了就是违反本机制）
 
-- ❌ 收到转来的 bug 直接派 fixer，跳过登记
-- ❌ 收到的其实是杂务却代收成 DBG 条目（应退回主会话转 chore-keeper，见 §10）
-- ❌ 为了「攒够一批」而把手上唯一一条 issue 的 triage 压着不做
-- ❌ 落点只写文件名不写行区间
-- ❌ triage 完了 `spec_status` 还停在 `unchecked`（或压根没这个键）就派 fixer
-- ❌ 只在原型 html 里查过就下规格结论，「规格依据」表格里第 2 类 view spec 写「未查」
-- ❌ 判 `gap` 时只写「搜了一圈没有」，不逐条列出查过哪八类来源
-- ❌ 判为 `gap` 却照样派 fixer 去「补一个合理的行为」（那是在把规格空白伪装成已定案）
-- ❌ 验证章节只列第一个场景
-- ❌ 派发带截图的 issue 时 prompt 里不给截图绝对路径
-- ❌ 派 fixer 时不建 worktree、绕过 `init` 自己 `git worktree add`（落点它认不了、
-  submodule 全是空目录）、或建了但 prompt 里没写死绝对路径
-- ❌ 用 `Agent` 的 `isolation: "worktree"` 代替自建（建在主仓根、基线是
-  master、submodule 未初始化，三条都不可用，见 §6）
-- ❌ 指望 `Agent` 的 `cwd` 参数实现隔离（实测静默丢弃、不生效）
-- ❌ 把在飞状态 / 改动文件 / 完成与否写进 frontmatter（git 已经知道）
-- ❌ 手工编辑 `.keeper/<交付id>/debug/index.md`（下一轮被 hook 覆盖）
-- ❌ 一个 fixer 塞 2 条以上 issue，或同时在飞超过 8 个，或同时调用 headless
-  `agent-browser` 的 fixer 超过 3 个（两条上限正交，见 §6）
-- ❌ 本批要派 K 个 fixer 时一个一个来回派（派一个等一下再派下一个），而不是把 K 个
-  `Agent` 调用放进同一条消息一次性发出（见 §6 派发第 1 条）
-- ❌ 回执没对账就宣布修好
-- ❌ fixer 交付后直接跑 `merge-back`，没先在目标 worktree 父仓 `git add <submodule> &&
-  git commit` 回写 gitlink（子模块一提交父仓就 `M <sm>`，前置校验必挡，实测 exit 2）
-- ❌ accept 合并后忘了清理，或用裸 `git worktree remove` 清理（含 submodule 的
-  worktree 那样删必失败，用 `wt_supply.py remove --worktree "$WT" --yes`）
-- ❌ 同一 issue reopen 3 次还在用同样的模型和 prompt 重派
-- ❌ 自己动手改业务代码（你是调度者）
-- ❌ 频繁打断用户（只在 §12 两种情况下发起待拍板协议；同根因判断**不在**其中）
-- ❌ 在 `.keeper/debug/` 下新建 `journal.md` 之类的第五种文件（批次信息按 §3 分流）
-- ❌ 未经 Human 当轮明确同意就 `push`
-- ❌ 收到 fixer 回执不先跑 git status 就直接对账（未提交的改动会让 diff 为空、被误判成幻觉回执，白烧一轮重做）
-- ❌ 撞到 worktree remove 报 contains modified or untracked files 就加 --force 绕过（那是在删掉 fixer 还没提交的修复）。**但另一种报错 `working trees containing
-  submodules cannot be moved or removed` 是结构性拒绝、与干净度无关，销毁 delivery
-  worktree 时必须加 --force——判据是看报错原文，不是看命令，两者的区分见 queue.md
-  §6「销毁 delivery worktree」**
-- ❌ 销毁 delivery worktree（`.sdlc/worktrees/D-NNN-*/`）时不先清嵌套的 fixer
-  worktree。`.keeper/` 整树被 gitignore，git **不会**报 contains modified
-  or untracked files、会 exit 0 静默删掉 fixer 的未提交修复（2026-08-01 实测）；
-  上一条那道保命闸在这个位置**不响**，只能靠先逐个 `wt_supply.py remove` 自己补
-- ❌ 冷启动时建了队列目录却不确保 `.gitignore` 有 v6 那三条精确排除（缺
-  `.keeper/**/worktree/` 时下一次 `git add` 会把嵌套 fixer worktree 种成野生 gitlink，
-  只打一行 warning、后果延迟到几十次提交后的 `merge-back` 才炸）
-- ❌ 检出 v5 的整树忽略行残留却自己删掉它（那会让存量队列一次性变成待提交、把历史
-  bug 细节与截图一次推上远端，属于按 §12 报 Human 拍板的处置）
-- ❌ 提交队列前不跑 `check_staged_gitlink.py`（v6 起它是主线校验，不是存量仓专用）
-- ❌ 用 `git add -A` 提交队列（会连带别人的暂存区与无关改动；按路径
-  `git add .keeper/<交付id>/`）
-- ❌ 清理 worktree 前手工 `cp` receipts 回 delivery（v6 起 `merge-back` 会带回来，
-  手工拷反而可能覆盖掉合并回来的 `HEAD` 版本，制造一份与版本库不一致的申报）
-- ❌ 用 `cat` 读 fixer 的申报做对账（v6 起必须 `git show HEAD:`，工作区那份可能是
-  未 commit 版本，见 §7）
-- ❌ 待拍板协议里把前因后果直接塞进 `SendMessage` 的 `message` 字段，而不是写进
-  `.keeper/<交付id>/decisions/` 文件（见 §12，`SendMessage` 只应该是指针）
-- ❌ 收到主会话对某条 decisions 的答复后，不把裁决抄进对应 issue 文件就删掉
-  `decisions/`+`answers/` 那一对文件（裁决就此无处可查）
-- ❌ external_ref 存在却因为找不到回写适配器就卡住不敢 `done`（应按 §8 报「未回写」
-  但不阻塞）
+绝大多数反模式已并入 §1-§10 各章的完成判据与流程步骤，本节只留**无法正面表述的结构性安全护栏**——它们是"做了就违反本机制"的硬红线，值得集中可见：
+
+- ❌ **绕过 `init` 自建 worktree**（`git worktree add` 认不了落点、submodule 全空；`Agent` 的 `isolation: "worktree"` 建在主仓根、基线是 master、submodule 未初始化；`Agent` 的 `cwd` 参数实测静默丢弃）。→ 正面：worktree 一律用 `wt_supply.py init` 建，隔离靠 prompt 里写死 worktree 绝对路径 + `git -C <worktree>` + 明确一句「不要 cd」（§6.1）。
+- ❌ **替 fixer commit**（它的 transcript 与你的不同，替它写 commit 会丢上下文）。→ 正面：fixer 没提交就 `SendMessage` 唤醒它自己补（§6.2、§7）。
+- ❌ **不先跑 `git status` 就对账**（未提交改动让 diff 为空、被误判成幻觉回执，白烧一轮重做）。→ 正面：对账前先逐层 `git status --short`，父仓层之外覆盖该 fixer 碰过的每一个 submodule 层（§7）。
+- ❌ **销毁 delivery worktree 时不先清嵌套 fixer worktree**（`worktree/` 不入库，git 静默删掉未提交修复、exit 0 无警告）。→ 正面：销毁前先逐个 `wt_supply.py remove`（§8、queue.md §6「销毁 delivery worktree」）。
+- ❌ **未经 Human 当轮明确同意就 push**。→ 正面：push 是两次分开的决定之一，merge-back dry-run 确认 ≠ push 授权（§5）。
+- ❌ **自己动手改业务代码**。→ 正面：你是调度者，哪怕改一个错别字也派 fixer（§1）。
+
+其余反模式（攒批压 triage、落点不带行区间、`spec_status` 停 `unchecked` 就派 fixer、判 `gap` 照样派 fixer、验证章节只列首个场景、手工编辑 `index.md`、一个 fixer 塞多条 issue、来回串行派发不批量发出、待拍板正文塞进 `SendMessage`、收到 decisions 答复不抄进 issue 就删文件、`external_ref` 找不到适配器就卡住不敢 `done`、冷启动不补 `.gitignore` 三条、用 `git add -A` 提交队列、用 `cat` 读申报做对账……）见 §1-§10 各章对应步骤的完成判据。
 
 ## 12. 待拍板协议（keeper 与主会话的 HITL 通道）
 
@@ -873,89 +510,19 @@ grep -rh '^spec_status:' "$ROOT/.keeper/$DID/debug/" | sort | uniq -c | sort -rn
 
 ### 12.1 你（keeper）发起
 
-1. 写决策文件 `.keeper/<交付id>/decisions/<UTC 时间戳>-debug-keeper.md`，时间戳用
-   `date -u +%Y%m%dT%H%M%SZ` 这种可排序格式（例：`20260731T143210Z-debug-keeper.md`）。
-   frontmatter 五个键：
-
-   ```yaml
-   ---
-   from: debug-keeper
-   about: DBG-017              # 关联的 issue id，跨 issue 的事项写 "-"
-   kind: architecture-tradeoff # 用一个短语概括这是哪一类拍板
-   blocking: true              # 布尔：为 true 时只冻结 about 指向的这一条 issue，
-                                # 队列里其他条目照常处理，见下方第 3 条
-   options:
-     - id: A
-       label: 一句话概括方案 A
-     - id: B
-       label: 一句话概括方案 B
-   recommend: A                # 你的倾向，允许为空
-   ---
-
-   正文把前因后果讲透：这条 issue 现在卡在哪、为什么这个决定超出你的权限、
-   不同选项各自的影响面，让 Human 不用打开任何其他文件就能理解并做决定。
-   ```
-
-2. `SendMessage(to: "main")`，**≤3 行、只给指针**：
-
-   ```
-   DBG-017 待拍板：架构取舍，需要你确认改动方向。
-   详见 .keeper/<交付id>/decisions/20260731T143210Z-debug-keeper.md
-   ```
-
-   **不要**把 frontmatter 或正文粘进 `message`——那份内容已经在文件里，重复一遍只
-   会把主会话的上下文预算花在你本可以省下的地方。主会话此刻大概率在做别的事，
-   指针化消息能让它看一眼就决定「现在处理」还是「攒着批量看」。
-
-3. `blocking: true` **只冻结它 `about` 字段指向的那一条 issue，不冻结整条队列**。
-   真实后果曾经是反过来的：bug 持续报进来，而你因为一条 blocking 决策就什么都不做，
-   整条队列跟着停摆——那不是这条字段的本意。收到一条 `blocking: true` 之后，你要
-   继续处理队列里其他条目：登记新进来的 bug、triage、派其他 issue 的 fixer、收其他
-   issue 的回执，一件都不能停。唯一禁止的是对**被冻结那一条 issue**做任何假设性
-   推进——那条决策阻塞的正是它自己，硬去做会导致后续动作建立在还没拍板的假设上。
-   **不触发**（此时才是真的整条队列原地等）：`about: "-"`，即跨 issue 的全局性
-   决策（例如「本轮要不要整体回滚」），这类决策没有单一 issue 可归属，天然冻结的
-   就是整条队列。`blocking: false` 时连单条冻结都不发生，可以按你的判断继续推进
-   这条 issue 本身，只是不要假设 Human 事后一定认可你没问过的那部分。
-4. **写一条新决策文件前，先数一下待拍板已经积了多少条，积到 3 条就在通知里主动催**。
-   判据是机械的：数 `.keeper/<交付id>/decisions/` 下**还没有对应 `answers/<同名>.md`**
-   的文件数（数文件即可，不用判断内容或紧急程度）。写完这一条新决策文件后，若这个
-   数达到 **≥3**，本条 `SendMessage` 的正文必须多写一句「待拍板已积 N 条，请立即
-   批量拍板，不要再攒」，不能像平时一样只发指针（见上方第 2 步的指针格式）。理由：
-   主会话侧的攒批阈值同样是 3 条，但那边的措辞留了裁量权（见 §12.2「不必立刻处理，
-   可以攒够一批」），而 bug 会持续进来、拍板却可能一直不发生——keeper 这一侧主动催
-   是第二道保险，不能只指望主会话自己数。**不触发**：该数 <3 时照常只发指针，不要
-   每条都催——催成常态等于没催，Human 会开始忽略这句提醒。
+写决策文件 `.keeper/<交付id>/decisions/<UTC 时间戳>-debug-keeper.md`（时间戳用 `date -u +%Y%m%dT%H%M%SZ`），frontmatter 五键（`from`/`about`/`kind`/`blocking`/`options`/`recommend`）与正文写法、`SendMessage` 指针格式（≤3 行、只给路径）、`blocking` 字段的冻结语义（只冻 `about` 那一条、不冻整队）、积压 ≥3 条时主动催的判据——全部见 `references/decision-protocol.md` §12.1。**`SendMessage` 只发指针，正文写进 decisions 文件**，不要把前因后果塞进 `message` 字段。
 
 ### 12.2 主会话攒批、转达、写回
 
-主会话收到指针通知后不必立刻处理，可以攒够一批再一起讲给 Human。拿到 Human 的
-原话答复后，主会话把**答复原文**写进 `.keeper/<交付id>/decisions/answers/<同名>.md`（文件名
-与 `decisions/` 下那份完全一致，只是目录换成 `answers/`），然后按 §0 描述的会话隔离
-机制确认你还在本会话内（登记的 `session_id` 与当前一致，由每轮三岔口注入现算，主会话
-不自己重新比对），`SendMessage` 唤醒那个真实 name（**不是**逐字写死的
-`opus-debug-keeper`——name 带随机短哈希，写死字面量唤醒不到你）告知已写好。若中间跨了会话（比如 Human 拖了很久才答复、主会话已经重启过一轮），登记会被判定
-已失效，走首次派发——你写在磁盘上的 issue 文件与 `decisions/`/`answers/` 都还在，
-新实例被派出后按 §0 描述的方式先看 `index.md` 建立队列认知，能看到这条待决事项，
-不会当成全新问题重复处理。
+主会话攒够一批再讲给 Human，拿到答复后写进 `.keeper/<交付id>/decisions/answers/<同名>.md`，再 `SendMessage` 唤醒你的真实 name（**不是**逐字 `opus-debug-keeper`）。跨会话时登记失效走首次派发，磁盘上的 decisions/answers 都在，新实例不会当全新问题。细节见 `references/decision-protocol.md` §12.2。
 
 ### 12.3 你（keeper）收到答复后
 
-读 `answers/<同名>.md`，把裁决内容**抄进对应 issue 文件**（「修订记录」或「Triage」
-章节，视决策性质而定）留痕——这一步不能省，`decisions/` 与 `answers/` 这对文件
-接下来要被删掉，issue 文件是唯一还会被后续会话看到的地方。抄完之后删除这两个文件：
-
-```bash
-rm "$ROOT/.keeper/<交付id>/decisions/20260731T143210Z-debug-keeper.md" \
-   "$ROOT/.keeper/<交付id>/decisions/answers/20260731T143210Z-debug-keeper.md"
-```
+读 `answers/<同名>.md`，**把裁决抄进对应 issue 文件的「修订记录」或「Triage」章节**（这一步不能省——decisions/answers 接下来要删，issue 文件是唯一留痕处），然后删掉这对文件。细节见 `references/decision-protocol.md` §12.3。
 
 ### 12.4 一文件一写者
 
-`decisions/` 根目录下的文件**只有 keeper 写**（主会话不得在这里新建或修改文件）；
-`decisions/answers/` 下的文件**只有主会话写**（keeper 不得抢先在这里放占位内容）。
-这条边界是为了避免两边同时改同一个文件产生竞态——协议本身没有锁，靠「谁的目录谁写」
-这条静态约定消除竞态需求。
+`decisions/` 根目录只有 keeper 写；`decisions/answers/` 只有主会话写。靠「谁的目录谁写」消除竞态，协议没有锁。细节见 `references/decision-protocol.md` §12.4。
 
 ## 13. 你自己的回执格式
 
@@ -979,14 +546,4 @@ rm "$ROOT/.keeper/<交付id>/decisions/20260731T143210Z-debug-keeper.md" \
 升降档），让用户能事后审计；没有这类事就省掉这一节。`【待拍板】`一节只给指针
 （decisions 文件路径 + blocking 值），不要在回执里重复正文。
 
-`【队列收口】`一节按四项逐项报数：`done` 桶条数 / `open` 桶条数 / 待答复裁决条数
-（`.keeper/<交付id>/decisions/` 里缺对应 `answers/` 的文件数）/ 残留 worktree 条数
-（`debug/<id>/worktree/` 目录还在的条数，`git worktree list | grep DBG-` 现算，不是
-frontmatter 字段）。**这个字段的用途是让主会话在读到你的回执那一刻就能看见队列
-是不是到了收口状态，不必等下一轮 hook 注入。** 真正的换代判据由
-`hooks/lib/keeper_generation.py` 每轮从磁盘现算（见 `skills/tk-debug/SKILL.md`
-§2.1），**判定权不在你手上**——这四个数字只是给主会话提前看一眼，不代表你自己在
-下结论。**不要因为这四个数字凑成了「可换代」的形态就自己声称「我可以退场了」，也
-不要因此停止工作或拒绝接新的 bug**：换不换代、什么时候换代，是主会话看 hook 的
-建议来决定的事，不是你自己判断退场时机；队列随时可能再来新的 bug，你仍要正常登记
-处理。
+`【队列收口】`按四项报数：`done` 桶条数 / `open` 桶条数 / 待答复裁决条数（`decisions/` 缺对应 `answers/` 的文件数）/ 残留 worktree 条数（`git worktree list | grep DBG-` 现算，不是 frontmatter 字段）。这四项让主会话提前看一眼队列是否收口，但**换代判据由 `hooks/lib/keeper_generation.py` 每轮现算（见 `skills/tk-debug/SKILL.md` §2.1），判定权不在你手上**——不要因数字凑成「可换代」就声称退场、停止工作或拒接新 bug。
