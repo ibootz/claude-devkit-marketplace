@@ -4,7 +4,7 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 
 ## 概述
 
-本市场包含 **20 个插件**（以两份市场清单为准），覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论、输出风格等场景。下面的编号清单只有 19 节——`clickable-paths` 至今只登记在市场清单与目录树里，没有单独的介绍段落，属于既有遗漏。
+本市场包含 **21 个插件**（以两份市场清单为准），覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论、输出风格等场景。下面的编号清单只有 20 节——`clickable-paths` 至今只登记在市场清单与目录树里，没有单独的介绍段落，属于既有遗漏。
 
 原 `devkit-git`、`devkit-dev`、`devkit-issue` 已从市场移除，不再作为独立插件提供。
 
@@ -209,6 +209,22 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
   `source` / `eval 'cd'` 等 19 类真污染写法实测放行，按用户拍板不补，清单在插件 README
 - 逃生阀 `CD_GUARD=off`（单次）；35 条回归用例两侧都覆盖：
   `node plugins/cd-blocker/tests/cd-guard.test.js`
+
+### 20. readable-citations（自足引用）
+
+把「见 X 文档 §5.2」这类引用改造成读者不点也读得懂的形态：编号后带**标题原文**（编号会漂、
+标题可搜）、括注 **20 字提要**（当场判断值不值得点）、**写明引用关系**（前置条件 / 反例 /
+详细版 / 相反做法）、被引结论只有一句时**直接内联**。纯注入，不拦截任何调用。
+
+- **链接按落点分两轨**：对话正文用 `file:///绝对路径#行号`（iTerm2 cmd+click 直达编辑器）；
+  落盘 md 用相对路径 + 标题锚点（文档 commit 后在别人机器与 GitLab 网页上仍可跳，绝对路径
+  在那里是死链且不报错）
+- **双挂 `UserPromptSubmit` + `SubagentStart`**：落盘文档大量由子代理写，而
+  `UserPromptSubmit` 只触达主会话，只挂它会漏掉产出文档的主力且毫无报错
+- **与 `clickable-paths` 互补不重叠**：那个管「提到文件时的路径」且明文排除落盘 md，
+  这个管「引用 md 文档的章节」
+- 逃生阀 `READABLE_CITATIONS=off`；7 条回归用例：
+  `node plugins/readable-citations/hooks/tests/readable-citations.test.js`
 
 ## 安装
 
@@ -420,7 +436,8 @@ claude-devkit-marketplace/
 │   ├── session-auto-title/
 │   ├── clickable-paths/
 │   ├── worktree-flow/
-│   └── cd-blocker/
+│   ├── cd-blocker/
+│   └── readable-citations/
 ├── .githooks/
 │   └── pre-commit             # 提交前强制跑版本四方校验（需 git config core.hooksPath .githooks）
 ├── scripts/

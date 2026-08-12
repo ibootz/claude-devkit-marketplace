@@ -1,12 +1,23 @@
 {
   "name": "clickable-paths",
-  "version": "1.2.0",
-  "description": "文件路径写成可点击链接 - 每轮注入格式规约，iTerm2 里 cmd+click 跳 VS Code（CLICKABLE_PATHS=off 可关）。需配 Semantic History，见 README",
+  "version": "1.3.0",
+  "description": "文件路径写成可点击链接 - 注入格式规约，iTerm2 里 cmd+click 跳 VS Code。1.3.0 起子代理也注入（CLICKABLE_PATHS=off 可关）",
   "author": {
     "name": "zhangq"
   },
   "hooks": {
     "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/clickable-paths.js"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
       {
         "matcher": "*",
         "hooks": [

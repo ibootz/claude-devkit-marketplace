@@ -93,6 +93,41 @@ Intel 机器或官方安装脚本可能是 `/usr/local/bin/code`）。
 本插件的形态**满足它且更强**：完整绝对路径在 href 里、点开即到。标签默认只写
 `<文件名>:<行号>` 保持简短，同名文件在一轮里出现多处时才换成相对仓库根的路径。
 
+## 主会话与子代理都注入（1.3.0 补的）
+
+1.2.0 及之前只挂 `UserPromptSubmit`，于是**子代理回执里的文件路径从来不可点**。
+
+原因是 `UserPromptSubmit` 只触达主会话——它的语义是「用户在交互界面提交了一次 prompt」，
+而子代理由 `Agent` / `Task` 工具编程派发任务字符串，不存在这个动作。这类落点错误**没有
+任何报错**：hook 正常执行、正常输出、退出码 0，只是那段文本永远不出现在子代理的上下文里。
+本仓有同型实测记录（codegraph 引导注入主会话 20 次，而真正做检索的子代理 23 份 transcript
+里零调用），判据见 `.claude/rules/project/hook-restraint.md` 的「注入类 hook 的事件落点」一节。
+
+1.3.0 起双挂 `UserPromptSubmit` + `SubagentStart`，共用同一个脚本，输出的
+`hookSpecificOutput.hookEventName` **按入参回声**——写死任一个会让另一路静默失效。
+
+回归用例：
+
+```bash
+node plugins/clickable-paths/hooks/tests/clickable-paths.test.js
+```
+
+7 条，覆盖两个事件各自的回声正确性、两路注入内容一致、白名单外事件不回声、关闭开关、
+空 stdin、畸形 JSON。
+
+## 与 readable-citations 的分工
+
+两个插件都在让引用可跳转，管的东西不重叠，同时装不冲突：
+
+| | clickable-paths（本插件） | readable-citations |
+|---|---|---|
+| 管什么 | 提到**文件**时的路径 | 引用 **md 文档的章节** |
+| 作用范围 | 只管对话正文，明文把「写进文件的 md」排除在外 | 对话正文与落盘 md 都管 |
+| 形态 | `[文件名:行号](file:///绝对路径#行号)` | 对话正文同左；落盘 md 走相对路径 + 标题锚点 |
+
+判据：**引用的是一份 md 文档里的某一节** → 那个插件；**提到一个源码文件的某一行** →
+本插件，锚点对 `.js` / `.py` 这类文件无效。
+
 ## 关闭
 
 ```bash
