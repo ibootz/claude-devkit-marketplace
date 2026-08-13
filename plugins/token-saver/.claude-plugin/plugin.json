@@ -1,0 +1,32 @@
+{
+  "name": "token-saver",
+  "version": "0.1.0",
+  "description": "运行时提醒 AI 节用 token：SessionStart 注入极简正向纪律，PreToolUse 在整读大文件时软提醒先定位行号，零硬拦。TOKEN_SAVER=off 关闭",
+  "author": {
+    "name": "zhangq"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/token-saver.js"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/token-saver.js"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -158,6 +158,13 @@
       "category": "Productivity",
       "description": "引用别处章节要免跳可读 - 带标题原文与20字提要，链接分绝对/相对两轨",
       "version": "1.0.0"
+    },
+    {
+      "name": "token-saver",
+      "source": "./plugins/token-saver",
+      "category": "Productivity",
+      "description": "运行时提醒 AI 节用 token - SessionStart 注入极简纪律 + 整读大文件软提醒，零硬拦",
+      "version": "0.1.0"
     }
   ]
 }
