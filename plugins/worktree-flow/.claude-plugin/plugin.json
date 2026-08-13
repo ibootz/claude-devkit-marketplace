@@ -1,6 +1,6 @@
 {
   "name": "worktree-flow",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "主分支保护 - main/master 上禁止直接改代码，强制 worktree 临时分支 → --no-ff 合回 → 清理。硬拦 Edit/Write/git commit，WORKTREE_GUARD=off 可关",
   "author": {
     "name": "zhangq"
