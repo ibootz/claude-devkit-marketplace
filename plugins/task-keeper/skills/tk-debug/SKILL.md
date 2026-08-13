@@ -26,14 +26,12 @@ when_to_use: |
 
 现在这些全部移到 **`debug-keeper` agent**（task-keeper 插件自带，
 `agents/debug-keeper.md`）。它在独立上下文里跑完全流程，**包括自己直接调用
-`Agent` 工具并行派发第二层 fixer subagent**；需要用户拍板时它走
-`agents/debug-keeper.md` §12 的待拍板协议——写 `.keeper/<交付id>/decisions/` 文件 +
-`SendMessage` 指针通知，不经过你转达正文。
-
-**嵌套 `Agent` 调用是否受限，历史上有过反复**（曾一度出现「具名 teammate 唤醒后
-再发起 Agent 调用被拒绝」又在同一天晚些时候消失），当前结论是标准
-`subagent_type` 路径不受嵌套深度限制、debug-keeper 按常驻 agent 正常工作；若未来
-再撞到类似报错，先判断卡住的是哪条调用路径，不要一概而论。
+`Agent` 工具并行派发第二层 fixer subagent**（标准 `subagent_type` 路径不受嵌套深度
+限制，debug-keeper 按常驻 agent 正常工作；撞到「具名 teammate 唤醒后再发起 `Agent`
+调用被拒绝」这类报错时，先判断卡住的是哪条调用路径——teammate 路径还是标准
+`subagent_type` 路径，不要一概而论）；需要用户拍板时它走 `agents/debug-keeper.md`
+§12 的待拍板协议——写 `.keeper/<交付id>/decisions/` 文件 + `SendMessage` 指针通知，
+不经过你转达正文。
 
 **你只做三件事，按顺序**：
 
@@ -114,12 +112,11 @@ cp "<照抄来的源路径>" "$DST"
 
 ### 1.2 图里可能含敏感信息时：不落盘
 
-**v6 起截图与同目录的 `issue.md` 会进 git 历史、会随 push 公开到远端**（2026-08-10
-用户拍板，推翻 v5 的整树不入库）。所以「不落盘」不再是额外谨慎，而是**唯一那道拦得住
-敏感信息公开的机械闸**——你没有图像编辑能力、打不了码，闸只有这一道，而 git 历史
-删不干净：即使之后 `rm` 掉文件，那次提交仍在。图里出现 token / cookie / 密码 / 密钥、
-手机号 / 邮箱 / 身份证 / 员工工号、真实客户机构名称、产线金额 / 成单数据 / 用户
-明细时**不要落盘**。
+**截图与同目录的 `issue.md` 会进 git 历史、随 push 公开到远端**，所以「不落盘」是
+**唯一那道拦得住敏感信息公开的机械闸**——你没有图像编辑能力、打不了码，闸只有这一道，
+而 git 历史删不干净：即使之后 `rm` 掉文件，那次提交仍在。图里出现 token / cookie /
+密码 / 密钥、手机号 / 邮箱 / 身份证 / 员工工号、真实客户机构名称、产线金额 / 成单
+数据 / 用户明细时**不要落盘**。
 
 **处置不是「打码后落盘」——你没有图像编辑能力，做不到打码。** 把打码写成指令等于要求
 执行一个不可能的动作。正确处置是跳过落盘 + 只做文字转录（把敏感值本身替换成
@@ -128,51 +125,19 @@ cp "<照抄来的源路径>" "$DST"
 
 ## 2. 唯一动作：派出或唤醒 `debug-keeper`
 
-**先看这一轮的三岔口注入怎么说，不要自己重新判断**：`user-prompt-submit-keeper-routing.sh`
-每轮都会读 `.keeper/<交付id>/.keeper-instance.json` 并核对 `session_id`，直接给出
-三种结论之一——「本会话已有 debug-keeper 在跑，name 是 `<真实 name>`，唤醒它」／
-「登记来自上一个会话（或是加会话隔离之前落的旧格式、压根没有 `session_id` 键），
-已失效，这是首次派发」／「还没有登记，首次派发」。**照它说的做**：说唤醒就用给出
-的 name 唤醒，说首次派发就用 `Agent` 派出并自己生成新的短哈希。
-
-**为什么不是你自己读文件判断**：`session_id` 只在 hook 收到的 payload 里才有，你
-（主会话）拿不到自己的这个字段，重新读一遍登记文件只能看到 name 存不存在，判断不
-出它是不是上一个会话留下的死 name——这正是 2026-08-03 那次事故（唤醒不到就直接改判
-首次派出再派第二个，两个实例抢同一个目录写权限）的根因，现在这层判断交给 hook 现算，
-不要自己再猜。**不要因为 `SendMessage` 唤醒失败就直接改判首次派出再派第二个**——先
-确认自己用的 name 是不是这一轮注入给你的那个；hook 已经说了「首次派发」你却拿旧文档
-或旧记忆里的名字去唤醒，失败是预期的，应该照 hook 的结论首次派出，不是"再派一个"。
+**派发与唤醒机制（三岔口注入、name 生成、description 锚定、换代）见
+`references/keeper-dispatch.md`，两 keeper 共用同一套，本文只写 debug 特异的判据。**
+读 reference 时占位替换：`<keeper>`→`debug-keeper`、`<kind>`→`debug`、
+`<prefix>`→`debug 队列`、`<正则前缀>`→`opus-debug-keeper`。
 
 **`model` 固定 `"opus"`，不按 bug 看起来难不难来下调。** keeper 是第一层调度者，它做的
 triage 打分、落点行区间、同根因判定、对账三件套误报识别，判错一次的返工成本由后面整条
 流水线承担（理由详见 `agents/debug-keeper.md` §0）。**第二层才分档**——keeper 派 fixer
 时按 `difficulty` 从 `sonnet` 起选，见 `references/queue.md` §4「模型分层」。
 
-**首次派出时，`name` 自己生成一个带 4 位随机短哈希的后缀，形态
-`opus-debug-keeper-<4位小写字母或数字>`（如 `opus-debug-keeper-4bb6`，正则
-`^opus-debug-keeper-[0-9a-z]{4}$`）。** 档位已钉死 `opus`，所以模型段恒为
-`opus-`，但**不再逐字写死 `opus-debug-keeper`**——那是旧版判据，2026-08-04 起改为
-强制带随机后缀，理由见下方事故。仍然不要写成 `debug-keeper`（缺模型段）、不要写成
-`opus-debug-keeper-<交付id>`（拿交付 id 当后缀，不是随机短哈希）、更不要写成
-`opus-task-keeper-debug-queue-manager`——这三类都会被 `working-discipline` 的
-`agent-dispatch` check 10 直接拦下。
-
-**为什么改成随机后缀而不是继续逐字固定**：逐字固定名撞上的是另一个问题——同一段
-会话里前一个 debug-keeper 实例结束被关掉后，下一个又叫同一个名字，`SendMessage`
-的 name 寻址是 latest wins，想唤起前一个就冲突。随机后缀让每个实例天生不重名，
-但代价是主会话没法再靠记忆或本文档拼出实际 name——这正是 `PreToolUse(Agent)` hook
-自动登记 `.keeper/<交付id>/.keeper-instance.json` 的原因（2026-08-04 起，见
-`hooks/lib/keeper_paths.py` 模块头「`.keeper-instance.json`」）：派发那一刻 hook
-自动把 name 写进去。**2026-08-05 起这份登记还会带上 `session_id`**，因为登记文件
-跨会话存活、而 keeper 只活在派出它的那次会话里——单纯记 name 不够，新会话读到的
-可能是上一个会话的死 name（见本节开头的会话隔离说明）；`user-prompt-submit-keeper-routing.sh`
-每轮据此现算三选一，不需要你凭记忆拼、也不需要盯着在飞面板抄。
-2026-08-03 的历史事故（旧版逐字固定名机制下）：keeper 被派成
-`sonnet-debug-keeper-085`，38 分钟后主会话按文档记的名字唤醒，`SendMessage` 报
-`No agent named 'debug-keeper' is reachable.`，随后它直接又派了第二个 keeper 实例，
-两个实例先后写同一个 `.keeper/<交付id>/debug/`，单一写者模式失效——落盘登记机制
-就是为了消除这类「唤醒不到就重派」的连锁反应，会话隔离是这个机制的补丁（登记机制
-本身没有区分会话时，这个连锁反应在跨会话场景下会原样复活一次）。
+首次派发的 `Agent` 调用形态（三岔口注入说「首次派发」时照这模板填，name 自己生成
+4 位随机短哈希、description 以 `debug 队列` 起头——完整规则与反模式清单见
+`references/keeper-dispatch.md` §2/§3）：
 
 ```
 Agent(
@@ -195,99 +160,29 @@ Agent(
 )
 ```
 
-**`description` 从「逐字等值」放宽为「前缀锚定」，不再要求照抄固定串。** 必须以
-`debug 队列` 起头，前缀之后接这一批的摘要，例如上面例子里的「debug 队列 · 关三条 +
-开工 DBG-140」（分隔符 `·` 只是推荐写法，不是判据的一部分，不写也放行）。这句话
-描述的是**这一代**而不是**这一秒**——debug-keeper 是常驻实例，此后一律靠
-`SendMessage` 唤醒、反复接不同的活，所以摘要要覆盖首次派发时手头已知的这一批范围，
-不要写成某个具体动作（比如只写「修 DBG-140」就丢了同批的另外两条）。
-
-**这条放宽的起因，是它此前钉死成固定串背后的理由已被推翻。** 2026-08-05 定的规矩是
-「description 逐字照抄固定串「debug 队列常驻管理」」，那条规矩依据的事实至今仍然
-成立：在飞 agent 面板渲染的是**首次 `Agent` 派发那一刻**的 `description`，
-`SendMessage` 只有 `to` / `summary` / `message` 三个字段，**没有任何入口能更新已
-派出 agent 的 description**。2026-08-05 实证（会话 `b4b5cb3e`，交付
-D-001-feat-job-sequence-model）：`opus-debug-keeper-7f3a` 派发时 description 写的是
-「关闭三条 + 开工 DBG-140」，此后对它的 `SendMessage` 唤醒 20+ 次（转新 bug、转裁决、
-放行合并……各不相同），面板始终显示派发那一刻那句——这条实证没有变。但 2026-08-10
-用户推翻的是当时给出的**应对**：钉死成固定串之后，这句话变得只说得出角色（「这是个
-debug keeper」），说不出这一代在干什么，用户原话是这个描述「已经失去了它实际工作
-的意义」，看板价值同样归零。
-
-**现在的应对是两条腿并用，缺一不可**：一条是这里的前缀锚定——放宽写法但不放弃「面板
-改不了」这个事实，靠「写这一批的摘要」让它至少在**这一代**存续期间是有信息量的；
-另一条是下面 2.1 节的换代机制——队列进入明确的收口状态时新派一个实例、连带换一句新
-的 description，而不是让一句话硬撑一整场会话。不带前缀的纯当次任务摘要现在会被
-`working-discipline` 的 `agent-dispatch` check 11 拦下（判据已改成 startsWith 比较：
-以 `debug 队列` 起头就放行；旧的固定串「debug 队列常驻管理」仍然放行，向后兼容）。
+**`description` 锚定 `<prefix>` 起头 + 这一批的摘要**：例如「debug 队列 · 关三条 +
+开工 DBG-140」，不要写成某个具体动作（比如只写「修 DBG-140」就丢了同批的另外两条）。
+完整机制（为什么前缀锚定而不是逐字固定串、面板渲染时机、check 11 拦下、向后兼容
+旧固定串、与 §2.1 换代的"两条腿并用"关系）见 `references/keeper-dispatch.md` §3。
 
 `run_in_background: true` 是必须的——它让 keeper 在后台跑，你不必等它，也让它具备
 `SendMessage` 到 `main` 的能力。`name` 派发成功后 `PreToolUse(Agent)` hook 会自动
 把它写进 `.keeper/<交付id>/.keeper-instance.json` 的 `debug` 键，你不需要自己再写
 这个文件。
 
-**此后每一次**（同一会话内再报 bug），这一轮的三岔口注入已经直接给出真实 name（见
-本节开头），不需要再自己读文件——下面这段读取命令只是给你在需要单独确认时用的
-等价写法，用 `SendMessage` 唤醒同一个，**不要再派第二个**：
+**此后每一次**（同一会话内再报 bug），用 `SendMessage` 唤醒同一个实例，**不要再派
+第二个**——唤醒形态、读取真实 name 的等价命令、上下文跨唤醒保留的事实、"唤醒不到
+就乱重派"为什么仍然禁止，见 `references/keeper-dispatch.md` §5。debug 侧的
+`SendMessage` 消息体要把用户原话 + 截图路径 + 文字转录一起带过去（§1 落盘流程的
+产物）。
 
-```
-NAME="$(/usr/bin/python3 -c '
-import json
-print(json.load(open(".keeper/<交付id>/.keeper-instance.json")).get("debug", {}).get("name", ""))
-' 2>/dev/null)"
-```
+### 2.1 换代：队列收口时新派一个实例
 
-```
-SendMessage(
-  to: "<上面读出来的 NAME，不是字面量 opus-debug-keeper>",
-  summary: "新增 bug 报告",
-  message: "用户原话逐字如下：\n<原话>\n截图：<_inbox 路径> / 转录：<文字转录>"
-)
-```
-
-`SendMessage` 唤醒时 keeper 的上下文完整保留（已实测确认），所以它记得之前登记过
-什么、能判断新报的这条是否与旧 issue 同根因。**每次新派一个 keeper 都会丢掉这个
-能力，并且产生两个写者竞争 `.keeper/<交付id>/debug/`。** 这一条讲的是「唤醒不到就乱
-重派」这种情形，仍然禁止；下面 2.1 节讲的是另一种情形——hook 主动建议换代——那时新派
-一个是机制本身要你做的事，不是违反本条。
-
-### 2.1 换代：队列收口时新派一个实例，而不是继续唤醒旧的
-
-**触发信号来自每轮的 hook 注入，不是你自己判断。** `hooks/lib/keeper_generation.py`
-每轮 `UserPromptSubmit` 现算一次：某个 kind（这里是 `debug`）的队列同时满足下面五项
-时，注入会建议你新派一个实例、而不是继续 `SendMessage` 唤醒旧的——
-
-1. `done` 桶非空（这一代确实干完了一批活，不是刚派出还没落盘）；
-2. `open` 桶为空（没有还没处理的条目）；
-3. `unknown` 桶为空；
-4. 该交付下没有待答复的裁决（`.keeper/<交付id>/decisions/` 里没有缺对应
-   `answers/` 的文件）；
-5. （debug 专项）没有任何 `debug/<id>/worktree/` 目录残留。
-
-**这五项缺一不可，尤其第 1 项。** 「`done` 桶非空」是实测出来的，不是设计时就想到
-的：第一版判据没有它，结果空队列——也就是 keeper 刚被派出、活还没落盘时的常态——
-直接被判成「可换代」，会导致主会话在转完一条 bug 的下一轮就急着重派，两个实例抢同一个
-队列目录的独占写权限。加上这一项之后，「刚开局」与「刚收工」这两种同样表现为「open
-为空」的状态才被区分开。第 4 项是一票否决、不按 kind 细分：keeper 写
-`decisions/<stamp>-<keeper>.md` 之后，答复是主会话后写的 `answers/<同名>.md`，而
-「把裁决抄回 issue、再删掉这对文件」这个收口动作只写在本文件（`agents/debug-keeper.md`）
-§12.3 里——一旦这一代在答复落盘前退场，新实例的冷启动流程里没有任何一步会去扫
-`decisions/` 待答复清单，那对文件会静默留在磁盘上，裁决永远不会被抄回。
-
-**换代该怎么做**：照上面一样用 `Agent` 新派——`subagent_type` 不变、`model` 仍是
-`"opus"`、`name` 换一个新的 4 位随机短哈希（如 `opus-debug-keeper-<新的4位>`）、
-`description` 写新一批的摘要（同样以 `debug 队列` 起头）。这是一次全新的 `Agent`
-调用，不是编辑或重启旧实例。
-
-**不需要任何「作废登记」动作。** `.keeper/<交付id>/.keeper-instance.json` 的写入是
-覆盖式的，`PreToolUse(Agent)` hook 在新实例派发那一刻自动登记，新 name 直接顶掉旧
-name——旧实例从此失去寻址，但**不会被杀掉**（Claude Code 的 subagent 没有终态，
-「停止」只是不再收消息），它安静留在后台，随会话结束，你不需要专门去关它或清理它的
-登记。
-
-**换代不是「必须做」，是「hook 给出建议之后你可以做」**：上面五项条件不全都满足时，
-继续照本节开头的方式 `SendMessage` 唤醒同一个实例，这仍是默认路径；本节只管那五项
-都满足之后新增的另一个选择。
+完整机制（hook 注入触发、五项条件、换代该怎么做、不需要作废登记、是否必须做）见
+`references/keeper-dispatch.md` §4。debug 侧的条件就是该节列出的五项——第 5 项
+「没有任何 `debug/<id>/worktree/` 目录残留」是 debug 专项，chore 侧没有。第 4 项
+一票否决涉及 `agents/debug-keeper.md` §12.3 的裁决抄回收口动作——一旦换代会丢掉
+这个收口能力，原因见 reference §4。
 
 ## 3. 转完立刻回到原任务
 

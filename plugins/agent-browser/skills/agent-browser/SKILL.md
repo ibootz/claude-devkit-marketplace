@@ -44,7 +44,7 @@ headless 一旦启动，人类**无法中途参与**登录授权，所以**第�
 
 拿到后按「鉴权注入四法」（下文）择优注入。**绝不**把明文密码写进 shell 历史、命令注释、日志或 git；token 类优先用环境变量或 `auth save` 落盘加密。
 
-**为什么第 1 步不能省**（2026-08-04 实证，非假设）：某次前端验证任务里，AI 只查了 `session list` 与两个 profile 目录，据此判定「本机无任何可用登录态」，转而向用户索取 token；而同一天上午本机的凭据管理工具已批量刷新过一批身份，其中恰好含该站点所需的那条、有效期还剩十天。用户据此拍板「本轮不验」，**10 条缺陷零运行时验证**。教训是一句话：**「我查过的地方没有」不等于「本机没有」**——盘点范围要覆盖上表四行，某行没查就说没查。
+**为什么第 1 步不能省**：**「我查过的地方没有」不等于「本机没有」**——盘点范围要覆盖上表四行，某行没查就说没查。只查两三个来源就断言「本机无登录态」，会漏掉刚被凭据管理工具批量刷新过的身份，转而向用户白要一次 token。
 
 **什么时候不触发本条**：目标是公开页面、压根不需要登录态（用 `--profile "$(mktemp -d)"` 起干净临时目录即可）；或用户在当轮消息里已直接给了 token / cookie / 账密（他给了就用他给的，不必再盘点）。
 
@@ -92,36 +92,9 @@ agent-browser close
 | 批量 cookie | cookie 导入 | `agent-browser cookies set --curl <file>` | 自动识别 JSON 数组 / Copy-as-cURL / 原始 header |
 | 敏感凭据落盘 | auth vault（加密） | `echo "pass" \| agent-browser auth save <name> --url <url> --username <user> --password-stdin` | 本地加密存储，LLM 看不到明文；配 `AGENT_BROWSER_ENCRYPTION_KEY`（64 位 hex，AES-256-GCM）加密 state 文件 |
 
-### 持久化 profile：选目录与避坑（运行时决策）
+### 持久化 profile 的目录选择
 
-`--profile` 是复用登录态的首选方式，但**传什么值**与**指向哪个目录**直接影响成败，下面是你要替用户把的关：
-
-**`--profile` 的两种形态（行为不同）**：
-- 传**名字**（如 `--profile Default`）= 只读快照那个 Chrome profile，不改原数据；适合"借一下登录态用完即弃"
-- 传**路径**（如 `--profile ~/.ab-profile` 或 `/Users/.../Chrome/Profile 1`）= 持久化目录，跨重启存全状态（cookies/IndexedDB/cache）；**推荐用于长期复用登录态，但仅限同一时刻只有一个实例用它**——多 agent 并发时改用传名字的只读快照形态，理由见下面的 SingletonLock 段
-
-**SingletonLock 硬约束（必须替用户避坑）**：macOS 上用户日常 Chrome 正在运行时，它当前打开的 profile 目录会被 `SingletonLock` 独占。CFT 若用**同一个**目录起，会**强制关掉用户日常 Chrome 或干脆起不来**。故：
-
-- **绝不**把 `--profile` 指向用户日常主力 profile（通常是 `Default` 对应的磁盘目录）。若用户给的路径疑似日常 profile，先确认"这是不是你平时在用的 Chrome 窗口的 profile？"，是就让他另建一个。
-- 纯隔离测试（匿名公开页、不需要登录态）用 `--profile "$(mktemp -d)"` 起干净临时目录，零冲突。
-
-**同一个 profile 路径不能被两个实例同时打开**（2026-08-06 实测，非推断）。上一条讲的是 CFT 与用户日常 Chrome 争目录，这一条讲的是**两个 agent-browser 实例之间**——同样撞，而且更容易撞，因为并行派多个 agent 是常态。实测：两个不同 `--session` 指向同一个 `--profile <路径>`，第二个直接退出，`exit code 21`，Chrome 原生报错逐字如下：
-
-```
-Failed to create /private/tmp/ab-lock-test/SingletonLock: File exists (17)
-Failed to create a ProcessSingleton for your profile directory. This means that
-running multiple instances would start multiple browser processes rather than
-opening a new window in the existing process. Aborting now to avoid profile corruption.
-```
-
-判据与后果：
-
-- **不排队、不自动复制、不降级**。agent-browser 自身没有锁检测逻辑，只按 500ms 间隔重试几次，然后把 Chrome 的 stderr 原样抛出。所以表现是**硬失败**，不是变慢。
-- **登录态本身不会被写坏**——Chrome 中止的理由就写在报错里（`to avoid profile corruption`）。这是唯一的好消息：撞了只是起不来，不必担心预热好的身份被并发写烂。
-- 因此**「建一个固定 profile 给所有 agent 共用」这个方案不成立**。要多 agent 并发复用同一份登录态，只有两条路：(a) 各 agent 用 `--profile <名字>`（传名字会拷只读快照到临时目录，天然互不冲突）；(b) 先从真身目录派生副本，每个 agent 各用一份副本路径。
-- **`--session` 不解决这件事**，它隔离的是浏览器实例不是磁盘目录。反过来还有个更早的坑：两个 agent 都不传 `--session` 时会共用名为 `default` 的同一个实例、抢同一批 tab，**且不报错**。并发时 `--session` 必须各自给稳定且互异的名字。
-
-**用户还没有独立 profile 时**：引导他建一个专用的（如 `AI Testing`），手动登录一次目标系统，再从 `chrome://version/` 的「个人资料路径」拿到磁盘路径交给你（注意磁盘目录名是 `Profile N`，不是 UI 显示名）。拿到后落到 `--profile <路径>`，并建议他把路径记进项目 `CLAUDE.md` / memory 方便下次复用。一次性的 UI 点击步骤由用户完成，你只负责拿到路径、注入 `--profile`、并在路径看起来是日常 profile 时拦一下。
+`--profile` 复用登录态时，**同一 profile 路径不能被两个实例同时打开**——Chrome `SingletonLock` 独占该目录，第二个实例直接退出（`exit code 21`）。多 agent 并发复用同一份登录态时，各实例用 `--profile <名字>`（只读快照，天然互不冲突）或各派生一份副本路径。**需要选 profile 目录、撞到 SingletonLock、或用户还没有独立 profile 时**，读 `references/profile-persistence.md`。
 
 ## 实例管理（全局上限 4 + 强制清理）
 
@@ -216,7 +189,7 @@ agent-browser batch "open <url>" "snapshot -i" "screenshot"
 
 ## 操作约束（必须遵守）
 
-1. **鉴权前置**：首次 open 目标站点前必须备好鉴权并注入（headless 下人类无法中途授权）。顺序是**先盘点本机已有来源**（profile / vault / 凭据管理 CLI / 项目文档记载的免登入口），四行全空才向用户索取
+1. **鉴权前置**：首次 open 目标站点前必须备好鉴权并注入（headless 下人类无法中途授权）。顺序是**先按「启动前的硬性准备 · 第 1 步」盘点本机已有来源**，四行全空才向用户索取
 2. **实例上限 4**：启动前查 `session list`，≥4 先 close；用完即关
 3. **用完即关（强制）**：每个任务结束立即 `agent-browser close`；headless 僵尸实例看不见但持续吃内存。即便你忘了，SessionEnd 钩子会兜底 `close --all`——但别依赖兜底，主动关是基本动作
 4. **snapshot 驱动**：先 `snapshot -i` 拿 refs 再操作；页面变化就重 snapshot；关键步 `screenshot --annotate` 复核
@@ -228,11 +201,11 @@ agent-browser batch "open <url>" "snapshot -i" "screenshot"
 
 | 错误 | 原因 | 修正 |
 |------|------|------|
-| 启动被 guard 拦「缺鉴权」 | 没带任何持久化鉴权方式 | **先盘点本机已有来源**（profile / `auth list` / 凭据管理 CLI / 项目文档免登入口，见「启动前的硬性准备 · 第 1 步」）拿到凭据后加 `--profile`/`--headers`/`--state`；**四行全空**才问用户要账密/token |
+| 启动被 guard 拦「缺鉴权」 | 没带任何持久化鉴权方式 | 按「启动前的硬性准备 · 第 1 步」盘点本机已有来源，拿到凭据后加 `--profile`/`--headers`/`--state`；**四行全空**才问用户要账密/token |
 | 启动被 guard 拦「实例超限」 | 活动实例已 ≥4 | `agent-browser close --all` 清理，或等现有任务完成 |
 | 内存持续涨 / 机器变卡 | 僵尸 CFT 实例未关（headless 看不见） | `agent-browser close --all` + `doctor`；或走 `orphan-process-cleaner` 场景 4 扫僵尸 |
 | 操作报「ref 不存在」 | 页面已变化、旧 refs 失效 | 重新 `snapshot -i` 拿新 refs |
 | 登录页反复跳转 | headless 被风控识别 | 切 `--headed` 让用户协助过验证，或换 stealth 方案 |
-| CFT 起不来 / 强关了用户 Chrome | profile 抢 SingletonLock | 用独立 AI Testing profile，别用日常 Default |
+| CFT 起不来 / 强关了用户 Chrome | profile 抢 SingletonLock | 用独立 AI Testing profile（见 `references/profile-persistence.md`），别用日常 Default |
 | context 被单页打爆 | 没限输出 | 加 `--max-output 50000`，snapshot 用 `-c` 紧凑模式 |
 | 每次退出 CC 报 `SessionEnd hook ... failed: Hook cancelled` | L2 钩子同步部分超出 1.5s 共享预算（1.1.1 及更早：`doctor` 同步跑 1.6s） | 升到 ≥1.1.2（`doctor` 已后台放飞）。清理其实成功——`close --all` 早于超时前跑完。仍复现则看是否有别的 `SessionEnd` 钩子拖慢，或按上文「L2 的 1.5s 硬预算」排查 |

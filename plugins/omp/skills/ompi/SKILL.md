@@ -1,5 +1,5 @@
 ---
-name: omp
+name: ompi
 description: >
   指挥 omp 命名子代理（omp-explore / omp-plan / omp-task）执行实际工作。
   你作为 Orchestrator 只负责理解需求、拆解任务、派发子代理、审阅结果；

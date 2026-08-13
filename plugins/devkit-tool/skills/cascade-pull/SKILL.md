@@ -1,6 +1,9 @@
 ---
 name: cascade-pull
-description: 带 submodule（子模块）的 Git 仓库整体同步拉取——父仓拉最新 + 子模块代码真正到位 + gitlink（父仓中指向子模块某次提交的指针）对齐，是 `git pull` 的增强版。与同插件 `cascade-push`（提交推送方向）配对，但**方向语义相反：本 skill 只处理本仓直接声明的 submodule、绝不递归进嵌套层**。当用户要求"拉一下代码/更新代码/同步仓库"、"pull 完子模块还是旧的/没更新"、"submodule 显示 dirty 或 detached HEAD"、"更新/bump submodule 指针"、"把某个 submodule 提升到最新"、"submodule 落后了要拉齐"、"更新 gitlink"时使用。核心纪律：只处理本仓直接声明的 submodule、绝不递归进嵌套子模块；诊断三方差异后由用户选拉取模式，不擅自替用户决定；移动 gitlink 前必须列出新旧提交的 commit message 给用户确认。
+description: 带 submodule 的 Git 仓库同步拉取——父仓拉最新、子模块 checkout 到位、gitlink 对齐，是 `git pull` 增强版。与 `cascade-push` 配对但作用域相反：**只处理本仓直接声明的一层 submodule，绝不递归嵌套层**。诊断父仓/子模块/远端三方差异后由用户选拉取模式，移动 gitlink 前列新旧提交给用户确认。
+when_to_use: |
+  用户说"拉一下代码/更新代码/同步仓库"、"pull 完子模块还是旧的/没更新"、"submodule dirty 或 detached HEAD"、"更新/bump submodule 指针"、"把某个 submodule 提升到最新"、"submodule 落后要拉齐"、"更新 gitlink"时使用。
+  **核心判据**：仓库有 `.gitmodules` 且要把父仓与子模块同步到一致。单仓无 submodule 直接 `git pull` 即可，不需要本 skill。嵌套递归拉取（多层子模块一路往里 pull）不是本 skill——本 skill 只处理一层、严禁 `--recursive`；递归推送方向（由内向外提交）才用 `cascade-push`。
 ---
 
 # 带 submodule 的仓库同步拉取（增强版 pull）
