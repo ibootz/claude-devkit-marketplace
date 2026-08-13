@@ -106,6 +106,17 @@ settings 改动会被 reload，无需重启即生效。落 `.claude/settings.jso
 落 `.claude/settings.local.json` 自动 gitignore、仅本人。判据仍是确定的前缀匹配：列了
 `docs/` 只放 `docs/` 下，`src/` 照拦。
 
+更激进一档：`WORKTREE_GUARD_EXEMPT_DOTDIRS=1` 放行所有顶层以点开头的路径（`.vscode/`、
+`.idea/`、`.husky/` 等隐藏目录，含 `.gitignore` 这类根点文件），未来新增的点目录自动放行：
+
+```json
+{ "env": { "WORKTREE_GUARD_EXEMPT_DOTDIRS": "1" } }
+```
+
+代价：`.githooks/`、`.github/workflows/`、`.husky/` 这类 hook/CI 脚本目录也会一并放行，
+可在 main 上直改、绕过 worktree 评审——改它们会改变 git/CI 行为，故默认关。判据是
+「相对仓根的首段以 `.` 开头」，机械确定，省去逐目录登记。
+
 ## 关闭
 
 ```bash

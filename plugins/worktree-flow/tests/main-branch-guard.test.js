@@ -178,6 +178,31 @@ check(
   2,
   { WORKTREE_GUARD_EXEMPT: 'docs/,config/' }
 )
+
+// WORKTREE_GUARD_EXEMPT_DOTDIRS=1 放行所有顶层点开头路径
+check(
+  'DOTDIRS 开 → main 上顶层点目录 → 放行',
+  { tool_name: 'Write', tool_input: { file_path: path.join(exemptRepo, '.githooks/new.sh') }, cwd: exemptRepo },
+  0,
+  { WORKTREE_GUARD_EXEMPT_DOTDIRS: '1' }
+)
+check(
+  'DOTDIRS 开 → main 上根点文件 → 放行（.gitignore）',
+  { tool_name: 'Write', tool_input: { file_path: path.join(exemptRepo, '.gitignore') }, cwd: exemptRepo },
+  0,
+  { WORKTREE_GUARD_EXEMPT_DOTDIRS: '1' }
+)
+check(
+  'DOTDIRS 开 → main 上非点开头目录 → 仍拦（src/）',
+  { tool_name: 'Write', tool_input: { file_path: path.join(exemptRepo, 'src/app.js') }, cwd: exemptRepo },
+  2,
+  { WORKTREE_GUARD_EXEMPT_DOTDIRS: '1' }
+)
+check(
+  'DOTDIRS 关（默认）→ main 上顶层点目录 → 仍拦（须显式开）',
+  { tool_name: 'Write', tool_input: { file_path: path.join(exemptRepo, '.vscode/x.json') }, cwd: exemptRepo },
+  2
+)
 check(
   '非 git 目录',
   { tool_name: 'Edit', tool_input: { file_path: path.join(os.tmpdir(), 'nowhere.js') }, cwd: os.tmpdir() },
