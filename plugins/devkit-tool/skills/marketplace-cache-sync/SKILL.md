@@ -12,7 +12,7 @@ when_to_use: |
 
 把"更新插件市场"这件事拆成两层动作依次执行，**先用本地/并发探测算出「哪几个真的需要动」，再只对那几个调 CLI**，并在核实每一层是否真的生效时避开已知的误判坑。
 
-**验证基础**：内容来自两次真实全量执行（17 个 marketplace + 25 个 enabled plugin，2026-07-29 复跑）+ 一次 project/local scope 专项验证（2026-07-30，8 个仅装在 project/local scope、从未装过 user scope 的插件 id）+ 一次 hook 定义方式双检测验证（2026-08-01，发现目录式 hook 会让”只读 `plugin.json` 判生命周期”漏判）+ **一次性能专项实测（2026-08-06，逐条计时定位固定开销、验证"跳过 no-op 等价"、验证两类插件源的探测判据）**，覆盖两层模型（marketplace 源 vs 已启用插件缓存）、探测优先的执行顺序、project/local scope 按 (id, projectPath) 逐条刷新、缓存清理白名单差集算法，以及下方「已验证的坑」列出的各条已复现问题。
+**验证基础**：本 skill 经过多次真实全量执行，覆盖两层模型（marketplace 源 vs 已启用插件缓存）、探测优先的执行顺序、project/local scope 按 (id, projectPath) 逐条刷新、缓存清理白名单差集算法。各结论数字与坑的完整复现证据（日期 / CLI 版本 / 秒数 / 复现过程）见 `references/verification-log.md`。
 
 ## 背景：两层状态，容易只做一半
 
@@ -27,23 +27,19 @@ Claude Code 的插件系统有两层独立状态，都在 `~/.claude/plugins/` �
 
 ## 慢在哪：先读这段，否则会照旧全量刷一遍
 
-2026-08-06 本机逐条计时（`claude` 2.1.220，17 市场 / 128 条安装记录）：
-
-| 动作 | 实测耗时 | 说明 |
-|---|---|---|
-| `claude --version` | 0.05s | CLI 启动开销可忽略，慢的不是启动 |
-| `claude plugin update <不存在的 id>` | 0.24s | 校验阶段就早退，证明固定开销**不在**加载市场清单 |
-| **`claude plugin update <一个已是最新的插件>`** | **24.8s** | **即使回执是 `already at the latest version`、对配置零改动，也照付这 25 秒** |
-| `claude plugin list --json` | 23.2s | 同一类固定开销 |
-| `claude plugin marketplace update <单个 git 市场>` | 3.9s | 市场层反而便宜 |
-| `claude plugin marketplace update`（不带参数，全量 17 个） | **14~16 分钟** | 逐市场**串行** clone，期间不流式打印进度；其中一个 SSH 源曾单独卡 1.5 分钟 |
-| 并发 `git ls-remote` 探测全部 17 个市场 | **4.5s** | 替代上面那 14~16 分钟的探测手段 |
-| 并发 `git ls-remote` 探测全部 53 条 url 源插件记录 | **2.9s** | 替代逐个 `plugin update` 的探测手段 |
-
 两个结论直接决定执行顺序：
 
-1. **每次 `claude plugin update` 都是 25 秒起步，与它是否真的有活干无关。** 本机 113 条已启用记录全刷一遍 ≈ 47 分钟。所以优化的唯一有效方向是**减少调用次数**，不是并行（并行不安全，原因见第三步）。
-2. **跳过一次必然 no-op 的 update，与跑它完全等价。** 实测：`claude plugin update insight-addon@claude-devkit-marketplace` 回执 `already at the latest version (1.1.0)`，前后 `diff <(jq -S . 快照) <(jq -S . installed_plugins.json)` 是 **0 行**。既然零改动，跳过就不丢任何东西——这是本 skill 全部剪枝的合法性基础。
+1. **每次 `claude plugin update` 都是 25 秒起步，与它是否真的有活干无关**——即使回执是 `already at the latest version`、对配置零改动，也照付这 25 秒。本机 113 条已启用记录全刷一遍 ≈ 47 分钟。所以优化的唯一有效方向是**减少调用次数**，不是并行（并行不安全，原因见第三步）。同类固定开销还覆盖 `claude plugin list --json`（≈ 23s）。
+2. **跳过一次必然 no-op 的 update，与跑它完全等价**——前后 `diff <(jq -S . 快照) <(jq -S . installed_plugins.json)` 是 0 行，跳过不丢任何东西。这是本 skill 全部剪枝的合法性基础。
+
+对照之下，探测手段本身几乎不花时间：
+
+| 手段 | 耗时 | 替代什么 |
+|---|---|---|
+| 并发 `git ls-remote` 探测全部 17 个市场 | ≈ 4.5s | 替代不带参数的 `marketplace update` 全量串行 clone（≈ 14~16 分钟） |
+| 并发 `git ls-remote` 探测全部 53 条 url 源插件记录 | ≈ 2.9s | 替代逐个 `plugin update` |
+
+完整计时表（含 `claude --version` / `plugin update <不存在 id>` 等基线对照）见 `references/verification-log.md`「性能计时基准」。
 
 ### 两类插件源：判据不同，别混用
 
@@ -93,7 +89,7 @@ while IFS= read -r mkt; do
 done < /tmp/mkt_to_update.txt
 ```
 
-**不要再跑不带参数的 `claude plugin marketplace update`。** 它对全部市场串行 clone，本机实测 14~16 分钟；而 2026-08-06 那次探测的结论是 17 个市场里只有 1 个真有新提交（另 1 个是无法探测的官方市场），实际要跑的只有 2 次 × 4s。历史上那 14 分钟里绝大部分是在重新 clone 已经最新的仓。
+**只对命中的市场逐个跑 `claude plugin marketplace update "$mkt"`。** 不带参数的全量版会对所有市场串行 clone（≈ 14~16 分钟），而典型一轮探测下来 17 个市场里通常只有 1~2 个真有新提交——绝大多数时间花在重新 clone 已经最新的仓。
 
 命中数量多（比如超过 5 个）时才需要 `run_in_background`，否则前台跑完更省事。
 
@@ -110,7 +106,7 @@ python3 "$PROBE" --stage plugin      # 本机实测 4.0s（含 53 条 url 源并
 3. 按上面「两类插件源」的判据分别剪枝：(a) 市场仓内源比版本号，(b) url 独立仓源并发 ls-remote 比 `gitCommitSha`。
 4. 三种情况一律**列入待刷**，不做剪枝：`installPath` 指向的缓存目录不存在、市场源没声明版本号（判不了）、远端探测失败。剪枝只在能确证"必然 no-op"时才生效。
 
-本机 2026-08-06 实测结果：113 条已启用记录里 **82 条可跳过、31 条需刷**，光这一步就省下 82 × 25s ≈ **34 分钟**。
+本机典型一轮：113 条已启用记录里 **82 条可跳过、31 条需刷**，光这一步就省下 82 × 25s ≈ **34 分钟**。
 
 **这个剪枝不改变结果，也不修 CLI 自身的漏刷面。** 它做的只是"预测 CLI 会不会 no-op，会就别调"。若某插件的版本号没升但内容改了，CLI 自己也会说 `already at the latest version` 而不刷——那是 CLI 的行为，剪枝既不引入也不放大它。
 
@@ -140,16 +136,11 @@ done < /tmp/plugins_to_refresh.txt
 
 **必须用 `while IFS= read -r` 逐行读，不要写 `for p in $plugins`。** Claude Code 的 Bash 工具在 macOS 上走 zsh，而 zsh 默认**不对未加引号的变量做单词分割**（bash 会）——`for p in $plugins` 会把整个多行字符串当成**一个** token 传给 CLI，报 `Plugin "<第一个插件名>" not found` 后整个循环失败。落地成临时文件再逐行读，不依赖任何 shell 的分词行为。
 
-**`--scope` 必须显式传。** `claude plugin update` 的 scope 默认值是 `user`（见 `--help`：`-s, --scope <scope>  Installation scope: user, project, local, managed (default: user)`）。某个 id 若从来没有 `user` scope 记录、只在项目目录下装过，不带 `--scope` 跑就会 `exit=1` 报 `Plugin "<name>" is not installed at scope user`，而循环不检查退出码，这类失败会和成功回执一起滚屏而过——**看起来流程正常跑完了，实际上那个插件从未被刷新**。2026-07-30 实测本机有 8 个这样的 id（判定式：`jq -r '.plugins | to_entries[] | select(.value | map(.scope) | index("user") | not) | .key' ~/.claude/plugins/installed_plugins.json`）。上面的清单驱动写法从源头绕开了这个坑——每条记录的 scope 都来自 `installed_plugins.json` 本身。
+**`--scope` 必须显式传。** `claude plugin update` 的 scope 默认值是 `user`（见 `--help`：`-s, --scope <scope>  Installation scope: user, project, local, managed (default: user)`）。某个 id 若从来没有 `user` scope 记录、只在项目目录下装过，不带 `--scope` 跑就会 `exit=1` 报 `Plugin "<name>" is not installed at scope user`，而循环不检查退出码，这类失败会和成功回执一起滚屏而过——**看起来流程正常跑完了，实际上那个插件从未被刷新**。判定式（本机曾命中 8 个 id）：`jq -r '.plugins | to_entries[] | select(.value | map(.scope) | index("user") | not) | .key' ~/.claude/plugins/installed_plugins.json`。上面的清单驱动写法从源头绕开了这个坑——每条记录的 scope 都来自 `installed_plugins.json` 本身。完整复现见 `references/verification-log.md`「project/local scope 专项坑的复现」。
 
-**project/local scope 靠 cwd 隐式定位目标项目，不接受任何显式路径参数；且 cwd 不匹配时不报错，而是打印看似成功的回执、对配置零改动。** 2026-07-30 实测：在与 `cskl-dev@curatedskills-dev` 完全无关的目录下执行 `claude plugin update --scope project cskl-dev@curatedskills-dev`，回执是 `✔ cskl-dev is already at the latest version (1.5.1)`，但前后 `diff <(jq -S . 快照) <(jq -S . installed_plugins.json)` 是 **0 行差异**——这句"已是最新"没有对应到任何真实记录，是误导性的假成功。所以必须 `cd` 进该条记录**自己的** `projectPath`；用子 shell `(cd "$ppath" && ...)` 而不是裸 `cd`，避免污染后续 Bash 调用的 cwd。目录缺失（项目已删但配置残留）不算错误，跳过并报告即可。
+**project/local scope 靠 cwd 隐式定位目标项目，不接受任何显式路径参数；且 cwd 不匹配时不报错，而是打印看似成功的回执、对配置零改动**（前后 `diff <(jq -S . 快照) <(jq -S . installed_plugins.json)` 是 0 行差异）。所以必须 `cd` 进该条记录**自己的** `projectPath`；用子 shell `(cd "$ppath" && ...)` 而不是裸 `cd`，避免污染后续 Bash 调用的 cwd。目录缺失（项目已删但配置残留）不算错误，跳过并报告即可。完整复现见 `references/verification-log.md`「project/local scope 专项坑的复现」。
 
-**循环变量禁止命名为 `path`（以及 `fpath` / `cdpath` / `manpath` / `fignore` / `mailpath` / `module_path`）。** zsh 用 `typeset -T PATH path` 把这些小写名与同名大写环境变量**双向绑定**——写 `path` 就是写 `PATH`。所以 `while IFS= read -r path ver` 会在第一次迭代把 `$PATH` 覆盖成一个目录字符串，之后循环体内所有外部命令（`jq` / `sort` / `wc` / `comm` / `du`）全部 `command not found`。**这个故障极易误判**：循环**之前**的同名命令已经跑成功了，报错看起来像"jq 没装好 / 环境坏了"，而真正的原因是自己把 PATH 写没了。本步与第五步的核验循环都要读 `installPath`，是最容易踩的位置——统一用带语义前缀的名字（`ipath` / `_p` / `orphan_dir`）。判据：**任何出现在 shell 片段里的小写变量名，若其大写形式是常见环境变量，就换名。**
-
-```bash
-echo a | while IFS= read -r path;  do jq --version; done   # command not found: jq
-echo a | while IFS= read -r ipath; do jq --version; done   # jq-1.7.1
-```
+**循环变量禁止命名为 `path`（以及 `fpath` / `cdpath` / `manpath` / `fignore` / `mailpath` / `module_path`）。** zsh 用 `typeset -T PATH path` 把这些小写名与同名大写环境变量**双向绑定**——写 `path` 就是写 `PATH`，第一次迭代后循环体内 `jq` / `sort` / `wc` / `comm` / `du` 全部 `command not found`，且故障表象像"jq 没装好"，极易误判。本步与第五步的核验循环都要读 `installPath`，是最容易踩的位置——统一用带语义前缀的名字（`ipath` / `_p` / `orphan_dir`）。判据：**任何出现在 shell 片段里的小写变量名，若其大写形式是常见环境变量，就换名。** PATH 只在该次 Bash 调用的子 shell 内被破坏，不影响后续调用。完整机制与最小复现见 `references/verification-log.md`「zsh `path` 绑定导致循环体内 `command not found`」。
 
 **必须串行执行，不能并发派发**：`claude plugin update` 会读改写共享的单个文件 `~/.claude/plugins/installed_plugins.json`，多个进程同时跑存在写竞态——后写完的会覆盖先写完的那条记录，可能导致某些插件的刷新结果丢失。用 `flock` 包住每个调用也换不来加速：一次 update 的 25 秒里网络检查与配置写入是同一个不可分割的进程，锁会让所有调用在锁处排队，等价于串行。
 
@@ -169,7 +160,7 @@ diff <(jq -S . /tmp/ip_before.json) <(jq -S . ~/.claude/plugins/installed_plugin
 
 ### 第三步补充：project scope 版本落后很多时先问用户，别默认拉平
 
-探测输出里若出现同一个 id 在多个项目目录下**版本号落后好几个大版本**，不要当成"欠账"直接全刷。2026-08-06 本机实测：`sdlc@ai-sdlc` 在 12 个项目目录下横跨 `3.3.0` / `3.3.3` / `3.8.0` / `3.9.0` / `3.3.18` 五个版本，而市场源已到 `3.12.2`。这有两种完全不同的成因，处置相反：
+探测输出里若出现同一个 id 在多个项目目录下**版本号落后好几个大版本**，不要当成"欠账"直接全刷。典型实例：`sdlc@ai-sdlc` 在 12 个项目目录下横跨多个大版本（`3.3.x` 到 `3.7.x`），而市场源已到 `3.12.2`。这有两种完全不同的成因，处置相反：
 
 - **有意钉版**——某个项目正依赖旧版行为，升级会改掉它的 skill / hook 行为。此时应保持不动。
 - **确实漏刷**——那些项目只是很久没打开过。此时该刷。
@@ -180,7 +171,7 @@ diff <(jq -S . /tmp/ip_before.json) <(jq -S . ~/.claude/plugins/installed_plugin
 
 刷新缓存**不会**热更新到正在运行的会话里：`claude plugin update` 的输出会提示 `Restart to apply changes.`，刷新完什么都不做等于白刷。必须显式告知用户这一点，不要让用户误以为当前会话已经在用新版本。
 
-但**"必须完整重启"是过强的说法**，`/reload-plugins` 这个内置命令通常就够：它重载插件清单、skill、agent 与 hook（回执形如 `Reloaded: 25 plugins · 4 skills · 11 agents · 17 hooks`），**包括本次刷新新增的 hook 挂载点**。2026-07-29 实测：`working-discipline` 从 3.0.0 刷到 3.2.0（3.2.0 新增了 `SessionStart` 挂载点、并把每轮注入从 6717 字符压到 1163），跑完 `/reload-plugins` 后**下一轮**的 `UserPromptSubmit` 注入内容立刻变成 3.2.0 的短版，无需退出会话。
+但**"必须完整重启"是过强的说法**，`/reload-plugins` 这个内置命令通常就够：它重载插件清单、skill、agent 与 hook（回执形如 `Reloaded: 25 plugins · 4 skills · 11 agents · 17 hooks`），**包括本次刷新新增的 hook 挂载点**。实测刷新后跑完 reload，下一轮的 `UserPromptSubmit` 注入内容就已是新版（具体案例见 `references/verification-log.md`「/reload-plugins 与生命周期挂载点」），无需退出会话。
 
 **唯一不会追补的是会话生命周期类事件的注入**，`SessionStart` 是典型：它只在 `startup` / `resume` / `clear` / `compact` 时触发，`/reload-plugins` **不会重放**它。后果是——如果新版本把内容下沉到了 `SessionStart`（而旧版本没有这个挂载点），reload 之后会进入一个**割裂状态**：每轮注入已经是新版的"指针 + 增量"，但它所引用的那份静态主体在本会话**从未注入过**，主体里的判据实际不在上下文里。同一现象也适用于 `SessionEnd` / `PreCompact` 等生命周期钩子。
 
@@ -192,10 +183,12 @@ diff <(jq -S . /tmp/ip_before.json) <(jq -S . ~/.claude/plugins/installed_plugin
 | 新增或改动 `PreToolUse` / `PostToolUse` / `UserPromptSubmit` 挂载点 | `/reload-plugins` 即可（实测新挂载点会生效） |
 | 新增或改动 `SessionStart` / `SessionEnd` / `PreCompact` 挂载点 | **必须重启会话**（或等一次 auto-compact 触发 `SessionStart:compact` 把它补上），否则该份注入在本会话缺失 |
 
-**怎么判断新版本是否含生命周期挂载点——必须同时查两处，漏一处会误判"无需重启"。** Claude Code 的插件有两种互相独立的 hook 定义方式，2026-08-01 实测各踩一种：
+**怎么判断新版本是否含生命周期挂载点——必须同时查两处，漏一处会误判"无需重启"。** Claude Code 的插件有两种互相独立的 hook 定义方式：
 
-1. **字段式**：hook 在 `.claude-plugin/plugin.json` 的 `hooks` 字段里以 `hooks.SessionStart` / `hooks.PreCompact` 等 key 声明。例如 `working-discipline` 3.7.0 的 `hooks` 字段含 `SessionStart`。
-2. **目录式**：hook 以 `hooks/` 目录下的脚本文件名约定挂载，`plugin.json` 里**没有** `hooks` 字段（可能配一份 `hooks/hooks.json` 登记事件绑定），`hooks/session-start.sh` / `hooks/pre-compact.sh` 等文件名直接对应生命周期事件。例如 `radnove-core` 4.5.1 的 `plugin.json` 无 `hooks` 字段，但 `hooks/` 下有 `session-start.sh`——只读 `plugin.json` 会判成"无 SessionStart"，实际它正是会话开头注入的那段内容。
+1. **字段式**：hook 在 `.claude-plugin/plugin.json` 的 `hooks` 字段里以 `hooks.SessionStart` / `hooks.PreCompact` 等 key 声明。
+2. **目录式**：hook 以 `hooks/` 目录下的脚本文件名约定挂载，`plugin.json` 里**没有** `hooks` 字段（可能配一份 `hooks/hooks.json` 登记事件绑定），`hooks/session-start.sh` / `hooks/pre-compact.sh` 等文件名直接对应生命周期事件——只读 `plugin.json` 会判成"无 SessionStart"，实际它正是会话开头注入的那段内容。
+
+两种各踩过的具体插件版本见 `references/verification-log.md`「hook 定义方式双检测」。
 
 检测命令（对某插件的 installPath 同时查两处，变量名避开 `path` 等 zsh 绑定名）：
 
@@ -219,9 +212,9 @@ ls "$ipath/hooks/" 2>/dev/null | grep -iE 'session-start|session-end|pre-compact
 
 `cache/` 下会出现形如 `temp_git_<13 位毫秒时间戳>_<6 位随机后缀>` 的顶层目录（例如 `temp_git_1784510740316_ohwupx`），是插件安装/更新过程中的临时 git 克隆，正常流程结束后本应自行删除，实测会大量残留。
 
-**成因 2026-08-06 已实测查明**：一次 `claude plugin update` 期间会**并发**起多个这样的克隆（该次观测峰值 4 个），且会顺带 fetch 非目标市场。这是 url 独立仓源插件（见「两类插件源」(b)）的必然代价——它的内容不在市场仓里，只能现拉。所以残留量与「本轮跑了多少次 update」正相关：按第一二步剪枝后调用次数大降，这类残留也跟着少了。
+**成因已实测查明**：一次 `claude plugin update` 期间会**并发**起多个这样的克隆（观测峰值 4 个），且会顺带 fetch 非目标市场。这是 url 独立仓源插件（见「两类插件源」(b)）的必然代价——它的内容不在市场仓里，只能现拉。所以残留量与「本轮跑了多少次 update」正相关：按第一二步剪枝后调用次数大降，这类残留也跟着少了。
 
-**残留数量在两次观测间波动极大，不要把具体数字当预期值，每次都实际 `ls` 一遍。** 观测一（2026-07-29 首次）：`cache/` 总占用 **2.9G**，其中 **13 个** `temp_git_*` 合计 **1.8G**，占了将近一半，比历史版本堆积严重得多。观测二（同日晚，清掉观测一的残留、又完整跑了一轮 17 市场 + 25 插件刷新之后）：`temp_git_*` **0 个**——说明这类残留不是每次刷新都必然产生，它取决于中途是否有克隆被打断。所以本小节可能直接命中"无残留"，这是正常结果，不要以为是命令写错了。
+**残留数量在两次观测间波动极大，不要把具体数字当预期值，每次都实际 `ls` 一遍。** 同一轮完整刷新之后可能直接命中"无残留"——这类残留不是每次刷新都必然产生，取决于中途是否有克隆被打断，是正常结果，不要以为是命令写错了。两次观测的对照数据见 `references/verification-log.md`「temp_git_* 残留成因与两次观测」。
 
 判定依据是"两份配置里零引用即孤立"：
 
@@ -234,7 +227,7 @@ du -sch ~/.claude/plugins/cache/temp_git_*/ | tail -1
 
 #### (b) 未被引用的历史版本目录——必须用白名单差集判定
 
-**绝对不要按"每个插件保留最新版本、删掉其余"来清理。** 同一插件在不同项目目录下（`scope` 为 `project`）会各自钉住不同版本，"最新"只对当前项目成立。实测反例：`sdlc@ai-sdlc` 在 `installed_plugins.json` 里有 12 条 `project` 记录，横跨 `3.3.0` / `3.3.3` / `3.3.18` / `3.7.3` 四个版本；`aisdlc-saas-extension` 有 `0.4.2` / `0.4.1` 两个。按"保留最新"会删掉其他项目正在使用的缓存，那些项目下次启动会加载失败或被迫重新下载。
+**绝对不要按"每个插件保留最新版本、删掉其余"来清理。** 同一插件在不同项目目录下（`scope` 为 `project`）会各自钉住不同版本，"最新"只对当前项目成立。按"保留最新"会删掉其他项目正在使用的缓存，那些项目下次启动会加载失败或被迫重新下载。具体反例（`sdlc@ai-sdlc` 12 条 project 记录横跨 4 个版本等）见 `references/verification-log.md`「多版本钉版反例」。
 
 唯一正确的判据是：把 `installed_plugins.json` 里 `.plugins[][].installPath` 的**全集**作为白名单，白名单之外的三级目录才是候选。注意 `.plugins` 的每个值是**数组**（每个 scope 一条记录，各有自己的 `installPath` / `version`），所以 jq 必须写 `.plugins[][]` 展开两层，只取第一条会把绝大多数在用版本误判成垃圾。
 
@@ -253,7 +246,7 @@ echo "白名单 $(wc -l < /tmp/cache_whitelist.txt) / 磁盘 $(wc -l < /tmp/cach
 comm -23 /tmp/cache_whitelist.txt /tmp/cache_actual.txt
 ```
 
-两次实测的差集规模（同样只作量级参考，不是预期值）：观测一 **58 个目录 / 704M**（白名单 48 条、磁盘 106 个）；观测二在清掉观测一之后 **14 个 / 25M**（白名单 48 条、磁盘 62 个），其中最大一块是单个 `sdlc/3.7.16` 占 16M。清理收益随执行频率快速衰减——第二次只回收了 25M（`cache/` 408M → 383M，约 6%），大头始终在白名单内的在用版本里。如实告知用户这个量级，不要暗示清理能显著省空间。
+清理收益随执行频率快速衰减，且大头始终在白名单内的在用版本里。如实告知用户这个量级（典型 10~700M，**不是**预期值），不要暗示清理能显著省空间。两次实测的差集规模对照见 `references/verification-log.md`「缓存清理两次差集规模」。
 
 **反向检查那一行必须输出为空**。若非空，说明有插件的配置指向了磁盘上不存在的缓存目录，缓存状态本身已异常——此时不要删任何东西，先回到第三步重新刷新把实体补齐，再重跑 dry-run。
 
@@ -267,25 +260,27 @@ xargs rm -rf < /tmp/cache_orphan.txt
 
 ## 已验证的坑
 
-| 现象 | 真实原因 | 怎么核实 |
-|------|----------|----------|
-| 想用 `known_marketplaces.json` 里的 `lastUpdated` 判断某个市场是否真的拉到了新代码 | **`lastUpdated` 两个变化方向都已观测到反例，不可作为判据。** 方向一（首次执行时记录）：回执 `✔ Successfully updated N marketplace(s)` 但某市场 `lastUpdated` 没变，当时结论是"该市场已是最新，字段语义为上次真正拉到新内容的时间"，在两个纯 GitHub 源市场稳定复现。方向二（2026-07-29 复跑时观测）：17 个市场的 `lastUpdated` **全部**前移到同一分钟区间（`01:21`~`01:23`），无一例外，但其中 `karpathy-skills` 的本地 HEAD 仍是 `2c60614`、提交日期 `2026-04-20`（三个月前），且前一天已经更新过一轮、本地早该到位——时间戳前移并未对应任何新内容。两次观测互相矛盾，最可能的解释是 CLI 版本之间改过写入语义（从"拉到新内容才写"变成"每次成功检查都写"），也不排除与市场源类型有关 | 只信 HEAD，不信时间戳。更新**前**先存一份快照：`git -C ~/.claude/plugins/marketplaces/<name> rev-parse HEAD`，更新后再取一次对比；或用 `git -C 同目录 ls-remote origin <branch>` 与本地 HEAD 比对。**既不要**因为 `lastUpdated` 变了就判定"拉到了新代码"，**也不要**因为它没变就判定失败——两种推断都已被实测推翻 |
-| 想用 `git -C ~/.claude/plugins/marketplaces/<name> log` 核实某市场是否最新，报错 `fatal: not a git repository` | 不是所有市场都是纯 git clone。例如官方 `claude-plugins-official`：即使 `known_marketplaces.json` 里登记的 `source` 字段写的是 `github`，其本地目录下实际没有 `.git`，只有一个 `.gcs-sha` 文件——它按内容哈希做整体快照同步，不是逐 commit 拉取 | 先 `ls -la ~/.claude/plugins/marketplaces/<name>` 看有没有 `.git` 目录；没有就别拿 git 命令去验真伪，直接看 CLI 回执，或对比 `installed_plugins.json` 里该市场旗下插件的 `gitCommitSha`/`lastUpdated` 字段变化 |
-| `claude plugin update <plugin>` 找不到批量刷新的写法 | CLI 没有 `--all` 之类的参数（见 `--help`），设计上一次只处理一个 `<plugin>@<marketplace>` | 只能枚举 `enabled: true` 的 id 后自己拼循环（见第三步） |
-| 同一插件在 `installed_plugins.json` 里出现好几条记录，`version`/`installPath` 都相同 | 不同项目目录各 `enable` 过一次，各记一条 `scope` 记录，但共用同一份缓存目录（见第二步） | 只需跑一次 `claude plugin update`，不按项目数重复刷 |
-| 刷新了缓存，当前会话里 skill/hook 行为却没有变化 | 缓存刷新不热更新到运行中的进程里（见第四步） | 跑 `/reload-plugins`；只有涉及 `SessionStart` / `SessionEnd` / `PreCompact` 这类生命周期挂载点时才必须重启 |
-| 跑完 `/reload-plugins` 后，每轮 hook 注入已经是新版的"指针"文本，但它引用的那份静态主体内容压根不在上下文里 | 新版本把内容下沉到了 `SessionStart`，而 reload **不重放**生命周期事件（见第四步）。实测 `working-discipline` 3.0.0 → 3.2.0：reload 后本会话里那句"一～六章已在会话开始注入"**不成立** | 涉及 `SessionStart` 类挂载点变动必须重启会话，或等一次 auto-compact 补上；判据是**同时查两处**（`plugin.json` 的 `hooks` 字段 + `hooks/` 目录下的脚本文件名约定，见第四步检测命令），只读 `plugin.json` 会漏掉目录式定义的插件——2026-08-01 实测 `radnove-core` 4.5.1 就是目录式（`plugin.json` 无 `hooks` 字段、`hooks/session-start.sh` 存在），只读 `plugin.json` 误判为无 SessionStart |
-| 核验循环里所有 `jq` / `sort` / `wc` / `comm` 突然 `command not found`，但循环之前同样的命令刚跑成功过 | 循环变量名撞上 zsh 的 `typeset -T PATH path` 绑定（见第三步「循环变量禁止命名为 `path`」） | 改用带语义前缀的变量名（`ipath` / `_p` / `orphan_dir`）改名重跑即可；PATH 只在该次 Bash 调用的子 shell 内被破坏，**不影响后续调用** |
-| 第三步的循环只跑了一次就整体失败，报 `Plugin "<第一个插件名>" not found`，可那个插件明明装着 | 用了 `for p in $plugins` 依赖单词分割的写法，zsh 默认不做单词分割（见第三步） | 改成 `while IFS= read -r p` 逐行读；这类失败**无副作用**——CLI 在 id 校验阶段就退出，没有写 `installed_plugins.json`、没有刷新任何插件，改好写法直接重跑即可 |
-| 第三步的循环整体跑完、回执看着都正常滚过去了，但某个只在项目目录里装过的插件（从未在 `user` scope 装过）实际上完全没被刷新 | `claude plugin update "$p"` 默认 `--scope user`，无 `user` scope 记录的 id 会 `exit=1` 但循环不检查退出码（机制与 8 个实测复现 id 见「第三步」） | 同一条 jq 判定式（见「第三步」），命中的 id 都要走 project/local scope 专项刷新，不能指望第三步的常规循环覆盖到 |
-| 对某个 project scope 插件跑 `claude plugin update --scope project <id>`，回执 `already at the latest version`，但其实完全没有更新到真正需要的那个项目 | `--scope project`/`--scope local` 靠 cwd 隐式定位、不接受路径参数，cwd 不匹配时不报错、只打印假成功回执（机制与 2026-07-30 实测 demo 见「第三步」） | 必须先 `cd` 进该记录**自己的** `projectPath` 再执行；核实靠写后回读 diff，确认 `version`/`gitCommitSha`/`lastUpdated` 三者都变了，而不是只信"already at the latest version"这句回执文字 |
-| `cache/` 目录体积远大于所有已启用插件之和（实测 2.9G） | `temp_git_*` 临时克隆残留没被清掉，13 个占 1.8G，在两份配置里都是 0 引用（见第五步 (a)） | `grep -c 'temp_git' ~/.claude/plugins/known_marketplaces.json ~/.claude/plugins/installed_plugins.json` 两处都为 0 即确认孤立，可整批删除 |
-| 清理历史版本缓存后，某个项目下的插件失效或被迫重新下载 | 按"每个插件只保留最新版本"删了。实测 `sdlc@ai-sdlc` 有 12 条 project 记录横跨 4 个版本（`3.3.0`/`3.3.3`/`3.3.18`/`3.7.3`），"最新"只对当前项目成立（见第五步 (b)） | 必须以 `.plugins[][].installPath` 的全集为白名单做差集，`.plugins[][]` 要展开两层，只取第一条会把在用版本误判成垃圾 |
-| 一次完整刷新要跑 30~50 分钟（2026-08-06 之前那轮实测从 01:55 跑到 02:47） | 没做探测剪枝，把两类固定开销全付了一遍：不带参数的 `marketplace update` 串行 clone 全部 17 个市场（14~16 分钟），加上对每条已启用记录都调一次 `plugin update`（**每次 25 秒起步，与它有没有活干无关**，113 条 ≈ 47 分钟） | 先跑 `probe-refresh.py --stage market` / `--stage plugin`（合计约 8.5 秒），只对判定为 STALE / 版本或 sha 不一致的目标调 CLI。本机实测 82 / 113 条可直接跳过 |
-| 想靠并发跑多个 `claude plugin update` 来加速 | 它们读改写同一个 `installed_plugins.json` 且 CLI 内部无文件锁，后写覆盖先写会丢记录；用 `flock` 包住调用则全部在锁处排队，退化成串行、零加速 | 加速只能靠减少调用次数（第一、二步的探测剪枝），这一步保持串行 |
-| 在 shell 里用 `timeout 20 git ls-remote …` 做探测，结果所有市场瞬间全部"探测失败"（总耗时只几十毫秒） | **macOS 默认没有 `timeout` 这个二进制**（GNU coreutils 才有，Homebrew 装的叫 `gtimeout`），命令整体 `command not found`，输出为空被误判成远端不可达 | `command -v timeout gtimeout` 先确认；没有就别包，或改用 python 的 `subprocess.run(..., timeout=)`（探测器脚本走的就是后者） |
-| 拿 `installed_plugins.json` 里的 `gitCommitSha` 去和市场仓 HEAD 比，判断插件要不要刷，结果几乎全判成"要刷" | 这个字段的语义**按插件源类型不同**：url 独立仓源的插件，它就是那个独立仓的 commit sha（可直接比）；市场仓内源的插件，它记的是上次刷新时市场仓的某个 commit，与该插件目录最后改动的 commit 大面积不相等（2026-08-06 抽 14 个样本只 1 个吻合） | 市场仓内源**只比版本号**（marketplace.json 条目的 `version`，缺失时回落读该目录 `plugin.json`）；url 源才比 sha（`git ls-remote <url> <ref>`）。见「两类插件源」 |
-| 为了拿 enabled 状态而跑 `claude plugin list --json`，一条命令等 23 秒 | 该命令与 `plugin update` 共享同一类固定开销 | enabled 状态可直读：user scope 看 `~/.claude/settings.json` 的 `enabledPlugins[<id>]`，project/local scope 看 `<projectPath>/.claude/settings.json` 或 `settings.local.json`（2026-08-06 三条 project 记录实测与 `plugin list` 一致）。探测器脚本已内置，key 缺失按未启用处理 |
+每条只列**现象 → 处置方向**；完整复现过程（具体插件版本、抽样数量、回执原文等）见 `references/verification-log.md`「已验证的坑 · 完整证据表」。
+
+| 现象 | 处置方向 |
+|------|----------|
+| 用 `lastUpdated` 判断市场是否拉到新代码 | 不可作为判据，两个方向都已观测到反例。只信 HEAD：更新前存快照，更新后再取 HEAD 对比 |
+| `git -C marketplaces/<name> log` 报 `fatal: not a git repository` | 该市场不是纯 git clone（官方 `.gcs-sha` 按内容哈希同步）。先 `ls -la` 看有无 `.git`；没有就改看 CLI 回执，或对比旗下插件的字段变化 |
+| `plugin update` 找不到批量刷新写法 | CLI 设计上一次只处理一个 `<plugin>@<marketplace>`，自己拼循环（见第三步） |
+| 同一插件多条相同 `version` / `installPath` 记录 | 不同项目各 `enable` 过一次，共用同一份缓存。只跑一次 update |
+| 刷新后 skill / hook 行为没变 | 缓存刷新不热更新到运行中的进程。跑 `/reload-plugins`；涉及 `SessionStart` / `SessionEnd` / `PreCompact` 才必须重启（见第四步） |
+| reload 后 hook 注入是"指针"文本但静态主体不在上下文 | 新版本把内容下沉到了 `SessionStart`，reload 不重放生命周期事件。必须重启会话或等一次 auto-compact |
+| 核验循环里 `jq` / `sort` / `wc` / `comm` 突然 `command not found` | 循环变量名撞 zsh 的 `typeset -T PATH path` 绑定。改用 `ipath` / `_p` / `orphan_dir`，见第三步判据 |
+| `for p in $plugins` 整体失败，报 `Plugin "<第一个>" not found` | zsh 默认不做单词分割。改成 `while IFS= read -r p`；无副作用，改好重跑即可 |
+| 只在 project 装过的插件静默 `exit=1` 滚屏而过 | `--scope` 默认 `user`，无 user scope 记录的 id 会 exit=1 但循环不检查退出码。见第三步判定式 |
+| `--scope project` 回执 `already at the latest version` 但前后 0 行 diff | cwd 隐式定位、不接受路径参数，cwd 不匹配时打印假成功。必须 `cd` 进该记录**自己的** `projectPath`，见第三步 |
+| `cache/` 体积远大于已启用插件之和 | `temp_git_*` 残留。两份配置 grep 计数都为 0 即可整批删，见第五步 (a) |
+| 清理历史版本缓存后某项目插件失效或被迫重新下载 | 按"只保留最新版本"删了。必须用 `.plugins[][].installPath` 全集做白名单差集，见第五步 (b) |
+| 一次完整刷新要跑 30~50 分钟 | 没做探测剪枝，把两类固定开销全付了一遍。先跑 `probe-refresh.py` 两阶段（合计约 8.5s），只对真有变化的调 CLI |
+| 并发跑多个 `plugin update` 想加速 | 它们读改写同一 `installed_plugins.json` 且 CLI 内部无文件锁；flock 包住则退化成串行、零加速。加速只能靠减少调用次数 |
+| `timeout 20 git ls-remote` 全部"探测失败"且总耗时几十毫秒 | macOS 默认无 `timeout` 二进制（Homebrew 的叫 `gtimeout`），命令整体 command not found，输出为空被误判。先 `command -v timeout gtimeout` 确认；探测器脚本走 python `subprocess.run(..., timeout=)` |
+| 拿 `gitCommitSha` 判断插件要不要刷，几乎全判成"要刷" | 字段语义按源类型不同：url 源比 sha；市场仓内源只比版本号（sha 与"目录最后改动 commit"大面积不相等，14 个样本只 1 个吻合） |
+| `plugin list --json` 一条命令等 23 秒 | 共享同一类固定开销。enabled 直读 `~/.claude/settings.json` 与 `<projectPath>/.claude/settings.json`，探测器已内置 |
 
 ## 验证清单
 
