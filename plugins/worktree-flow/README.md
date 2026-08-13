@@ -37,7 +37,7 @@
 |---|---|---|
 | 目标仓 | `Write`/`Edit`/`MultiEdit` 取 `tool_input.file_path`、`NotebookEdit` 取 `notebook_path`，向上找到第一个存在的目录后跑 `git rev-parse --show-toplevel`；`Bash` 用 `payload.cwd` 或该次调用自己的 `-C <path>` | 命令失败即非 git 仓 → 放行 |
 | 分支 | `git rev-parse --abbrev-ref HEAD` | **逐字**等于 `main` 或 `master`。detached HEAD 返回 `HEAD`，不在集合内 |
-| 豁免路径 | 目标文件相对仓根的路径 | 前缀是否为 `.claude/` `.keeper/` `.git/` |
+| 豁免路径 | 目标文件相对仓根的路径 | 前缀是否为 `.claude/` `.keeper/` `.git/`，或 `WORKTREE_GUARD_EXEMPT` 列出的前缀 |
 | 合流进行中 | `git rev-parse --absolute-git-dir` 下是否存在 `MERGE_HEAD` / `CHERRY_PICK_HEAD` / `REVERT_HEAD` / `rebase-merge` / `rebase-apply` | 文件存在性 |
 
 全部是确定字段或文件存在性，没有一处在猜语义。
@@ -45,10 +45,11 @@
 **2. 假阳性长什么样？** 三类，都是有意接受的：
 
 - 在 main 上改一个错别字、补一行文档 → 被拦。用户拍板不按扩展名豁免文档，理由是 `.json`
-  / `.yml` 落在代码与文档的灰区，按扩展名切会切出一条模糊边界。出口是逃生阀。
+  / `.yml` 落在代码与文档的灰区，按扩展名切会切出一条模糊边界。出口是逃生阀或按目录豁免。
 - 仓里恰好有个叫 `main` 但不作主干用的分支 → 被拦。同一个出口。
-- `.claude/` `.keeper/` `.git/` 三个豁免前缀是白名单式的：主分支上写这三处之外的**任何**
-  路径都拦，包括 `docs/`、`README.md`。
+- 默认三前缀（`.claude/` `.keeper/` `.git/`）是白名单式的：主分支上写这三处之外的**任何**
+  路径都拦，包括 `docs/`、`README.md`。`WORKTREE_GUARD_EXEMPT` 可追加前缀（见下「按目录
+  豁免」），那是配置者主动开的口子，不算误杀。
 
 **3. 假阴性长什么样？** Bash 侧的漏报面是**有意收窄**的结果，不是疏漏。hook-restraint 明令
 「判据需要理解语义的规则不得做成 deny」，而「这条 shell 命令算不算写操作」正是那类判据。
@@ -77,7 +78,8 @@ node plugins/worktree-flow/tests/main-branch-guard.test.js
 用例在临时目录里真建 git 仓（不 mock），`spawnSync` 喂 JSON 到 stdin、**不经过 shell**
 （经 shell 的测试脚本一旦引号失衡，guard 会把测试数据当真命令拦下并原样回灌进 finding）。
 两侧都有：该拦的确实拦（main 上 Edit / `git commit`），该放的确实放（feature 分支、
-detached HEAD、`.claude/` 路径、合并进行中、非 git 目录、`sed -i` 这类已知漏报）。
+detached HEAD、`.claude/` 路径、`WORKTREE_GUARD_EXEMPT` 路径、合并进行中、非 git 目录、
+`sed -i` 这类已知漏报）。
 
 ## 与内置 EnterWorktree 的关系
 
@@ -88,6 +90,21 @@ detached HEAD、`.claude/` 路径、合并进行中、非 git 目录、`sed -i` 
   本地 main 领先 origin 时新工作区缺你的本地提交。SKILL.md 给了开工前的比对命令与两条出路。
 - **submodule**：`git worktree add` 只建父仓工作区，submodule 目录是空的，`EnterWorktree`
   不补。含 submodule 的聚合仓改用 `task-keeper:tk-worktree`。
+
+## 按目录豁免
+
+`WORKTREE_GUARD=off` 是整仓放行；若只想让某些目录在主分支上可直接改（如 `docs/`、
+`config/`），用更细的 `WORKTREE_GUARD_EXEMPT`——逗号分隔的目录前缀，并进默认三前缀之后：
+
+```json
+// .claude/settings.json（团队共享）或 .claude/settings.local.json（个人本地）
+{ "env": { "WORKTREE_GUARD_EXEMPT": "docs/,config/" } }
+```
+
+settings.json 的 `env` 注入会话进程，PreToolUse hook 作为子进程经 `process.env` 继承，
+settings 改动会被 reload，无需重启即生效。落 `.claude/settings.json` 随仓入库、全队共享；
+落 `.claude/settings.local.json` 自动 gitignore、仅本人。判据仍是确定的前缀匹配：列了
+`docs/` 只放 `docs/` 下，`src/` 照拦。
 
 ## 关闭
 

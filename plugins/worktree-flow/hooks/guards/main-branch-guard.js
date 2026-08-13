@@ -16,9 +16,11 @@
 //    （或该次 git 调用自己的 `-C <path>`）。
 // 3. 分支：`git rev-parse --abbrev-ref HEAD` 的返回值是否**逐字等于** main 或 master。
 //    detached HEAD 返回 "HEAD"，不在集合内 → 放行。非 git 目录（命令失败）→ 放行。
-// 4. 豁免路径：目标文件相对仓根落在 .claude/ .keeper/ .git/ 之下 → 放行。这三处装的是
-//    会话产物、任务队列台账与 git 自身元数据，不是「代码」，且 .claude/worktrees/ 本身
-//    就是本插件要求的工作区落点——拦它会让流程自锁。
+// 4. 豁免路径：目标文件相对仓根落在默认三前缀（.claude/ .keeper/ .git/）或
+//    WORKTREE_GUARD_EXEMPT 列出的前缀之下 → 放行。默认三处装的是会话产物、任务队列
+//    台账与 git 自身元数据，不是「代码」，且 .claude/worktrees/ 本身就是本插件要求的
+//    工作区落点——拦它会让流程自锁。WORKTREE_GUARD_EXEMPT 逗号分隔额外前缀，经
+//    settings.json 的 env 注入（子进程继承 process.env）。
 // 5. 合流进行中豁免：git 目录里存在 MERGE_HEAD / CHERRY_PICK_HEAD / REVERT_HEAD /
 //    rebase-merge / rebase-apply 任一 → 放行。理由是「解决冲突」这一步按设计就发生在
 //    主分支上，且必须能改文件、能 `git commit` 收尾；不豁免会把本插件推荐的 --no-ff
@@ -54,8 +56,25 @@ const { execFileSync } = require('child_process')
 
 const PROTECTED_BRANCHES = new Set(['main', 'master'])
 
-// 相对仓根的豁免前缀（会话产物 / 任务台账 / git 元数据，不是代码）
-const EXEMPT_PREFIXES = ['.claude/', '.keeper/', '.git/']
+// 相对仓根的默认豁免前缀（会话产物 / 任务台账 / git 元数据，不是代码）。
+// 额外前缀经环境变量 WORKTREE_GUARD_EXEMPT 注入（逗号分隔，如 "docs/,config/"），
+// 落 settings.json 的 env 字段后会注入会话进程、被本 hook 经 process.env 继承。
+const DEFAULT_EXEMPT_PREFIXES = ['.claude/', '.keeper/', '.git/']
+
+function loadExemptPrefixes() {
+  const prefixes = DEFAULT_EXEMPT_PREFIXES.slice()
+  const extra = process.env.WORKTREE_GUARD_EXEMPT
+  if (extra) {
+    for (const raw of extra.split(',')) {
+      const dir = raw.trim()
+      if (!dir) continue
+      prefixes.push(dir.endsWith('/') ? dir : dir + '/')
+    }
+  }
+  return prefixes
+}
+
+const EXEMPT_PREFIXES = loadExemptPrefixes()
 
 // 存在任一即视为「合流进行中」，整仓放行
 const IN_PROGRESS_MARKERS = [
