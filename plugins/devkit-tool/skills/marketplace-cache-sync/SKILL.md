@@ -46,7 +46,7 @@ Claude Code 的插件系统有两层独立状态，都在 `~/.claude/plugins/` �
 `marketplace.json` 里每个插件条目的 `source` 字段有两种形态，决定了「怎么判断它需不需要刷」：
 
 - **(a) 市场仓内源**（`"source": "./plugins/<name>"`）：插件内容就在市场仓里。判据是**版本号**——条目里的 `version`（缺失时回落读该目录的 `plugin.json`）与 `installed_plugins.json` 里该记录的 `version` 比，相等即跳过。这正是 CLI 判 `already at the latest version` 的依据，纯本地读、毫秒级。
-- **(b) url 独立仓源**（`"source": {"source": "url", "url": "http://…git", "ref": "master"}`）：**插件内容根本不在市场仓里**，在一个独立 git 仓中。判据是 **commit sha**——`installed_plugins.json` 里该记录的 `gitCommitSha` 就是那个独立仓的 sha（2026-08-06 对 13 个 url 源逐个 `git ls-remote` 比对确认），并发探测全部只需 2.9 秒。
+- **(b) url 独立仓源**（`"source": {"source": "url", "url": "http://…git", "ref": "master"}`）：**插件内容根本不在市场仓里**，在一个独立 git 仓中。判据是 **commit sha**——`installed_plugins.json` 里该记录的 `gitCommitSha` 就是那个独立仓的 sha，并发探测全部只需 2.9 秒（sha 字段语义见 `references/verification-log.md`「`gitCommitSha` 对市场仓内源插件语义错位」）。
 
 **(b) 类正是最慢的那一类**：CLI 每次都要重新 clone 那个独立仓，实测一次 `plugin update` 期间峰值并发起 **4 个** `temp_git_*` 克隆，且会顺带 fetch 非目标市场——这同时解释了第五步要清的 `temp_git_*` 残留是怎么来的。
 
@@ -102,7 +102,7 @@ python3 "$PROBE" --stage plugin      # 本机实测 4.0s（含 53 条 url 源并
 输出写进 `/tmp/plugins_to_refresh.txt`，每行形如 `<id>|<scope>|<projectPath>`（user scope 的 projectPath 为空）。它做四件事：
 
 1. 遍历 `installed_plugins.json` 的**全部** `plugins[id][]` 数组元素——每个元素是一条独立的 (id, scope, projectPath) 记录，同一个 id 在不同项目目录可以各自钉着不同版本。
-2. 按 enabled 过滤。**不调 `claude plugin list --json`**（那条命令本机 23.2s），改为直读 `~/.claude/settings.json` 的 `enabledPlugins[<id>]`（user scope）与 `<projectPath>/.claude/settings.json` / `settings.local.json`（project/local scope）——2026-08-06 实测三条 project 记录，直读值与 `plugin list` 的 `enabled` 字段一致。要连未启用的一起刷时加 `--include-disabled`。
+2. 按 enabled 过滤。**不调 `claude plugin list --json`**（那条命令本机 23.2s），改为直读 `~/.claude/settings.json` 的 `enabledPlugins[<id>]`（user scope）与 `<projectPath>/.claude/settings.json` / `settings.local.json`（project/local scope）——直读值与 `plugin list` 的 `enabled` 字段一致（验证见 `references/verification-log.md`「`claude plugin list --json` 一条命令等 23 秒」）。要连未启用的一起刷时加 `--include-disabled`。
 3. 按上面「两类插件源」的判据分别剪枝：(a) 市场仓内源比版本号，(b) url 独立仓源并发 ls-remote 比 `gitCommitSha`。
 4. 三种情况一律**列入待刷**，不做剪枝：`installPath` 指向的缓存目录不存在、市场源没声明版本号（判不了）、远端探测失败。剪枝只在能确证"必然 no-op"时才生效。
 
