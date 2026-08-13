@@ -151,6 +151,33 @@ check(
   0,
   { WORKTREE_GUARD: 'off' }
 )
+
+// WORKTREE_GUARD_EXEMPT 追加目录级豁免前缀
+const exemptRepo = makeRepo('main')
+check(
+  'main 上 WORKTREE_GUARD_EXEMPT 列出的目录 → 放行（带尾斜杠）',
+  { tool_name: 'Write', tool_input: { file_path: path.join(exemptRepo, 'docs/guide.md') }, cwd: exemptRepo },
+  0,
+  { WORKTREE_GUARD_EXEMPT: 'docs/' }
+)
+check(
+  'main 上 WORKTREE_GUARD_EXEMPT 不带尾斜杠 → 自动补，放行',
+  { tool_name: 'Write', tool_input: { file_path: path.join(exemptRepo, 'config/app.json') }, cwd: exemptRepo },
+  0,
+  { WORKTREE_GUARD_EXEMPT: 'config' }
+)
+check(
+  'main 上多目录逗号分隔 → 第二个放行',
+  { tool_name: 'Write', tool_input: { file_path: path.join(exemptRepo, 'notes/x.md') }, cwd: exemptRepo },
+  0,
+  { WORKTREE_GUARD_EXEMPT: 'docs/,notes/' }
+)
+check(
+  'main 上 WORKTREE_GUARD_EXEMPT 未列的目录 → 仍拦（精确前缀，非全放）',
+  { tool_name: 'Write', tool_input: { file_path: path.join(exemptRepo, 'src/app.js') }, cwd: exemptRepo },
+  2,
+  { WORKTREE_GUARD_EXEMPT: 'docs/,config/' }
+)
 check(
   '非 git 目录',
   { tool_name: 'Edit', tool_input: { file_path: path.join(os.tmpdir(), 'nowhere.js') }, cwd: os.tmpdir() },
