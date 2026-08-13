@@ -17,7 +17,7 @@
       "source": "./plugins/devkit-tool",
       "category": "Development",
       "description": "工具技能集：代码库分析、依赖排查、初始化、codegraph 建图、插件缓存刷新、submodule 拉取同步与嵌套提交推送（8 技能）",
-      "version": "6.12.0"
+      "version": "6.12.1"
     },
     {
       "name": "devkit-spec",
@@ -94,7 +94,7 @@
       "source": "./plugins/task-keeper",
       "category": "Productivity",
       "description": "keeper 托管 debug/杂务/上下文三队列，动手前收齐规格再交表销账，决策打包 HITL",
-      "version": "3.1.0"
+      "version": "3.1.1"
     },
     {
       "name": "plain-talk-output-style",

@@ -236,90 +236,13 @@ reported_at 距今 >14 天；批次名固定 `auto-<YYYYMMDD>`。用户点名要
 
 ## §11 冷启动
 
-项目第一次用你时：
+项目第一次用你时，建 `.keeper/<交付id>/chore/` 目录并确保 worktree 根 `.gitignore` 有 v6 的三条精确排除规则——**这一刻就要做完，不要拖**：三条缺位会让队列文本被忽略、`git add` 漏收，ugrep 静默零命中又让「搜不到」伪装成「没有」（v5 整树被忽略时即如此）；v5 的 `.keeper/` 整树忽略行若残留，按 §12 上报 Human 拍板删，不自删。
 
-1. 计算 ROOT 与交付 id（算法须与 `hooks/lib/keeper_paths.py` 的
-   `find_worktree_root` / `resolve_delivery_id` 一致：先跳出 submodule，再取
-   当前 worktree 根；basename 匹配 `^(?:D-\d+-|hotfix-)` 才算交付，否则落
-   兜底桶 `_main`）：
+ROOT 计算、三条 pattern 与写法纪律、回读验证 bash 块、v5 残留处置、ugrep 坑——完整步骤见 `skills/tk-debug/references/cold-start.md`，chore 与 debug 共用同一份。**照做时把路径里的 `debug` 换成 `chore`**，并注意两处差异：
 
-   ```bash
-   ROOT="$(pwd)"
-   while true; do
-     SUP="$(git -C "$ROOT" rev-parse --show-superproject-working-tree 2>/dev/null)"
-     [ -n "$SUP" ] && [ -d "$SUP" ] || break
-     ROOT="$SUP"
-   done
-   ROOT="$(git -C "$ROOT" rev-parse --show-toplevel)"
-   DID="$(basename "$ROOT")"
-   case "$DID" in D-[0-9]*-*|hotfix-*) ;; *) DID=_main ;; esac
-   ```
+- 建目录只建 `mkdir -p "$ROOT/.keeper/$DID/chore"`，**不建 `_inbox/`**（那是 debug 收截图用的）。
+- 回读验证把 `debug/index.md` 换成 `chore/index.md`（`.keeper-instance.json` 的验证两队列相同）。
 
-   `mkdir -p "$ROOT/.keeper/$DID/chore"`
+存量仓若 v5 期间队列未跟踪，删整树行后首次 `git add` 会把历史杂务细节一次性推上远端，属 Human 拍板处置（§12），不要自己 `git add`。
 
-   正常情况下这一步是幂等兜底：只要 `.keeper/` 顶层已存在，`chore/` 目录本身
-   每轮已由 UserPromptSubmit hook（`find_queue` 自动补建，见
-   `hooks/lib/queue_snapshot.py` 的 docstring「为什么自动补建」）建好，这行
-   `mkdir -p` 大概率是在建一个已经存在的目录。保留它是因为你也可能跑在 hook
-   未生效的环境（如手工调用、hook 被禁用）。冷启动**真正不能跳过**的是紧随其后
-   的 `.gitignore` 整树忽略行写入——那一步 hook 不会替你做。
-2. 确保 worktree 根 `.gitignore` 有 v6 的三条精确排除规则，缺就整块补写，
-   **注释与 pattern 逐字照抄、不许自由发挥**（与 `debug-keeper.md` §3 那份是同一份
-   字节，两处必须一致）：
-
-   ```bash
-   GI="$ROOT/.gitignore"
-   # v5 的整树忽略行若还在，它会覆盖下面三条、让队列继续不入库，且**不会有任何报错**
-   if grep -qxF '.keeper/' "$GI" 2>/dev/null; then
-     echo "ACTION: $GI 里还有 v5 的 '.keeper/' 整树忽略行，它覆盖三条精确规则——按 §12 上报请用户拍板删除"
-   fi
-   # 三行一起追加，用第一条当哨兵（有它就有另两条，因为只可能整块写入）
-   if ! grep -qxF '.keeper/**/worktree/' "$GI" 2>/dev/null; then
-     printf '\n# task-keeper 队列：正文与附件入库，只排除三类本机产物\n.keeper/**/worktree/\n.keeper/**/.keeper-instance.json\n.keeper/.keeper-active\n' >> "$GI"
-   fi
-   ```
-
-   **v6（2026-08-10 用户拍板）是「队列正文与附件入库，只精确排除三类本机产物」**，
-   **推翻 v5 的「`.keeper/` 整树不入库」**。用户原话：「`.keeper` 之前把它从整个项目中
-   忽略了，现在看来还是需要提交到远端纳入版本控制，除了少数内容比如里面的 worktree
-   之外，其他都可以（包括当时的问题附件/图片/文件等）纳入版本控制」。
-
-   排除三条各有理由：`worktree/` 入库会种野生 gitlink；`.keeper-instance.json` 含
-   `session_id` 与当次 subagent 的随机 name，跨机器无意义且多人并行必冲突；
-   `.keeper-active` 是本机活跃交付指针。**其余一律入库**，含 `item.md` / `issue.md` /
-   `receipts.md` / `index.md` / `decisions/` / 截图与附件。
-
-   **`.keeper-active` 那条不带 `**`**（顶层单文件），另两条**必须**带 `**`（写死中间层
-   在嵌套变化时会漏网）。文案写死是必要条件——v4 当初改成 fail-loud、不自动追加的唯一
-   理由就是实测过两个分支各自追加**内容不同**的注释会产生合并冲突；逐字相同则 git 视为
-   同一处改动、不冲突。
-
-   **ugrep 的静默零命中现在只影响 `worktree/` 内部**：Claude Code 把 `grep` 影子成自带
-   ugrep 且参数写死 `--ignore-files`，被 ignore 的文件搜起来**静默零命中、不报错**。
-   v5 时整树被忽略、搜什么都得换根；v6 起队列文本已入库，从仓库根搜正常命中，只有
-   `worktree/` 里的内容仍需把搜索根设进去。
-
-   > 依据是 2026-08-01 实测：ugrep 只读递归下降途中遇到的 `.gitignore`，**不向上找**。
-   > `Read` 不走 grep，任何时候都正常。拿不准时用 `Read` / `ls` 正面列举，
-   > **不要用否定式检索得出「队列里没有这条」**——那个「没有」可能是假的。
-
-   **回读验证不能跳过，且要验行为不验文件内容**——`grep` 到规则写对了不等于 git 真的
-   按它生效。用 `git check-ignore -q <路径>` 验，**v6 起两个方向都要验**：
-
-   ```bash
-   git -C "$ROOT" check-ignore -q ".keeper/$DID/chore/index.md" \
-     && echo "FAILED: 队列文本仍被忽略，v6 要它入库——检查是不是整树行还在" \
-     || echo "OK: 队列文本不再被忽略"
-   git -C "$ROOT" check-ignore -q ".keeper/$DID/.keeper-instance.json" \
-     && echo "OK: 实例登记已排除" \
-     || echo "FAILED: 写入 $GI 失败，停下人工处理"
-   ```
-
-   队列文本应 **exit=1**（不再被忽略），实例登记应 **exit=0**（已排除）。**这两个方向
-   相对 v5 全部反转了**，照 v5 的旧断言验会把正确配置判成错误配置。
-
-   **存量仓的两种历史各有处置**：v5 期间队列是未跟踪的，删掉整树行后它们变成「未跟踪
-   且不再被忽略」，下次 `git add` 才真正收录——**这一步会把历史 bug 细节与截图一次性
-   推上远端**，属于要 Human 拍板的处置，按 §12 上报，不要自己 `git add`。v4 期间已跟踪
-   的文件不受 gitignore 影响，本来就在库里，无需动作。
-3. 登记第一条杂务，正常走 §2。
+冷启动完，登记第一条杂务，正常走 §2。
