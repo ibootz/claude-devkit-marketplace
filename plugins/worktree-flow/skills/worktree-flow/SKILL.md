@@ -16,7 +16,7 @@ description: 在 main/master 分支上要改代码时，改走「开 worktree �
 - detached HEAD（`rev-parse --abbrev-ref HEAD` 返回 `HEAD`）
 - 已经在某个 worktree / 别的分支上——分支名不是 main/master 就不受本流程约束
 - 仓正处于 merge / rebase / cherry-pick 进行中（解决冲突按设计就发生在主分支上）
-- 目标文件落在 `.claude/`、`.keeper/`、`.git/` 之下，或 `WORKTREE_GUARD_EXEMPT` 配置的目录下（会话产物、任务台账、git 元数据，或项目经 settings.json 主动豁免的目录）
+- 目标文件落在 `.claude/`、`.keeper/`、`.git/` 之下，或 `WORKTREE_GUARD_EXEMPT` 配置的目录下，或开启 `WORKTREE_GUARD_EXEMPT_DOTDIRS=1` 后任何顶层点开头目录下（会话产物、任务台账、git 元数据，或项目主动豁免的目录）
 
 ## 四步流程
 

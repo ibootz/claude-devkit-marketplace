@@ -20,7 +20,9 @@
 //    WORKTREE_GUARD_EXEMPT 列出的前缀之下 → 放行。默认三处装的是会话产物、任务队列
 //    台账与 git 自身元数据，不是「代码」，且 .claude/worktrees/ 本身就是本插件要求的
 //    工作区落点——拦它会让流程自锁。WORKTREE_GUARD_EXEMPT 逗号分隔额外前缀，经
-//    settings.json 的 env 注入（子进程继承 process.env）。
+//    settings.json 的 env 注入（子进程继承 process.env）。WORKTREE_GUARD_EXEMPT_DOTDIRS=1
+//    时另放行所有顶层点开头路径（隐藏目录与根点文件），含 .githooks / .github 等脚本
+//    目录——opt-in，默认关。
 // 5. 合流进行中豁免：git 目录里存在 MERGE_HEAD / CHERRY_PICK_HEAD / REVERT_HEAD /
 //    rebase-merge / rebase-apply 任一 → 放行。理由是「解决冲突」这一步按设计就发生在
 //    主分支上，且必须能改文件、能 `git commit` 收尾；不豁免会把本插件推荐的 --no-ff
@@ -75,6 +77,11 @@ function loadExemptPrefixes() {
 }
 
 const EXEMPT_PREFIXES = loadExemptPrefixes()
+
+// WORKTREE_GUARD_EXEMPT_DOTDIRS=1 时，所有顶层以点开头的路径（隐藏目录与根点文件）
+// 一律豁免。判据是「相对仓根的首段以 . 开头」，机械确定；副作用是 .githooks / .github
+// 等 hook/CI 脚本目录也会放行（可在 main 上直改、绕过 worktree 评审），故默认关、opt-in。
+const EXEMPT_DOTDIRS = process.env.WORKTREE_GUARD_EXEMPT_DOTDIRS === '1'
 
 // 存在任一即视为「合流进行中」，整仓放行
 const IN_PROGRESS_MARKERS = [
@@ -166,6 +173,7 @@ function isExemptPath(filePath, root) {
   const rel = path.relative(root, filePath)
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return true
   const normalized = rel.split(path.sep).join('/')
+  if (EXEMPT_DOTDIRS && normalized.split('/')[0].startsWith('.')) return true
   return EXEMPT_PREFIXES.some(
     (prefix) => normalized === prefix.slice(0, -1) || normalized.startsWith(prefix)
   )
