@@ -1,10 +1,10 @@
 # DevKit-Tool
 
-**版本**: 6.11.0
+**版本**: 6.13.0
 **作者**: zhangq
 **许可证**: MIT
 
-工具技能套件（原 `devkit-core`），当前聚焦 8 个 Skills，覆盖代码库分析、依赖排查、代码知识图谱建图决策、submodule 仓库同步与提交推送、多模型协作与 Claude Code 自身运维辅助工具。
+工具技能套件（原 `devkit-core`），当前聚焦 9 个 Skills，覆盖代码库分析、依赖排查、代码知识图谱建图决策、submodule 仓库同步与提交推送、多模型协作与 Claude Code 自身运维辅助工具。
 
 ---
 
@@ -35,6 +35,8 @@
 
 - `orphan-process-cleaner`
 - `marketplace-cache-sync` — 市场源 + 已启用插件缓存两层同步，含缓存清理。6.2.1 起修正了「让新版本生效」的判据：默认 `/reload-plugins` 即可（实测能热载 skill / agent / hook 脚本与新增的 `PreToolUse` / `PostToolUse` / `UserPromptSubmit` 挂载点），**只有** `SessionStart` / `SessionEnd` / `PreCompact` 这类生命周期挂载点变动才必须重启会话——`/reload-plugins` 不重放生命周期事件，否则会出现「每轮注入已是新版指针、它引用的静态主体却从未投放」的割裂状态。6.2.2 起补上 project/local scope 插件的刷新：常规刷新循环默认只处理 `user` scope，只装在项目目录下（`project`/`local` scope）的插件会静默刷新失败且无任何报错提示；新增按 (id, projectPath) 逐条 `cd` 进目标项目再刷新的写法，并记录了 `--scope project` 靠 cwd 隐式定位、cwd 不匹配时静默假成功的陷阱。
+
+- `restore-subscription` — 把因自定义模型配置（第三方 API 中转 / 本地 LLM）而回不到 Claude 订阅鉴权的会话切回订阅。核心是**三层污染源**模型：shell 环境变量 / settings 文件的 `env` 段 / **daemon 进程继承**——第三层最隐蔽，`claude daemon run` 由某个加载过第三方配置的 claude 拉起后常驻，此后一切由它承载的后台会话全部继承，与当前终端干不干净无关。两条实测结论：会话形态可变（交互式会话切进 `claude agents` 视图会转为 `bg` 归 daemon 管，当场中毒，判据是 transcript 里的 `sessionKind` 字段而非进程 env）；换 daemon 可由 AI 全自动完成（前提是 AI 自身进程链干净），换完新起会话默认走订阅。判成败只认 transcript 的实际应答模型，不认 `/login` 是否成功。
 
 ### submodule 仓库操作（`cascade-*` 配对）
 
@@ -79,7 +81,8 @@ plugins/devkit-tool/
     ├── init-architect/
     ├── key-module-analysis/
     ├── marketplace-cache-sync/
-    └── orphan-process-cleaner/
+    ├── orphan-process-cleaner/
+    └── restore-subscription/    # 自定义模型场景切回订阅鉴权（三层污染源 + daemon 替换）
 ```
 
 ## 维护说明
