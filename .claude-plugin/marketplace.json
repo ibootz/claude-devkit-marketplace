@@ -17,7 +17,7 @@
       "source": "./plugins/devkit-tool",
       "category": "Development",
       "description": "工具技能集：代码库分析、依赖排查、初始化、codegraph 建图、插件缓存刷新、submodule 拉取同步与嵌套提交推送、订阅鉴权恢复（9 技能）",
-      "version": "6.13.0"
+      "version": "6.14.0"
     },
     {
       "name": "devkit-spec",
