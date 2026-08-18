@@ -109,6 +109,7 @@ python3 "$SP" --push
 | push 半途失败，前面层已 push、后面没推 | 网络 / 认证 / 远端拒绝 / 写后回读不一致 | 任一层失败立即中止，打印「已成功 push 的层」与「中止层」，据此决定补推还是回滚 |
 | 跑 `git ls-remote` 探测远端时 SSH 弹密码卡住 | 没禁交互 | 脚本已设 `GIT_TERMINAL_PROMPT=0` + `GIT_SSH_COMMAND="ssh -o BatchMode=yes"`，无凭证直接失败不挂起 |
 | 用 shell 的 `timeout` 包命令，结果瞬间"全部失败" | macOS 默认没有 `timeout` 二进制（GNU coreutils 才有，Homebrew 的叫 `gtimeout`） | 脚本用 `subprocess.run(timeout=)`，不依赖 `timeout` 命令 |
+| 某一层报告的改动清单与它的上级层**逐字相同**，或空目录层也报出了一堆改动 | 该层是**未 init 的 submodule**（空目录，没有自己的 `.git`），在其中跑 git 会沿目录树向上找到**上级仓**并返回上级仓的状态，exit 0、无任何警告 | 核实 `git -C <该层> rev-parse --show-toplevel` 的返回值是否等于该层目录本身，或 `ls -d <该层>/.git` 是否存在——注意 linked worktree 里的 `.git` 是**文件**不是目录，不要因为它不是目录就判该层无效。不成立就把该层从遍历清单里剔掉。**危害**：在这类目录上跑 `git add -A` 会把上级仓的全部改动裹进一个无关提交 |
 
 ## 验证清单
 
