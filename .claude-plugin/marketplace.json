@@ -66,7 +66,7 @@
       "source": "./plugins/working-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒。零 skill，适合全局开启",
-      "version": "3.26.0"
+      "version": "3.27.0"
     },
     {
       "name": "agent-browser",
@@ -101,7 +101,7 @@
       "source": "./plugins/plain-talk-output-style",
       "category": "Productivity",
       "description": "说人话输出风格 - 一语中的、几句话讲明白、能表格不成段，启停即切换",
-      "version": "1.4.0"
+      "version": "1.5.0"
     },
     {
       "name": "adhd-output-style",
@@ -115,7 +115,7 @@
       "source": "./plugins/wenyan-output-style",
       "category": "Productivity",
       "description": "文言极简输出风格 - 文言语法压缩、字形简体，代码与告警原样，启停即切换",
-      "version": "1.4.0"
+      "version": "1.5.0"
     },
     {
       "name": "insight-addon",
