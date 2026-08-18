@@ -57,7 +57,7 @@ cwd）就读不到了——2026-07-31 实测踩过，遂独立成文件。
 "这条登记是不是本会话写的"。所以比对这一步必须由本 hook 现算，直接把结论注进
 三岔口文案：
 
-  · 登记存在且 `session_id` 与当前一致 → 直接告诉 AI "唤醒 `<真实 name>`"。
+  · 登记存在且 `session_id` 与当前一致 → 告诉 AI 这些实例在跑、各自认领了哪条。
   · 登记存在但不一致（或是加 `session_id` 之前落的旧格式，压根没这个键）→ 告诉
     AI "这份登记已失效，当首次派发处理"。
   · 没有任何登记 → 保持原来的措辞，首次派发。
@@ -65,25 +65,26 @@ cwd）就读不到了——2026-07-31 实测踩过，遂独立成文件。
 同一轮只注入当下成立的那一种——预算是每轮成本，把三种都注等于把预算浪费在另外
 两种当下不成立的分支上。
 
-## 第 4 种状态：登记有效但这一代已经收口，建议换代（2026-08-10 加）
+## v7：同一档并存多个实例，注入要给的是「issue → name」映射（2026-08-18）
 
-上面第一支「唤醒它」在 2026-08-10 起再分两路：`keeper_generation.retirable_kinds`
-现算这个 kind 的队列是不是已经收口（done 非空 / open 空 / unknown 空 / 无待答复裁决
-/ debug 还要求无残留 worktree），收口了就改成建议**新派一代**而不是继续唤醒。
+v6 是一档一个常驻 keeper 顺序处理整条队列，所以注入只需回答一个问题：**唤不唤醒它**。
+v7 改成一条 issue 一个实例并行跑，注入要回答的问题变成两个：
 
-为什么要有代际：在飞面板那一行的 description 在派发那一刻就永久定格，SendMessage
-与 SubagentStart hook 两条通道都写不回它（对 CLI 2.1.226 逐条核实过）。常驻实例活
-整场会话，那一行就定格整场会话，看板价值归零。换代把定格的粒度从「一场会话」缩小
-到「一批活」，配套 working-discipline 的 check 11 把 description 判据从「逐字固定串」
-放宽为「`<kind> 队列` 前缀 + 本批摘要」，两者缺一都不成立。
+  1. **这条新 bug 该新派还是该唤醒？**——答案几乎总是「新派」。这是与 v6 最容易搞反
+     的一条：v6 的措辞「已有 X 在跑，用 SendMessage 唤醒它，不要重派」若原样留着，
+     主会话会把第二条、第三条 bug 全塞进同一个实例，它们于是排队等前一条修完——
+     并行化的收益当场归零，而且**表面上一切正常**，没有任何报错提示串行化发生了。
+  2. **要补充的信息该发给谁？**——按 `issue` 找，不按时间猜。所以注入里给的是
+     `DBG-207→name` 这样的映射，不是一个孤零零的 name。
 
-**这一支给的是建议不是命令**：判据看不见「keeper 正在推理、活还没落盘」这一瞬间，
-所以措辞用「可退场」而不是「必须重派」。主会话若明知刚转过活过去，照常唤醒即可。
+「已收工」那一支由 `keeper_generation.instance_state` **按实例**现算（该条目 status
+是 done、且没有 worktree 残留）。它替代了 v6 的按档换代判定——按档判会让 DBG-207 的
+实例被还在跑的 DBG-208 挡住、永远判不出收工。两层判定的分工见 `keeper_generation.py`
+模块头「v7：两层判定并存」。
 
-判定失败（import 不到、解析异常）一律回落到「全部唤醒」——那是加换代之前的行为。
-
-`debug`/`chore` 两档可以各自处在不同状态（一个还在跑、另一个已收口），此时两段话
-同时出现在同一句里，H29 的 [134] 断言这个形态。
+判定失败（import 不到、解析异常、登记里没有 `issue`）一律算作「还有活」——那是保守
+方向：多提示一次唤醒的代价，远小于把一个刚派出、还没来得及认领编号的实例判成收工，
+继而让主会话重派第二个去抢同一条 issue。
 """
 import json
 import os
@@ -99,9 +100,9 @@ except Exception:
     read_keeper_instances = None
 
 try:
-    from keeper_generation import retirable_kinds
+    from keeper_generation import instance_state
 except Exception:
-    retirable_kinds = None
+    instance_state = None
 
 NOT_ENABLED = (
     "task-keeper 未启用（无 .keeper/）。启用后 bug 转 debug-keeper、杂务转 "
@@ -120,9 +121,8 @@ TRIAGE_HEAD = """# task-keeper 分诊（先分诊，再动手）
 判一次归属，不要为分类反问用户：
 
 1. 自己做：主线任务本身、几句话能答的问题、需要你上下文才能做的事。
-2. 转 debug-keeper：bug/报错/异常行为，逐字转发（首次 `Agent` 派出，之后 `SendMessage` 唤醒）。属于既有交付流程的活走该流程。
-3. 转 chore-keeper：台账/沉淀/收尾/外部系统小操作等杂务，逐字转发。
-4. 转 context-keeper：**动手前**收齐某功能单元的规格/约束（implement 前、debug 派 fixer 前），转发用户原话 + 单元边界。
+2. 转 debug-keeper：bug/报错/异常行为，逐字转发。**一条 bug 一个实例**——同轮报来多条就在同一条消息里并行派多个，别塞给同一个。
+3. 转 chore-keeper：台账/沉淀/收尾/外部系统小操作等杂务，逐字转发。**杂务相反，攒在同一个实例里**——它要跨条目攒批、一次打包拍板。
 
 """
 
@@ -132,48 +132,73 @@ TRIAGE_TAIL = """
 
 最常见失效是「这个我顺手做了更快」——转发是为了不让任务状态只活在本轮上下文里，compact 一次就没了。"""
 
-# 分支 1：没有任何登记（本会话与之前任何会话都没派过）——保持原有措辞。
-# 句尾补一句 description 提示（≤30 汉字）：working-discipline 的 agent-dispatch
-# check 11 要求 keeper 的 description 以 `<kind> 队列` 起头，首次派发就写对可省一轮 deny。
-# 2026-08-10 起前缀之后可以（也应该）接本批摘要，见 keeper_generation 模块头「为什么需要换代」。
-WAKE_LINE_NONE = ("还没有登记：首次转发用 `Agent` 派出，name 自带 4 位随机短哈希后缀，"
-                   "description 写『<kind> 队列 · <本批摘要>』，前缀不可省。")
-
-# 分支 3：登记存在但不属于本会话（session_id 不一致，或是加会话隔离之前落的旧格式、
-# 压根没有 session_id 键）——一律当陈旧处理，判据见 keeper_paths.read_keeper_instance_name。
-WAKE_LINE_STALE = ("`.keeper-instance.json` 的登记来自上一个会话，已失效：当首次派发，"
-                    "用 `Agent` 派出并生成新的 4 位随机短哈希后缀，"
-                    "description 写『<kind> 队列 · <本批摘要>』。")
-
-# 分支 4（2026-08-10 加）：登记有效、实例还在，但这一代手上的活已经全部收口——
-# 建议换代而不是继续唤醒。判据在 `keeper_generation.retirable_kinds`（四项全过），
-# 那边的模块头写清了为什么换代不需要「作废登记」这个动作（覆盖写即代际交替）。
+# 分支 1：本会话没有任何活着的实例——首次派发。
+# 句尾那句 description 提示（≤30 汉字）对应 working-discipline 的 agent-dispatch
+# check 11：keeper 的 description 必须以 `<kind> 队列` 起头，首次派发就写对可省一轮 deny。
 #
-# **这一支是建议不是命令**：判据看不见「keeper 正在推理、活还没落盘」这一瞬间，
-# 所以主会话若明知刚转过活过去，照常唤醒即可。措辞用「可以」不用「必须」。
-WAKE_LINE_RETIRE = ("%s 手上的活已收口（open 0 / 无待拍板 / 无残留 worktree），"
-                    "这一代可退场：本次改用 `Agent` 新派（name 换新短哈希，"
-                    "description 写『%s 队列 · <本批摘要>』），旧登记会被自动覆盖。")
+# v7 多了一句「name 原样写进 prompt 第一行」：实例要用自己的 name 去取合并锁、写登记
+# （`scripts/keeper_cli.py` 的 `--name` 参数），而 **subagent 拿不到自己的 name**——
+# 那个值只存在于主会话这一侧的派发参数里。不传下去，实例就只能瞎猜一个标识，合并锁的
+# 持有者校验会因此失效（谁都能释放谁的锁）。
+WAKE_LINE_NONE = ("本会话还没有实例：用 `Agent` 派出，name 自带 4 位随机短哈希后缀，"
+                   "description 写『<kind> 队列 · <本条摘要>』（前缀不可省），"
+                   "并把这个 name 原样写进 prompt 第一行——实例要用它取合并锁。")
+
+# 分支 2：登记存在但不属于本会话（session_id 不一致，或是加会话隔离之前落的旧格式、
+# 压根没有 session_id 键）——一律当陈旧处理，判据见 keeper_paths.live_instances。
+WAKE_LINE_STALE = ("`.keeper-instance.json` 里的登记来自上一个会话，已失效：当首次派发，"
+                    "用 `Agent` 派出并生成新的 4 位随机短哈希后缀，"
+                    "description 写『<kind> 队列 · <本条摘要>』，name 原样写进 prompt 第一行。")
+
+# 分支 3（v7 改）：本会话有活着的实例。与 v6 最大的差别是**这里不再劝你唤醒**——
+# 唤醒只对「补充某条既有 issue 的信息」成立，新 bug 一律新派一个实例。
+#
+# v6 的措辞是「本会话已有 X 在跑，用 SendMessage 唤醒它，不要重派」，那句话在一档
+# 一实例的架构下是对的，在 v7 下会直接把并行压回串行：主会话看到有实例在跑，就把
+# 第二条、第三条 bug 全塞给同一个，于是它们排队等前一条修完。
+WAKE_LINE_LIVE = ("本会话在跑：%s。**新 bug 一律新派实例**（同轮多条就在同一条消息里"
+                  "并行派完）；只有补充某条既有 issue 的信息，才 `SendMessage` 唤醒"
+                  "认领了它的那一个。")
+
+# 分支 3 的附加段：这些实例认领的条目已 done 且无 worktree 残留，手上没活了。
+# 措辞是「别再唤醒」而不是「已死」——实例本身还在后台，只是没有理由再叫醒它。
+WAKE_LINE_RETIRED = "已收工，别再唤醒：%s。"
+
+# 同一句里最多列几个实例。超出的收成「等 N 个」——每轮注入有 800 字符硬上限（H19），
+# 十几个实例的完整清单会把三岔口本体挤掉。要看全的用 `keeper_cli.py peers`。
+MAX_LISTED = 4
 
 # 与 `keeper_instance_register.KEEPER_SUBAGENT_KIND` 是一对必须同增同减的清单：
 # 那边决定 name 落不落盘，这边决定落了盘的 name 会不会被读出来注进三岔口。
 # 只加一边的后果是「登记了但永远不提示唤醒」或「提示唤醒一个从未登记的 kind」。
-KIND_LABELS = (("debug", "debug-keeper"), ("chore", "chore-keeper"),
-               ("context", "context-keeper"))
+KIND_LABELS = (("debug", "debug-keeper"), ("chore", "chore-keeper"))
+
+
+def _fmt_instances(items):
+    """`[(issue, name)]` → `DBG-207→\\`name\\`、DBG-208→\\`name\\``，超出 MAX_LISTED 收尾。
+
+    `issue` 为空的实例显示成「未认领编号」而不是省略：它同样占着一个 keeper，主会话
+    需要知道它在那儿，否则会以为那个 name 是野的。
+    """
+    shown = items[:MAX_LISTED]
+    parts = ["%s→`%s`" % (iid or "未认领编号", name) for iid, name in shown]
+    rest = len(items) - len(shown)
+    if rest > 0:
+        parts.append("等 %d 个" % rest)
+    return "、".join(parts)
 
 
 def triage_wake_line(worktree_root, session_id):
-    """算三岔口里"唤醒前怎么办"这句话，三选一，失败一律回落到"没有登记"这一支。
+    """算三岔口里"唤醒前怎么办"这句话。失败一律回落到"没有实例"那一支。
 
     `worktree_root` 是 `find_worktree_root` 的返回值（本函数不重新解析，避免重复
     起 git 子进程）；`session_id` 是本轮 `UserPromptSubmit` payload 里的 `session_id`
     字段，取不到时传 `None`——此时任何登记都判不出"匹配"，一律落到"陈旧"或"没有
-    登记"两支中的一支，这是安全的降级方向（宁可多提示一次首次派发，也不要在无法
+    实例"两支中的一支，这是安全的降级方向（宁可多提示一次首次派发，也不要在无法
     确认的情况下让 AI 去唤醒一个可能早已不存在的实例）。
 
-    `debug`/`chore` 两档分别判断：session_id 匹配的进 matched，登记存在但不匹配
-    （含旧格式无 session_id 键）的进 stale。matched 非空优先；否则 stale 非空则
-    提陈旧；两者都空则是"没有登记"。
+    v7 起同一档可以有多个实例，所以这里遍历的是**列表**而不是单条记录，并按
+    `keeper_generation.instance_state` 把它们分成「还有活」与「已收工」两组分别成句。
     """
     if resolve_delivery_id is None or read_keeper_instances is None or not worktree_root:
         return WAKE_LINE_NONE
@@ -185,40 +210,38 @@ def triage_wake_line(worktree_root, session_id):
     if not isinstance(data, dict):
         return WAKE_LINE_NONE
 
-    matched, stale = [], []
-    for kind, label in KIND_LABELS:
-        entry = data.get(kind)
-        if not isinstance(entry, dict):
-            continue
-        name = entry.get("name")
-        if not isinstance(name, str) or not name:
-            continue
-        entry_session_id = entry.get("session_id")
-        if session_id and isinstance(entry_session_id, str) and entry_session_id == session_id:
-            matched.append((kind, label, name))
-        else:
-            stale.append((label, name))
+    delivery_root = os.path.join(worktree_root, ".keeper", delivery_id)
+    live, retired, has_stale = [], [], False
+    for kind, _label in KIND_LABELS:
+        for rec in data.get(kind) or []:
+            if not isinstance(rec, dict):
+                continue
+            name = rec.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+            sid = rec.get("session_id")
+            if not (session_id and isinstance(sid, str) and sid == session_id):
+                has_stale = True
+                continue
+            issue = rec.get("issue")
+            state = "unknown"
+            if instance_state is not None:
+                try:
+                    state = instance_state(delivery_root, kind, issue)
+                except Exception:
+                    state = "unknown"
+            # unknown 与 live 一起进「还有活」——判据看不见「刚派出、还没认领编号」
+            # 这一瞬，把它算成收工会让主会话立刻重派，两个实例抢同一条 issue。
+            (retired if state == "retirable" else live).append((issue, name))
 
-    if matched:
-        # 有效实例再分两路：手上活已收口的建议换代（分支 4），其余照旧唤醒。
-        # 判定失败一律回落到「全部唤醒」——那是加换代之前的行为，安全方向。
-        retire_set = set()
-        if retirable_kinds is not None:
-            try:
-                retire_set = retirable_kinds(
-                    os.path.join(worktree_root, ".keeper", delivery_id))
-            except Exception:
-                retire_set = set()
-        wake = [(l, n) for k, l, n in matched if k not in retire_set]
-        retire = [(k, l, n) for k, l, n in matched if k in retire_set]
-        segs = []
-        if wake:
-            parts = "、".join("%s（name `%s`）" % (l, n) for l, n in wake)
-            segs.append("本会话已有 %s在跑，用 `SendMessage` 唤醒它，不要重派。" % parts)
-        for kind, label, _name in retire:
-            segs.append(WAKE_LINE_RETIRE % (label, kind))
+    segs = []
+    if live:
+        segs.append(WAKE_LINE_LIVE % _fmt_instances(live))
+    if retired:
+        segs.append(WAKE_LINE_RETIRED % _fmt_instances(retired))
+    if segs:
         return " ".join(segs)
-    if stale:
+    if has_stale:
         return WAKE_LINE_STALE
     return WAKE_LINE_NONE
 
@@ -237,9 +260,13 @@ ENABLED = """# task-keeper 主会话侧参考
 
 keeper 待拍板会写 `<交付>/decisions/<stamp>-<keeper>.md` 并 SendMessage 打铃。攒批处理（待拍板 ≥3 条/出现 blocking/用户问起/停顿点才处理）：一次 AskUserQuestion 并列问完（不用文本选项块），原文写 `<交付>/decisions/answers/<同名>.md` 并通知 keeper。「待拍板 N 条」由磁盘现算。
 
-## 布局（v5）
+## 布局（v7）
 
-`<worktree 根>/.keeper/<交付id>/{debug,chore,context,decisions}/`，交付 id 取 worktree 根 basename，非交付用 `_main`。一条 bug 全在 `debug/<DBG-id>/`，一个上下文包全在 `context/<CTX-id>/`。**v6 起队列正文与附件入库**（issue/receipts/index/decisions/截图都进版本库），只精确排除三类本机产物：`worktree/`、`.keeper-instance.json`、`.keeper-active`。所以截图脱敏是红线——落盘即公开。
+`<worktree 根>/.keeper/<交付id>/{debug,chore,decisions}/`，交付 id 取 worktree 根 basename，非交付用 `_main`。一条 bug 全在 `debug/<DBG-id>/`。**v6 起队列正文与附件入库**（issue/receipts/index/decisions/截图都进版本库），只精确排除本机产物：`worktree/`、`.keeper-instance.json`、`.keeper-active`、`.merge.lock*`。所以截图脱敏是红线——落盘即公开。
+
+## 多实例（v7）
+
+同一档并存多个实例，一条 issue 一个。谁认领了哪条看每轮注入的映射，或跑 `scripts/keeper_cli.py peers --kind debug`。合并回主仓是唯一的共享资源，由 `.merge.lock` 互斥（超时 15 分钟自动抢占），实例侧走同一个 CLI 的 `lock` 子命令。
 
 指针：skills/tk-decisions；状态看每轮注入或各队列 index.md。"""
 

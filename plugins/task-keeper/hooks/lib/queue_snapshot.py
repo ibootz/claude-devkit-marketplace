@@ -121,16 +121,33 @@ LEGACY_QUEUE = ".debug"  # radnove-core 时代的旧队列目录，仅用于迁�
 # 语义**，所以 `.keeper/*/debug/*/worktree/` 这种写死中间层的等价物不算命中，这是
 # 有意的：写死中间层在嵌套层数变化时会漏网，属于要报出来的错误配置而非等价写法。
 GITIGNORE_RULES = (
-    ("fixer worktree（入库会种野生 gitlink）",
+    # 四条的 `why` 一律**只写理由、不复述这条规则排除的是什么**——那件事 `pat` 自己
+    # 已经说了（`worktree/` 就是 fixer worktree），复述一遍只是把同一个意思在告警里写
+    # 两次。这不是行文偏好：整串 `why` 会被逐字拼进「缺 N 条」告警，而那条告警计入
+    # chore 快照的注入预算（H14 硬指标 900 字节，`[58]` 那个「尚未配 .gitignore」的仓
+    # 是最坏情形）。v7 加第四条时最坏情形一度顶破预算，成因正是这些重复的前缀。
+    ("入库会种野生 gitlink",
      ".keeper/**/worktree/",
      {".keeper/**/worktree/", ".keeper/**/worktree",
       "/.keeper/**/worktree/", "/.keeper/**/worktree"}),
-    ("keeper 实例登记（含 session_id，跨机器无意义且必冲突）",
+    ("含 session_id，跨机器无意义且必冲突",
      ".keeper/**/.keeper-instance.json",
      {".keeper/**/.keeper-instance.json", "/.keeper/**/.keeper-instance.json"}),
-    ("活跃交付指针（本机状态）",
+    ("本机状态，跨机器无意义",
      ".keeper/.keeper-active",
      {".keeper/.keeper-active", "/.keeper/.keeper-active"}),
+    # v7 新增。合并锁是**运行态**产物：目录存在的那几分钟表示"有人正在合并"，
+    # 合完就删。入库会造成两个后果，第二个是自伤：
+    #   (1) 跨机器无意义——锁里记的是本机某个 keeper 实例的 name 与时间戳；
+    #   (2) merge-back 的前置校验要求父仓干净，而持锁期间锁目录若被 git 看见，
+    #       **持锁这件事本身就会让校验失败**——拿了锁反而合不了，锁把自己锁死。
+    # pattern 末尾那个 `*` 不是随手加的：抢占一把超时锁时，旧锁目录会被改名成
+    # `.merge.lock.stale-<旧持有者>` **留在原地当诊断现场**（谁死在合并中途、什么时候）。
+    # 写成 `.merge.lock/` 只匹配得到锁本身、匹配不到这个残留，于是抢占路径上仍会出现
+    # 未跟踪目录 → 前置校验判脏树 → 抢到锁的那个实例照样合不了。实测确认过一次。
+    ("被 git 看见则 merge-back 判脏树",
+     ".keeper/**/.merge.lock*",
+     {".keeper/**/.merge.lock*", "/.keeper/**/.merge.lock*"}),
 )
 
 # v5 的整树忽略行。**v6 起它是错误配置**：留着会让整个队列继续不入库，与新策略完全
@@ -142,10 +159,11 @@ GITIGNORE_LEGACY_ALL = {".keeper/", ".keeper", "/.keeper/", "/.keeper", ".keeper
 # 「两个分支各自 EOF 追加内容不同的注释即冲突」（实测过）；内容逐字相同则 git 视为
 # 同一处改动、不冲突。keeper 的 agent 定义里贴的是同一份字节，改这里要同步改那两处。
 GITIGNORE_BLOCK = (
-    "\n# task-keeper 队列：正文与附件入库，只排除三类本机产物\n"
+    "\n# task-keeper 队列：正文与附件入库，只排除四类本机产物\n"
     ".keeper/**/worktree/\n"
     ".keeper/**/.keeper-instance.json\n"
     ".keeper/.keeper-active\n"
+    ".keeper/**/.merge.lock*\n"
 )
 
 # bug 报告特征词。命中即追加 register-first 提醒。

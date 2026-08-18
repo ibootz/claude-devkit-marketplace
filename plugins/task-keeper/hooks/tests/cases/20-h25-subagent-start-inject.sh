@@ -40,18 +40,23 @@ Q="$T/.keeper/_main/debug"
 mkissue "$Q" DBG-001 open P1 "已 triage 未派的问题" "" medium
 mkissue "$Q" DBG-002 open ""  "还没 triage 的问题"
 OUT="$(run_subagent_start "$T")"; RC=$?
-has "含漏派体检开场白" "$OUT" "# 漏派体检（harness 每次唤醒现算，非你的记忆）"
+has "含漏派体检开场白" "$OUT" "# 漏派体检 + 同档实例（harness 每次唤醒现算，非你的记忆）"
 has "带出已 triage 未派的 DBG-001" "$OUT" "DBG-001"
 hasnt "不带未 triage 的 DBG-002（触发漏派前提是 priority 与 difficulty 都非空）" "$OUT" "DBG-002"
+# 【v7 零成本一侧】没有任何实例登记时不渲染「同档在跑的实例」那一段——那段的存在
+# 意义是让实例判断某条漏派是不是已经有人在做，一个实例都没有时它是纯噪音。
+hasnt "无实例登记时不渲染同档实例段" "$OUT" "同档在跑的实例"
 if [ "$RC" -eq 0 ]; then ok "有漏派场景 exit 0"
 else bad "有漏派场景应 exit 0" "0" "$RC"; fi
 # 字节数按本测试套件的既有惯例计（$(...) 会剥掉 hook stdout 末尾那个换行符，
 # 见 09-h14-chore-snapshot.sh:19、15-h20-queue-autocreate.sh:17 同一手法）——
-# 因此这里量到的字节数比"贴着原始管道输出跑 wc -c"少 1。人工用原始管道实测过
-# 一次是 905 字节（含末尾换行符），本条断言的 904 与之一致，差的正是那 1 个换行
-# 字节，不是两次结果不一致。这是回归判据，锁定的是 render() 模板文案本身没有
-# 漂移——模板文案一旦被改动，这条会先红，提醒去 debug_keeper_inject.py 复核。
+# 因此这里量到的字节数比"贴着原始管道输出跑 wc -c"少 1。这是回归判据，锁定的是
+# render() 模板文案本身没有漂移——模板文案一旦被改动，这条会先红，提醒去
+# debug_keeper_inject.py 复核。
+# 【v7 改数：904 → 714】render() 的开场白加了「+ 同档实例」四个字，收尾那段整段改写
+# （v6 是「你只需要处理上面这几条」，v7 是「你只对自己认领的那条 issue 负全责」）。
+# 数字变小不是内容变少，是收尾段的措辞更短——两处改动都在 render() 里，逐字核对过。
 BYTES="$(printf '%s' "$OUT" | wc -c | tr -d ' ')"
-if [ "$BYTES" -eq 904 ]; then ok "漏派注入体 ${BYTES} 字节（=904，人工实测原始字节数 905 差的是被剥掉的那个换行符）"
-else bad "漏派注入体应为 904 字节（模板文案回归锁定）" "904" "$BYTES"; fi
+if [ "$BYTES" -eq 714 ]; then ok "漏派注入体 ${BYTES} 字节（=714，无实例登记的形态）"
+else bad "漏派注入体应为 714 字节（模板文案回归锁定）" "714" "$BYTES"; fi
 rm -rf "$T"

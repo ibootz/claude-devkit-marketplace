@@ -93,12 +93,30 @@
 #   render_frontmatter 按 fm_order 固定位置渲染它（不是被当未知键排到末尾）、
 #   index.md 的 open 表格新增「规格」列且取值取自 issue 的 spec_status。
 #
-# 【2026-08-10 新增 H27，编号 [114]-[120]】
-#   第三条队列 context（上下文收集包）接线：queue_files 新增 CONTEXT spec、
-#   新增 lib/context_snapshot.py 与 user-prompt-submit-context-queue.sh。H27 锁
-#   fm_order 键位与 index_cols 三列（失效形态同 H26）、`ledger_progress` 的两侧
-#   （数得对 + 格式一变就 fail-soft 返回 None 而不是谎报「0 行已填」）、以及
-#   端到端注入里三方降级标记与「销账表无人填」告警的两侧。
+# 【2026-08-18 摘除 H27（原编号 [114]-[120]），编号留空档不复用】
+#   context 队列（CTX-NNN）整条拆除，连同 queue_files.CONTEXT spec、
+#   lib/context_snapshot.py、user-prompt-submit-context-queue.sh、
+#   agents/context-keeper.md 与 skills/tk-context/ 一起删。
+#   依据是实证而非设计偏好：全机 8 个真实项目的 `.keeper/*/context/` 共 0 条 CTX
+#   条目，三个产物文件（context.md / ledger.md / reconcile.md）从未被创建过一次，
+#   每处 index.md 只有冷启动那一次提交。上下文收集降级为 prompt 模板
+#   （skills/tk-debug/references/collector.md），由 keeper 派给 general-purpose。
+#
+# 【2026-08-18 v7 多实例：H22/H25/H29 改判据，新增 H30（[142]-[178]）】
+#   v7 把「一档一个常驻 keeper 顺序跑完整条队列」改成「一条 issue 一个实例并行跑」。
+#   三节既有用例断言的是 v6 语义，随之改写（判据没松，只是观测点/措辞跟着变）：
+#     · H22 [87]/[88]：三岔口动态行措辞从「本会话已有 X 在跑，用 SendMessage 唤醒它，
+#       不要重派」改成「本会话在跑：DBG-207→name…**新 bug 一律新派实例**」。v6 那句
+#       在多实例下会把并行压回串行，故 [88] 追加一条**反向**断言锁它的缺席。
+#     · H25 [111]：注入体从「一份清单」变成「两份事实」（漏派清单 + 同档实例认领表），
+#       开场白与收尾段都改了，字节回归锁 904 → 714。
+#     · H29：`retirable_kinds` 不再进注入（注入改成按实例现算的 `instance_state`），
+#       观测点从注入文本下移到函数返回值，五项判据与 fixture 一条没动。
+#   新增 H30（cases/25-h30-multi-instance.sh）覆盖多实例新增的四组原语：`claim_id`
+#   原子认领（含 8 进程并发不撞号，驱动在 tests/lib/claim_race.py）、合并锁
+#   （获取/占用/重入/超时抢占/未超时不抢/owner 不匹配拒删）、`extract_issue` 归属抽取
+#   （抽得到 / 抽不到返回 None / 跨档不串号）、`instance_state` 三态，外加三岔口多实例
+#   措辞与 SubagentStart 两份事实的注入门槛。
 #
 # 【2026-08-10 新增 H28，编号 [121]-[127]】
 #   入库策略 v5 → v6 反转（队列正文与附件入库，只精确排除 worktree/instance.json/
@@ -161,9 +179,9 @@ source "$TESTS_DIR/cases/17-h22-keeper-routing-session.sh"
 source "$TESTS_DIR/cases/19-h24-board-report.sh"
 source "$TESTS_DIR/cases/20-h25-subagent-start-inject.sh"
 source "$TESTS_DIR/cases/21-h26-spec-status.sh"
-source "$TESTS_DIR/cases/22-h27-context-queue.sh"
 source "$TESTS_DIR/cases/23-h28-gitignore-v6.sh"
 source "$TESTS_DIR/cases/24-h29-keeper-generation.sh"
+source "$TESTS_DIR/cases/25-h30-multi-instance.sh"
 
 echo
 printf '通过 %d / 失败 %d\n' "$pass" "$fail"

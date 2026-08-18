@@ -20,7 +20,9 @@
 
 ```yaml
 ---
-from: debug-keeper
+from: opus-debugger-4bb6    # 派发时拿到的那个实际 name（带随机短哈希），不是 kind 字面量
+                            # ——v7 一档并存多个实例，写成字面量 "debug-keeper" 会让主会话
+                            # 唤醒不到人：SendMessage 按 name 寻址，没有这个字面量对应的实例
 about: DBG-017              # 关联的 issue id，跨 issue 的事项写 "-"
 kind: architecture-tradeoff # 用一个短语概括这是哪一类拍板
 blocking: true              # 布尔：为 true 时只冻结 about 指向的这一条 issue，
@@ -64,7 +66,13 @@ DBG-017 待拍板：架构取舍，需要你确认改动方向。
 
 ## 12.2 主会话攒批、转达、写回
 
-主会话收到指针通知后不必立刻处理，可以攒够一批再一起讲给 Human。拿到 Human 的原话答复后，主会话把**答复原文**写进 `.keeper/<交付id>/decisions/answers/<同名>.md`（文件名与 `decisions/` 下那份完全一致，只是目录换成 `answers/`），然后按 §0 描述的会话隔离机制确认 keeper 还在本会话内（登记的 `session_id` 与当前一致，由每轮三岔口注入现算，主会话不自己重新比对），`SendMessage` 唤醒那个真实 name（**不是**逐字写死的 `opus-debug-keeper`——name 带随机短哈希，写死字面量唤醒不到）告知已写好。
+主会话收到指针通知后不必立刻处理，可以攒够一批再一起讲给 Human。拿到 Human 的原话答复后，主会话把**答复原文**写进 `.keeper/<交付id>/decisions/answers/<同名>.md`（文件名与 `decisions/` 下那份完全一致，只是目录换成 `answers/`），然后按 §0 描述的会话隔离机制确认 keeper 还在本会话内（登记的 `session_id` 与当前一致，由每轮三岔口注入现算，主会话不自己重新比对），`SendMessage` 唤醒那个真实 name（**不是**逐字写死的 `opus-debugger`——name 带随机短哈希，写死字面量唤醒不到）告知已写好。
+
+v7 起同一档并存多个实例，唤醒对象直接读决策文件 frontmatter 的 `from` 字段即可——那就是
+派发这条决策的实例自己的 name，不需要再去 `.keeper-instance.json` 里按 `issue` 反查。只有
+`from` 与登记表对不上（比如文件是旧会话遗留、`from` 那个 name 已不在活实例列表里）才需要
+退回按 `about` 字段（issue id）在 `.keeper-instance.json` 的 `debug.instances` 里查当前
+真正认领这条 issue 的实例——此时说明原实例已收工或被判定失效，答复要唤醒的是接手它的新实例。
 
 若中间跨了会话（比如 Human 拖了很久才答复、主会话已经重启过一轮），登记会被判定已失效，走首次派发——keeper 写在磁盘上的 issue 文件与 `decisions/`/`answers/` 都还在，新实例被派出后按 §0 描述的方式先看 `index.md` 建立队列认知，能看到这条待决事项，不会当成全新问题重复处理。
 

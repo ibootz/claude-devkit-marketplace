@@ -103,11 +103,18 @@ REG="$T/.keeper/_main/.keeper-instance.json"
 NAME_NOSID="$(ki_field "$REG" debug name)"
 if [ "$NAME_NOSID" = "opus-debug-keeper-4bb6" ]; then ok "缺 session_id 时 name 仍正常登记"
 else bad "缺 session_id 时 name 应仍登记" "opus-debug-keeper-4bb6" "$NAME_NOSID"; fi
+# 【v7 起必须下钻到 instances 那一层】登记从「kind 直接是一条 record」变成
+# 「kind 是 {"instances": [record, ...]}」。原先这里写的是
+# `"session_id" in d.get("debug", {})`——它在 v7 下**恒为 False**，因为 v7 的
+# `d["debug"]` 只有 `instances` 一个键。也就是说这条断言即使 hook 真的错写了
+# session_id 也照样绿，是一条失去检测力的假绿。改成读第一条 record 本身。
 HAS_KEY="$(/usr/bin/python3 -c '
 import json
 try:
     d = json.load(open("'"$REG"'"))
-    print("session_id" in d.get("debug", {}))
+    e = d.get("debug") or {}
+    rec = (e.get("instances") or [e])[0]
+    print("session_id" in rec)
 except Exception:
     print("ERROR")
 ')"

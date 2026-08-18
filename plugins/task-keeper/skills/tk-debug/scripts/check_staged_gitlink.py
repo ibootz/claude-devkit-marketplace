@@ -7,7 +7,7 @@
 
 v5 期间 `.keeper/` 整树 gitignore，`git add -A` 压根不会碰到嵌套 fixer worktree，
 本脚本要防的风险确实不发生，于是当时降级为存量仓专用。v6 把入库策略反转成「队列正文
-与附件入库，只精确排除三类本机产物」之后，**这条路重新打开**——现在挡住野生 gitlink
+与附件入库，只精确排除四类本机产物」之后，**这条路重新打开**——现在挡住野生 gitlink
 的只有 `.gitignore` 里那一条 `.keeper/**/worktree/`，而它有实测过的写法坑（必须用
 `**`，写死中间层如 `.keeper/*/debug/*/worktree/` 会在嵌套层数变化时漏网）。
 
@@ -102,13 +102,14 @@ def main():
     print("\n修复（逐条撤出暂存区，再补 .gitignore 规则）：")
     for p in hits:
         print("    git -C %s rm --cached -r --quiet -- %s" % (repo, p))
-    print("    # 确认 .gitignore 里有 v6 的三条精确排除规则（逐字，与 hooks/lib/")
+    print("    # 确认 .gitignore 里有 v6 的四条精确排除规则（逐字，与 hooks/lib/")
     print("    # queue_snapshot.py 的 GITIGNORE_RULES 同源，改这里要同步改那边）：")
     print("    #   .keeper/**/worktree/")
     print("    #   .keeper/**/.keeper-instance.json")
     print("    #   .keeper/.keeper-active")
+    print("    #   .keeper/**/.merge.lock*")
     print("    # 反过来，若 .gitignore 里还留着 v5 的整树忽略行 `.keeper/`，那是 v6 起的")
-    print("    # 错误配置：它静默让整个队列都不入库，与 v6「正文与附件入库、只排除三类")
+    print("    # 错误配置：它静默让整个队列都不入库，与 v6「正文与附件入库、只排除四类")
     print("    # 本机产物」完全相反，先把它删掉。v4 的 `.keeper/**/*.png`、`*.jpg` 同理——")
     print("    # v6 要求截图入库，留着会让附件继续漏在版本库外。")
     print("    # 改完重跑本脚本回读验证，不要凭 `git add` 没报错就认为好了")

@@ -11,6 +11,12 @@ stdout = 永远空——本 hook **不拦截任何操作**，不输出 permissio
          第一次读到上一个会话的死 name，唤醒失败后会误判成"重派"，见 `keeper_paths.py`
          模块头「`.keeper-instance.json` 的会话隔离」那一节的事故描述。
 
+【v7 补：登记里多写一个 `issue`（`DBG-207` / `CHR-042`）】
+  一条 issue 一个 keeper 实例、同一档并存多个之后，光有 `name` 不足以定位「该唤醒
+  谁」——主会话要找的是**认领了某条 issue 的那个实例**。`issue` 从 `tool_input.prompt`
+  （抽不到再看 `description`）里正则抽第一个匹配，判据与降级口径见 `extract_issue`。
+  抽不到不影响登记本身：少一个键，唤醒退回按时间定位。
+
 【判据：只用确定字段，白名单枚举，不做模糊匹配】
   1. `tool_name == "Agent"`——不是这次调用就不用往下看。
   2. `tool_input.subagent_type` 取冒号后的 slug，必须**恰好等于**
@@ -50,6 +56,7 @@ stdout = 永远空——本 hook **不拦截任何操作**，不输出 permissio
 """
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -59,15 +66,23 @@ try:
 except Exception:
     keeper_paths = None
 
-# 白名单枚举——只认这三个值，不做「含 keeper 就算」的模糊匹配。
+# 白名单枚举——只认这两个值，不做「含 keeper 就算」的模糊匹配。
 #
 # 漏登记某一类的后果不是「少存一个名字」：它的 name 永不落盘 → 每次唤醒前读不到登记 →
-# 每次都当首次派发 → 同一个交付目录出现两个实例抢独占写权。所以新增常驻 keeper 时
-# 这里必须同步加，它与 `keeper_routing.KIND_LABELS` 是一对必须同增同减的清单。
+# 每次都当首次派发 → 同一条 issue 出现两个实例抢同一个 DBG 目录的写权。所以新增常驻
+# keeper 时这里必须同步加，它与 `keeper_routing.KIND_LABELS` 是一对必须同增同减的清单。
+#
+# v7 移除了 `context-keeper`：context 队列整条拆除，上下文收集降级成 keeper 派给
+# `general-purpose` 的 prompt 模板（与 fixer / review 同构），不再是常驻 keeper。
 KEEPER_SUBAGENT_KIND = {
     "debug-keeper": "debug",
     "chore-keeper": "chore",
-    "context-keeper": "context",
+}
+
+# 从派发 prompt 里抽认领的 issue id。**只取第一个匹配**——见 `extract_issue` 的说明。
+ISSUE_RE = {
+    "debug": re.compile(r"\bDBG-\d{3,}\b"),
+    "chore": re.compile(r"\bCHR-\d{3,}\b"),
 }
 
 
@@ -82,6 +97,40 @@ def keeper_kind(subagent_type):
         return None
     slug = subagent_type.rsplit(":", 1)[-1].strip()
     return KEEPER_SUBAGENT_KIND.get(slug)
+
+
+def extract_issue(tool_input, kind):
+    """从派发参数里抽出这个实例认领的 issue id（`DBG-207` / `CHR-042`）；抽不到返回 `None`。
+
+    ## 为什么要抽它
+
+    v7 起一条 issue 一个 keeper 实例，同一档并存多个。主会话手里的事实是"DBG-207 又
+    复现了"，要唤醒的是**认领了 DBG-207 的那个实例**。没有这个键就只能按登记时间猜
+    最近一条，而"最近派的那个"恰好是并行化要消灭的串行假设——猜错的后果是把 DBG-208
+    的进展写进 DBG-207 的 issue.md。
+
+    ## 判据：`prompt` 优先，`description` 兜底，都只取**第一个**匹配
+
+    `prompt` 里可能出现不止一个 id（"这条与 DBG-100 现象相似"）。取第一个而不是全部，
+    依据是派发模板要求把认领目标写在 prompt 开头（见 `skills/tk-debug` 的派发模板）——
+    模板是本插件自己写的，所以这个位置约定可控，不是对自由文本的猜测。
+
+    抽不到就返回 `None`，登记照常写入、只是少一个键。降级后果是主会话唤醒时读到一条
+    没有 `issue` 的登记，只能按 ts 定位——退回 v6 的行为，不是登记失败。**不要为了
+    "总得有个值"去填 tool_input 里别的字段**，一个错的 issue 键比没有更糟：它会让
+    寻址静默指向另一条 bug，而缺键至少能被识别成"这条登记定位不到 issue"。
+    """
+    pattern = ISSUE_RE.get(kind)
+    if pattern is None:
+        return None
+    for field in ("prompt", "description"):
+        val = tool_input.get(field)
+        if not isinstance(val, str):
+            continue
+        m = pattern.search(val)
+        if m:
+            return m.group(0)
+    return None
 
 
 def main():
@@ -119,7 +168,9 @@ def main():
     session_id = session_id if isinstance(session_id, str) and session_id.strip() else None
 
     delivery_id = keeper_paths.resolve_delivery_id(root)
-    keeper_paths.write_keeper_instance(root, delivery_id, kind, name.strip(), session_id=session_id)
+    keeper_paths.write_keeper_instance(root, delivery_id, kind, name.strip(),
+                                       session_id=session_id,
+                                       issue=extract_issue(tool_input, kind))
     # 不打印任何东西：本 hook 没有需要回灌给 harness 的输出。
 
 

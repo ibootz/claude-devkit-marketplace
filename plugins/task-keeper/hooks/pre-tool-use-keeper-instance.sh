@@ -4,7 +4,7 @@
 #
 # 【作用】命中 keeper 类 `subagent_type`（`debug-keeper` / `chore-keeper`）的
 #   `Agent` 派发时，把这次派发用的 `tool_input.name`（keeper 的 name 现在强制带
-#   4 位随机短哈希，如 `opus-debug-keeper-4bb6`）写进
+#   4 位随机短哈希，如 `opus-debugger-4bb6`）写进
 #   `<worktree 根>/.keeper/<交付id>/.keeper-instance.json`，供主会话下次唤醒 keeper
 #   前读取真实 name——短哈希是随机的，主会话没法靠记忆或文档拼出来。
 #
