@@ -1,132 +1,106 @@
 # worktree-flow · 主分支保护
 
-在 `main` / `master` 分支上禁止直接改代码。所有改动走「开 worktree 临时分支 → 在里面改并
-提交 → `--no-ff` 合回主分支 → 删 worktree 与临时分支」，临时分支不 push remote。
+`main` / `master` 默认不直接落笔：改动走临时 worktree，再以 `--no-ff` 合回。确需留在主分支时，
+主会话可用 `AskUserQuestion` 取得 Human **本轮**授权，不再只能撞无条件硬拒。
 
 ## 构成
 
-| 组件 | 挂载点 | 强度 | 作用 |
-|---|---|---|---|
-| `hooks/guards/main-branch-guard.js` | `PreToolUse(Write\|Edit\|MultiEdit\|NotebookEdit\|Bash)` | **deny（exit 2）** | 受保护分支上的写操作硬拦，文案给可照抄的下一步 |
-| `hooks/worktree-flow-inject.js` | `SessionStart` + `UserPromptSubmit` + `SubagentStart` | 注入 | 撞闸之前先讲清正确路径 |
-| `skills/worktree-flow/SKILL.md` | skill | — | 四步流程全文、base ref 坑、冲突处理、清理核验 |
-
-三个注入事件缺一不可：`UserPromptSubmit` 只触达主会话，子代理收不到；而**改文件这个动作
-主会话和子代理都会做**，子代理那一路必须靠 `SubagentStart`。`SessionStart` 覆盖会话开头
-与 auto-compact 之后的重注。
-
-## 为什么是 deny 而不是 ask
-
-本仓 `.claude/rules/project/hook-restraint.md` 的强度阶梯建议「能退到 `ask` 就别用 `deny`」，
-因为 `ask` 给用户一个点一下就过的出口。**但本机 Claude Code 的 `defaultMode` 是
-`bypassPermissions`，`permissionDecision: "ask"` 实测全部失效**——弹框不出现、直接放行。
-可用强度只剩「注入提醒」与「硬拒 deny」两档，没有中间档。
-
-2026-08-11 用户在这两档之间拍板选 deny，并要求配环境变量逃生阀。逃生阀 `WORKTREE_GUARD=off`
-同时关掉 guard 与注入（不能只关一半，否则会出现「拦得住但不说怎么办」或「说了却不拦」的
-错位状态）。
-
-## 判据（对照 hook-restraint 的六问）
-
-**0. 挂在哪个事件、能不能真的阻止？** `PreToolUse` + `exit 2`，能真正拦下调用。不是
-`PostToolUse`（那个拦不住任何东西，文件已经写完了）。
-
-**1. 确定字段是哪个？**
-
-| 步骤 | 取值方式 | 比较方式 |
+| 组件 | 挂载点 | 作用 |
 |---|---|---|
-| 目标仓 | `Write`/`Edit`/`MultiEdit` 取 `tool_input.file_path`、`NotebookEdit` 取 `notebook_path`，向上找到第一个存在的目录后跑 `git rev-parse --show-toplevel`；`Bash` 用 `payload.cwd` 或该次调用自己的 `-C <path>` | 命令失败即非 git 仓 → 放行 |
-| 分支 | `git rev-parse --abbrev-ref HEAD` | **逐字**等于 `main` 或 `master`。detached HEAD 返回 `HEAD`，不在集合内 |
-| 豁免路径 | 目标文件相对仓根的路径 | 前缀是否为 `.claude/` `.keeper/` `.git/`，或 `WORKTREE_GUARD_EXEMPT` 列出的前缀 |
-| 合流进行中 | `git rev-parse --absolute-git-dir` 下是否存在 `MERGE_HEAD` / `CHERRY_PICK_HEAD` / `REVERT_HEAD` / `rebase-merge` / `rebase-apply` | 文件存在性 |
+| `hooks/guards/main-branch-guard.js` | `PreToolUse(Write\|Edit\|MultiEdit\|NotebookEdit\|Bash)` | 无本轮授权时拒绝主分支写入；finding 给 worktree 与授权两条路径 |
+| `hooks/approval-question-guard.js` | `PreToolUse(AskUserQuestion)` | 固定授权卡须逐字段匹配，拒绝 AI 预填回答 |
+| `hooks/round-approval-state.js` | `PostToolUse(AskUserQuestion)` + `SessionStart` + `UserPromptSubmit` + `Stop` + `SessionEnd` | Human 明确批准后记本轮状态，并在边界事件撤销 |
+| `hooks/worktree-flow-inject.js` | `SessionStart` + `UserPromptSubmit` + `SubagentStart` | 事前注入流程与授权边界 |
+| `skills/worktree-flow/SKILL.md` | skill | worktree 四步、授权路径、submodule 边界 |
 
-全部是确定字段或文件存在性，没有一处在猜语义。
+`UserPromptSubmit` 只触达主会话，`SubagentStart` 单独触达子代理；二者都可能写文件，故双挂。
+`SessionStart` 覆盖启动与 compact 后重注。
 
-**2. 假阳性长什么样？** 三类，都是有意接受的：
+## 为什么不用 `permissionDecision: "ask"`
 
-- 在 main 上改一个错别字、补一行文档 → 被拦。用户拍板不按扩展名豁免文档，理由是 `.json`
-  / `.yml` 落在代码与文档的灰区，按扩展名切会切出一条模糊边界。出口是逃生阀或按目录豁免。
-- 仓里恰好有个叫 `main` 但不作主干用的分支 → 被拦。同一个出口。
-- 默认三前缀（`.claude/` `.keeper/` `.git/`）是白名单式的：主分支上写这三处之外的**任何**
-  路径都拦，包括 `docs/`、`README.md`。`WORKTREE_GUARD_EXEMPT` 可追加前缀（见下「按目录
-  豁免」），那是配置者主动开的口子，不算误杀。
+本机 `defaultMode = bypassPermissions` 时，PreToolUse 返回 `permissionDecision: "ask"` 实测不弹框、
+直接放行，不能承载主分支授权。本插件改用两段式：
 
-**3. 假阴性长什么样？** Bash 侧的漏报面是**有意收窄**的结果，不是疏漏。hook-restraint 明令
-「判据需要理解语义的规则不得做成 deny」，而「这条 shell 命令算不算写操作」正是那类判据。
-故 Bash 侧只拦 `git commit` 这一种可定位到命令名位置的闭合形态。下列在 main 上一律放行：
+1. guard 首次命中仍 `exit 2`，只阻止尚未获批的调用；
+2. 主会话真实调用 `AskUserQuestion`，PostToolUse 仅在结构化
+   `tool_response.answers[完整问题] === "批准本轮"` 时落授权状态。
 
-- `sed -i` / `>` `>>` 重定向 / `tee` / `cp` `mv` `rm` / heredoc 写文件
-- 解释器脚本内部的写操作（`python - <<EOF` 里的 `open(w)`、`node -e`、`awk -i inplace`）
-- `$(which git) commit`、`G=git; $G commit` 等命令替换与变量间接调用
-- heredoc 终止符写法非常规、`stripHeredocs` 没剥干净时藏在正文里的 `git commit`
+Claude Code 2.1.234 的二进制传递链确认：AskUserQuestion 的 `call().data` 原样进入
+`PostToolUse.tool_response`，回答在 `answers`，自由文本在 `response`，备注在 `annotations`，
+AFK 自动继续带 `afkTimeoutMs`。后面三类一律 fail-closed，不解析模型可见的 UI 文本，也不回读
+transcript。
 
-兜住这些的是注入的流程规约（软约束）与 SKILL.md 的「拦不住但同样违反」一节，不是这道闸。
+## 本轮授权契约
 
-**4. AI 撞到能不能一次改对？** finding 文案里直接给了 `EnterWorktree` 的调用 JSON 与
-`merge --no-ff` / `worktree remove` / `branch -d` 三条可照抄的命令，以及逃生阀写法。
+授权卡的 `metadata.source` 固定为 `worktree-flow`。触发时实际的仓绝对路径、`main` / `master`
+分支与目标编码在完整问题正文的“现场证据”行；其余正文同时呈现：
 
-**5. 失灵时会怎样？** 所有 git 调用带 3 秒超时并 `try/catch`，失败一律返回 `null` →
-**放行**（fail-open）。git 不可用、payload 字段改名、仓损坏等情形下本插件静默退化为不拦，
-不会出现「永久拒绝」这种把 AI 逼到绕路的失败模式。
+- 起源：哪个仓、分支、目标命中保护；
+- 差距：默认应走 worktree，当前想直接写；
+- 影响：批准放行当前会话本轮所有主分支写入；
+- 现场证据：仓、分支、目标的实值。
+
+PreToolUse 要求问题、选项、metadata 逐字段匹配，且输入不能带 `answers` / `annotations`。PostToolUse
+还要求 `tool_response` 只含原问题与单一 `answers` 映射；自由文本、备注、AFK、未知字段、跳过、
+非批准标签皆不落授权。
+
+授权状态按 `session_id` 的 SHA-256 命名，存系统临时目录，目录权限 `0700`、文件权限 `0600`；
+下一次 `UserPromptSubmit`、`Stop`、`SessionEnd` 或新 `SessionStart` 删除。另设 24 小时 fail-safe，防异常退出遗留。
+状态文件不含对话、仓内容或用户回答原文。
+
+**批准粒度**：当前会话本轮所有 `main` / `master` 写入与 `git commit`。这是 Human 选择的粒度，
+并非每次工具调用重问。授权不会跨下一条用户消息，也不会成为以后会话的常驻许可。
+
+子代理没有 `AskUserQuestion`，撞闸后只能回主会话申请；同一 session 的本轮状态可供本轮动作继续。
+
+## 主分支判据
+
+| 步骤 | 取值方式 | 比较 |
+|---|---|---|
+| 目标仓 |文件工具取目标路径；Bash 取 `cwd` 或 `git -C` | `git rev-parse --show-toplevel` 失败则放行 |
+| 分支 | `git rev-parse --abbrev-ref HEAD` | 逐字等于 `main` 或 `master` |
+| 豁免路径 | 文件相对仓根路径 | `.claude/`、`.keeper/`、`.git/` 或显式配置前缀 |
+| 合流进行中 | git 目录标记 | merge / cherry-pick / revert / rebase 标记存在则放行 |
+| 本轮授权 | session-scoped 临时状态 | 有效则放行；缺失、过期、损坏则拒绝 |
+
+Bash 侧仍只认命令位上的 `git commit`。正则无法可靠判断 `sed -i`、重定向、heredoc 或解释器
+内部写入，故这些保持已知漏报，由注入纪律兜住。
 
 ## 回归用例
 
 ```bash
 node plugins/worktree-flow/tests/main-branch-guard.test.js
+node plugins/worktree-flow/tests/round-approval.test.js
 ```
 
-用例在临时目录里真建 git 仓（不 mock），`spawnSync` 喂 JSON 到 stdin、**不经过 shell**
-（经 shell 的测试脚本一旦引号失衡，guard 会把测试数据当真命令拦下并原样回灌进 finding）。
-两侧都有：该拦的确实拦（main 上 Edit / `git commit`），该放的确实放（feature 分支、
-detached HEAD、`.claude/` 路径、`WORKTREE_GUARD_EXEMPT` 路径、合并进行中、非 git 目录、
-`sed -i` 这类已知漏报）。
+覆盖：无授权拒绝；固定授权卡放行调用；预填回答拒绝；批准后整轮多次放行；下一条用户消息、Stop、
+SessionEnd 撤销；非批准、自由文本、备注、AFK、问题篡改、损坏与过期状态皆 fail-closed；以及 feature
+分支、detached HEAD、豁免目录、合流进行中和 Bash 已知漏报不回归。
 
-## 与内置 EnterWorktree 的关系
+## worktree 与 submodule 边界
 
-流程第 1 步用 Claude Code 自带的 `EnterWorktree`（落点 `.claude/worktrees/`、会话 cwd 自动
-切换），而不是本插件自带脚本——用户 2026-08-11 拍板。已知边界：
+`EnterWorktree` 默认 `worktree.baseRef = fresh`，本地主分支领先远端时会漏本地提交；先比
+`HEAD` 与 `origin/<branch>`，不一致则用 `head` 或从本地 `HEAD` 手动建。
 
-- **base ref**：`EnterWorktree` 默认 `worktree.baseRef = fresh`，从 `origin/<默认分支>` 分叉。
-  本地 main 领先 origin 时新工作区缺你的本地提交。SKILL.md 给了开工前的比对命令与两条出路。
-- **submodule**：`git worktree add` 只建父仓工作区，submodule 目录是空的，`EnterWorktree`
-  不补。含 submodule 的聚合仓改用 `task-keeper:tk-worktree`。
+普通 worktree 不初始化 submodule。完整聚合仓 worktree 用 `task-keeper:tk-worktree`；嵌套提交推送
+用 `devkit-tool:cascade-push`。若现有 checkout 才持有脏改动，可向 Human 申请本轮直写，勿开空
+worktree 后再跨隔离边界操作原仓。
 
-## 按目录豁免
+## 目录豁免与全局关闭
 
-`WORKTREE_GUARD=off` 是整仓放行；若只想让某些目录在主分支上可直接改（如 `docs/`、
-`config/`），用更细的 `WORKTREE_GUARD_EXEMPT`——逗号分隔的目录前缀，并进默认三前缀之后：
+细粒度目录豁免：
 
 ```json
-// .claude/settings.json（团队共享）或 .claude/settings.local.json（个人本地）
 { "env": { "WORKTREE_GUARD_EXEMPT": "docs/,config/" } }
 ```
 
-settings.json 的 `env` 注入会话进程，PreToolUse hook 作为子进程经 `process.env` 继承，
-settings 改动会被 reload，无需重启即生效。落 `.claude/settings.json` 随仓入库、全队共享；
-落 `.claude/settings.local.json` 自动 gitignore、仅本人。判据仍是确定的前缀匹配：列了
-`docs/` 只放 `docs/` 下，`src/` 照拦。
+`WORKTREE_GUARD_EXEMPT_DOTDIRS=1` 放行所有顶层点目录，亦会放开 `.github/workflows/`、`.githooks/`
+等高影响脚本目录，默认关闭。
 
-更激进一档：`WORKTREE_GUARD_EXEMPT_DOTDIRS=1` 放行所有顶层以点开头的路径（`.vscode/`、
-`.idea/`、`.husky/` 等隐藏目录，含 `.gitignore` 这类根点文件），未来新增的点目录自动放行：
-
-```json
-{ "env": { "WORKTREE_GUARD_EXEMPT_DOTDIRS": "1" } }
-```
-
-代价：`.githooks/`、`.github/workflows/`、`.husky/` 这类 hook/CI 脚本目录也会一并放行，
-可在 main 上直改、绕过 worktree 评审——改它们会改变 git/CI 行为，故默认关。判据是
-「相对仓根的首段以 `.` 开头」，机械确定，省去逐目录登记。
-
-## 关闭
-
-```bash
-WORKTREE_GUARD=off <命令>          # 单次
-```
-
-或写进 settings.json 的 `env`（长期关闭等于卸载本插件，还留着一份「以为受保护」的错觉，
-不建议）。
+`WORKTREE_GUARD=off` 保留为独立全局关闭开关，**不是 Human 本轮授权**。AI 不得自行启用；长期写进
+settings 等于卸载保护，却会制造“仍受保护”的错觉。
 
 ## Codex 侧
 
-`.codex-plugin/plugin.json` 已登记，但 **hook 是 Claude Code 专有**，Codex 侧只有
-`skills/worktree-flow/SKILL.md` 生效——即只有流程指引，没有硬拦。
+`.codex-plugin/plugin.json` 已登记，但 hooks 为 Claude Code 专有。Codex 侧只有 skill 指引，
+没有机械门控或 AskUserQuestion 授权状态机。

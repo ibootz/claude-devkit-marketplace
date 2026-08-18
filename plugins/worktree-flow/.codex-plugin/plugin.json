@@ -1,7 +1,7 @@
 {
   "name": "worktree-flow",
-  "version": "1.1.0",
-  "description": "主分支保护 - main/master 上禁止直接改代码，强制 worktree 临时分支 → --no-ff 合回 → 清理。Codex 侧只有 skill 生效，PreToolUse 硬拦为 Claude Code 专有",
+  "version": "1.2.0",
+  "description": "主分支保护 - main/master 默认走 worktree；确需直写时由 Human 本轮批准。Codex 侧只有 skill，Claude Code 侧另有机械门控",
   "author": {
     "name": "zhangq"
   },

@@ -179,19 +179,20 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 ### 18. worktree-flow（主分支保护）
 
-`main` / `master` 上禁止直接改代码：这两个分支上的 `Write` / `Edit` / `MultiEdit` /
-`NotebookEdit` 与 `git commit` 被 `PreToolUse` **硬拦**。改动一律走「`EnterWorktree` 开临时
-分支 → 在里面改并提交 → `git merge --no-ff` 合回 → `worktree remove` + `branch -d` 清理」，
-**临时分支不 push remote**。
+`main` / `master` 默认不直接落笔：`Write` / `Edit` / `MultiEdit` / `NotebookEdit` 与 `git commit`
+无 Human 本轮授权时由 `PreToolUse` 拒绝。默认走「`EnterWorktree` 开临时分支 → 在里面改并提交 →
+`git merge --no-ff` 合回 → `worktree remove` + `branch -d` 清理」，临时分支不 push remote。
 
-- **为什么是 deny 不是 ask**：本机 `defaultMode` 为 `bypassPermissions`，`ask` 档实测全部
-  失效，可用强度只剩「注入提醒」与「硬拒」两档。故配 `WORKTREE_GUARD=off` 逃生阀
-- **Bash 侧只认 `git commit` 一种形态**：`sed -i` / 重定向 / heredoc 写文件算不算写操作要
-  猜语义，仓内 hook 克制原则明令这类判据不得做成 deny，故有意收窄；漏报面在插件 README 里
-  逐条列明，靠注入的软约束兜
-- **豁免**：非 git 目录、detached HEAD、`.claude/` `.keeper/` `.git/` 下的文件、仓正处于
-  merge/rebase/cherry-pick 进行中（解决冲突按设计就在主分支上做）
-- 26 条回归用例两侧都覆盖：`node plugins/worktree-flow/tests/main-branch-guard.test.js`
+- **可申请本轮直写**：首次撞闸后，主会话用固定 `AskUserQuestion` 卡片展示实际仓、分支、目标与
+  影响；Human 选择“批准本轮”后，本轮所有 `main` / `master` 写入放行，下一条用户消息或回合结束
+  自动恢复。子代理不能提问，须回主会话申请
+- **不用 `permissionDecision: "ask"`**：本机 `bypassPermissions` 下该档实测不弹框而直接放行；
+  改由 `PostToolUse(AskUserQuestion)` 精确读取结构化 `tool_response.answers`，自由文本、备注、AFK、
+  未知结构皆 fail-closed
+- **`WORKTREE_GUARD=off` 仍保留**：它是独立全局关闭开关，不是 Human 本轮授权，AI 不得自行启用
+- **Bash 侧只认 `git commit`**：`sed -i`、重定向、heredoc 等仍属已知漏报，靠注入纪律约束
+- **既有豁免不变**：非 git 目录、detached HEAD、配置的目录、合流进行中
+- 两组回归覆盖守卫与授权状态：`main-branch-guard.test.js`、`round-approval.test.js`
 
 ### 19. cd-blocker（独立 cd 拦截）
 
@@ -289,7 +290,7 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 # 会话标题自动跟随话题
 /plugin install session-auto-title@claude-devkit-marketplace
 
-# 主分支保护（改动一律走 worktree 临时分支）
+# 主分支保护（默认走 worktree，Human 可批准本轮直写）
 /plugin install worktree-flow@claude-devkit-marketplace
 ```
 

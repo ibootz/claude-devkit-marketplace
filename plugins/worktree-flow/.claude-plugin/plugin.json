@@ -1,12 +1,21 @@
 {
   "name": "worktree-flow",
-  "version": "1.1.0",
-  "description": "主分支保护 - main/master 上禁止直接改代码，强制 worktree 临时分支 → --no-ff 合回 → 清理。硬拦 Edit/Write/git commit，WORKTREE_GUARD=off 可关",
+  "version": "1.2.0",
+  "description": "主分支保护 - main/master 默认走 worktree；确需直写时由 AskUserQuestion 取得 Human 本轮授权；WORKTREE_GUARD=off 可全局关闭",
   "author": {
     "name": "zhangq"
   },
   "hooks": {
     "PreToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/approval-question-guard.js"
+          }
+        ]
+      },
       {
         "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
         "hooks": [
@@ -17,10 +26,47 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/round-approval-state.js"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/round-approval-state.js"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/round-approval-state.js"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "matcher": "*",
         "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/round-approval-state.js"
+          },
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/worktree-flow-inject.js"
@@ -32,6 +78,10 @@
       {
         "matcher": "*",
         "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/round-approval-state.js"
+          },
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/worktree-flow-inject.js"

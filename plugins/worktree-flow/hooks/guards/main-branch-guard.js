@@ -1,13 +1,14 @@
 // main-branch-guard.js — PreToolUse 门控钩子（matcher: Write|Edit|MultiEdit|NotebookEdit|Bash）
 //
 // 【用途】
-// 禁止在受保护分支（main / master）上直接改代码。命中即 exit 2 阻断，文案里给出可直接
-// 照抄的 worktree 开工与合流命令。
+// 默认禁止在受保护分支（main / master）上直接改代码。命中即 exit 2 阻断，文案给两条路：
+// 开 worktree，或由主会话用 AskUserQuestion 向 Human 申请本轮放行。
 //
-// 【为什么是 deny 而不是 ask】
+// 【为什么仍以 deny 起步】
 // 本机 Claude Code 的 defaultMode 为 bypassPermissions，`permissionDecision: "ask"` 实测
-// 全部失效（弹框不出现、直接放行）。强度阶梯上只剩「注入提醒」与「硬拒 deny」两档，
-// 由用户 2026-08-11 拍板选 deny，并要求配一个环境变量逃生阀。
+// 全部失效（弹框不出现、直接放行）。故不能让 PreToolUse 自己 ask：首次命中仍 deny，主会话
+// 随后真实调用 AskUserQuestion；PostToolUse 只在 Human 选择固定“批准本轮”项后写 session-scoped
+// 临时凭据。本 guard 见凭据才放行，Stop / 下一次 UserPromptSubmit / SessionEnd 即清。
 //
 // 【判据（全部取自确定信息，不猜语义）】
 // 1. 逃生阀：环境变量 WORKTREE_GUARD=off → 放行。
@@ -55,6 +56,8 @@
 const fs = require('fs')
 const path = require('path')
 const { execFileSync } = require('child_process')
+
+const { approvalToolInput, isRoundApproved } = require('../lib/round-approval')
 
 const PROTECTED_BRANCHES = new Set(['main', 'master'])
 
@@ -373,13 +376,17 @@ function main() {
   }
 
   if (!hit) process.exit(0)
+  if (isRoundApproved(payload.session_id)) process.exit(0)
 
-  const finding = `仓 ${truncate(hit.root, PATH_ECHO_LIMIT)} 当前在受保护分支 ${hit.branch}，禁止直接改代码（目标：${truncate(hit.subject, PATH_ECHO_LIMIT)}）`
+  const finding = `仓 ${truncate(hit.root, PATH_ECHO_LIMIT)} 当前在受保护分支 ${hit.branch}，本轮尚无 Human 直接写入授权（目标：${truncate(hit.subject, PATH_ECHO_LIMIT)}）`
+  const request = JSON.stringify(
+    approvalToolInput({ repository: hit.root, branch: hit.branch, target: hit.subject })
+  )
   const hint =
-    '先开工作区：调 EnterWorktree 工具 {"name":"<任务语义-kebab>"}，它建临时分支并把会话切进去，在那里改与提交；' +
-    '收尾回到主目录后照抄三步：git -C <仓根> merge --no-ff <临时分支> ；' +
-    'git -C <仓根> worktree remove <worktree 路径> ；git -C <仓根> branch -d <临时分支>。' +
-    '临时分支不 push remote。确需在主分支直接写时用 WORKTREE_GUARD=off 临时关闭本闸。'
+    '默认路径：调 EnterWorktree 工具 {"name":"<任务语义-kebab>"}，在临时分支改与提交，再 --no-ff 合回。' +
+    `若确需本轮直写：主会话原样调用 AskUserQuestion ${request}；` +
+    'Human 选择“批准本轮”后重试，授权覆盖当前会话本轮全部 main/master 写入，下一次用户消息或本轮结束即失效。' +
+    '子代理不能提问，须回主会话申请。WORKTREE_GUARD=off 是独立的全局关闭开关，不得拿它冒充 Human 本轮授权。'
 
   process.stderr.write(
     `[L1-BLOCKER] tool=${tool} check=worktree-flow finding="${finding}" hint="${hint}"\n`

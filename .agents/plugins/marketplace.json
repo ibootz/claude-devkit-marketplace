@@ -342,7 +342,7 @@
         "name": "zhangq"
       },
       "category": "Development",
-      "description": "主分支保护 - main/master 禁止直接改代码，改动走 worktree 临时分支再合回",
+      "description": "主分支保护 - main/master 默认走 worktree，Human 批准后可本轮直写",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "worktree-flow",
       "source": {
@@ -353,7 +353,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "1.1.0"
+      "version": "1.2.0"
     },
     {
       "author": {

@@ -16,6 +16,7 @@ const path = require('path')
 const { spawnSync, execFileSync } = require('child_process')
 
 const GUARD = path.join(__dirname, '..', 'hooks', 'guards', 'main-branch-guard.js')
+const STATE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'wtflow-main-guard-'))
 
 let passed = 0
 let failed = 0
@@ -40,7 +41,7 @@ function run(payload, env) {
   const res = spawnSync(process.execPath, [GUARD], {
     input: JSON.stringify(payload),
     encoding: 'utf8',
-    env: Object.assign({}, process.env, env || {}),
+    env: Object.assign({}, process.env, { WORKTREE_GUARD_STATE_DIR: STATE_DIR }, env || {}),
   })
   return { code: res.status, stderr: res.stderr || '' }
 }
@@ -237,5 +238,6 @@ check(
   0
 )
 
+fs.rmSync(STATE_DIR, { recursive: true, force: true })
 console.log(`\n结果：${passed} passed, ${failed} failed`)
 process.exit(failed === 0 ? 0 : 1)
