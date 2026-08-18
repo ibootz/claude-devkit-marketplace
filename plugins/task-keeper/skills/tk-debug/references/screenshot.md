@@ -134,7 +134,7 @@ AS
 
 **这是 v6（2026-08-10 用户拍板）的状态，与 v5 完全相反，读到旧措辞不要照旧行动。**
 v5 期间 `.keeper/` 整树被忽略，截图不入库；v6 只精确排除 `worktree/` /
-`.keeper-instance.json` / `.keeper-active` 三类本机产物，**截图与附件明确在入库范围内**
+`.keeper-instance.json` / `.keeper-active` / `.merge.lock*` 四类本机产物，**截图与附件明确在入库范围内**
 （用户原话点名「包括当时的问题附件/图片/文件等」）。
 
 所以本节的性质变了：

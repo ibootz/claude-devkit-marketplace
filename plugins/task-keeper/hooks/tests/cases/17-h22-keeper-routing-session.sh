@@ -21,27 +21,31 @@ except Exception:
 '
 }
 
-echo "[87] 没有任何登记 → 三岔口注入「还没有 keeper 登记记录」这一支，且总长度 ≤800"
+echo "[87] 没有任何登记 → 三岔口注入「本会话还没有实例」这一支，且总长度 ≤800"
 T="$(newtmpdir)"; mkrealrepo "$T"
 mkdir -p "$T/.keeper"   # 只需 .keeper/ 顶层存在即 enabled，不要求已建出具体队列目录
 OUT="$(run_triage_sess "$T" "sess-A")"
 TEXT="$(triage_text "$OUT")"
-has "无登记时提示还没有登记记录" "$TEXT" "还没有登记"
+has "无登记时提示本会话还没有实例" "$TEXT" "本会话还没有实例"
 hasnt "无登记时不误报已失效" "$TEXT" "已失效"
 CHARS="$(/usr/bin/python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
 if [ "$CHARS" -le 800 ]; then ok "无登记分支 ${CHARS} 字符 ≤800"
 else bad "无登记分支应 ≤800 字符" "<=800" "$CHARS"; fi
 rm -rf "$T"
 
-echo "[88] 登记存在且 session_id 与当前一致 → 注入「本会话已有 xxx 在跑」，直接带出真实 name"
+echo "[88] 登记存在且 session_id 与当前一致 → 注入「本会话在跑：…」，直接带出真实 name"
 T="$(newtmpdir)"; mkrealrepo "$T"
 run_keeper_instance "$T" "task-keeper:debug-keeper" "opus-debug-keeper-4bb6" "Agent" "sess-A" >/dev/null
 OUT="$(run_triage_sess "$T" "sess-A")"
 TEXT="$(triage_text "$OUT")"
-has "session 匹配时提示本会话已有 keeper 在跑" "$TEXT" "本会话已有"
+has "session 匹配时提示本会话有实例在跑" "$TEXT" "本会话在跑"
 has "session 匹配时直接带出真实 name" "$TEXT" "opus-debug-keeper-4bb6"
-has "session 匹配时提示用 SendMessage 唤醒" "$TEXT" "SendMessage"
-has "session 匹配时收尾提醒不要重派（该分支专属短语）" "$TEXT" "不要重派"
+has "session 匹配时仍给出 SendMessage 这条唤醒通道（只对补充既有 issue 成立）" "$TEXT" "SendMessage"
+has "session 匹配时提示新 bug 一律新派实例（v7 该分支专属短语）" "$TEXT" "新 bug 一律新派实例"
+# 【v7 反向断言，别删】v6 那句「用 SendMessage 唤醒它，不要重派」在一档一实例下是对的，
+# 在 v7 下会把并行压回串行：主会话看到有实例在跑，就把第二条、第三条 bug 全塞给同一个。
+# 表面上一切正常、没有任何报错，只是并行收益归零——所以这句话的**缺席**本身就是判据。
+hasnt "session 匹配时不得再劝「不要重派」（v6 措辞会把并行压回串行）" "$TEXT" "不要重派"
 # 【不测"不含首次"】"首次" 这个词本身也出现在 TRIAGE_HEAD 固定骨架里（第 2 条
 # 岔路"首次用 Agent 派出，之后 SendMessage 唤醒"），三个分支都恒定含有它，不是
 # 动态行专属词——最初写成 hasnt 断言是假阳性，已改为上面这条更精确的正向断言。
@@ -87,5 +91,5 @@ run_keeper_instance "$T" "task-keeper:debug-keeper" "opus-debug-keeper-4bb6" "Ag
 OUT="$(run_triage "$T")"   # 不带 session_id 的旧版调用方式
 TEXT="$(triage_text "$OUT")"
 has "当前 session_id 缺失时把已有登记当陈旧处理" "$TEXT" "已失效"
-hasnt "当前 session_id 缺失时不应误判成本会话匹配" "$TEXT" "本会话已有"
+hasnt "当前 session_id 缺失时不应误判成本会话匹配" "$TEXT" "本会话在跑"
 rm -rf "$T"

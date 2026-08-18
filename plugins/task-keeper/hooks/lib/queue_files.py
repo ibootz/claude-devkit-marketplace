@@ -62,6 +62,7 @@ gitignore，幂等只是防 mtime 抖动；**v4 起 `index.md` 入库**，非幂
 v4 还多一层：`next_id` 接受 `sibling_dirs` 参数扫**所有交付目录**取全局最大值
 （判据 4）。只扫当前交付会让 D-002 的第一条 issue 又叫 DBG-001。
 """
+import datetime
 import io
 import os
 import re
@@ -131,37 +132,12 @@ CHORE = QueueSpec(
     generated_by="task-keeper hook",
 )
 
-# CONTEXT 与前两个的形态差异：条目目录里是**三份**文件而不是一份正文加附件——
-# `context.md`（keeper 写的上下文包）/ `ledger.md`（**外部实现者**填的销账表）/
-# `reconcile.md`（keeper 事后核对）。`item_file` 只登记第一份，另两份与 debug 的
-# `receipts.md` 同地位：由 agent 指令约定文件名，不进 QueueSpec。
-#
-# 之所以不把 item_file 扩成列表：本文件所有函数（`item_path` / `iter_items` /
-# `render_index`）都按「一个目录一份正文」取值，扩成列表要改全部签名，换来的只是把
-# 一个 agent 侧约定搬进数据结构。判据是**hook 要不要机械读它**——hook 只读
-# frontmatter 出 index，只读 `context.md` 一份就够。
-CONTEXT = QueueSpec(
-    key="context",
-    dir_name="context",
-    item_file="context.md",
-    prefix="CTX",
-    pad=3,
-    fm_order=[
-        "id",            # CTX-NNN，与目录名一致
-        "summary",       # 一句话摘要，index.md 直接用
-        "status",        # open | done ← done 表示已跑过事后核对且 reconcile.md 已落盘
-        "stage",         # implement | debug ← 决定要不要做同构扩散面
-        "about",         # 对应的工作单元：DBG-NNN / task id / feature 名
-        "sources",       # 实际参与印证的信源数，只能是 5 或 3（3 = 降级，须可见）
-        "assertions",    # 断言条数 = ledger.md 的行数
-        "inconsistent",  # 四态里非「一致」的条数 ← 本包最有价值的那个数字
-        "created_at",    # YYYY-MM-DD
-        "external_ref",  # 外部工单号，可选
-    ],
-    index_title="Context 队列索引",
-    index_cols=[("stage", "阶段"), ("sources", "信源"), ("inconsistent", "不一致")],
-    generated_by="task-keeper hook",
-)
+# v7 删掉了第三档 `CONTEXT`（CTX-NNN，上下文包）。实测依据：全机 8 个真实项目的
+# `.keeper/*/context/` 目录里共 0 条 CTX 条目，`context.md` / `ledger.md` /
+# `reconcile.md` 三个产物从未被创建过一次，每处 `context/index.md` 都只有队列冷启动
+# 那一次提交、此后再无写入。上下文收集能力改为一份 prompt 模板（见
+# `skills/tk-debug/references/collector.md`），由 keeper 按需派给 `general-purpose`，
+# 形态与 fixer 同构：二级从属、无独立落盘规格。
 
 STATUS_OPEN = "open"
 STATUS_DONE = "done"
@@ -313,6 +289,10 @@ def scan_archived_ids(queue_dir, spec):
 
 def next_id(queue_dir, spec, sibling_dirs=None):
     """派生下一个可用 id。`sibling_dirs` 给了就跨交付目录取全局最大值。
+
+    **登记新条目要用 `claim_id`，不是这个函数。** 本函数只扫描、不占位，两个 keeper
+    实例同时调它会拿到同一个 id 并互相覆盖（详见 `claim_id` 的 docstring）。这里保留
+    它是因为"下一个号是几"这个问题本身还有只读用途（提示文案、干跑校验）。
 
     id 历史来自两处并集：现存条目目录名，以及 `archive/<批次>/` 下已归档的
     条目目录名（见 `scan_archived_ids`）。done 的条目会被 `archive_done.py`
@@ -473,6 +453,109 @@ def write_index(queue_dir, spec):
         old = None
     if old == new:
         return False
-    with io.open(path, "w", encoding="utf-8") as f:
-        f.write(new)
+
+    # 先写临时文件再 `os.replace`——rename 在同一文件系统内是原子的，读者要么看到
+    # 完整的旧内容、要么看到完整的新内容，不会读到写了一半的 index。
+    #
+    # v7 之前这里是直接 `open(path, "w")`：截断与写入之间有一个窗口，此时任何读者
+    # 拿到的是空文件或半截表格。单实例时这个窗口没人踩得到；多实例并行后，另一个
+    # keeper 恰好在这一刻读 index 是常态。它的表现尤其难归因——index 是**派生视图**，
+    # 读到半截不会报错，只会让那个 keeper 以为队列里少了几条。
+    #
+    # 临时文件名带 pid：两个进程同时走到这里时，共用一个 `.tmp` 会让后写者截断先写者
+    # 的内容，再各自 rename——最终落盘的可能是两份内容拼接出来的东西。
+    tmp = "%s.tmp.%d" % (path, os.getpid())
+    try:
+        with io.open(tmp, "w", encoding="utf-8") as f:
+            f.write(new)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except Exception:
+            pass
+        return False
     return True
+
+
+def claim_id(queue_dir, spec, sibling_dirs=None, summary=None, max_tries=64):
+    """**原子**认领下一个 id：先建条目目录占位，再落一份最小正文。
+
+    返回 `(iid, item_dir)`；连试 `max_tries` 个编号都被占用（或目录建不出来）时
+    返回 `(None, None)`，调用方据此报错而不是硬造一个 id。
+
+    ## 为什么 `next_id` 不够用
+
+    `next_id` 是**纯扫描**：算出 max+1 就返回，中间不占任何东西。两个 keeper 实例
+    同时登记新 bug 时，两边都扫到 207、都返回 DBG-208，然后**各自写自己的
+    `DBG-208/issue.md`**——后写的那份整份覆盖先写的，先登记的那条 bug 连同它的
+    triage 结论一起消失，且**全程没有任何报错**：目录名合法、frontmatter 合法、
+    index.md 渲染正常，只是少了一条。这是多实例架构下最危险的一种损坏，因为它
+    伪装成"这条 bug 从来没被报过"。
+
+    单实例时代这个竞态不存在（同一档只有一个 keeper 在写），所以 v6 之前一直没问题。
+
+    ## 认领怎么做到原子
+
+    `os.mkdir` 的"目录已存在就失败"是 POSIX 与 Windows 都保证的原子操作。谁先建出
+    `DBG-208/` 谁就拥有这个编号，输的那个撞 `FileExistsError`、把号 +1 再试。
+
+    顺序不能反：**先建目录、后写正文**。反过来（先写文件再建目录）没有原子性可言。
+    也正因为占位先于内容，`next_id` 的扫描（它读的是 `issue.md` 的 frontmatter）
+    在这个窗口里看不到刚被占的号——所以竞争者会算出同一个号、然后在 `mkdir` 这一步
+    分出胜负，而不是在写文件那一步互相覆盖。
+
+    ## 边界：跨交付目录仍然只靠扫描
+
+    `sibling_dirs` 让编号在**多个交付目录之间**取全局最大值（判据 4），但占位只发生
+    在 `queue_dir` 自己这一个目录里。两个不同交付的 keeper 同时认领时，两边各自
+    `mkdir` 都会成功，仍可能撞号。
+
+    这个缺口是**有意留着**的：不同交付 = 不同 worktree = 通常不同会话，并发窗口远
+    小于同一交付内的多实例；而要堵它就得往别人的交付目录里建占位目录，那会在一条
+    与本次工作无关的队列里留下垃圾条目，代价比它挡掉的风险大。**不要因为这一段
+    描述了缺口就以为它已经被处理了**——同交付原子、跨交付不原子，就是当前的真实状态。
+    """
+    try:
+        os.makedirs(queue_dir, exist_ok=True)
+    except Exception:
+        return (None, None)
+
+    m = id_re(spec).match(next_id(queue_dir, spec, sibling_dirs))
+    if not m:
+        return (None, None)
+    n = int(m.group(1))
+
+    for _ in range(max_tries):
+        iid = "%s-%0*d" % (spec.prefix, spec.pad, n)
+        d = item_dir_path(queue_dir, iid)
+        try:
+            os.mkdir(d)
+        except FileExistsError:
+            n += 1
+            continue
+        except Exception:
+            return (None, None)
+
+        fm = {
+            "id": iid,
+            "summary": (summary or "").strip() or "（认领占位，待 keeper 补全）",
+            "status": STATUS_OPEN,
+            "reported_at": datetime.date.today().isoformat(),
+        }
+        body = (
+            "## 现象\n\n"
+            "_占位。这份文件由 `claim_id` 在认领编号时落盘，只为让编号立即可见、"
+            "不被另一个实例重复分配。认领者应当立刻用真实内容整份改写它。_\n"
+        )
+        try:
+            with io.open(item_path(queue_dir, spec, iid), "w", encoding="utf-8") as f:
+                f.write(render_frontmatter(fm, spec) + "\n\n" + body)
+        except Exception:
+            # 目录已经占住了，正文没写成。**不回滚删目录**——删了就等于把编号退回
+            # 池子里，而认领者可能已经拿着这个 id 往下走了。留一个空目录的代价是
+            # index.md 里少一行，比两条 bug 共用一个编号轻得多。
+            pass
+        return (iid, d)
+
+    return (None, None)

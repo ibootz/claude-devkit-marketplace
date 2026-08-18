@@ -92,6 +92,20 @@ hook 的输出 schema 只认 `additionalContext`，两条通道都不写回 job 
     所以本模块的输出**永远只用于软提示，不得升级成任何拦截**。
   · **本模块只回答「可不可以换代」，不回答「该不该现在换」**。后者取决于主会话
     手上是不是正好有新一批活，那是语义判断，机械层面不碰。
+
+## v7：两层判定并存，各回答一个不同的问题（2026-08-18）
+
+多实例架构下「一档 = 一代 keeper」这个等式不再成立，于是本模块分成两个函数：
+
+  · `instance_state(delivery_root, kind, issue)`——**按实例**问「绑了这条 issue 的
+    实例还有没有活」。这是每轮注入实际使用的那个，因为主会话要逐个决定唤醒谁。
+  · `retirable_kinds(delivery_root)`——**按档**问「这一档是不是全清了」。它在 v7
+    里不再驱动「换代」，只用于「这一档可以收尾了」这类整体提示。上面五项判据原样
+    保留（含裁决一票否决），因为整档收口本来就该比单个实例收工更严。
+
+改任何一个之前先确认改的是哪一层的问题。把按档判据搬去按实例用，会让 DBG-207 的
+实例被 DBG-208 的存在挡住、永远判不出收工；反过来把按实例判据搬去按档用，会在还有
+别的实例在跑时报「整档已清」。
 """
 import os
 import sys
@@ -99,10 +113,11 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from queue_files import DEBUG, CHORE, CONTEXT, load_all, split_by_status
+    from queue_files import (DEBUG, CHORE, STATUS_DONE, item_dir_path, item_path,
+                             load_all, parse_item_file, split_by_status)
 except Exception:
-    DEBUG = CHORE = CONTEXT = None
-    load_all = split_by_status = None
+    DEBUG = CHORE = STATUS_DONE = None
+    item_dir_path = item_path = load_all = parse_item_file = split_by_status = None
 
 try:
     from decision_inbox import pending_decisions
@@ -111,9 +126,10 @@ except Exception:
 
 # 与 keeper_routing.KIND_LABELS / keeper_instance_register.KEEPER_SUBAGENT_KIND
 # 是同增同减的一组清单。少一个 kind 的后果是那个 kind 永远判不出可换代（安全方向）。
+# v7 删掉了 `context`——context 队列整条拆除，收集降级成 prompt 模板。
 SPEC_BY_KIND = {}
 if DEBUG is not None:
-    SPEC_BY_KIND = {"debug": DEBUG, "chore": CHORE, "context": CONTEXT}
+    SPEC_BY_KIND = {"debug": DEBUG, "chore": CHORE}
 
 
 def _batch_finished(delivery_root, spec):
@@ -189,6 +205,64 @@ def retirable_kinds(delivery_root, kinds=None):
         if _batch_finished(delivery_root, spec):
             out.add(kind)
     return out
+
+
+def instance_state(delivery_root, kind, issue):
+    """**按实例**判：绑了 `issue` 的这个 keeper 实例现在处于什么状态。
+
+    返回 `"live"` / `"retirable"` / `"unknown"` 三者之一。
+
+    ## 为什么 v7 要按实例判，而不是继续按档判
+
+    `retirable_kinds` 问的是「这一**档**的活是不是全干完了」。那个问题在「一个 keeper
+    顺序处理整条队列」的 v6 架构下等于「这一**代** keeper 是不是该退场」——两者同义，
+    因为一档只有一个实例。
+
+    v7 一条 issue 一个实例之后，两者彻底分开了：DBG-207 的实例干完了它那条，此时
+    debug 档大概率还有 DBG-208、DBG-209 在跑。按档判会说「还不能退场」，于是主会话
+    继续把它当活人唤醒——而它手上早就没活了。反过来，等整档收口再判，等于要求所有
+    实例齐步走，把并行又压回串行。
+
+    ## 判据（两项，都机械）
+
+      1. 该条目的 `status` 是 `done`。
+      2. 该条目目录下没有 `worktree/` 残留——worktree 还在说明合并或清理没走完，
+         这个实例还欠一步收尾动作，不能当它已经交差。
+
+    ## 三种返回值分别意味着什么
+
+      · `"retirable"`——两项都过。主会话**不必再唤醒它**；同一条 issue 若 reopen，
+        按新一轮处理重新派实例，不要复活旧的（它的上下文停在「我已收工」那一刻）。
+      · `"live"`——条目还在 open，或还有 worktree 残留。正常唤醒。
+      · `"unknown"`——`issue` 为空（登记时没抽到编号）、条目目录还不存在（刚派出、
+        keeper 尚未认领编号）、或解析失败。**一律按 live 对待**：注入措辞上不提退场。
+        理由与 v6「空队列不算干完」同源——实例生命周期的开头本来就有一段磁盘上什么
+        都没有的窗口，把那一瞬判成可退场，会让主会话立刻重派一个，两个实例抢同一条
+        issue 的写权。
+
+    裁决（`decisions/`）**不参与本判定**。v6 里它一票否决整档换代，是因为一代 keeper
+    退场后没有任何人会去扫待答复裁决。v7 把这条责任改成了「读盘现算、谁碰到谁做」：
+    任一活着的实例都会在每轮注入里看到待拍板计数并收口它，不再依赖某个特定实例活着。
+    """
+    if not issue or parse_item_file is None:
+        return "unknown"
+    spec = SPEC_BY_KIND.get(kind)
+    if spec is None:
+        return "unknown"
+    idir = item_dir_path(os.path.join(delivery_root, spec.dir_name), issue)
+    if not os.path.isdir(idir):
+        return "unknown"
+    try:
+        fm, _body = parse_item_file(os.path.join(idir, spec.item_file))
+    except Exception:
+        return "unknown"
+    if not isinstance(fm, dict):
+        return "unknown"
+    if str(fm.get("status", "")).strip() != STATUS_DONE:
+        return "live"
+    if os.path.isdir(os.path.join(idir, "worktree")):
+        return "live"          # 活干完了但工作区没清，还欠一步
+    return "retirable"
 
 
 if __name__ == "__main__":

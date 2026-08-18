@@ -93,8 +93,8 @@
       "name": "task-keeper",
       "source": "./plugins/task-keeper",
       "category": "Productivity",
-      "description": "keeper 托管 debug/杂务/上下文三队列，动手前收齐规格再交表销账，决策打包 HITL",
-      "version": "3.1.1"
+      "description": "多实例 keeper 并行托管 debug/杂务两队列：一 bug 一实例，原子认领 + 合并锁",
+      "version": "4.0.0"
     },
     {
       "name": "plain-talk-output-style",

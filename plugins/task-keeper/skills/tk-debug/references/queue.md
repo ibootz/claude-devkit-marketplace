@@ -71,21 +71,27 @@ issue 的（Human 对它的拍板、它的落点与量级对账、它的字段�
 delta、本次交付的台账）属于项目自己的交付文档体系（如仓库里的 `.sdlc/` 或等价
 目录），`.keeper/debug/` 只装 bug 队列本身。
 
-**队列正文与附件入库，只精确排除三类本机产物**（v6，2026-08-10 用户拍板）。keeper
-冷启动自动写入固定四行（注释与 pattern 逐字写死，避免不同分支各自追加不同注释导致
-合并冲突）：
+**队列正文与附件入库，只精确排除四类本机产物**（v7；前三类是 v6 2026-08-10 用户拍板，
+第四类随合并锁在 v7 补入）。keeper 冷启动自动写入固定五行（注释与 pattern 逐字写死，
+避免不同分支各自追加不同注释导致合并冲突）：
 
 ```gitignore
-# task-keeper 队列：正文与附件入库，只排除三类本机产物
+# task-keeper 队列：正文与附件入库，只排除四类本机产物
 .keeper/**/worktree/
 .keeper/**/.keeper-instance.json
 .keeper/.keeper-active
+.keeper/**/.merge.lock*
 ```
 
 入库的是 `issue.md` / `receipts.md` / `index.md` / `decisions/` / 截图与附件；排除的
-三类各有理由：`worktree/` 入库会种野生 gitlink；`.keeper-instance.json` 含 `session_id`
+四类各有理由：`worktree/` 入库会种野生 gitlink；`.keeper-instance.json` 含 `session_id`
 与当次 subagent 的随机 name，跨机器无意义且多人并行必冲突；`.keeper-active` 是本机
-活跃交付指针。
+活跃交付指针；`.merge.lock*` 是合并锁的运行态。
+
+第四条末尾那个 `*` 不能省。抢占一把超时锁时，旧锁目录会被改名成
+`.merge.lock.stale-<旧持有者>` 留在原地当诊断现场，写成 `.merge.lock/` 只匹配得到锁
+本身、匹配不到这个残留——于是抢占路径上仍会冒出未跟踪目录，merge-back 的前置校验判
+脏树，**抢到锁的那个实例反而合不了**。
 
 `index.md` 由 hook 每轮重算，**不要手工编辑它**，下一轮就被覆盖。v6 起它是被跟踪
 文件，所以手改还会在 `git diff` 里留下一条随即被抹掉的假改动（这条 v4 的副作用随入库
@@ -433,6 +439,15 @@ worktree 让这个问题消失：每个 fixer 在自己的工作区里改，两�
 
 ### 派发步骤
 
+**v7 起，下面的「本批 K 条 issue」通常就是你自己认领的那一条（K=1）。** 一个
+debug-keeper 实例只负责自己认领的那一条 issue，不再像 v6 那样由一个常驻实例批量
+处理整条队列里互不相关的多条 issue——`--ids` 批量建 worktree 这套机制**不是因此
+作废**，只是调用者变了：K≥2 的场景不再是「一个实例同时给队列里 3 条不相关的 bug
+建 worktree」，而是「你自己这一条 issue 确实需要拆成几个可并行的子任务、各自开
+一个 worktree」这种更少见的情形。凡是下文写着「本批 K 条」的地方，先按「K=1，
+就是我自己这条」理解；只有你判断自己的这一条 issue 真的需要拆成多个并行子任务时，
+才会用到 K≥2 的批量写法。
+
 **一条 `init` 命令建完本批全部 worktree**：建父仓工作区 → 记住源 worktree → 全量递归供给
 所有 submodule 层（含嵌套）→ 自校验，本批 K 条 issue 一次建完，不要循环调 K 次。这是派发
 前**唯一**的串行前置——它跑完之后，K 个 `Agent` 调用才一次性发出（同消息批量发出的硬规则
@@ -548,14 +563,16 @@ prompt 模板，先看下一节按 `difficulty` 分的两条路径。
   结构这类走这条：两版模板都要传 `name`（必须带模型档次前缀）与
   `run_in_background: true`，medium/hard 版在此之上额外在 prompt 里加一段交互
   纪律，让它在真正卡住时用 `SendMessage` 问 keeper 自己的 name。keeper 的 name
-  带随机短哈希（形态
-  `opus-debug-keeper-<4位>`），fixer 拿不到 keeper 自己的调度元数据，所以
-  debug-keeper 派发 fixer 之前要先读一次 `.keeper/<交付id>/.keeper-instance.json`
-  的 `debug` 键，把真实 name 写进 prompt 里替换掉占位符，而不是自己拍板续做。这份
-  登记从 2026-08-05 起还带 `session_id`（用于主会话跨会话判断"这条登记是不是本会话
-  写的"，完整说明见 `agents/debug-keeper.md` §0），但 debug-keeper 读自己这一份时
-  不需要比对——写它的正是这次派发/唤醒本身，必然属于当前会话，会话隔离要处理的是
-  主会话跨会话唤醒的场景，不是这里。
+  带随机短哈希（形态 `opus-debugger-<4位>`），fixer 拿不到 keeper 自己的调度
+  元数据，所以 debug-keeper 派发 fixer 之前要把**自己当前这个实例的 name**
+  （就是自己被 `Agent` 派出/`SendMessage` 唤醒时那个 name，通常已经写在自己
+  收到的 prompt 第一行里，不需要额外去查）写进 fixer 的 prompt 里替换掉占位符，
+  而不是自己拍板续做——**不要**去 `.keeper/<交付id>/.keeper-instance.json` 里
+  按 `debug` 这个 kind 键查，v7 起那是一份实例列表（`debug.instances`），同一档
+  可能有好几条记录，凭 kind 查不出该填哪一个，只有自己知道自己是谁。这份登记从
+  2026-08-05 起还带 `session_id`（用于主会话跨会话判断"这条登记是不是本会话
+  写的"，完整说明见 `agents/debug-keeper.md` §0），但这与本节无关——本节要的
+  只是"我自己叫什么"，不涉及登记表查询。
 
 #### 同消息批量发出（硬约束）
 
@@ -716,9 +733,10 @@ Agent(
             完全不属于你的职责范围。
             **遇到需要拍板的歧义**（两种改法都说得通、triage 没写清、发现 issue
             描述与代码实际不符）时，**不要猜、不要挑一个继续**：用 `SendMessage`
-            把选项和你的倾向发给 `<debug-keeper 的实际 name，派发前从
-            .keeper/<交付id>/.keeper-instance.json 的 debug 键读出来填进这段
-            prompt，不要写字面量 opus-debug-keeper>`；不是 `main`——你是
+            把选项和你的倾向发给 `<debug-keeper 的实际 name，派发前由
+            debug-keeper 把它自己当前这个实例的 name 原样填进这段 prompt，
+            不要写字面量 opus-debugger——v7 起一档并存多个实例，字面量找不到
+            任何一个具体实例>`；不是 `main`——你是
             debug-keeper 派出的末层 fixer，禁止再派任何 subagent；只有
             debug-keeper 判断这个歧义超出它自己权限时才会再走 §12 待拍板协议
             转交给用户），等它拍板。等待期间你会被结束，它答复后你会从
@@ -945,6 +963,27 @@ accept、进入合并」，不能当成「运行时已验证」。
 fixer 的 commit 在 worktree 供给出来的 submodule 分支上。回流必须先合 submodule、
 再回写父仓 gitlink——父仓 gitlink 只有在 submodule 合完之后才有新值可写。这个顺序
 由 `wt_supply.py merge-back` 内部保证，**不需要你手工分两步做**。
+
+#### v7 新增前置：merge-back 前必须先拿合并锁
+
+同一个交付的 `.keeper/<交付id>/debug/` 下可能同时并存好几个 debug-keeper 实例，各自
+认领不同的 issue，但它们的 fixer 最终都要 merge-back 回**同一个** delivery worktree
+父仓——这是所有实例共享的唯一资源。两个实例前后脚各自跑 `merge-back --apply`，
+后一个会在前一个还没提交完的中间状态上开始操作，轻则拿到误导性的"父仓不干净"前置
+校验失败，重则在多层 submodule 场景下把两次回写交织进同一次 `git merge`，产生分不清
+源头的冲突。
+
+跑 merge-back（含下面"先在目标 worktree 父仓 commit gitlink"这一步）之前，先拿锁：
+
+```bash
+python3 <插件根>/scripts/keeper_cli.py lock acquire --name <自己的 name> --issue <DBG-NNN>
+# ...跑下面「先 commit gitlink」与「回流本体」两步...
+python3 <插件根>/scripts/keeper_cli.py lock release --name <自己的 name>
+```
+
+退出码 3 = 锁被别的实例占着，正常竞争，等一会儿重试，不要绕开锁硬跑。完整的锁语义
+（TTL、抢占后要先检查目标 worktree 是不是停在半完成的 merge 状态、`release` 失败
+代表什么）见 `references/keeper-dispatch.md` §5——两处共用同一把锁，不要重新发明一套。
 
 #### 跑 merge-back 之前：先在目标 worktree 父仓 commit gitlink（不做这步必定被阻断）
 

@@ -21,17 +21,19 @@ when_to_use: |
 
 | 路径 | 写者 | 内容 |
 |---|---|---|
-| `.keeper/<交付id>/decisions/<stamp>-<keeper>.md` | 该 keeper | 待拍板事项全文 |
+| `.keeper/<交付id>/decisions/<stamp>-<实例 name>.md` | 该 keeper 实例 | 待拍板事项全文 |
 | `.keeper/<交付id>/decisions/answers/<同名>.md` | 主会话 | 用户答复原文 |
 
 `<stamp>` 用 UTC 紧凑时间戳（如 `20260731T083015Z`），文件名排序即时间序。
+`<实例 name>` 写**这个实例自己的完整 name**（如 `opus-debugger-4bb6`），不是 kind 名
+——v7 起同一 kind 可以同时有多个实例在跑，写 `debug-keeper` 会让两个实例撞同一个文件名。
 裁决落地后**两个文件都由 keeper 删除**（见流程第 5 步），目录里只留未决事项。
 
 ## 决策文件格式（keeper 写）
 
 ```markdown
 ---
-from: chore-keeper          # 写者名，也是答复要送回的 SendMessage 目标
+from: sonnet-chore-7c2e     # 写者的实例 name（不是 kind 名），也是答复要送回的 SendMessage 目标
 about: CHR-014              # 关联的队列条目 id，没有就写 "-"
 kind: external-write        # external-write 外部写授权 / conflict 冲突让位 / scope 范围取舍 / other
 blocking: true              # true = 冻结 about 指向的那一条 issue，keeper 继续处理队列其他条目；false = 不急
@@ -71,8 +73,12 @@ recommend: A                # keeper 的推荐，可省
    （header 用 about 的条目 id，options 照抄文件里的 options，正文要点进
    question 文字）。一次调用最多 4 问，超出分批、blocking 优先。
 4. **答复原文回传**：把用户对每条的答复**原文**写 `answers/<同名>.md`（不改写、
-   不概括），然后 `SendMessage(to: <from 字段的 keeper>)` 一句话通知「CHR-014 已
-   拍板，见 answers/<文件名>」。
+   不概括），然后 `SendMessage(to: <from 字段的字面值>)` 一句话通知「CHR-014 已
+   拍板，见 answers/<文件名>」。`from` 就是那个实例的 name，**直接照抄，不要拿 kind
+   名去猜**。只有 `SendMessage` 报 `No agent named X is reachable`（实例已退场）时，
+   才去 `.keeper/<交付id>/.keeper-instance.json` 的 `<kind>.instances` 列表里按
+   `about` 的条目 id 匹配 `issue` 字段，找现在接手这条 issue 的实例；列表里也没有就
+   新派一个实例并在 prompt 里指明先读 `answers/<文件名>`。
 5. **keeper 落地留痕**：keeper 把裁决正文抄进对应队列条目文件，执行裁决，然后删除
    decisions 与 answers 两个同名文件。**抄进条目这一步不因 v6 入库而免除**——v6 起
    `decisions/` 会进版本库（`git log` 里翻得到），但那解决的是「彻底丢失」，不解决

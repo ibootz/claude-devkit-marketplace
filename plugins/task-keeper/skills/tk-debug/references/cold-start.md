@@ -1,8 +1,8 @@
-# 冷启动：建队列目录与补 .gitignore 三条
+# 冷启动：建队列目录与补 .gitignore 四条
 
 > 本文件从 `agents/debug-keeper.md` §3 下推。keeper 第一次在某个 worktree 接手 debug 队列时照此执行；
 > 入库策略的演变史见 `references/history.md` §1。
-> chore-keeper 的冷启动逻辑与本文件同一份（`.gitignore` 三条逐字一致），后续会统一指向这里。
+> chore-keeper 的冷启动逻辑与本文件同一份（`.gitignore` 四条逐字一致），后续会统一指向这里。
 
 ## 什么时候跑
 
@@ -28,20 +28,20 @@ mkdir -p "$ROOT/.keeper/$DID/debug" "$ROOT/.keeper/$DID/debug/_inbox"
 #   截图落盘目标缺失。
 ```
 
-## 确保 .gitignore 三条精确排除在位
+## 确保 .gitignore 四条精确排除在位
 
-当前生效策略（v6）：**正文与附件入库，只精确排除三类本机产物**。冷启动时缺就整块补写。
+当前生效策略（v6）：**正文与附件入库，只精确排除四类本机产物**。冷启动时缺就整块补写。
 
 ```bash
-# 确保三条精确排除在位；缺就整块补写
+# 确保四条精确排除在位；缺就整块补写
 GI="$ROOT/.gitignore"
-# v5 的整树忽略行若还在，它会覆盖下面三条、让队列继续不入库，且**不会有任何报错**
+# v5 的整树忽略行若还在，它会覆盖下面四条、让队列继续不入库，且**不会有任何报错**
 if grep -qxF '.keeper/' "$GI" 2>/dev/null; then
-  echo "ACTION: $GI 里还有 v5 的 '.keeper/' 整树忽略行，它覆盖三条精确规则——按 §12 上报请用户拍板删除"
+  echo "ACTION: $GI 里还有 v5 的 '.keeper/' 整树忽略行，它覆盖四条精确规则——按 §12 上报请用户拍板删除"
 fi
-# 三行一起追加，用第一条当哨兵（有它就有另两条，因为只可能整块写入）
+# 四行一起追加，用第一条当哨兵（有它就有另三条，因为只可能整块写入）
 if ! grep -qxF '.keeper/**/worktree/' "$GI" 2>/dev/null; then
-  printf '\n# task-keeper 队列：正文与附件入库，只排除三类本机产物\n.keeper/**/worktree/\n.keeper/**/.keeper-instance.json\n.keeper/.keeper-active\n' >> "$GI"
+  printf '\n# task-keeper 队列：正文与附件入库，只排除四类本机产物\n.keeper/**/worktree/\n.keeper/**/.keeper-instance.json\n.keeper/.keeper-active\n.keeper/**/.merge.lock*\n' >> "$GI"
 fi
 # 回读验证：**验行为不验文本**——写对了不等于 git 按它生效（已跟踪的文件就是反例）
 git -C "$ROOT" check-ignore -q ".keeper/$DID/debug/index.md" \
@@ -52,19 +52,20 @@ git -C "$ROOT" check-ignore -q ".keeper/$DID/.keeper-instance.json" \
   || echo "FAILED: 写入 $GI 失败，停下人工处理"
 ```
 
-### 三条 pattern 的写法纪律
+### 四条 pattern 的写法纪律
 
-**注释与那三条 pattern 必须逐字照抄，不许自由发挥。** 实测过两个分支各自在 EOF 追加**内容不同**的注释即产生合并冲突。文案固定之后，各分支追加的字节逐字相同，git 合并时视为同一处改动、不冲突。理想情况是这四行一次性提交到主分支，各交付分支的 `grep -qxF` 直接命中、什么都不写。
+**注释与那四条 pattern 必须逐字照抄，不许自由发挥。** 实测过两个分支各自在 EOF 追加**内容不同**的注释即产生合并冲突。文案固定之后，各分支追加的字节逐字相同，git 合并时视为同一处改动、不冲突。理想情况是这五行一次性提交到主分支，各交付分支的 `grep -qxF` 直接命中、什么都不写。
 
-**`.keeper-active` 那条不带 `**`**，不要照抄 worktree 那条的写法——它是 `.keeper/` 顶层的单文件，不是每交付一份；写成 `.keeper/**/.keeper-active` 匹配不到它。反过来另两条**必须用 `**`** 而不是写死中间层（`.keeper/*/debug/*/worktree/`）——兜底桶 `_main` 与交付桶层级数虽相同，但写死中间层在嵌套变化时会漏网。
+**`.keeper-active` 那条不带 `**`**，不要照抄 worktree 那条的写法——它是 `.keeper/` 顶层的单文件，不是每交付一份；写成 `.keeper/**/.keeper-active` 匹配不到它。反过来另三条**必须用 `**`** 而不是写死中间层（`.keeper/*/debug/*/worktree/`）——兜底桶 `_main` 与交付桶层级数虽相同，但写死中间层在嵌套变化时会漏网。
 
-### 三条分别排除什么
+### 四条分别排除什么
 
 - **入库**：issue、receipts、index、decisions、截图与附件。
 - **排除**：
   - `worktree/`（入库会种野生 gitlink）
   - `.keeper-instance.json`（含 `session_id` 与随机 agent name，跨机器无意义、多人并行必冲突）
   - `.keeper-active`（本机活跃交付指针）
+  - `.merge.lock*`（合并锁与抢占后留下的 `.merge.lock.stale-<旧持有者>` 诊断现场，都是运行态。**被 git 看见会让 merge-back 的前置校验判脏树，拿了锁反而合不了**；末尾的 `*` 不能省，否则匹配不到 stale 残留）
 
 ### v5 整树忽略行残留的处置
 
