@@ -1,6 +1,6 @@
 {
   "name": "wenyan-output-style",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "文言极简输出风格 - 文言语法压缩、字形一律简体，代码与报错原样，安全告警与落盘产出物退回白话。取自 caveman 插件的 wenyan-ultra 档位，拉平成纯注入，/plugin 启停即切换",
   "author": {
     "name": "zhangq"
