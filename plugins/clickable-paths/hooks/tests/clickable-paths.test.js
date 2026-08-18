@@ -79,6 +79,53 @@ const cases = [
     run: () => run('{not json'),
     check: (r) => (r.status === 0 && r.stdout === '' ? null : `exit=${r.status} stdout=${r.stdout}`),
   },
+  {
+    name: '注入正文点名三种漏套形态（1.4.0 收紧的那段）',
+    run: () => run({ hook_event_name: 'UserPromptSubmit' }),
+    check: (r) => {
+      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
+      // 实测的漏套形态就是这三种：只写文件名、裸 path:行号、inline code。
+      // 只留「套链接」的正面要求而不点名它们，模型会拿 inline code 当合法替代形态。
+      for (const kw of ['只写文件名', 'path/to/file.ext:130', 'inline code']) {
+        if (!c.includes(kw)) return `注入正文缺「${kw}」这条判据`
+      }
+      return null
+    },
+  },
+  {
+    name: '注入正文圈定适用面：表格 / 列表 / 现场证据 / 转述回执',
+    run: () => run({ hook_event_name: 'UserPromptSubmit' }),
+    check: (r) => {
+      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
+      // 这四种场合此前都在「对话正文」的字面含义之外，模型据此漏套。
+      for (const kw of ['表格', '列表项', '现场证据', '转述子代理回执']) {
+        if (!c.includes(kw)) return `注入正文未把「${kw}」圈进适用面`
+      }
+      return null
+    },
+  },
+  {
+    name: '注入正文写明与 working-discipline 3.3 的关系（链接同时满足两边）',
+    run: () => run({ hook_event_name: 'UserPromptSubmit' }),
+    check: (r) => {
+      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
+      // 3.3 与 readable-citations 每轮都注入裸 `path:行号` 的模板，
+      // 不写明关系时模型满足了它们就以为交付完了，本条静默失效。
+      if (!c.includes('working-discipline 3.3')) return '未提 working-discipline 3.3'
+      if (!c.includes('同时满足两边')) return '未写明套成链接同时满足两边'
+      return null
+    },
+  },
+  {
+    name: '注入正文保留 #1 兜底与三斜杠 href 规则',
+    run: () => run({ hook_event_name: 'SubagentStart' }),
+    check: (r) => {
+      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
+      if (!c.includes('#1')) return '缺「没有行号写 #1」'
+      if (!c.includes('三条斜杠')) return '缺 href 绝对路径规则'
+      return null
+    },
+  },
 ]
 
 let failed = 0
