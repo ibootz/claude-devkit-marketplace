@@ -150,12 +150,47 @@ const EXEMPT_SUBAGENT_TYPES = new Set(['fork', 'statusline-setup', 'output-style
 //     keeper-like 常驻 agent（`foo:queue-keeper` / `foo:keeper-v2`）不在表内——这张表是**白
 //     名单式枚举**，加新成员要显式改这里，不做"含 keeper 就算"的模糊匹配（那会把无档位要求
 //     的第三方 agent 一并拦下）。
-const FIXED_OPUS_PATTERN = /(^|:)(debug|chore)-keeper$/
-const FIXED_OPUS_MODEL = 'opus'
+// ─────────────────────────────────────────────────────────────────────────────
+// 【2026-08-18 用户拍板：档位不再两个 keeper 一刀切，按 kind 分叉；name 里的身份段
+//   与 subagent_type 的 slug 解耦】
+//
+// 变的是两件事，闸的**强度不变**（仍是 deny，不是降级成 ask）：
+//
+//   (a) **chore-keeper 的固定档从 opus 降为 sonnet**，debug-keeper 仍是 opus。
+//       原判据的口径是「keeper 是第一层调度者，降档没有正当理由」——那句话对 debug
+//       仍然成立（triage 错一次整条队列跟着错），对 chore 不成立：chore 是台账登记、
+//       归档、收尾这类机械杂务，没有需要 opus 的因果链深度。
+//       注意这不是「放宽」：chore 派成 opus 同样会被拦，因为判据是**等值**而不是
+//       「不低于」。两个方向都拦住，面板与成本才对得上。
+//
+//   (b) **name 里的身份段不再直接复用 subagent_type 的 slug**。原先
+//       `keeperNamePrefix` 拿 `stLower.split(':').pop()` 拼出 `opus-debug-keeper-`，
+//       于是 name 里带着一个对读者毫无信息量的 `-keeper` 段。新形态是
+//       `opus-debugger-xxxx` / `sonnet-chore-xxxx`。
+//       `subagent_type` 本身**不改**（仍是 `task-keeper:debug-keeper`）——它是
+//       SubagentStart matcher 的键、是 task-keeper 登记表反推 kind 的依据，改它的
+//       波及面远大于换一个显示名。所以这里需要一张显式映射表，不能再靠 slug 推。
+//
+// 三个字段收在同一张表里而不是三个平行常量：它们**按 kind 一起变**，拆开放会让
+// 「加一个新 keeper」变成三处要同步的改动，而三处同步正是本仓反复吃过账的失效形态。
+// ─────────────────────────────────────────────────────────────────────────────
+const KEEPER_SLUG_PATTERN = /(^|:)(debug|chore)-keeper$/
+
+const KEEPER_SPECS = {
+  debug: { model: 'opus', nameSeg: 'debugger', descPrefix: 'debug 队列' },
+  chore: { model: 'sonnet', nameSeg: 'chore', descPrefix: 'chore 队列' },
+}
+
+// subagent_type → 该 keeper 的规格；非 keeper（或表内没登记的新 keeper）返回 null，
+// 调用方据此整条跳过（fail-open，与白名单口径一致）。
+function keeperSpec(stLower) {
+  const m = String(stLower || '').match(KEEPER_SLUG_PATTERN)
+  return (m && KEEPER_SPECS[m[2]]) || null
+}
 
 // keeper 类常驻 agent 的 description 必需前缀（check 11，2026-08-05 用户拍板加；
 // 2026-08-10 用户拍板把判据从「逐字等值」放宽为「前缀锚定」，配套 task-keeper 的换代机制）。
-// 键取自 FIXED_OPUS_PATTERN 的第 2 个捕获组（`debug` / `chore`），两个值与
+// 键取自 KEEPER_SLUG_PATTERN 的第 2 个捕获组（`debug` / `chore`），两个值与
 // task-keeper 的 `skills/tk-debug/SKILL.md` / `skills/tk-chore/SKILL.md` 派发样例
 // 里写的 description **逐字一致**——改任一处都要三处同步（含本仓 README 的 check 表）。
 //
@@ -196,7 +231,7 @@ const FIXED_OPUS_MODEL = 'opus'
 // description 照样只能写固定串，换代白换。两条必须同时在，改其中一条前先看另一条。
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// 【判据形态】`subagent_type` 命中 FIXED_OPUS_PATTERN（完整锚定正则）+ description 正文对
+// 【判据形态】`subagent_type` 命中 KEEPER_SLUG_PATTERN（完整锚定正则）+ description 正文对
 // 前缀串做 `startsWith`，两个都是确定字段，同一输入必得同一结论。不猜语义、不看 prompt。
 // 前缀之后的内容一概不校验——那是任务摘要，机械层面无从判断写得对不对，长度由 check 7 兜。
 //
@@ -214,16 +249,14 @@ const FIXED_OPUS_MODEL = 'opus'
 //     绕过了，是既有边界，本条不新增。
 //   - 比较用的是 **strip 掉 `[模型名]` 前缀后的正文**（与 check 6 同口径），`[opus] debug
 //     队列 · xxx` 不会被这条拦下；面板多显示一个前缀无害，不值得多一个误杀面。
-const KEEPER_DESC_PREFIXES = {
-  debug: 'debug 队列',
-  chore: 'chore 队列',
-}
+// （前缀值本身住在上方 KEEPER_SPECS 的 `descPrefix` 字段里，2026-08-18 起三个按 kind
+// 变化的常量合表，理由见那张表上方的注释。）
 
 // keeper 的 description 必需前缀；非 keeper（或表内没登记的新 keeper）返回空串，
-// 调用方据此整条跳过（fail-open，与 FIXED_OPUS_PATTERN 的白名单口径一致）。
+// 调用方据此整条跳过（fail-open，与 KEEPER_SLUG_PATTERN 的白名单口径一致）。
 function keeperDescPrefix(stLower) {
-  const m = String(stLower || '').match(FIXED_OPUS_PATTERN)
-  return (m && KEEPER_DESC_PREFIXES[m[2]]) || ''
+  const spec = keeperSpec(stLower)
+  return (spec && spec.descPrefix) || ''
 }
 
 // 身份词校验（check 8）的通用词黑名单：这些词出现在 subagent_type 的 slug 里不携带
@@ -379,18 +412,27 @@ function shortHash(s) {
 }
 
 // keeper 类常驻 agent 的 name 固定前缀（check 10 用）。`stLower` 传小写化后的
-// subagent_type，命中 FIXED_OPUS_PATTERN 时才有意义。前缀之后必须再接 4 位小写
+// subagent_type，命中 KEEPER_SLUG_PATTERN 时才有意义。前缀之后必须再接 4 位小写
 // 字母数字短哈希——2026-08-04 用户拍板：同一会话里前一个 keeper 实例结束后，
 // 若下一个又派成逐字相同的固定名，`SendMessage` 的 latest-wins 寻址会让唤醒方
 // 分不清召唤的是哪一个实例；强制带哈希后缀，把"名字不可预测"这个事实摆出来，
 // 逼唤醒方必须去读登记文件（task-keeper 的 PreToolUse(Agent) hook 会把实际用的
 // name 写进 `.keeper/<交付id>/.keeper-instance.json`），而不是心存"记得住固定名"
 // 的幻觉。
+//
+// 2026-08-18 起前缀的两段都取自 KEEPER_SPECS，不再从 subagent_type 的 slug 现推：
+// 档位段按 kind 分叉（debug 是 `opus-`、chore 是 `sonnet-`），身份段用表里登记的
+// `nameSeg`（`debugger` / `chore`）而不是 slug 本身。旧实现 `stLower.split(':').pop()`
+// 拼出的是 `opus-debug-keeper-`，那个 `-keeper` 段对读面板的人零信息量。
 function keeperNamePrefix(stLower) {
-  return `${FIXED_OPUS_MODEL}-${stLower.split(':').pop()}-`
+  const spec = keeperSpec(stLower)
+  if (!spec) return ''
+  return `${spec.model}-${spec.nameSeg}-`
 }
 
 // keeper name 的完整锚定正则：固定前缀 + 恰好 4 位小写字母或数字，无更多无更少。
+// 非 keeper 传进来时 prefix 是空串，正则会退化成 `^[0-9a-z]{4}$`——所以调用方必须
+// 先用 KEEPER_SLUG_PATTERN 判过再调它（check 10 与 autoName 都是这么做的）。
 function keeperNamePattern(stLower) {
   return new RegExp('^' + keeperNamePrefix(stLower) + '[0-9a-z]{4}$')
 }
@@ -400,7 +442,7 @@ function autoName(ti, model) {
   // 直接按这个形态生成，复用与非 keeper 分支相同的 shortHash 输入口径
   // （prompt + description + slug），确保自己补的名自己能通过 check 10。
   const stLowerForKeeper = String(ti.subagent_type || '').toLowerCase()
-  if (FIXED_OPUS_PATTERN.test(stLowerForKeeper)) {
+  if (KEEPER_SLUG_PATTERN.test(stLowerForKeeper)) {
     const keeperHash = shortHash(
       String(ti.prompt || '') + '|' + String(ti.description || '') + '|' + stLowerForKeeper
     )
@@ -522,23 +564,27 @@ function checkNaming(ti) {
     }
   }
 
-  // 9. keeper 类常驻 agent 的档位钉死在 opus（2026-08-03 新增，判据与边界见 FIXED_OPUS_PATTERN）
+  // 9. keeper 类常驻 agent 的档位钉死（2026-08-03 新增；2026-08-18 用户拍板改成按 kind
+  //    分叉：debug-keeper 仍是 opus，chore-keeper 降为 sonnet，判据与边界见 KEEPER_SPECS）。
   //    与 check 1 并列而非合并：check 1 管"三档枚举内"，这条管"这个 subagent_type 只允许一档"。
   //    model 缺失时两条会同时报，hint 各给一半，AI 一次改全。
-  if (FIXED_OPUS_PATTERN.test(stLower) && model !== FIXED_OPUS_MODEL) {
+  //    注意判据是**等值**不是"不低于"：给 chore-keeper 派 opus 同样被拦，否则档位一路只升
+  //    不降，本次降档就白降了。
+  const fixedSpec = keeperSpec(stLower)
+  if (fixedSpec && model !== fixedSpec.model) {
     findings.push(
-      `subagent_type="${ti.subagent_type}" 是固定 ${FIXED_OPUS_MODEL} 档的常驻 keeper,` +
+      `subagent_type="${ti.subagent_type}" 是固定 ${fixedSpec.model} 档的常驻 keeper,` +
         `本次 model=${model ? `"${model}"` : '(缺失)'};` +
-        `agent 定义 frontmatter 的 model:${FIXED_OPUS_MODEL} 会被这里显式传的 model 顶掉` +
+        `agent 定义 frontmatter 的 model:${fixedSpec.model} 会被这里显式传的 model 顶掉` +
         `(Agent 工具的 model 参数优先级高于 frontmatter),所以档位只能在这里给对`
     )
-    // 建议名：剥掉 name 已有的模型前缀，换成 opus-。name 缺失时给出带身份词的完整模板。
-    const strippedName = name.replace(/^(sonnet|opus|fable|haiku)[-_]/i, '')
-    const suggestSlug = toAsciiKebab(strippedName) || `${stLower.split(':').pop()}-<任务语义-kebab>`
     hints.push(
-      `model 改 "${FIXED_OPUS_MODEL}",name 前缀同改 "${FIXED_OPUS_MODEL}-"(即 "${FIXED_OPUS_MODEL}-${suggestSlug}");` +
-        `keeper 是第一层调度者,triage/去重/对账错一次整条队列跟着错,故不按任务看起来难不难下调,` +
-        `也不受三档标尺那句"没 ${FIXED_OPUS_MODEL} 触发信号就留在 sonnet"约束`
+      `model 改 "${fixedSpec.model}",name 同改 "${fixedSpec.model}-${fixedSpec.nameSeg}-xxxx"` +
+        `(xxxx 为 4 位小写字母数字);两个 keeper 的档位各自钉死、互不参照:` +
+        `debug-keeper 恒 opus(triage/去重/对账错一次整条队列跟着错),` +
+        `chore-keeper 恒 sonnet(台账登记与归档是机械杂务,不需要 opus 的因果链深度);` +
+        `档位不按这条 bug 或这批杂务看起来难不难上下调,也不受三档标尺那句` +
+        `"没 opus 触发信号就留在 sonnet"约束`
     )
   }
 
@@ -559,11 +605,14 @@ function checkNaming(ti) {
   //     机制不会退化成"记得住就不读、记不住才读"的可选项。登记文件由 task-keeper 插件
   //     的 `PreToolUse(Agent)` hook 写：命中 keeper 类 subagent_type 时把本次实际用的
   //     name 落进 `.keeper/<交付id>/.keeper-instance.json`
-  //     （形如 `{"debug":{"name":"opus-debug-keeper-4bb6","ts":"<ISO8601>"}}`），
+  //     （v7 起同一档是一个实例列表，形如
+  //     `{"debug":{"instances":[{"name":"opus-debugger-4bb6","issue":"DBG-207",...}]}}`），
   //     主会话唤醒前先读它，读不到才首次派发。
   //
-  //     判据形态：完整锚定正则 `^opus-<slug>-[0-9a-z]{4}$`（`keeperNamePattern()`），
-  //     `<slug>` 取自 subagent_type 冒号后的部分（`debug-keeper` / `chore-keeper`）。
+  //     判据形态：完整锚定正则 `^<档位>-<身份段>-[0-9a-z]{4}$`（`keeperNamePattern()`），
+  //     两个前段都取自 KEEPER_SPECS（`opus-debugger-` / `sonnet-chore-`），
+  //     **不再从 subagent_type 的 slug 现推**（2026-08-18 用户拍板换名，旧形态
+  //     `opus-debug-keeper-5a1b` 里那个 `-keeper` 段对读面板的人零信息量）。
   //     前缀部分仍是确定字段比较，只有后 4 位是「形态匹配」而非「值校验」——
   //     它与 check 8（name 须含身份词）不是一回事：check 8 只防遗忘、随便塞词即可过闸；
   //     这条同样不校验后 4 位是不是真的取自哈希，只校验形态（4 个小写字母或数字）。
@@ -577,9 +626,10 @@ function checkNaming(ti) {
   //     - **假阳性**：合法的 4 位小写字母数字后缀不会被拒绝，无已知误杀面。
   //     - name 缺失时不在这里报：`autoName` 已直接补成同一形态的名字（见 keeper 分支，
   //       复用 shortHash，输出的十六进制字符天然落在 [0-9a-z] 内）。
-  //     - 与 check 9 的叠加：model 不是 opus 时两条会同时报，期望名恒以 `opus-` 开头
-  //       （档位本身也被钉死），两条 hint 方向一致、AI 一次改全。
-  if (!nameMissing && FIXED_OPUS_PATTERN.test(stLower)) {
+  //     - 与 check 9 的叠加：model 给错时两条会同时报，而期望名的首段**就是该 kind 钉死
+  //       的那个档位**（debug 恒 `opus-`、chore 恒 `sonnet-`），两条 hint 方向一致、
+  //       AI 一次改全。
+  if (!nameMissing && KEEPER_SLUG_PATTERN.test(stLower)) {
     const pattern = keeperNamePattern(stLower)
     if (!pattern.test(name)) {
       const prefix = keeperNamePrefix(stLower)
@@ -727,14 +777,15 @@ function main() {
     // keeper 类补的是 check 10 要求的那种形态（固定前缀 + 4 位短哈希），文案要讲清楚
     // 这个名字不可预测、唤醒前要先读登记文件——否则又是一处"效力与描述各自漂移"
     // （见 .claude/rules/project/hook-restraint.md 实证 5）。
-    const isFixedKeeper = FIXED_OPUS_PATTERN.test(String(ti.subagent_type || '').toLowerCase())
+    const keeperSpecForName = keeperSpec(String(ti.subagent_type || '').toLowerCase())
     allowWithName(
       ti,
       generated,
-      isFixedKeeper
+      keeperSpecForName
         ? `[agent-dispatch] 本次派发没给 name（Agent 工具的 JSON Schema 未声明该字段，` +
             `但运行时接受并会存进 subagent 元数据）。这是常驻 keeper，name 必须形如` +
-            ` "opus-<debug|chore>-keeper-<4位小写字母数字短哈希>"，已补为 "${generated}" 并放行——` +
+            ` "${keeperSpecForName.model}-${keeperSpecForName.nameSeg}-<4位小写字母数字短哈希>"，` +
+            `已补为 "${generated}" 并放行——` +
             `后 4 位短哈希是为了防同一会话内前一个 keeper 实例关闭后新派的同名撞车` +
             `（SendMessage 的 name 寻址是 latest wins），这个名字因此不可预测。` +
             `唤醒它前先读 .keeper/<交付id>/.keeper-instance.json 里登记的实际 name，` +

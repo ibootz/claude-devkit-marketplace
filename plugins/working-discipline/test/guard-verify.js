@@ -406,15 +406,25 @@ const ad = (over) => Object.assign({}, AD_BASE, over)
 const adO = (over) => Object.assign({}, AD_BASE, { model: 'opus' }, over)
 // 3.23.0 加 check 11 之后，keeper 的 description 也被钉死（`<kind> 队列常驻管理`），
 // AD_BASE 那句「排查登录超时」对 keeper 一律 DENY。keeper 用例统一走这个 helper：
-// 带上固定档 opus + 固定 description，这样 check 9 / 10 各自段落里验的仍然是那一条，
+// 带上该 kind 的固定档 + 固定 description，这样 check 9 / 10 各自段落里验的仍然是那一条，
 // 不会因为 description 顺带被拦而验错东西（与上面 adO 注释同一类陷阱）。
+//
+// 2026-08-18 起两个 keeper 的固定档**不再相同**（debug=opus / chore=sonnet），name 的
+// 身份段也与 subagent_type 的 slug 解耦（`debugger` / `chore`，不再是 `debug-keeper`）。
+// 这张表是本文件里唯一的形态来源，用例一律用 `kName()` 拼名字而不是写字面量——否则
+// 下次改形态又要逐条手改二十处，正是本仓吃过账的失效形态。
+const KEEPER_FIXED = {
+  debug: { model: 'opus', seg: 'debugger' },
+  chore: { model: 'sonnet', seg: 'chore' },
+}
+const kName = (kind, suffix) => `${KEEPER_FIXED[kind].model}-${KEEPER_FIXED[kind].seg}-${suffix}`
 const adKeeper = (kind, over) =>
-  Object.assign({}, AD_BASE, { model: 'opus', description: `${kind} 队列常驻管理` }, over)
+  Object.assign({}, AD_BASE, { model: KEEPER_FIXED[kind].model, description: `${kind} 队列常驻管理` }, over)
 
 // 该拦：subagent_type 含冒号（插件专用 agent），name 不含任何身份词
 const ad8 = agent('本次事故原样 dbg vs debug-keeper', adKeeper('debug', { name: 'opus-dbg-open-audit', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
 check('agent-dispatch: check 8 finding 点明身份词', true, /身份词/.test(ad8.detail), ad8.detail)
-agent('chore-keeper 身份丢失', adKeeper('chore', { name: 'opus-ledger-tidy', subagent_type: 'task-keeper:chore-keeper' }), 'DENY')
+agent('chore-keeper 身份丢失', adKeeper('chore', { name: 'sonnet-ledger-tidy', subagent_type: 'task-keeper:chore-keeper' }), 'DENY')
 agent('cavecrew-reviewer 身份丢失', ad({ name: 'sonnet-check-diff', subagent_type: 'caveman:cavecrew-reviewer' }), 'DENY')
 
 // 不得误杀：含任一身份词即可，位置与大小写不限
@@ -432,9 +442,9 @@ agent('fpf:fpf-agent 滤掉 agent 只剩 fpf', ad({ name: 'sonnet-fpf-hypothesis
 agent('plugin-validator 命中 plugin', ad({ name: 'sonnet-validate-plugin-json', subagent_type: 'plugin-dev:plugin-validator' }), 'ALLOW')
 
 // 旧判据仍然生效
-const adNoModel = agent('旧判据: 缺 model 仍 deny', { name: 'sonnet-debug-keeper-x', description: 'x', subagent_type: 'task-keeper:debug-keeper' }, 'DENY')
+const adNoModel = agent('旧判据: 缺 model 仍 deny', { name: 'sonnet-debugger-x', description: 'x', subagent_type: 'task-keeper:debug-keeper' }, 'DENY')
 check('agent-dispatch: 缺 model 的 finding 仍在', true, /缺 model/.test(adNoModel.detail), adNoModel.detail)
-agent('旧判据: 前缀与 model 不符仍 deny', { model: 'opus', name: 'sonnet-debug-keeper-x', description: 'x', subagent_type: 'task-keeper:debug-keeper' }, 'DENY')
+agent('旧判据: 前缀与 model 不符仍 deny', { model: 'opus', name: 'sonnet-debugger-x', description: 'x', subagent_type: 'task-keeper:debug-keeper' }, 'DENY')
 
 // 自动补名路径：补出来的名字自己必须满足 check 8，否则等于补了个 guard 不放行的形态。
 // 载体从 debug-keeper 换成 cavecrew-reviewer（3.23.0）：check 11 起 keeper 的 description
@@ -446,28 +456,37 @@ for (const [label, desc] of [['中文 description', '排查登录超时'], ['ASC
   }
 }
 
-// ── agent-dispatch check 9：keeper 类常驻 agent 固定 opus 档 ──────────
+// ── agent-dispatch check 9：keeper 类常驻 agent 的档位按 kind 各自钉死 ──────────
 //
-// 判据两侧都覆盖：该拦的四条（含 2026-08-03 事故原样）、绝不能误杀的五条。
-// 重点是最后两条负向用例——判据只看 subagent_type，不看 name；且白名单式枚举，
-// 第三方 keeper-like agent 不在表内不该被牵连。
+// 2026-08-18 用户拍板：debug-keeper 仍固定 opus，chore-keeper 降为固定 sonnet。
+// 判据是**等值**而不是"不低于"，所以两个方向都要有用例——「chore 派 opus」必须同样被拦，
+// 否则档位只升不降，这次降档等于没降。
+// 其余两侧照旧：该拦的（含 2026-08-03 事故原样）、绝不能误杀的（判据只看 subagent_type
+// 不看 name；白名单式枚举，第三方 keeper-like agent 不牵连）。
 
-// 该拦：subagent_type 是两个固定 opus 档 keeper，model 却不是 opus
+// 该拦：debug-keeper 走 sonnet（2026-08-03 事故原样）
 const adK = agent(
   '本次事故原样 debug-keeper 走 sonnet',
-  ad({ name: 'sonnet-debug-keeper-085', subagent_type: 'task-keeper:debug-keeper' }),
+  ad({ name: 'sonnet-debugger-085', subagent_type: 'task-keeper:debug-keeper' }),
   'DENY'
 )
 check('agent-dispatch: check 9 finding 点明固定档', true, /固定 opus 档的常驻 keeper/.test(adK.detail), adK.detail)
-agent('chore-keeper 走 sonnet', ad({ name: 'sonnet-chore-keeper-tidy', subagent_type: 'task-keeper:chore-keeper' }), 'DENY')
-agent('debug-keeper 走 fable 同样拦', ad({ model: 'fable', name: 'fable-debug-keeper-x', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
-agent('无冒号裸 debug-keeper 也拦', ad({ name: 'sonnet-debug-keeper-x', subagent_type: 'debug-keeper' }), 'DENY')
+// 该拦：chore-keeper 走 opus——降档后的反方向，判据等值才拦得住
+const adK2 = agent(
+  'chore-keeper 走 opus 也拦（等值判据，不是"不低于"）',
+  Object.assign({}, AD_BASE, { model: 'opus', description: 'chore 队列常驻管理', name: 'opus-chore-3d7b', subagent_type: 'task-keeper:chore-keeper' }),
+  'DENY'
+)
+check('agent-dispatch: check 9 对 chore 报的是 sonnet 档', true, /固定 sonnet 档的常驻 keeper/.test(adK2.detail), adK2.detail)
+agent('debug-keeper 走 fable 同样拦', ad({ model: 'fable', name: 'fable-debugger-x', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+agent('chore-keeper 走 fable 同样拦', ad({ model: 'fable', name: 'fable-chore-x', subagent_type: 'task-keeper:chore-keeper' }), 'DENY')
+agent('无冒号裸 debug-keeper 也拦', ad({ name: 'sonnet-debugger-x', subagent_type: 'debug-keeper' }), 'DENY')
 
 // 不得误杀
 // name 用「固定前缀 + 4 位短哈希」——2026-08-04 起裸固定名会被 check 10 拦下（那条的
 // 用例见下一段），这里要验的是"档位对了就不该被 check 9 拦"，所以 name 必须先满足 check 10。
-agent('debug-keeper 走 opus 放行', adKeeper('debug', { name: 'opus-debug-keeper-4bb6', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
-agent('chore-keeper 走 opus 放行', adKeeper('chore', { name: 'opus-chore-keeper-0a9z', subagent_type: 'task-keeper:chore-keeper' }), 'ALLOW')
+agent('debug-keeper 走 opus 放行', adKeeper('debug', { name: kName('debug', '4bb6'), subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('chore-keeper 走 sonnet 放行', adKeeper('chore', { name: kName('chore', '0a9z'), subagent_type: 'task-keeper:chore-keeper' }), 'ALLOW')
 agent('非 keeper 的插件专用 agent 不受档位约束', ad({ name: 'sonnet-cavecrew-reviewer-diff', subagent_type: 'caveman:cavecrew-reviewer' }), 'ALLOW')
 // 判据取 subagent_type，不取 name——name 里出现 keeper 不构成档位要求
 agent('name 含 keeper 但类型是 Explore', ad({ name: 'sonnet-keeper-queue-audit', subagent_type: 'Explore' }), 'ALLOW')
@@ -479,7 +498,13 @@ agent('第三方 queue-keeper 不在白名单', ad({ name: 'sonnet-queue-keeper-
 // 已经踩过的坑（见 hooks/guards/agent-dispatch.js 的 autoName 注释）。
 const adAuto = agent('keeper 缺 name 自动补', { model: 'opus', description: 'debug 队列常驻管理', subagent_type: 'task-keeper:debug-keeper' }, 'AUTONAME')
 if (adAuto.verdict === 'AUTONAME') {
-  check('agent-dispatch: keeper 自动名满足新形态(固定前缀+4位短哈希)', true, /^opus-debug-keeper-[0-9a-z]{4}$/.test(adAuto.detail), adAuto.detail)
+  check('agent-dispatch: keeper 自动名满足新形态(固定前缀+4位短哈希)', true, /^opus-debugger-[0-9a-z]{4}$/.test(adAuto.detail), adAuto.detail)
+}
+// chore 侧同样要验一次——自动名的档位段取自 KEEPER_SPECS 而不是传入的 model，
+// 两个 kind 的前缀不同，只验 debug 会漏掉 chore 补出 `opus-` 前缀这类回归。
+const adAutoC = agent('chore keeper 缺 name 自动补', { model: 'sonnet', description: 'chore 队列常驻管理', subagent_type: 'task-keeper:chore-keeper' }, 'AUTONAME')
+if (adAutoC.verdict === 'AUTONAME') {
+  check('agent-dispatch: chore 自动名前缀是 sonnet-chore-', true, /^sonnet-chore-[0-9a-z]{4}$/.test(adAutoC.detail), adAutoC.detail)
 }
 
 // ── agent-dispatch check 10：keeper 的 name 必须带 4 位短哈希后缀 ────────
@@ -493,23 +518,30 @@ if (adAuto.verdict === 'AUTONAME') {
 // 这条同样不校验后 4 位是不是真的取自哈希，只校验形态——假阴性面是"AI 可以随便编
 // 4 个字符"，可接受，见 hooks/guards/agent-dispatch.js check 10 注释里的覆盖边界说明。
 
+// 该拦：2026-08-18 换名前的旧形态（身份段还带着 `-keeper`）。这条是本次换名的主回归——
+// 它形态完全合法（前缀 + 4 位短哈希），只是身份段变了，靠肉眼审阅极易放过。
+const ad10old = agent('换名前的旧形态 opus-debug-keeper-5a1b 必须拦', adKeeper('debug', { name: 'opus-debug-keeper-5a1b', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+check('agent-dispatch: check 10 finding 给出新身份段', true, /必须形如 "opus-debugger-xxxx"/.test(ad10old.detail), ad10old.detail)
+agent('chore 旧形态 opus-chore-keeper-0a9z 必须拦', adKeeper('chore', { name: 'opus-chore-keeper-0a9z', subagent_type: 'task-keeper:chore-keeper' }), 'DENY')
+// 该拦：档位段与该 kind 的固定档不符——name 前缀不是自由文本，它的首段跟着 check 9 走
+agent('chore 用 opus- 档位段也拦', adKeeper('chore', { name: 'opus-chore-0a9z', subagent_type: 'task-keeper:chore-keeper' }), 'DENY')
 // 该拦：旧版逐字固定名现在缺后缀
-agent('旧版固定名缺后缀也拦', adKeeper('debug', { name: 'opus-debug-keeper', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+agent('旧版固定名缺后缀也拦', adKeeper('debug', { name: 'opus-debugger', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
 // 该拦：事故原样的旧三位数字后缀，形态本身没问题（3 位不是 4 位），仍要拦
-const ad10 = agent('事故原样 opus-debug-keeper-085 位数不对', adKeeper('debug', { name: 'opus-debug-keeper-085', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
-check('agent-dispatch: check 10 finding 给出新形态提示', true, /必须形如 "opus-debug-keeper-xxxx"/.test(ad10.detail), ad10.detail)
+const ad10 = agent('事故原样后缀 085 位数不对', adKeeper('debug', { name: 'opus-debugger-085', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+check('agent-dispatch: check 10 finding 给出新形态提示', true, /必须形如 "opus-debugger-xxxx"/.test(ad10.detail), ad10.detail)
 // 该拦：大写
-agent('后缀大写也拦', adKeeper('debug', { name: 'opus-debug-keeper-4BB6', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+agent('后缀大写也拦', adKeeper('debug', { name: 'opus-debugger-4BB6', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
 // 该拦：3 位
-agent('后缀 3 位也拦', adKeeper('debug', { name: 'opus-debug-keeper-4bb', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+agent('后缀 3 位也拦', adKeeper('debug', { name: 'opus-debugger-4bb', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
 // 该拦：5 位
-agent('后缀 5 位也拦', adKeeper('debug', { name: 'opus-debug-keeper-4bb6c', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
-agent('chore-keeper 缺后缀也拦', adKeeper('chore', { name: 'opus-chore-keeper', subagent_type: 'task-keeper:chore-keeper' }), 'DENY')
-agent('身份词乱序拼名也拦', adKeeper('debug', { name: 'opus-keeper-debug-4bb6', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+agent('后缀 5 位也拦', adKeeper('debug', { name: 'opus-debugger-4bb6c', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
+agent('chore-keeper 缺后缀也拦', adKeeper('chore', { name: 'sonnet-chore', subagent_type: 'task-keeper:chore-keeper' }), 'DENY')
+agent('身份词乱序拼名也拦', adKeeper('debug', { name: 'opus-4bb6-debugger', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
 
 // 不得误杀：新形态（固定前缀 + 4 位小写字母数字）
-agent('debug-keeper 新形态放行', adKeeper('debug', { name: 'opus-debug-keeper-4bb6', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
-agent('chore-keeper 新形态放行', adKeeper('chore', { name: 'opus-chore-keeper-0a9z', subagent_type: 'task-keeper:chore-keeper' }), 'ALLOW')
+agent('debug-keeper 新形态放行', adKeeper('debug', { name: kName('debug', '4bb6'), subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('chore-keeper 新形态放行', adKeeper('chore', { name: kName('chore', '0a9z'), subagent_type: 'task-keeper:chore-keeper' }), 'ALLOW')
 // 非 keeper 的插件专用 agent 不受这条约束，仍是"含身份词即可"
 agent('cavecrew-reviewer 带任务后缀不受这条约束', ad({ name: 'sonnet-cavecrew-reviewer-diff-audit', subagent_type: 'caveman:cavecrew-reviewer' }), 'ALLOW')
 // 白名单式枚举：第三方 keeper-like agent 不在表内，名字自由
@@ -536,7 +568,7 @@ agent('第三方 queue-keeper 名字自由', ad({ name: 'sonnet-queue-keeper-any
 // 该拦：写当次任务、不带队列前缀（实证原样）
 const ad11 = agent(
   '实证原样 keeper description 写当次任务',
-  adKeeper('debug', { name: 'opus-debug-keeper-7f3a', subagent_type: 'task-keeper:debug-keeper', description: '关闭三条 + 开工 DBG-140' }),
+  adKeeper('debug', { name: kName('debug', '7f3a'), subagent_type: 'task-keeper:debug-keeper', description: '关闭三条 + 开工 DBG-140' }),
   'DENY'
 )
 check('agent-dispatch: check 11 finding 给出必需前缀', true, /description 必须以 "debug 队列" 起头/.test(ad11.detail), ad11.detail)
@@ -544,47 +576,47 @@ check('agent-dispatch: check 11 finding 给出必需前缀', true, /description 
 // detail 到 hint 处已被截断，在这里断言 hint 会拿到一个与文案无关的假失败。
 agent(
   'chore-keeper 写当次任务同样拦',
-  adKeeper('chore', { name: 'opus-chore-keeper-3d7b', subagent_type: 'task-keeper:chore-keeper', description: '登记五项杂务' }),
+  adKeeper('chore', { name: kName('chore', '3d7b'), subagent_type: 'task-keeper:chore-keeper', description: '登记五项杂务' }),
   'DENY'
 )
 // 该拦：两个 keeper 的前缀不可互换（前缀锚定同样区分 debug / chore）
 agent(
   '两个 keeper 的队列前缀不可互换',
-  adKeeper('debug', { name: 'opus-debug-keeper-4bb6', subagent_type: 'task-keeper:debug-keeper', description: 'chore 队列常驻管理' }),
+  adKeeper('debug', { name: kName('debug', '4bb6'), subagent_type: 'task-keeper:debug-keeper', description: 'chore 队列常驻管理' }),
   'DENY'
 )
 // 该拦：前缀出现在正文中间不算（判据是 startsWith，不是 includes）——否则
 // 「本批关三条，属于 debug 队列」这种写法会蒙混过关，面板扫读时前缀不在行首等于没有
 agent(
   '队列前缀写在正文中间仍拦',
-  adKeeper('debug', { name: 'opus-debug-keeper-4bb6', subagent_type: 'task-keeper:debug-keeper', description: '关三条，属于 debug 队列' }),
+  adKeeper('debug', { name: kName('debug', '4bb6'), subagent_type: 'task-keeper:debug-keeper', description: '关三条，属于 debug 队列' }),
   'DENY'
 )
 
 // 不得误杀
-agent('debug 旧固定串仍放行', adKeeper('debug', { name: 'opus-debug-keeper-4bb6', subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
-agent('chore 旧固定串仍放行', adKeeper('chore', { name: 'opus-chore-keeper-0a9z', subagent_type: 'task-keeper:chore-keeper' }), 'ALLOW')
+agent('debug 旧固定串仍放行', adKeeper('debug', { name: kName('debug', '4bb6'), subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
+agent('chore 旧固定串仍放行', adKeeper('chore', { name: kName('chore', '0a9z'), subagent_type: 'task-keeper:chore-keeper' }), 'ALLOW')
 // 新形态：前缀 + 本批摘要。这是 2026-08-10 之后期望的写法，必须放行
 agent(
   '前缀加本批摘要放行（新形态）',
-  adKeeper('debug', { name: 'opus-debug-keeper-a1c9', subagent_type: 'task-keeper:debug-keeper', description: 'debug 队列 · 关三条 + 开工 DBG-140' }),
+  adKeeper('debug', { name: kName('debug', 'a1c9'), subagent_type: 'task-keeper:debug-keeper', description: 'debug 队列 · 关三条 + 开工 DBG-140' }),
   'ALLOW'
 )
 agent(
   'chore 前缀加本批摘要放行',
-  adKeeper('chore', { name: 'opus-chore-keeper-9f2a', subagent_type: 'task-keeper:chore-keeper', description: 'chore 队列 · 登记五项杂务' }),
+  adKeeper('chore', { name: kName('chore', '9f2a'), subagent_type: 'task-keeper:chore-keeper', description: 'chore 队列 · 登记五项杂务' }),
   'ALLOW'
 )
 // 分隔符不是判据的一部分（有意不查，理由见 agent-dispatch.js 那段「为什么前缀之后不强制分隔符」）
 agent(
   '不带分隔符直接接摘要也放行',
-  adKeeper('debug', { name: 'opus-debug-keeper-b2d0', subagent_type: 'task-keeper:debug-keeper', description: 'debug 队列本批只清 DBG-141' }),
+  adKeeper('debug', { name: kName('debug', 'b2d0'), subagent_type: 'task-keeper:debug-keeper', description: 'debug 队列本批只清 DBG-141' }),
   'ALLOW'
 )
 // [模型名] 前缀是容错接受的旧写法，比较用 strip 后的正文（与 check 6 同口径），不该被拦
 agent(
   '带 [opus] 前缀的固定串不误杀',
-  adKeeper('debug', { name: 'opus-debug-keeper-4bb6', subagent_type: 'task-keeper:debug-keeper', description: '[opus] debug 队列常驻管理' }),
+  adKeeper('debug', { name: kName('debug', '4bb6'), subagent_type: 'task-keeper:debug-keeper', description: '[opus] debug 队列常驻管理' }),
   'ALLOW'
 )
 // 判据取 subagent_type：非 keeper 的 description 写什么都不受这条约束
@@ -604,7 +636,7 @@ agent(
 // 「判据准 + 文案给模板 = 一次改对」。
 const ad11n = agent(
   'keeper 缺 description 仍 deny',
-  { model: 'opus', name: 'opus-debug-keeper-4bb6', subagent_type: 'task-keeper:debug-keeper' },
+  { model: 'opus', name: kName('debug', '4bb6'), subagent_type: 'task-keeper:debug-keeper' },
   'DENY'
 )
 check('agent-dispatch: keeper 缺 description 的 hint 给带前缀的模板', true, /debug 队列 · <本批摘要>/.test(ad11n.detail), ad11n.detail)
