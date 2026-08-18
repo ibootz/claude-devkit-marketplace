@@ -96,6 +96,12 @@ hooks/user-prompt-submit.sh`，各取输出 JSON 的 `hookSpecificOutput.additio
 
 **「本次 md 受众判定」声明句照写。** 判定词原样，理由部分可文言。「禁自指」不覆盖 harness 要求的声明。
 
+## 1.5.0：禁生造名词补注释通道
+
+八类权威来源默认标识符本身就是可读的名字，真实代码里大量标识符不是（`tech_level`、拼音缩写、纯编号列）。1.5.0 在这一条里补了四条注释通道——entity 类字段注释、数据库表/列注释、i18n 文案与其 key 注释、代码行内注释与 javadoc，并写死它们是八类的**取值通道**而非第九类来源：注释只把八类里读不出的名字翻译出来，不是独立的命名权威。
+
+同批改的还有 `working-discipline` 3.27.0 的 3.1 与 `plain-talk-output-style` 1.5.0 的第 5 条——同一条规则的三份表达，改一处必须改三处。
+
 ## 维护约定
 
 - 注入走 `additionalContext`，纯注入零拦截，不受 `.claude/rules/project/hook-restraint.md` 的判据要求约束（见该文件「适用边界」节）。
