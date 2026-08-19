@@ -156,6 +156,31 @@ def cell(s):
     return str(s if s not in (None, "") else "-").replace("|", "\\|")
 
 
+def cell_link(iid, path):
+    """编号列专用：渲染成 `[DBG-140](file:///abs/path/issue.md#1)` 可点击链接。
+
+    与 `cell()` 分开一个函数，是因为 `cell()` 还被说明/状态等其它列复用——把
+    链接逻辑塞进 `cell()` 会给那些列也套上链接。`path` 来自 `load_all()` /
+    `load_archived()` 已经算好的条目正文路径（`<queue_dir>` 在 `render()` 入口
+    处已用 `os.path.abspath()` 兜过一层，见 `main()`），这里再兜一次
+    `os.path.abspath()` 是防御性的——不假设调用方一定传的是绝对路径。
+
+    条目目录一旦不存在（理论上不该发生，但归档会把条目搬走、`_broken` 条目
+    也可能缺正文文件），`os.path.isfile` 为假，此时优雅退化成裸编号，不抛异常
+    让整张看板挂掉。
+    """
+    text = cell(iid)
+    if not path:
+        return text
+    try:
+        abspath = os.path.abspath(path)
+    except Exception:
+        return text
+    if not os.path.isfile(abspath):
+        return text
+    return "[%s](file://%s#1)" % (text, abspath)
+
+
 def pending_by_id(delivery_root):
     """扫 `decisions/` 未答复文件，返回 ({条目id: [文件名…]}, [未归属文件名…])。
 
@@ -264,7 +289,7 @@ def render(queue_dir, spec, show_all, width, only_states):
             warn_unknown.append("%s：%s" % (fm.get("id", "?"), fm["_broken"]))
         if state == S_DONE and os.path.isdir(os.path.join(item_dir, "worktree")):
             warn_stray.append(str(fm.get("id", "?")))
-        rows.append((fm, state, ""))
+        rows.append((fm, state, "", path))
 
     # 有 `about:` 指向、但那条最终没被标成「待拍板」的未答复 decision。成因有二：
     # 指向的条目已经 done（`derive_state` 里 done 短路在前），或 `about:` 写了一个
@@ -272,21 +297,21 @@ def render(queue_dir, spec, show_all, width, only_states):
     # 收尾」，后者是脏数据。v2 的教训（读不懂的东西静默跳过、16 条 issue 人间蒸发）
     # 就是在这种地方发生的。
     marked = {str(fm.get("id", "")).strip().upper()
-              for fm, st, _b in rows if st == S_PENDING}
+              for fm, st, _b, _p in rows if st == S_PENDING}
     warn_dangling = []
     for iid, files in sorted(pending.items()):
         if iid not in marked:
             warn_dangling.append("%s（%s）" % (iid, "、".join(files)))
 
     archived_n = 0
-    for fm, _body, _path, batch in load_archived(queue_dir, spec):
+    for fm, _body, path, batch in load_archived(queue_dir, spec):
         archived_n += 1
         if show_all:
-            rows.append((fm, S_DONE, batch))
+            rows.append((fm, S_DONE, batch, path))
 
     # 总览按四态计数；归档条目只有在 --all 时才进 rows，所以单列一行说明。
     counts = {s: 0 for s in STATE_ORDER}
-    for fm, state, _b in rows:
+    for fm, state, _b, _p in rows:
         counts[state] += 1
     total = sum(counts.values()) or 1
 
@@ -319,10 +344,10 @@ def render(queue_dir, spec, show_all, width, only_states):
     L.append("")
     L.append("| " + " | ".join(head) + " |")
     L.append("|" + "---|" * len(head))
-    for fm, state, batch in rows:
+    for fm, state, batch, path in rows:
         c4 = priority_of(fm)[1] if is_debug else fm.get("kind", "")
         c5 = fm.get("type", "") if is_debug else fm.get("external_write", "")
-        cols = [cell(fm.get("id")), cell(clip(fm.get("summary"), width)), cell(state),
+        cols = [cell_link(fm.get("id"), path), cell(clip(fm.get("summary"), width)), cell(state),
                 cell(c4), cell(c5), cell(external_of(fm))]
         if show_all:
             cols.append(cell(batch))

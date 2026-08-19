@@ -65,8 +65,11 @@ Agent(
 **之后每一次**（同一会话内再有新杂务），默认用 `SendMessage` 唤醒同一个实例，**不要
 自己主动多开**。这是 chore 与 debug 最大的分野：debug 是「一条 bug 一个实例」，并行
 本身就是收益；chore 反过来，价值恰恰在跨条目视野——攒批执行、把散落的待拍板事项打成
-一个包一次问完（`agents/chore-keeper.md` §0）、归档时看的是整个 done 桶。拆成多个
-各管一段，这三件事全部失效，Human 会收到 N 个各说各话的拍板请求，而不是一次。
+一个包一次问完（`agents/chore-keeper.md` §0）。拆成多个各管一段，这两件事全部失效，
+Human 会收到 N 个各说各话的拍板请求，而不是一次。
+
+（归档**不再**是单实例的论据。它已降到单条粒度：keeper 只归档自己做完的那几条，
+一条一次 `--issue`。全队列归档归主会话，见下面「归档分工」一节。）
 
 **唯一的例外是 Human 或用户当轮明确要求并行清账。** 此时才多派一个，新实例的 name
 另生成一个短哈希，登记表按下述 v7 格式记多条；要给某条 issue 补充信息时按 `issue`
@@ -133,4 +136,21 @@ chore-keeper 并存的场景下才会超过一条）：
 | `hooks/user-prompt-submit-chore-queue.sh` | 每轮队列快照注入（零 git 调用，≤900 字符） |
 | `scripts/keeper_cli.py` | v7 新增的多实例并发原语 CLI：`claim --kind chore` 原子认领 `CHR-NNN`；`bind` 登记 issue→name；`peers --kind chore` 看同档还有哪些实例。chore 通常不需要 `lock`（合并锁是 debug 侧合并回主仓时用的，chore 各条目独立目录、天然无锁竞争） |
 | `skills/tk-decisions/SKILL.md` | 决策打包 HITL 协议正典 |
-| `skills/tk-debug/scripts/archive_done.py` | 归档脚本（`--queue chore`），keeper 自动跑 |
+| `skills/tk-debug/scripts/archive_done.py` | 归档脚本。keeper 只跑 `--queue chore --issue CHR-NNN --apply`（单条）；全量 `--auto` 归主会话 |
+
+## 归档分工：keeper 管自己做完的那几条，主会话管全量兜底
+
+| 谁 | 跑什么 | 什么时候 |
+|---|---|---|
+| chore-keeper | `--queue chore --issue CHR-NNN --apply`，一条一次 | 它把某条杂务做完、`status` 已 `done` 之后 |
+| **主会话（你）** | `--queue chore --auto --apply` | 确认当前没有活着的 chore-keeper 实例时，清掉没人认领的历史 done 条目 |
+
+**为什么切成两条路径**：全量归档扫全队列、逐条 `shutil.move`，会搬走**别的实例正在写的
+条目目录**。而「那个实例还活着吗」在本插件里没有可靠数据源——`.keeper-instance.json` 是
+派发即登记、没有完成摘除这一环，记录最长滞留 14 天。粒度降到单条之后这个问题消失：实例
+只搬自己认领的那条，所有权与操作范围对齐，不需要锁也不需要判定别人在不在飞。
+
+**主会话跑全量前要自己确认没有在飞实例**，判据是你手上的 agent 列表（哪些 chore-keeper
+是你派的、有没有还在跑），不是文件。debug 队列上脚本还有一道 worktree 静默期闸兜底，
+**chore 队列没有 worktree，那道闸对它恒放行**——脚本会在 `--auto --queue chore` 时打印
+一行提醒，读到它就说明这次没有任何机械防线，判断责任在你。

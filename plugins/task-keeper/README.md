@@ -288,18 +288,36 @@ v7 多实例并发引入两个必须原子的动作，靠 agent 用 `Write` 手�
 合并锁落在 `.keeper/<交付id>/.merge.lock/`（目录 mkdir 原子性 + `owner.json` 记录
 持有者），chore 通常不需要它——各条目独立目录，写操作天然无锁竞争。
 
-## 自动归档
+## 归档：两条粒度，常态走单条
 
-两个 keeper 在每次收尾窗口自查 done 条目，满足任一条件即跑
-`skills/tk-debug/scripts/archive_done.py --auto --apply`（debug/chore 共用，`--queue` 区分）：
+`skills/tk-debug/scripts/archive_done.py`（debug/chore 共用，`--queue` 区分）有两个入口，
+按**谁拥有这条条目**分工，互斥：
+
+| 入口 | 谁跑 | 什么时候 |
+|---|---|---|
+| `--issue DBG-216 --apply` | keeper 实例 | 它认领的那条 `status` 转 `done` 之后，一条一次 |
+| `--auto --apply` | 主会话 | 确认没有在飞 keeper 实例时，清没人认领的历史 done 条目 |
+
+单条模式不看阈值、不看队列静默期——所有权与操作范围对齐，搬的就是自己那个目录。
+全量 `--auto` 仍看两条阈值中的任一条：
 
 | 判据 | 阈值 |
 |---|---|
 | done 条目数 | ≥ 10 |
 | 最早 done 条目的 `reported_at` 距今 | > 14 天 |
 
-批次名 `auto-<YYYYMMDD>`。`next_id` 的扫描覆盖 `archive/**`，归档后编号**不回收**。
-worktree 目录还在的 done 条目跳过并警告（先收工作区再归档）。
+**为什么切成两条粒度**：v4 起一个 keeper 实例只认领一条 issue，而全量归档扫全队列逐条
+`shutil.move`，会搬走**别的实例正在写的条目目录**。而「那个实例还活着吗」在本插件里没有
+可靠数据源（`.keeper-instance.json` 是派发即登记、无摘除环节，记录最长滞留 14 天）。实测
+后果是两个 keeper 都判断「跑归档会伤到别人」于是双双跳过，归档永远不发生。降到单条粒度后
+这个判断根本不需要做。
+
+`--auto` 另有一道队列静默期闸：debug 队列里只要还有条目挂着活 worktree 就整轮不归档并打印
+阻塞原因。**这道闸对 chore 队列恒放行**（chore 条目没有 worktree），所以 `--auto --queue chore`
+会额外打印一行提醒，说明本次没有任何机械防线，判断责任在跑它的人。显式 `--batch` 不过这道闸。
+
+批次名 `auto-<YYYYMMDD>`（`--auto` 与 `--issue` 共用）。`next_id` 的扫描覆盖 `archive/**`，
+归档后编号**不回收**。worktree 目录还在的 done 条目跳过并警告（先收工作区再归档）。
 
 ## 决策打包 HITL（需要人拍板的事怎么走）
 
@@ -513,7 +531,7 @@ bash plugins/task-keeper/hooks/tests/run-tests.sh
 
 真实进程回归（JSON 喂 stdin、断言 stdout，不 mock），覆盖：队列快照分桶/排序/坏文件显式告警、
 index 幂等、三道守卫的拦与不拦两侧、wt_supply 供给/幂等/回流前置校验、归档与编号不回收、
-chore 快照字节预算、决策信箱计数、双队列互不串号、自动归档判据、路由注入分档、
+chore 快照字节预算、决策信箱计数、双队列互不串号、归档粒度与判据、路由注入分档、
 keeper 实例登记的写入与放弃两侧（白名单命中/不命中、name 缺失、目录不存在时自动建出、
 另一个键保留）、会话隔离两侧（`session_id` 写入/同会话读得到/跨会话读不到/旧格式
 无 `session_id` 键当陈旧处理/payload 缺 `session_id` 时仍正常登记 name、三岔口注入

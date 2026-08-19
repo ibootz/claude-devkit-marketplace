@@ -62,12 +62,30 @@ keeper 在每次「收尾/执行窗口」结束时跑一次 `--auto`：满足任
 日期比较，机械可核；`reported_at` 缺失或格式不对的条目不参与年龄判据
 （只影响触发时机，不影响归档正确性）。
 
+## 多实例并行下的粒度：常态走 `--issue`，全量 `--auto` 只在队列静默期跑
+
+4.0.0 起一条 issue 一个 keeper 实例，而本脚本原先只有全量模式——**一个只对自己那
+一条负责的实例，被要求执行一个动全队列的操作**。实例观察到这个失配后的正确反应是
+跳过归档，于是归档退化成一句「等大家收工后统一跑一次」的无主承诺：没有责任人、没有
+触发事件，实际语义是永不发生。
+
+粒度对齐后这个问题消失，两条路径职责分明：
+
+  · `--issue <ID>`：**实例收尾时的常态动作**，只搬自己认领的那一条。所有权粒度 =
+    操作粒度，天然无竞态，不需要锁、也不需要判断别人在不在飞。
+  · `--auto`：**孤儿条目的兜底**（实例已消失、没人认领的历史 done 条目），由主会话
+    或 tk-board 在队列静默期触发，keeper 实例不跑它。前置闸见 `queue_is_quiet()`。
+
+为什么兜底路径不改成加锁：互斥锁防的是「两个实例同时跑归档」，而真正的事故是「A 搬走
+B 正在写的目录」——那不是并发写同一文件，是拿走别人手上的工作对象，锁在语义上不覆盖。
+
 ## 用法
 
     python3 archive_done.py --queue-dir <根>/.keeper/D-001-feat-xxx/debug
     python3 archive_done.py --queue-dir <根>/.keeper/_main/debug --apply
-    python3 archive_done.py --queue chore --auto --apply   # chore 队列自动归档
-    python3 archive_done.py                                # 自动定位队列与批次名
+    python3 archive_done.py --issue DBG-216 --apply         # 实例收尾：只归档这一条
+    python3 archive_done.py --queue chore --auto --apply    # chore 队列全量兜底
+    python3 archive_done.py                                 # 自动定位队列与批次名
 
 默认 dry-run，只打印搬迁清单不动文件；`--apply` 才真正移动。
 """
@@ -125,7 +143,9 @@ def guess_batch(queue_dir, explicit, auto):
 
     优先级：
       1. 显式 `--batch` 参数
-      2. `--auto` 模式固定 `auto-<YYYYMMDD>`
+      2. `--auto` **或 `--issue`** 模式固定 `auto-<YYYYMMDD>`（调用方把两者的或
+         传进 `auto` 形参）。单条模式也走日期批次，是为了让同一天各实例陆续收尾
+         归档的条目聚进同一个桶；按各自交付 id 分批会把一天的收尾散成多个目录
       3. **当前**交付 id（`keeper_paths.resolve_delivery_id`，与队列目录名同源）。
          注意取的是归档发生时所在的交付，不是队列目录名——跨交付 reopen 是常规
          路径（`skills/tk-debug/SKILL.md`），D-001 的 issue 可能在 D-002 期间才
@@ -137,7 +157,7 @@ def guess_batch(queue_dir, explicit, auto):
         return explicit, "显式 --batch 参数"
     if auto:
         stamp = datetime.date.today().strftime("%Y%m%d")
-        return "auto-%s" % stamp, "--auto 模式固定 auto-<YYYYMMDD>"
+        return "auto-%s" % stamp, "日期批次 auto-<YYYYMMDD>（--auto 与 --issue 共用）"
 
     # `<worktree 根>/.keeper/<交付id>/<队列>` → 上溯三级
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(queue_dir))))
@@ -233,6 +253,45 @@ def worktree_blocks_archive(queue_dir, iid, registered):
     return None
 
 
+def queue_is_quiet(queue_dir, registered):
+    """全队列一个活 worktree 都没有 → 返回 None；否则返回第一条阻塞说明。
+
+    这是 `--auto` 全量归档的前置闸，作用域比 `worktree_blocks_archive` 大一圈：
+    后者逐条判「这一条能不能搬」，本函数判「现在整个队列适不适合做全量归档」。
+
+    为什么全量模式需要这道更保守的闸：多实例并行下（4.0.0 起一条 issue 一个 keeper
+    实例），全量归档会搬走**别的实例负责的条目目录**，而「那个实例是不是还在写它」
+    没有任何可靠数据源能回答——`.keeper-instance.json` 是派发即登记、没有完成摘除
+    这一环（见 `hooks/lib/keeper_paths.py` 模块头），读到的记录最长会滞留 14 天。
+
+    可靠的只有 `git worktree list` 现算出来的在飞信号。所以全量归档只在「队列静默」
+    时才跑：队列里任何一条还挂着 worktree，就说明至少有一个 fixer 没收工，其上游
+    的 keeper 实例大概率也在收尾途中，此时整体不动。单条归档（`--issue`）不受这道
+    闸约束——实例只搬自己认领的那一条，粒度与所有权对齐，本就不存在这个竞态。
+
+    **覆盖边界（写在这里免得被当成比实际更强的保护）**：
+
+      · 本闸只对 debug 队列有效。**chore 队列没有 worktree**，本函数对它恒返回
+        None——`--auto --queue chore` 在多实例并存时没有任何机械防线，只能靠调用方
+        自己确认无在飞实例。chore-keeper 的提示词因此写死「不要跑 --auto」。
+      · 即使 debug 队列静默，也只证明「没有 fixer 在飞」，不证明「没有 keeper 实例
+        在收尾」——一个 worktree 已清理、正在写 receipts 的实例，本闸看不见它。这是
+        当前数据源的上限，不是实现漏了一步。
+      · 显式 `--batch` 的全量归档**不过这道闸**：那是人点名的动作，尊重其意图。
+    """
+    try:
+        names = sorted(os.listdir(queue_dir))
+    except Exception as e:
+        return "无法列出队列目录 %s：%s" % (queue_dir, e)
+    for name in names:
+        if name == "archive" or not os.path.isdir(os.path.join(queue_dir, name)):
+            continue
+        blocked = worktree_blocks_archive(queue_dir, name, registered)
+        if blocked:
+            return "%s %s" % (name, blocked)
+    return None
+
+
 def plan_for_item(queue_dir, spec, batch, iid):
     """给定条目 id，返回 [(标签, src, dst)]。
 
@@ -252,6 +311,9 @@ def main():
                     help="队列目录（如 <项目>/.keeper/debug），缺省从 cwd 往上找")
     ap.add_argument("--batch", default=None,
                     help="归档批次名，缺省自动推断（见 guess_batch）")
+    ap.add_argument("--issue", default=None, metavar="ID",
+                    help="只归档这一条（如 DBG-216 / CHR-014）。keeper 实例收尾时"
+                         "用它归档自己认领的那条，与 --auto 互斥")
     ap.add_argument("--auto", action="store_true",
                     help="自动归档模式：done ≥%d 条或最早 done 超 %d 天才归档，"
                          "批次名 auto-<YYYYMMDD>" % (AUTO_DONE_THRESHOLD, AUTO_AGE_DAYS))
@@ -259,6 +321,11 @@ def main():
     ap.add_argument("--dry-run", action="store_true",
                     help="显式声明 dry-run（默认行为，可省略）")
     args = ap.parse_args()
+
+    if args.issue and args.auto:
+        sys.exit("--issue 与 --auto 互斥：--auto 是全队列阈值判据（done ≥%d 条或超龄），"
+                 "对单条归档没有意义。单条直接 `--issue %s --apply`。"
+                 % (AUTO_DONE_THRESHOLD, args.issue))
 
     spec = SPECS[args.queue]
     queue_dir = args.queue_dir or find_queue_dir(spec)
@@ -274,14 +341,39 @@ def main():
         print("无可归档条目（%s 下没有 status: done 的条目）。" % queue_dir)
         sys.exit(0)
 
+    # v4 的 worktree 落点在条目目录里（`<queue>/DBG-NNN/worktree`），不再是与队列
+    # 平级的 `.keeper/worktrees/<id>`。判据 8 两条腿：目录存在性 + git 登记。
+    registered = registered_worktrees(queue_dir)
+
+    if args.issue:
+        want = str(args.issue).strip().upper()
+        dn = [t for t in dn if str((t[0] or {}).get("id", "")).strip().upper() == want]
+        if not dn:
+            sys.exit("%s 不在 %s 的 done 桶里——它可能不存在、或 status 还不是 done。"
+                     "归档只搬已 done 的条目，先确认状态再跑。" % (want, queue_dir))
+        print("[single] 只归档 %s（单条模式不看全队列阈值，也不看队列静默期）" % want)
+
     if args.auto:
+        noisy = queue_is_quiet(queue_dir, registered)
+        if noisy:
+            print("[auto] 队列非静默：%s。全量归档会搬走别的实例正在处理的条目目录，"
+                  "本次不归档。等在飞条目收工后再跑，或用 `--issue <ID>` 只归档某一条。"
+                  % noisy)
+            sys.exit(0)
+        if args.queue == "chore":
+            print("[auto] 注意：chore 队列没有 worktree，上面那道静默期闸对它恒放行——"
+                  "本次没有任何机械防线拦住「搬走别的实例正在处理的条目」。"
+                  "确认过队列无在飞实例再继续。")
         ok, why = auto_should_archive(dn)
         if not ok:
             print("[auto] 未达自动归档阈值：%s。不归档。" % why)
             sys.exit(0)
         print("[auto] 触发自动归档：%s" % why)
 
-    batch, batch_source = guess_batch(queue_dir, args.batch, args.auto)
+    # 单条模式也走日期批次，让同一天各实例陆续归档的条目聚在同一个 auto-<日期> 桶里，
+    # 而不是按各自的交付 id / 分支名散成多个批次目录。
+    batch, batch_source = guess_batch(
+        queue_dir, args.batch, args.auto or bool(args.issue))
     print("归档批次：%s（来源：%s）" % (batch, batch_source))
 
     before_next = next_id(queue_dir, spec)
@@ -289,10 +381,6 @@ def main():
 
     to_archive = []      # [(iid, plan)]
     skipped = []         # [(iid, reason)]
-
-    # v4 的 worktree 落点在条目目录里（`<queue>/DBG-NNN/worktree`），不再是与队列
-    # 平级的 `.keeper/worktrees/<id>`。判据 8 两条腿：目录存在性 + git 登记。
-    registered = registered_worktrees(queue_dir)
 
     for fm, _body, _path in dn:
         iid = str(fm.get("id"))
