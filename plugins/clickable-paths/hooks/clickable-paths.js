@@ -65,24 +65,71 @@ function readStdin() {
   }
 }
 
+// 从 cwd 逐级上溯找 `.keeper/`，返回该项目实际存在的队列路径前缀。
+//
+// 【为什么要现算，而不是在注入文本里写一个模板】
+// 队列条目的路径含两个只有运行时才知道的变量：仓根绝对路径与 `<交付id>`。写成模板
+// 就得留占位符，而 `<` `>` 是非法 URL 字符——iTerm2 对含尖括号的 file:// 识别失败，
+// 整条链接不可点。于是模板本身在示范一个失效形态，照抄它的人得到的是坏链接。
+// 现算把这一层去掉：注入里给的就是可以逐字照抄的真实前缀。
+// 探不到 `.keeper/` 时返回空数组，那一段整体不注入——没有队列的项目不必读这几行。
+function keeperQueues(startDir) {
+  const out = []
+  try {
+    let dir = fs.realpathSync(startDir)
+    for (let up = 0; up < 8; up++) {
+      const keeper = `${dir}/.keeper`
+      let deliveries = null
+      try {
+        deliveries = fs.readdirSync(keeper, { withFileTypes: true })
+      } catch {
+        deliveries = null
+      }
+      if (deliveries) {
+        for (const d of deliveries) {
+          if (!d.isDirectory() || d.name.startsWith('.')) continue
+          for (const [queue, file] of [['debug', 'issue.md'], ['chore', 'item.md']]) {
+            const qdir = `${keeper}/${d.name}/${queue}`
+            try {
+              if (fs.statSync(qdir).isDirectory()) out.push({ queue, file, dir: qdir })
+            } catch {
+              /* 该队列尚未建，跳过 */
+            }
+          }
+        }
+        return out
+      }
+      const parent = fs.realpathSync(`${dir}/..`)
+      if (parent === dir) break
+      dir = parent
+    }
+  } catch {
+    /* 探测失败一律降级为「没有队列」，不让 hook 因此报错 */
+  }
+  return out
+}
+
 function main() {
   const flag = (process.env.CLICKABLE_PATHS || '').toLowerCase()
   if (flag === 'off' || flag === '0' || flag === 'false') {
     process.exit(0)
   }
 
-  let event = ''
+  let payload = {}
   try {
-    event = (JSON.parse(readStdin()) || {}).hook_event_name || ''
+    payload = JSON.parse(readStdin()) || {}
   } catch {
-    event = ''
+    payload = {}
   }
+  const event = payload.hook_event_name || ''
 
   if (!ALLOWED_EVENTS.has(event)) {
     process.exit(0)
   }
 
-  const prompt = [
+  const queues = keeperQueues(payload.cwd || process.cwd())
+
+  const lines = [
     '# 文件路径写成可点击链接（clickable-paths）',
     '',
     '对话正文每提到一个本机文件，就给一个链接：' +
@@ -97,6 +144,11 @@ function main() {
       '相对仓库根路径+行号。',
     '- 一句话提到三个文件就给三个链接。表格单元格、列表项、四要素的「现场证据」段、' +
       '转述子代理回执的那几行，都是对话正文，照套。',
+    '- **队列编号同样是文件**：`DBG-140` / `CHR-014` 是队列条目的别名，说到编号就是' +
+      '说到那条条目文件，照上面的形态套链接，并在链接后紧跟括号写 ≤20 字问题简述，' +
+      '让人不点开也知道这条讲什么。debug 编号对应 `issue.md`，chore 编号对应 ' +
+      '`item.md`，两个文件名不可互换。归档后的条目路径多一层 `archive/<批次>/`，' +
+      '先 `ls` 确认再链。',
     '',
     '判据：你 Read/Edit/Grep/ls 见过、或工具结果里出现过的文件 = 存在，套链接。' +
       '拿不准存在性时先 `ls` 或 `Grep` 确认再写，确认不到才退回 inline code' +
@@ -109,7 +161,20 @@ function main() {
     '裸路径原样：代码块与命令行内部、commit message、写进文件的 md/代码/注释、' +
       '派给子代理的 prompt、提交给外部系统的内容（工单/评论/消息）、不在本机的路径' +
       '（他人仓库、报错原文、纯举例）。',
-  ].join('\n')
+  ]
+
+  if (queues.length) {
+    lines.push(
+      '',
+      '本项目实际存在的队列前缀（已从磁盘探到，逐字照抄这个形状）：')
+    for (const q of queues) {
+      const sample = q.queue === 'debug' ? 'DBG-140' : 'CHR-014'
+      lines.push(
+        `- ${q.queue}：[${sample}](file://${q.dir}/${sample}/${q.file}#1)（≤20 字问题简述）`)
+    }
+  }
+
+  const prompt = lines.join('\n')
 
   const output = {
     hookSpecificOutput: {

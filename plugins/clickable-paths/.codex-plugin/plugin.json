@@ -1,7 +1,7 @@
 {
   "name": "clickable-paths",
-  "version": "1.4.0",
-  "description": "文件路径写成可点击链接 - 注入一段输出格式规约，让 AI 提到本机文件时输出 [文件名:行号](file:///绝对路径#行号)，iTerm2 渲染成 OSC 8 超链接、cmd+click 用 VS Code 打开对应行。1.3.0 起双挂 UserPromptSubmit + SubagentStart，子代理回执里的路径也可点；1.4.0 收紧措辞，点名「只写文件名 / 裸 path:行号 / inline code」三种漏套形态，并把表格、列表、四要素现场证据圈进适用面。零 skill，纯注入不拦截（CLICKABLE_PATHS=off 可关）",
+  "version": "1.5.0",
+  "description": "文件路径写成可点击链接 - 注入一段输出格式规约，让 AI 提到本机文件时输出 [文件名:行号](file:///绝对路径#行号)，iTerm2 渲染成 OSC 8 超链接、cmd+click 用 VS Code 打开对应行。1.3.0 起双挂 UserPromptSubmit + SubagentStart，子代理回执里的路径也可点；1.4.0 收紧措辞，点名「只写文件名 / 裸 path:行号 / inline code」三种漏套形态，并把表格、列表、四要素现场证据圈进适用面；1.5.0 把 task-keeper 队列编号 DBG-NNN / CHR-NNN 也算作文件，并从 cwd 向上探 .keeper/ 现算样例铺进注入，避开占位符产生的非法 URL 字符。零 skill，纯注入不拦截（CLICKABLE_PATHS=off 可关）",
   "author": {
     "name": "zhangq"
   },

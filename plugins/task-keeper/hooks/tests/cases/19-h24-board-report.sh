@@ -29,6 +29,12 @@ BOARD_PY="$HOOK_DIR/../skills/tk-board/scripts/board.py"
 #   d-answered.md 有同名 answers/ → 已答复，一律不算
 T="$(newtmpdir)"; : > "$T/.git"
 Q="$T/.keeper/_main/debug"
+# board.py 渲染链接时用 `os.path.abspath()` 兜一层——`$TMPDIR` 在 macOS 上常年
+# 带尾随斜杠（`newtmpdir` 的模板因此变成 `.../T//tk-dbgq.XXXXXX` 双斜杠），
+# `os.path.abspath` 会把双斜杠折叠成单斜杠而 bash 字符串拼接不会，直接拿 `$Q`
+# 拼期望值必然对不上。这里用同一个 python3 提前把 `$Q` 归一化，让期望值与
+# board.py 实际产出的路径逐字节一致。
+QN="$(/usr/bin/python3 -c 'import os,sys;print(os.path.abspath(sys.argv[1]))' "$Q")"
 mkissue "$Q" DBG-001 open P2 "纯 open 无在飞"
 mkissue "$Q" DBG-002 open P1 "已派 fixer 在飞"
 mkissue "$Q" DBG-003 open P0 "等人拍板"
@@ -43,13 +49,13 @@ printf -- 'ok\n' > "$DEC/answers/d-answered.md"
 OUT="$(/usr/bin/python3 "$BOARD_PY" --queue-dir "$Q" 2>&1)"
 
 echo "[99] 四态派生：status 只有 open/done 两值，另三态从 worktree/ 与 decisions/ 反推"
-has "DBG-001 判未解决" "$OUT" "| DBG-001 | 纯 open 无在飞 | 未解决 |"
-has "DBG-002 有 worktree/ 判进行中" "$OUT" "| DBG-002 | 已派 fixer 在飞 | 进行中 |"
-has "DBG-003 被未答复决策指向判待拍板" "$OUT" "| DBG-003 | 等人拍板 | 待拍板 |"
-has "DBG-004 done 判已解决" "$OUT" "| DBG-004 | 已收尾但 worktree 没删 | 已解决 |"
+has "DBG-001 判未解决" "$OUT" "| [DBG-001](file://$QN/DBG-001/issue.md#1) | 纯 open 无在飞 | 未解决 |"
+has "DBG-002 有 worktree/ 判进行中" "$OUT" "| [DBG-002](file://$QN/DBG-002/issue.md#1) | 已派 fixer 在飞 | 进行中 |"
+has "DBG-003 被未答复决策指向判待拍板" "$OUT" "| [DBG-003](file://$QN/DBG-003/issue.md#1) | 等人拍板 | 待拍板 |"
+has "DBG-004 done 判已解决" "$OUT" "| [DBG-004](file://$QN/DBG-004/issue.md#1) | 已收尾但 worktree 没删 | 已解决 |"
 
 echo "[100] 判定优先级：done 短路在 worktree/ 之前，陈旧 worktree 不冒充「进行中」"
-hasnt "DBG-004 不被误判成进行中" "$OUT" "| DBG-004 | 已收尾但 worktree 没删 | 进行中 |"
+hasnt "DBG-004 不被误判成进行中" "$OUT" "| [DBG-004](file://$QN/DBG-004/issue.md#1) | 已收尾但 worktree 没删 | 进行中 |"
 has "陈旧 worktree 单列告警" "$OUT" "陈旧 worktree"
 has "陈旧告警点名 DBG-004" "$OUT" "没清理，归档会被它卡住）：DBG-004"
 
@@ -77,7 +83,7 @@ else bad "不应写 index.md" "不存在" "存在"; fi
 echo "[104] --status 过滤只筛明细，进度总览仍给全量（看板要的是全局进度）"
 OUT_F="$(/usr/bin/python3 "$BOARD_PY" --queue-dir "$Q" --status 待拍板,进行中 2>&1)"
 has "明细只剩两条" "$OUT_F" "## 条目明细（2 条）"
-hasnt "已解决条目被筛掉" "$OUT_F" "| DBG-004 | 已收尾但 worktree 没删 |"
+hasnt "已解决条目被筛掉" "$OUT_F" "| [DBG-004](file://$QN/DBG-004/issue.md#1) | 已收尾但 worktree 没删 |"
 has "总览仍显示已解决 1 条" "$OUT_F" "| 已解决 | 1 |"
 BADOUT="$(/usr/bin/python3 "$BOARD_PY" --queue-dir "$Q" --status 已修复 2>&1 || true)"
 has "不认识的状态值直接报错并列出合法值" "$BADOUT" "--status 不认识的值"
@@ -85,7 +91,7 @@ has "不认识的状态值直接报错并列出合法值" "$BADOUT" "--status �
 echo "[105] summary 前导【…】状态块被剥掉——真实数据里它常写成状态叙述而非问题说明"
 mkissue "$Q" DBG-005 done P2 "【已关闭 —— 用户拍板】【与 DBG-105 重叠】导入侧权重校验缺失"
 OUT_S="$(/usr/bin/python3 "$BOARD_PY" --queue-dir "$Q" 2>&1)"
-has "连续两块【】都被剥掉，露出真正的问题说明" "$OUT_S" "| DBG-005 | 导入侧权重校验缺失 |"
+has "连续两块【】都被剥掉，露出真正的问题说明" "$OUT_S" "| [DBG-005](file://$QN/DBG-005/issue.md#1) | 导入侧权重校验缺失 |"
 rm -rf "$T"
 
 echo "[106] 空队列与缺队列都不报错（看板是随手可跑的只读命令，不该因为没数据就崩）"
@@ -97,3 +103,46 @@ OUT_M="$(/usr/bin/python3 "$BOARD_PY" --queue-dir "$T2/.keeper/_main/nosuch" 2>&
 has "队列目录不存在时给可读提示而不是 traceback" "$OUT_M" "找不到"
 hasnt "不吐 python traceback" "$OUT_M" "Traceback"
 rm -rf "$T2"
+
+# 【2026-08-19 补编号列可点击链接，编号 [180]-[182]】
+# 需求：编号列从裸文本改成 `[DBG-140](file:///abs/path/issue.md#1)` 形态的
+# markdown 链接，让 iTerm2 里 cmd+click 能直接打开对应 issue.md。三件事要锁：
+#   [180] 正常条目渲染成真实绝对路径的 file:// 链接、行号锚点固定 #1
+#   [181] 条目目录存在但正文文件缺失（_broken）时优雅退化成裸编号，不抛异常
+#   [182] 归档条目（--all）的链接指向 archive/<批次>/<id>/ 下的真实位置，
+#         不是未归档时的原路径——归档会把条目目录整个搬走
+echo "[180] 编号列渲染为可点击 file:// 链接（三条斜杠 + 行号锚点 #1）"
+T3="$(newtmpdir)"; : > "$T3/.git"
+Q3="$T3/.keeper/_main/debug"
+QN3="$(/usr/bin/python3 -c 'import os,sys;print(os.path.abspath(sys.argv[1]))' "$Q3")"
+mkissue "$Q3" DBG-001 open P2 "编号列应可点击"
+OUT_LINK="$(/usr/bin/python3 "$BOARD_PY" --queue-dir "$Q3" 2>&1)"
+has "编号渲染成指向 issue.md 真实绝对路径的 file:// 链接" "$OUT_LINK" \
+  "| [DBG-001](file://$QN3/DBG-001/issue.md#1) | 编号列应可点击 | 未解决 |"
+
+echo "[181] 条目目录存在但正文文件缺失（_broken）时，编号退化成裸文本，不抛异常"
+mkdir -p "$Q3/DBG-002"
+OUT_BROKEN="$(/usr/bin/python3 "$BOARD_PY" --queue-dir "$Q3" 2>&1)"
+has "DBG-002 缺 issue.md 时编号退化为裸文本" "$OUT_BROKEN" "| DBG-002 | -"
+hasnt "DBG-002 不应被渲染成链接" "$OUT_BROKEN" "[DBG-002]("
+rm -rf "$T3"
+
+echo "[182] 归档条目（--all）的链接指向 archive/<批次>/<id>/issue.md 真实位置"
+T4="$(newtmpdir)"; : > "$T4/.git"
+Q4="$T4/.keeper/_main/debug"
+QN4="$(/usr/bin/python3 -c 'import os,sys;print(os.path.abspath(sys.argv[1]))' "$Q4")"
+mkdir -p "$Q4/archive/2026-08-19/DBG-100"
+{
+  echo "---"
+  echo "id: DBG-100"
+  echo "summary: 已归档条目"
+  echo "status: done"
+  echo "reported_at: $(today_iso)"
+  echo "---"
+  echo
+  echo "# DBG-100 · 已归档条目"
+} > "$Q4/archive/2026-08-19/DBG-100/issue.md"
+OUT_ARCH="$(/usr/bin/python3 "$BOARD_PY" --queue-dir "$Q4" --all 2>&1)"
+has "归档条目链接指向 archive/<批次>/<id>/ 下真实路径，不是未归档原路径" "$OUT_ARCH" \
+  "[DBG-100](file://$QN4/archive/2026-08-19/DBG-100/issue.md#1)"
+rm -rf "$T4"

@@ -472,19 +472,33 @@ task-keeper 机构无关，不内置任何具体工单系统的回写代码。�
 适配器）」，**不阻塞** issue 的 `done` 状态。适配器自己的纪律（写前出示清单等 Human
 当轮授权、写后逐字段回读）由那个 skill 负责，本文件不重复。
 
-## 9. 归档：交付收官后把 done 条目搬进 archive/
+## 9. 归档：你认领那条 done 之后，把它一条搬进 archive/
 
 队列目录会被历史上已经 done 的条目越撑越大——虽然 `index.md` 的 done 桶只列
-id 不列正文，但 `load_all()` 每轮都要扫过全部历史文件。**每一轮收尾（本轮涉及的
-worktree 全部清理完成）之后**，跑一次自动归档：
+id 不列正文，但 `load_all()` 每轮都要扫过全部历史文件。
+
+**你只归档自己认领的那一条**，在它 done 且它的 worktree 已清理干净之后：
 
 ```bash
 ARCHIVE="$(find ~/.claude/plugins/cache -maxdepth 6 \
   -path '*/task-keeper/*/skills/tk-debug/scripts/archive_done.py' 2>/dev/null | head -1)"
-python3 "$ARCHIVE" --queue-dir "$ROOT/.keeper/debug" --auto --apply
+python3 "$ARCHIVE" --issue DBG-216 --apply      # 换成你这条的编号
 ```
 
-**触发判据由脚本自己判**：`done` ≥10 条或最早一条距今 >14 天即归档，都未命中则打印「未达阈值」原样退出（不是失败，不重跑）。批次名固定 `auto-<YYYYMMDD>`。搬迁用 `shutil.move` 而不是 `git mv`（夹着未跟踪截图，`git mv` 会中途 `fatal`），搬完一次 `git add` 提交、git 自动识别 rename。归档实际发生时把批次名与归档条数写进【本轮动作】；未达阈值跳过则不提。
+不用传 `--queue-dir`：缺省时脚本按 cwd 用 `keeper_paths.queue_dir()` 定位当前交付的
+队列目录。批次名固定 `auto-<YYYYMMDD>`，所以同一天各实例陆续收尾归档的条目会聚进同一
+个桶。搬迁用 `shutil.move` 而不是 `git mv`（夹着未跟踪截图，`git mv` 会中途 `fatal`），
+搬完一次 `git add` 提交。归档实际发生时把条目编号写进【本轮动作】。
+
+**不要跑 `--auto`。** 那是全队列模式，会扫过并搬走**别的实例认领的条目目录**——而
+「那个实例是不是还在写它」没有任何数据源能可靠回答（`.keeper-instance.json` 是派发即
+登记、没有完成摘除这一环，记录最长滞留 14 天）。4.0.0 起一条 issue 一个实例，你的所有权
+只覆盖自己那一条，归档粒度必须与它对齐。全量归档是孤儿条目的兜底路径，归主会话在队列
+静默期跑（脚本自带前置闸：队列里任何一条还挂着 worktree 就整体不归档）。
+
+单条模式的两条边界，撞到时按它的输出处置、不要改用 `--auto` 绕过：条目 status 还不是
+`done` 会直接报错退出；条目目录下 `worktree/` 还在（或 `git worktree list` 里仍有登记）
+会被逐条判据跳过——那说明清理没做干净，先把 worktree 收掉再归档。
 
 ### 9.1 收官归因：每次交付产出一张「规格失守清单」
 
@@ -585,17 +599,25 @@ grep -rh '^spec_status:' "$ROOT/.keeper/$DID/debug/" | sort | uniq -c | sort -rn
 每次被唤醒处理完一轮后，回执要让主会话**不读任何文件**就能向用户复述现状：
 
 ```
-【本轮动作】登记 DBG-018 / 派发 DBG-005+017 / 收到 DBG-012 回执并对账通过 / 归档 auto-20260731（3 条）
+【本轮动作】登记 DBG-018（导出按钮点了没反应）/ 派发 DBG-005+017 / 收到 DBG-012 回执并对账通过 / 归档 DBG-012 一条
 【队列现状】在飞 2（DBG-005 sonnet、DBG-017 opus）、待 triage 1、待 accept 1
-【改动文件】.keeper/<交付id>/debug/DBG-018/issue.md（新建）、.keeper/<交付id>/debug/DBG-012/issue.md（status → done）
+【改动文件】/Users/me/proj/.keeper/D-001-feat-export/debug/DBG-018/issue.md（新建）、/Users/me/proj/.keeper/D-001-feat-export/debug/DBG-012/issue.md（status → done）
 【自主判定】DBG-003 与 DBG-001 判为同根因，已合并到 DBG-001 处理（未打断用户，理由见 §4）
 【待拍板】DBG-012 修复完成待 accept；DBG-017 有一条 architecture-tradeoff 待拍板
-  （.keeper/<交付id>/decisions/20260731T143210Z-debug-keeper.md，blocking: true，已发指针通知）
+  （/Users/me/proj/.keeper/D-001-feat-export/decisions/20260731T143210Z-debug-keeper.md，blocking: true，已发指针通知）
 【外部工单】DBG-012（external_ref: TRACKER#644168）合并+实测通过，已按
   references/external-tracker.md 找到适配器并回写；或：未找到适配器，未回写，不阻塞 done
 【队列收口】done 2 / open 1 / 待答复裁决 1 / 残留 worktree 0
 【下一步】DBG-017 原地等待答复；其余等 DBG-005 回执
 ```
+
+**路径一律写绝对路径，编号首次出现时括号里带 ≤20 字问题简述。** 这两条是给主会话用的：
+它拿到你的回执后要向用户复述，而用户在终端里期望编号可以直接 cmd+click 点开那条 issue。
+主会话把编号渲染成 `[DBG-018](file:///绝对路径/DBG-018/issue.md#1)（导出按钮点了没反应）`，
+它手上唯一的路径来源就是你这份回执——你写 `.keeper/<交付id>/debug/...` 这种带尖括号的
+相对路径，它只能猜，而 `<` `>` 是非法 URL 字符，拼出来的链接点不开且不报错。你手上有
+现成的绝对路径：`keeper_cli.py claim` 的输出第二列就是条目目录绝对路径，直接用它拼。
+简述同理——只给编号，用户看不出这条讲什么，还得先点开才知道要不要点开。
 
 `【改动文件】`一节必须列全——它是你自己那份申报，用户 accept 前会拿它对照 diff。
 `【自主判定】`一节写你没去打断用户、自己拍了的事（同根因合并、优先级按 rubric 机械

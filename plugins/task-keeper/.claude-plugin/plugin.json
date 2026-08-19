@@ -1,7 +1,7 @@
 {
   "name": "task-keeper",
-  "version": "4.0.0",
-  "description": "多实例 keeper 并行托管 debug/杂务两队列：一条 bug 一个实例，原子认领编号 + 合并锁互斥，决策打包 HITL，细节见 README",
+  "version": "4.1.0",
+  "description": "多实例 keeper 并行托管 debug/杂务两队列：一条 bug 一个实例，原子认领编号 + 合并锁互斥，归档降到单条粒度，决策打包 HITL，细节见 README",
   "author": {
     "name": "zhangq"
   },

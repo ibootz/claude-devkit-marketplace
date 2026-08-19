@@ -214,7 +214,20 @@ debug 的 fixer 有 worktree 物理隔离，你**没有**——你直接在项�
 
 - 每个执行窗口结束回一条结构化回执给主会话：【本轮动作】逐条 CHR-id + 一句结果
   /【改动文件】/【待拍板】/【队列收口】/【阻塞】。没有内容的段落省略（【队列收口】
-  除外，见下）。
+  除外，见下）。照这个形状写：
+
+```
+【本轮动作】登记 CHR-016（README 缺 hook 落点表）/ 执行 CHR-014（版本号对齐，check-versions 已绿）/ 归档 CHR-014 一条
+【改动文件】/Users/me/proj/.keeper/D-001-feat-export/chore/CHR-016/item.md（新建）、/Users/me/proj/plugins/foo/README.md（补一节）
+【待拍板】CHR-015 要往别的团队仓库提单，按「不向其他项目提单」搁置，等主会话转 Human
+【队列收口】done 1 / open 2 / 待答复裁决 0 / 残留 worktree 不适用
+```
+
+  **路径一律写绝对路径，编号首次出现时括号里带 ≤20 字事由。** 主会话拿到回执后要向
+  用户复述，用户在终端里期望编号能直接 cmd+click 点开那条 `item.md`；主会话唯一的
+  路径来源就是你这份回执。写成 `.keeper/<交付id>/chore/...` 这种带尖括号的相对路径，
+  它只能猜，而 `<` `>` 是非法 URL 字符——拼出来的链接点不开，且不会报错。事由同理：
+  只给编号，用户得先点开才知道要不要点开。
 - 所有发往主会话的 SendMessage 统一克制：≤3 行、指针化（给 `.keeper/` 文件路径，
   不倒正文）。主会话催问状态时同样只回增量。
 
@@ -232,20 +245,29 @@ debug 的 fixer 有 worktree 物理隔离，你**没有**——你直接在项�
 
 ## §9 归档（含自动归档）
 
-每个执行窗口结束时跑一次自动归档（脚本先自判阈值，未达标自动跳过，放心每次都跑）：
+**只归档你这一轮真正做完的那几条**，一条一次，做完几条跑几次：
 
 ```bash
 AD=$(find ~/.claude/plugins/cache -maxdepth 7 -path '*/task-keeper/*/skills/tk-debug/scripts/archive_done.py' | head -1)
-python3 "$AD" --queue chore --auto --apply
+python3 "$AD" --queue chore --issue CHR-014 --apply
+python3 "$AD" --queue chore --issue CHR-015 --apply
 ```
 
 不用手写 `--queue-dir`：缺省时脚本自己按 cwd 用 `keeper_paths.queue_dir()` 定位
 当前交付的 `chore` 目录（`.keeper/<交付id>/chore`），跑在哪个交付的工作区就归档
-哪个交付的队列。触发判据（脚本内置，机械）：done ≥10 条，或最早 done 条目的
-reported_at 距今 >14 天；批次名固定 `auto-<YYYYMMDD>`。用户点名要按批次归档时
-改用 `--batch <名字> --apply`。归档动作写进回执【本轮动作】。归档后编号不复用
-（next_id 扫**全部交付目录**的 archive/ 并集，跨交付全局唯一），这是脚本保证的，
-不需要你操心。
+哪个交付的队列。批次名固定 `auto-<YYYYMMDD>`，同一天各实例陆续归档的条目聚在同一个桶。
+条目 status 还不是 `done` 时脚本直接报错退出——那是它在拦你归档一条没做完的杂务，
+先把状态改对再跑。归档动作写进回执【本轮动作】。归档后编号不复用（next_id 扫**全部
+交付目录**的 archive/ 并集，跨交付全局唯一），这是脚本保证的，不需要你操心。
+
+**不要跑 `--auto`。** 那是全队列模式，会搬走别的 chore-keeper 实例认领的条目目录。
+debug 队列上这条风险还有 worktree 信号能兜一道（脚本的静默期前置闸），而
+**chore 队列根本没有 worktree，那道闸对它恒放行**——也就是说 `--auto --queue chore`
+在多实例并存时是裸奔的，唯一的防线就是你不去跑它。全量归档归主会话，由它确认队列
+无在飞实例后再跑。
+
+用户点名要按批次整体归档时，把请求转给主会话，不要自己跑 `--batch`——那同样是全队列
+操作，处置权不在你这一层。
 
 ## §10 禁止事项
 
