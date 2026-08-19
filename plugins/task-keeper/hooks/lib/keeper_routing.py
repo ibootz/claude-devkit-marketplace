@@ -156,9 +156,17 @@ WAKE_LINE_STALE = ("`.keeper-instance.json` 里的登记来自上一个会话，
 # v6 的措辞是「本会话已有 X 在跑，用 SendMessage 唤醒它，不要重派」，那句话在一档
 # 一实例的架构下是对的，在 v7 下会直接把并行压回串行：主会话看到有实例在跑，就把
 # 第二条、第三条 bug 全塞给同一个，于是它们排队等前一条修完。
-WAKE_LINE_LIVE = ("本会话在跑：%s。**新 bug 一律新派实例**（同轮多条就在同一条消息里"
-                  "并行派完）；只有补充某条既有 issue 的信息，才 `SendMessage` 唤醒"
-                  "认领了它的那一个。")
+#
+# 4.2.0 起按 kind 分成两句：两档的处置方向恰好相反（debug 新派、chore 唤醒），合成
+# 一句只能取一个口径，另一档必然读到反的那句。4.0.0～4.1.0 期间这里只有 debug 口径，
+# 靠 `TRIAGE_HEAD` 第 3 条那句「杂务相反」远距离兜着——两句同时在场时，紧贴着实例
+# 清单的这一句更近、更具体，会盖过头部那句通则。
+WAKE_LINE_LIVE_DEBUG = ("debug 在跑：%s。**新 bug 一律新派实例**（同轮多条就在同一条"
+                        "消息里并行派完）；只有补充某条既有 issue 的信息，才 "
+                        "`SendMessage` 唤醒认领了它的那一个。")
+
+WAKE_LINE_LIVE_CHORE = ("chore 在跑：%s。**新杂务一律 `SendMessage` 交给它**——攒批与"
+                        "打包拍板正是它的价值；只有它已收工才新派。")
 
 # 分支 3 的附加段：这些实例认领的条目已 done 且无 worktree 残留，手上没活了。
 # 措辞是「别再唤醒」而不是「已死」——实例本身还在后台，只是没有理由再叫醒它。
@@ -166,6 +174,10 @@ WAKE_LINE_RETIRED = "已收工，别再唤醒：%s。"
 
 # 同一句里最多列几个实例。超出的收成「等 N 个」——每轮注入有 800 字符硬上限（H19），
 # 十几个实例的完整清单会把三岔口本体挤掉。要看全的用 `keeper_cli.py peers`。
+#
+# 4.2.0 起「还有活」按 kind 分两句，这个上限是**每句各自**生效（debug 与 chore 混跑时
+# 最多列 4+4=8 个）。仍守得住 800：两句合计的固定骨架约 150 字符，8 个条目按最长的
+# `DBG-207→\`opus-debugger-4bb6\`` 算也就 240 字符左右。
 MAX_LISTED = 4
 
 # 与 `keeper_instance_register.KEEPER_SUBAGENT_KIND` 是一对必须同增同减的清单：
@@ -198,7 +210,8 @@ def triage_wake_line(worktree_root, session_id):
     确认的情况下让 AI 去唤醒一个可能早已不存在的实例）。
 
     v7 起同一档可以有多个实例，所以这里遍历的是**列表**而不是单条记录，并按
-    `keeper_generation.instance_state` 把它们分成「还有活」与「已收工」两组分别成句。
+    `keeper_generation.instance_state` 分出「已收工」一组单独成句；「还有活」的再按
+    kind 分成 debug / chore 两句（4.2.0 起），因为两档的处置方向相反。
     """
     if resolve_delivery_id is None or read_keeper_instances is None or not worktree_root:
         return WAKE_LINE_NONE
@@ -211,7 +224,8 @@ def triage_wake_line(worktree_root, session_id):
         return WAKE_LINE_NONE
 
     delivery_root = os.path.join(worktree_root, ".keeper", delivery_id)
-    live, retired, has_stale = [], [], False
+    live = {"debug": [], "chore": []}
+    retired, has_stale = [], False
     for kind, _label in KIND_LABELS:
         for rec in data.get(kind) or []:
             if not isinstance(rec, dict):
@@ -232,11 +246,19 @@ def triage_wake_line(worktree_root, session_id):
                     state = "unknown"
             # unknown 与 live 一起进「还有活」——判据看不见「刚派出、还没认领编号」
             # 这一瞬，把它算成收工会让主会话立刻重派，两个实例抢同一条 issue。
-            (retired if state == "retirable" else live).append((issue, name))
+            #
+            # 「还有活」再按 kind 落桶，各自成句；「已收工」不分桶，「别再唤醒」这句
+            # 对两档同样成立，分开只会白占字符预算。
+            if state == "retirable":
+                retired.append((issue, name))
+            else:
+                live[kind].append((issue, name))
 
     segs = []
-    if live:
-        segs.append(WAKE_LINE_LIVE % _fmt_instances(live))
+    if live["debug"]:
+        segs.append(WAKE_LINE_LIVE_DEBUG % _fmt_instances(live["debug"]))
+    if live["chore"]:
+        segs.append(WAKE_LINE_LIVE_CHORE % _fmt_instances(live["chore"]))
     if retired:
         segs.append(WAKE_LINE_RETIRED % _fmt_instances(retired))
     if segs:
