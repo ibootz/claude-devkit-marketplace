@@ -33,12 +33,12 @@ if [ "$CHARS" -le 800 ]; then ok "无登记分支 ${CHARS} 字符 ≤800"
 else bad "无登记分支应 ≤800 字符" "<=800" "$CHARS"; fi
 rm -rf "$T"
 
-echo "[88] 登记存在且 session_id 与当前一致 → 注入「本会话在跑：…」，直接带出真实 name"
+echo "[88] 登记存在且 session_id 与当前一致 → 注入「debug 在跑：…」，直接带出真实 name"
 T="$(newtmpdir)"; mkrealrepo "$T"
 run_keeper_instance "$T" "task-keeper:debug-keeper" "opus-debug-keeper-4bb6" "Agent" "sess-A" >/dev/null
 OUT="$(run_triage_sess "$T" "sess-A")"
 TEXT="$(triage_text "$OUT")"
-has "session 匹配时提示本会话有实例在跑" "$TEXT" "本会话在跑"
+has "session 匹配时提示 debug 有实例在跑" "$TEXT" "debug 在跑"
 has "session 匹配时直接带出真实 name" "$TEXT" "opus-debug-keeper-4bb6"
 has "session 匹配时仍给出 SendMessage 这条唤醒通道（只对补充既有 issue 成立）" "$TEXT" "SendMessage"
 has "session 匹配时提示新 bug 一律新派实例（v7 该分支专属短语）" "$TEXT" "新 bug 一律新派实例"
@@ -72,7 +72,7 @@ TEXT="$(triage_text "$OUT")"
 has "旧格式登记也当陈旧处理" "$TEXT" "已失效"
 rm -rf "$T"
 
-echo "[91] debug/chore 两档都命中同一个 session_id → 两个 name 一起出现在同一句里"
+echo "[91] debug/chore 两档都命中同一个 session_id → 两个 name 各自落进本档那一句（4.2.0 起分两句）"
 T="$(newtmpdir)"; mkrealrepo "$T"
 run_keeper_instance "$T" "task-keeper:debug-keeper" "opus-debug-keeper-4bb6" "Agent" "sess-A" >/dev/null
 run_keeper_instance "$T" "task-keeper:chore-keeper" "opus-chore-keeper-9f2a" "Agent" "sess-A" >/dev/null
@@ -80,6 +80,11 @@ OUT="$(run_triage_sess "$T" "sess-A")"
 TEXT="$(triage_text "$OUT")"
 has "两档都匹配时 debug 的 name 出现" "$TEXT" "opus-debug-keeper-4bb6"
 has "两档都匹配时 chore 的 name 出现" "$TEXT" "opus-chore-keeper-9f2a"
+# 【为什么两句都要断言】两档处置方向相反（debug 新派 / chore 唤醒），4.0.0～4.1.0
+# 这里只有 debug 一句，chore 实例在场时读到的是反的口径。两句同时在场是本次修复的判据。
+has "两档都匹配时 debug 句在场" "$TEXT" "debug 在跑"
+has "两档都匹配时 chore 句在场" "$TEXT" "chore 在跑"
+has "chore 句给的是唤醒方向（攒批打包拍板）" "$TEXT" "新杂务一律 \`SendMessage\` 交给它"
 CHARS="$(/usr/bin/python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
 if [ "$CHARS" -le 800 ]; then ok "两档都匹配分支 ${CHARS} 字符 ≤800（预算仍留有余量）"
 else bad "两档都匹配分支应 ≤800 字符" "<=800" "$CHARS"; fi
@@ -91,5 +96,5 @@ run_keeper_instance "$T" "task-keeper:debug-keeper" "opus-debug-keeper-4bb6" "Ag
 OUT="$(run_triage "$T")"   # 不带 session_id 的旧版调用方式
 TEXT="$(triage_text "$OUT")"
 has "当前 session_id 缺失时把已有登记当陈旧处理" "$TEXT" "已失效"
-hasnt "当前 session_id 缺失时不应误判成本会话匹配" "$TEXT" "本会话在跑"
+hasnt "当前 session_id 缺失时不应误判成本会话匹配" "$TEXT" "debug 在跑"
 rm -rf "$T"

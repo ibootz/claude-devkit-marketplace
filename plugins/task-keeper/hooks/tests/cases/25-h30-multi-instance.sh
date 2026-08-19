@@ -407,6 +407,32 @@ has "映射带出 DBG-202 及其 name" "$TEXT" "DBG-202→\`opus-debug-keeper-bb
 has "映射带出 chore 档的 CHR-001" "$TEXT" "CHR-001→\`opus-chore-keeper-cccc\`"
 has "明说新 bug 一律新派实例" "$TEXT" "新 bug 一律新派实例"
 hasnt "不得出现 v6 那句「不要重派」" "$TEXT" "不要重派"
+# 【4.2.0 分叉判据】CHR-001 必须落进 chore 那一句，而不是跟 DBG-201/202 挤在 debug 句里。
+# 只断言 name 出现是不够的——4.0.0 那版把三个实例合成一句，CHR-001 同样"出现"了，
+# 但它头顶挂着的是「新 bug 一律新派实例」。
+has "chore 档单独成句" "$TEXT" "chore 在跑：CHR-001→\`opus-chore-keeper-cccc\`"
+has "debug 档单独成句" "$TEXT" "debug 在跑：DBG-"
+# 【为什么抽片段而不是写整句】句内条目的排列顺序取自登记表的写入次序，断言整句等于把
+# 顺序也钉死，登记侧改一次追加位置这条就假红。真正要验的是分桶：debug 那句里不许出现
+# CHR-，chore 那句里不许出现 DBG-。
+# 【形态照抄同文件已验证过的那种】单行 python -c + 参数走 argv。
+#
+# 【全角括号紧贴变量名必须写 ${}】`（$DSEG）` 在本机 bash 3.2 + UTF-8 locale 下被解析成
+# 变量名 `DSEG` 加上全角右括号的字节，`set -u` 当场报 `DSEG?: unbound variable` 整个
+# 用例文件中断（实测撞过两次）。中文括号、书名号一类全角标点紧跟 `$NAME` 时一律写
+# `${NAME}` 把边界划出来。
+DSEG="$(/usr/bin/python3 -c 'import re,sys; m=re.search(r"debug 在跑：(.*?)。", sys.argv[1]); print(m.group(1) if m else "")' "$TEXT")"
+case "$DSEG" in
+  *CHR-*) bad "debug 句混入了 chore 条目" "只含 DBG-" "$DSEG" ;;
+  "")     bad "取不到 debug 句" "非空片段" "(空)" ;;
+  *)      ok "debug 句只装 debug 实例（${DSEG}）" ;;
+esac
+CSEG="$(/usr/bin/python3 -c 'import re,sys; m=re.search(r"chore 在跑：(.*?)。", sys.argv[1]); print(m.group(1) if m else "")' "$TEXT")"
+case "$CSEG" in
+  *DBG-*) bad "chore 句混入了 debug 条目" "只含 CHR-" "$CSEG" ;;
+  "")     bad "取不到 chore 句" "非空片段" "(空)" ;;
+  *)      ok "chore 句只装 chore 实例（${CSEG}）" ;;
+esac
 CHARS="$(/usr/bin/python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
 if [ "$CHARS" -le 800 ]; then ok "三实例分支 ${CHARS} 字符 ≤800"
 else bad "三实例分支应 ≤800 字符" "<=800" "$CHARS"; fi
@@ -435,7 +461,7 @@ mi_item "$T" DBG-301 done
 mi_item "$T" DBG-302 open
 TEXT="$(mi_text "$(run_triage_sess "$T" "sess-A")")"
 has "收工实例进「已收工，别再唤醒」清单" "$TEXT" "已收工，别再唤醒：DBG-301→\`opus-debug-keeper-done\`"
-has "在跑实例仍在「本会话在跑」清单" "$TEXT" "本会话在跑：DBG-302→\`opus-debug-keeper-live\`"
+has "在跑实例仍在「debug 在跑」清单" "$TEXT" "debug 在跑：DBG-302→\`opus-debug-keeper-live\`"
 rm -rf "$T"
 
 echo "[170] 误杀侧：done 但 worktree 未清 → 不得进「已收工」清单，仍算在跑"
@@ -445,7 +471,7 @@ mi_item "$T" DBG-301 done
 mkdir -p "$T/.keeper/_main/debug/DBG-301/worktree"
 TEXT="$(mi_text "$(run_triage_sess "$T" "sess-A")")"
 hasnt "worktree 未清时不提示已收工" "$TEXT" "已收工"
-has "worktree 未清时仍列在「本会话在跑」" "$TEXT" "本会话在跑：DBG-301→\`opus-debug-keeper-done\`"
+has "worktree 未清时仍列在「debug 在跑」" "$TEXT" "debug 在跑：DBG-301→\`opus-debug-keeper-done\`"
 rm -rf "$T"
 
 echo "[171] 误杀侧：登记有 issue 但条目还没落盘（unknown）→ 按 live 对待，不提示已收工"
@@ -454,6 +480,20 @@ mi_bind "$T" debug opus-debug-keeper-fresh sess-A DBG-777
 TEXT="$(mi_text "$(run_triage_sess "$T" "sess-A")")"
 hasnt "条目未落盘时不提示已收工" "$TEXT" "已收工"
 has "条目未落盘时仍算在跑" "$TEXT" "DBG-777→\`opus-debug-keeper-fresh\`"
+rm -rf "$T"
+
+# 【为什么编号带 b】这条是 4.2.0 补的阴性对照，语义上属于 E 段（triage_wake_line 措辞），
+# 挤进 [172] 会把后面 7 条全部重排、让历史 finding 里的编号引用全部错位。
+echo "[171b] 只有 chore 实例在跑（无 debug）→ 只出 chore 那一句，不得出现 debug 的新派口径"
+# 【这条就是 4.0.0 的缺陷本体】那版 WAKE_LINE_LIVE 只有一个 debug 口径，chore 独自在跑时
+# 主会话读到的是「新 bug 一律新派实例」——照它做就会给 chore 再派一个实例，而 chore 的
+# 全部价值在攒批打包拍板，拆成两个实例等于给 Human 发两份互不相干的决策请求。
+T="$(newtmpdir)"; mkrealrepo "$T"
+mi_bind "$T" chore opus-chore-keeper-only sess-A CHR-001
+TEXT="$(mi_text "$(run_triage_sess "$T" "sess-A")")"
+has "chore 独自在跑时给出 chore 句" "$TEXT" "chore 在跑：CHR-001→\`opus-chore-keeper-only\`"
+hasnt "chore 独自在跑时不出现 debug 句头" "$TEXT" "debug 在跑"
+hasnt "chore 独自在跑时不出现 debug 的新派口径" "$TEXT" "新 bug 一律新派实例"
 rm -rf "$T"
 
 # ─────────────────── F · SubagentStart 注入两份事实（[172]-[175]）───────────────────
