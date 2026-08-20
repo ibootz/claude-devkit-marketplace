@@ -666,22 +666,21 @@ issue 在上一节批量建 worktree 时没通过自校验时（那一条跳过�
 3. 代价：每次唤醒都要重放 transcript，token 成本比真正挂起高——所以 `easy`
    档不必用交互式 subagent，一次性 subagent 更省。
 
-`name` 必须带模型档次前缀且格式合规——实测撞过 `agent-dispatch` 守卫拦下纯
-`DBG-024` 这种名字，报 `name="DBG-probe-subagent" 缺模型档次前缀`，改成
-`sonnet-DBG-024` 这类形态才放行。
+第二层 fixer 的 `name` 必须随精确 type 固定：easy 用
+`sonnet-debug-<4位小写字母数字>`，medium 用 `opus-debug-<4位小写字母数字>`，hard
+用 `fable-debug-<4位小写字母数字>`。不得把第一层的 `debugger` 中段带入第二层。
 
-`description` 用**简体中文**、**上限 15 字**：按 code point 计，一个汉字与一个 ASCII
-字符都算 1 字，`DBG-024` 记 7 字，`修 DBG-024 分类归属` 恰好 14 字。下面两个模板里的
-那一行就是照这个口径写的，改写时保留编号、删修饰词——在飞面板只显示这一行，编号是
-认出「这是哪条 issue 的 fixer」的唯一线索。
+`description` 用**简体中文**、**上限 15 个 code point**：一个汉字与一个 ASCII 字符都算 1，
+`DBG-024` 记 7；`修DBG-024分类归属` 可直接使用。只写任务摘要，不带模型标签，也不用
+`debug 队列` / `debugger 队列` 前缀；编号是面板辨认该 issue 的线索。
 
 #### easy 档模板：一次性 subagent
 
 ```
 Agent(
-  subagent_type: "general-purpose",
-  name: "sonnet-fix-dbg017-step3-style",
-  description: "修 DBG-017 样式对齐",
+  subagent_type: "task-keeper:debug-fixer-easy",
+  name: "sonnet-debug-4bb6",
+  description: "修DBG-017样式对齐",
   model: "sonnet",
   run_in_background: true,
   prompt: "【目标】修 DBG-017。
@@ -692,7 +691,8 @@ Agent(
             规格锚：<规格文件绝对路径:行区间>，动手前先 Read **全文**，不要只看 issue
             「规格依据」章节里那段摘录。〔本条 spec_status 不是 violation 时改写成
             「本条 spec_status 为 <值>，无规格锚」〕
-           【约束】**修复判据是「实现与上述规格逐条一致」，不是「issue 里报的那个现象
+           【约束】你是第 2 层 fixer，禁止再派发任何 subagent。
+            **修复判据是「实现与上述规格逐条一致」，不是「issue 里报的那个现象
             不再复现」。** 规格若是一张表或一份清单，**逐行核对**——报告里只列了其中
             一条，不代表其余各条已经实现（实测过一次：需求表格给全了 31 条错误提示
             文案，用户只报了其中 1 条，按「现象消失」口径修完即收工，剩下 30 条原样
@@ -750,12 +750,17 @@ Agent(
 
 #### medium / hard 档模板：交互式 subagent
 
+按本条 `difficulty` 选下列一组字段：medium 固定
+`task-keeper:debug-fixer-medium` / `opus-debug-4bb6` / `opus`；hard 固定
+`task-keeper:debug-fixer-hard` / `fable-debug-4bb6` / `fable`。`hard` 的 `fable` 首用例外
+只限这三个精确 fixer type；普通 Agent 仍须同一任务以 `opus` 完整跑过至少两轮无进展。
+
 ```
 Agent(
-  subagent_type: "general-purpose",
-  name: "sonnet-DBG-024",
-  description: "修 DBG-024 分类归属",
-  model: "sonnet",
+  subagent_type: "task-keeper:debug-fixer-medium",
+  name: "opus-debug-4bb6",
+  description: "修DBG-024分类归属",
+  model: "opus",
   run_in_background: true,
   prompt: "【目标】修 DBG-024。
            【上下文】你的工作区是 <worktree 绝对路径>。所有文件操作用该前缀下的
@@ -765,7 +770,8 @@ Agent(
             规格锚：<规格文件绝对路径:行区间>，动手前先 Read **全文**，不要只看 issue
             「规格依据」章节里那段摘录。〔本条 spec_status 不是 violation 时改写成
             「本条 spec_status 为 <值>，无规格锚」〕
-           【约束】**修复判据是「实现与上述规格逐条一致」，不是「issue 里报的那个现象
+           【约束】你是第 2 层 fixer，禁止再派发任何 subagent。
+            **修复判据是「实现与上述规格逐条一致」，不是「issue 里报的那个现象
             不再复现」。** 规格若是一张表或一份清单，**逐行核对**——报告里只列了其中
             一条，不代表其余各条已经实现。**核对中发现规格另有一条与本 issue 无关、
             但实现同样没照做时，不要顺手改**：写进回执交 debug-keeper 另立 issue，
@@ -884,14 +890,12 @@ triage 结论仍有疑问（比如截图转录不够精确、怀疑现象已经�
 
 | difficulty × 场景 | 派发 |
 |---|---|
-| easy × UI/文案 | 有锚点 → `general-purpose/sonnet`；无锚点 → 先 `Explore/sonnet` 定位 |
-| easy × 后端机械 | `general-purpose/sonnet` |
-| medium × 前端联动 | `general-purpose/sonnet` |
-| medium × 后端单方法 | `general-purpose/sonnet` |
-| hard × 库 API 密集 | `general-purpose/sonnet`，回执附自测证据 |
-| hard × 集成缺失 / 跨文件 | 先 `Explore/sonnet` 出集成图 → `general-purpose/opus` 修 |
-| 跨模块 / 改数据结构 | 先 `Plan/opus` 出方案 → **用户拍板** → `general-purpose/opus` 实施 |
+| easy × 单文件、明确锚点、改法唯一 | `task-keeper:debug-fixer-easy/sonnet`；需先定位则 `Explore/sonnet` |
+| medium × 跨 2–3 文件，或需先定位 | `task-keeper:debug-fixer-medium/opus` |
+| hard × 跨模块、数据结构或集成缺失 | `task-keeper:debug-fixer-hard/fable` |
 
+这三种精确 fixer type 是第二层的唯一模型映射；`hard` 直接用 `fable` 仅为此例外，
+不改变普通 Agent 必须同一任务以 `opus` 完整跑至少两轮无进展后才可用 `fable` 的规则。
 `haiku` 档已废弃，不要写（会被 `agent-dispatch` 守卫拦下）。**合并派发至少
 `sonnet`**——合并任务的回执要逐 issue 分节对账，低档模型做不到。难度决定档位，
 而**并发任务数是一个独立的降档约束**：两个 easy 打包给一个 agent 也不安全，

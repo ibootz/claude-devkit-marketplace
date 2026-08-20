@@ -426,7 +426,7 @@
 
 **触发条件**：`tool_name` 是 `Agent`。注意**不匹配旧工具名 `Task`**——旧名环境下的 `tool_input` 可能压根没有 `name` / `model` 字段，强制校验会造成永久性误拦，fail-open 优于误伤。
 
-### 拦什么：10 项结构校验，多条一并列出
+### 拦什么：13 项结构校验，多条一并列出
 
 这类问题往往同时出现好几个（`name` 前缀不符 + `description` 抄 prompt + 超长），`findings` 聚合成一条 reason 一次报清，才能一次改对：
 
@@ -443,9 +443,16 @@
 
 | 8 | `subagent_type` 的 slug 是 `debug-keeper` / `chore-keeper` 而 `model` 不等于该 kind 钉死的那一档（`debug`→`opus`、`chore`→`sonnet`） | **3.13.0 加；3.27.0（2026-08-18）用户拍板把单一固定档拆成按 kind 分叉**——`chore-keeper` 降为 `sonnet`（台账登记、归档、收尾是机械杂务，没有需要 opus 的因果链深度），`debug-keeper` 仍是 `opus`。判据是**等值**而不是「不低于」：给 `chore-keeper` 派 `opus` 同样被拦，否则档位只升不降，降档等于没降。三个按 kind 变化的值（`model` / name 身份段 / description 前缀）合并进一张 `KEEPER_SPECS` 表，加一个新 keeper 只改一处。以下是 3.13.0 的原始记录，除「两个 keeper 同档」这一点外逐条仍成立。这两个 keeper 在自己的定义文件里已写 `model: opus`（`task-keeper/agents/debug-keeper.md:5`），但 `Agent` 工具的 `model` 参数**优先级高于 agent frontmatter**（工具描述原文 "Takes precedence over the agent definition's model frontmatter"），主会话显式传 `sonnet` 就把它顶掉了；而「keeper 固定 opus」这条规则只写在 `tk-debug` / `tk-chore` 两个 SKILL.md 正文里，task-keeper 每轮注入的 TRIAGE 文本（`hooks/lib/keeper_routing.py:73`）压根没提 `model`——主会话没先调那个 skill 就读不到它，只读到本插件的三档标尺「没 `opus` 触发信号就留在 `sonnet`」。2026-08-03 事故：会话 `8477c246` 派出 `{"name":"sonnet-debug-keeper-085","model":"sonnet","subagent_type":"task-keeper:debug-keeper"}`，前七项 check 全过（前缀与 `model` 一致、含身份词 `keeper`），档位静默落在 `sonnet`。判据是完整锚定正则 `/(^|:)(debug|chore)-keeper$/` + `model` 与 `'opus'` 的等值比较，两个都是确定字段。**这不是 3.0.0 删掉的那条档位判据**——那条扫 prompt 里的「不变量」「根因」猜任务难度，这条只看 `subagent_type` 是不是那两个固定档类型。**白名单式枚举**：第三方 keeper-like agent（`foo:queue-keeper`）不在表内、不牵连，加成员要显式改 `KEEPER_SLUG_PATTERN` 与 `KEEPER_SPECS`，不做"含 keeper 就算"的模糊匹配。假阳性面是「故意降档跑 keeper」，本 guard 不给逃生舱（只能 `AGENT_DISPATCH_GUARD=off`）——用户拍板时明确选 deny 而非 ask，口径是"keeper 降档没有正当理由"；日后若出现真实需求，正确处置是整条降级为 ask，不是加咒语 |
 | 9 | `subagent_type` 的 slug 是 `debug-keeper` / `chore-keeper` 而 `name` 不满足 `^<档位>-<身份段>-[0-9a-z]{4}$`（即 `opus-debugger-xxxx` / `sonnet-chore-xxxx`） | **3.14.0 加，2026-08-04 改判据，3.27.0（2026-08-18）用户拍板换名**——两个前段现在都取自 `KEEPER_SPECS`，不再从 `subagent_type` 的 slug 现推：档位段跟着上一条的分叉走，身份段用表里登记的 `debugger` / `chore`。旧形态 `opus-debug-keeper-5a1b` 里那个 `-keeper` 段对读面板的人零信息量，故去掉；`subagent_type` 本身**不改**（它是 `SubagentStart` matcher 的键、也是 task-keeper 登记表反推 kind 的依据，改它的波及面远大于换一个显示名），所以 slug 与身份段之间需要一张显式映射表。旧形态现在会被 deny，回归用例见 `test/guard-verify.js` 的「换名前的旧形态必须拦」。以下是 3.14.0 的原始记录。与第 7 项不是一回事：第 7 项只防遗忘、随便塞个身份词即可过闸；这条要求 name 落在固定前缀 + 4 位小写字母数字短哈希的形态里，因为唤醒方是**照文档拼名字**而不是照面板抄名字。2026-08-03 事故（会话 `8477c246`）：keeper 被派成 `sonnet-debug-keeper-085`，38 分钟后主会话按 `agents/debug-keeper.md:31` 写的固定名 `debug-keeper` 唤醒，`SendMessage` 返回 `No agent named 'debug-keeper' is reachable.`，随后它直接又派了**第二个** debug-keeper 实例——同一会话里两个实例先后持有 `.keeper/<交付id>/debug/` 的独占写权限，单一写者模式失效。3.14.0 最初的判据是把 name 钉死成逐字相等的固定三段名 `opus-debug-keeper`，但这条本身埋了新坑：同一会话内前一个 keeper 实例结束后，若后来者又派成逐字相同的固定名，`SendMessage` 的 latest-wins 寻址规则会让"占名"本身变得不可靠——旧实例的名字被新实例顶掉，唤醒方无法分辨这次唤到的是哪一个。2026-08-04 改为要求 name 带 4 位短哈希后缀（如 `opus-debug-keeper-4bb6`），逼"名字不可预测"这个事实被强制暴露出来：唤醒方**必须**先读登记文件才能拿到当前有效的 name，机制不会退化成"记得住固定名就不用读"的可选项。登记文件由 `task-keeper` 插件新增的 `PreToolUse(Agent)` hook 写：命中 keeper 类 `subagent_type` 时把本次实际用的 name 落进 `.keeper/<交付id>/.keeper-instance.json`（形如 `{"debug":{"name":"opus-debug-keeper-4bb6","ts":"<ISO8601>"}}`），主会话唤醒前先读它，读不到才首次派发。判据是完整锚定正则 `^opus-<slug>-[0-9a-z]{4}$`，前缀部分仍是确定字段比较，只有后 4 位是形态匹配。**覆盖边界（如实记录，不再写"零误判"）**：假阴性面是"AI 可以随便编 4 个字符而不是真的取哈希"——判据只能校验形态、校验不了随机性，但这是可以接受的：本 guard 真正要防的是"同名撞车导致 `SendMessage` 寻址混乱"，任意 4 位后缀（哪怕是编的）都能防住这一点；防不住的是"AI 故意每次编同一个后缀"，但那属于蓄意绕过纪律，不是本 guard 该拦的范畴。假阳性面是合法的 4 位小写字母数字后缀，无已知误杀。`autoName()` 同步改为对 keeper 补出带哈希的名字（复用与非 keeper 分支相同的 `shortHash()` 输入口径），`allowWithName()` 的提示文案也同步改写——避免又一处「效力与描述各自漂移」 |
-| 10 | `subagent_type` 的 slug 是 `debug-keeper` / `chore-keeper` 而 `description` 正文（strip 掉 `[模型名]` 前缀后）不以 `<kind> 队列` 起头 | **3.23.0 加，2026-08-05 用户拍板加；3.25.0（2026-08-10）用户拍板把判据从「与固定串逐字等值」放宽为「前缀锚定」**。在飞面板渲染的是**首次 `Agent` 派发那一刻**的 `description`，而 keeper 是常驻实例：派出后一律靠 `SendMessage` 唤醒、反复接不同的活，`SendMessage` 只有 `to`/`summary`/`message` 三个字段，**没有任何入口能更新已派出 agent 的 description**，那句描述从派发那一刻起永久定格。2026-08-05 实证（会话 `b4b5cb3e`，交付 D-001-feat-job-sequence-model）：`opus-debug-keeper-7f3a` 派发时 `description` 写「关闭三条 + 开工 DBG-140」，此后对它的 `SendMessage` 唤醒 20+ 次（转新 bug、转裁决、放行合并……各不相同），面板始终显示派发那一刻那句；同会话 `opus-chore-keeper-3d7b` 的「登记五项杂务」同理。**漂移成因是两条指令打架，不是 AI 疏忽**：本插件每轮注入的字段表写「`description`：3-5 词任务摘要，只写这次任务干什么」，那条对一次性 subagent 完全正确、对常驻 keeper 恰好相反；`tk-debug` / `tk-chore` 两份 SKILL.md 早给了正确样例（"debug 队列常驻管理"），但只在主会话调过对应 skill 时才在场，字段表每轮都在，软文本斗软文本斗不过，故加闸。判据是 `KEEPER_SLUG_PATTERN` 锚定匹配 + description 正文对 `KEEPER_SPECS[kind].descPrefix`（`debug 队列` / `chore 队列`）做 `startsWith`，两个都是确定字段，同一输入必得同一结论。**3.25.0 为什么放宽**：钉死固定串确实消灭了「永久定格在某次任务」，但走到了另一个极端——面板那行永远只说得出角色、说不出这一代 keeper 在干什么，看板价值同样归零（用户原话「已经失去了它实际工作的意义」）。新形态是 `<kind> 队列 · <本批摘要>`，配套 `task-keeper` 2.15.0 的**换代机制**（`hooks/lib/keeper_generation.py`：某个 kind 的队列 done 桶非空、open 与 unknown 桶为空、该交付无待答复裁决、debug 另需无残留 worktree 时，每轮注入建议主会话新派一代而不是继续唤醒）。两者缺一不可：只放宽判据不换代，描述仍会定格在第一批活上；只换代不放宽判据，新实例照样只能写固定串。前缀之后的分隔符**有意不校验**——旧写法 `debug 队列常驻管理` 必须继续放行（向后兼容），且分隔符是排版偏好不是语义边界。**覆盖边界**：假阳性面是想给 keeper 起一个完全不含中文队列名的 description（如纯英文 `debug queue`）会被硬拦，这是有意的——中文前缀是面板上区分 keeper 与一次性 subagent 的唯一标记；前缀之后可写任何东西，故本条**不防**提示词泄漏，那由第 6 项（角色设定句）与第 7 项（长度）各兜一部分；假阴性面是改用 `general-purpose` 派 keeper 可绕过，但那连第 7/8/9 项一起绕过，是既有边界不新增。比较用的是 strip 掉 `[模型名]` 前缀后的正文（与第 4 项同口径），`[opus] debug 队列常驻管理` 不会被这条拦下 |
+| 10 | `subagent_type` 的 slug 是 `debug-keeper` / `chore-keeper` 而 `description` 正文（strip 掉 `[模型名]` 前缀后）不以 `<kind> 队列` 起头 | 常驻 keeper 的面板描述必须保留 `debug 队列` / `chore 队列` 前缀；判据仅查精确 type 与 description 正文，前缀之后不解释任务语义。 |
+| 11 | 精确 `task-keeper:debug-fixer-easy` / `medium` / `hard` 的 `model` 不分别等于 `sonnet` / `opus` / `fable` | 第二层 debug fixer 的 Human 明示特例。判据只查本次 input 的精确 `subagent_type` 与 `model`：easy=sonnet、medium=opus、hard=fable；不扫描 prompt 判断任务像不像 fixer。此 `hard=fable` 首用例外不扩展到普通 Agent，普通 Agent 仍须同一任务 `opus` 完整跑至少两轮无进展。 |
+| 12 | 上述精确 fixer 的 `name` 不满足 `^<该 type 的 model>-debug-[0-9a-z]{4}$` | model、type、name 三字段一一绑定：`sonnet-debug-xxxx` / `opus-debug-xxxx` / `fable-debug-xxxx`。中段只能为 `debug`，故第一层的 `debugger` 不会混入第二层。 |
+| 13 | 上述精确 fixer 的 `description` 非全串简体中文任务摘要、超过 15 个 JS code point、带模型标签或以 `debug 队列` / `debugger 队列` 起头 | 允许必要的 `DBG-024` 与常用中文标点，且必须含汉字，故纯英文拒绝；使用 `Array.from(description).length` 按 code point 而非 UTF-16 code unit 计数。对含明确简繁差异的字形，内置 OpenCC `TSCharacters.txt` 的 3203 个「传统源字不属于简体目标字列表」单字表逐 code point 拒绝，例如 `修復登入` 拒绝、`修复登入` 放行；简繁共用字（如 `乾`、`著`）不拒绝。普通 Agent 的 ASCII 或繁体 description 仍走一般规则并放行。 |
 
-**判据精度：不要再写成"零误判"。** 3.6.0 前这里写的是「判据全部取自确定字段，误判空间接近零」，审计用 28 条真实 payload 证伪了后半句。十条里有九条确实是确定字段比较（`model` 在闭合枚举 `MODELS` 内、`name` 匹配完整锚定正则 `NAME_PATTERN`、`name` 以 `<model>-`/`<model>_` 开头、`description` 是否为空、`description.length > DESC_BODY_MAX`、第 7 条的身份词子串包含、第 8 条的 `FIXED_OPUS_PATTERN` 锚定匹配 + `model` 等值比较、第 9 条的 `^opus-<slug>-[0-9a-z]{4}$` 形态匹配、第 10 条的 `description` 正文与固定串的逐字等值比较）——同一输入必得同一结论、可人工复核。**第 5 条不是**：它靠"正文以某个句式开头"近似判断"这是角色设定句而不是任务摘要"，本质在猜语义。已知边界写在 `hooks/guards/agent-dispatch.js:14-23`——假阴性是角色设定句不在开头（`本次请你扮演审计员…`）或换用未列举句式（`扮演` / `担任` / `Pretend you are`）；假阳性是任务摘要本身合法地以词表里的词开头。处置口径是**词表只减不增**：再出现真实误杀就继续收窄或整条降级为注入提醒，不是加更复杂的正则去猜。
+**判据精度：不要再写成"零误判"。** 新增的第 11–13 项只取本次 `Agent` input 的精确
+`subagent_type`、`model`、`name`、`description` 与长度：不扫描 prompt，不推断任务身份。第 13 项的
+字符白名单是明确边界：允许汉字、`DBG-数字`、数字及常用中文标点，要求至少一个汉字；故能人工复核
+「为什么英文拒绝、为何 `修DBG-024分类归属` 放行」。第 5 项仍是唯一近似判据：它靠正文开头句式猜测
+角色设定，词表只减不增。
 
 **3.6.0 整条移除的 prompt-prefix-overlap 检查**（原第 6 项，常量 `LEAK_MATCH_MIN = 20`：`description` 正文与 `prompt` 开头逐字重合 ≥20 字符即判抄袭）：移除原因不是"阈值不合适"，而是**判据前提不成立**。合法的 `description` 本来就写任务目标，而本仓派发 prompt 的第一段恰是 `【目标】` 且写的是同一件事，两者开头天然重合——它命中的是"写得规范"，不是"抄了 prompt"。真正要防的提示词泄露由第 5 项承担。
 
@@ -840,7 +847,7 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-dispatch.js
    ↓    AGENT_DISPATCH_GUARD=off 或 AGENT_NAMING_GUARD=off → 放行（总开关）
    ↓    tool_name 不是 Agent → 放行（不匹配旧名 Task，避免永久误拦）
    ↓    subagent_type ∈ {fork, statusline-setup, output-style-setup} → 放行
-   ↓  10 项结构校验，聚合所有 finding：
+   ↓  13 项结构校验，聚合所有 finding：
    ↓    model 显式且合法 / name 前缀符 model（分隔符 - 或 _）·满足原生正则
    ↓    description 必填且有正文（不要求 [模型名] 前缀，3.4.0 起软放宽；[haiku] 报错）
    ↓    description 正文非角色设定句 / 原始串 ≤60 字符（前缀也算进去）
@@ -946,7 +953,7 @@ plugins/working-discipline/
 │   │   └── prompt-images.js            #   从 UserPromptSubmit payload 提取图片绝对路径（纯函数，
 │   │                                   #   不回读 transcript —— 那是 3.0.0 删掉的误判根源）
 │   └── guards/
-│       ├── agent-dispatch.js           # PreToolUse:Agent —— 10 项结构校验聚合报错；
+│       ├── agent-dispatch.js           # PreToolUse:Agent —— 13 项结构校验聚合报错；
 │       │                               #   只缺 name 时用 updatedInput 自动补名放行
 │       ├── bash-guard.js               # PreToolUse:Bash —— agent-browser 启动四护栏
 │       │                               #   （①鉴权 ②实例上限 ④安全边界），一次报清；
@@ -957,7 +964,7 @@ plugins/working-discipline/
 │                                       #   满 4 次报数、满 6 次 deny 一次（自解除）；state 落
 │                                       #   $TMPDIR，同批并发不计、子代理直接放行
 ├── test/
-│   ├── guard-verify.js                 # bash-guard / write-guard / agent-dispatch 回归 130 条
+│   ├── guard-verify.js                 # bash-guard / write-guard / agent-dispatch 回归 157 条
 │   │                                   #   （3.26.0 起 cd 用例在 cd-blocker 插件，这里只留一条
 │   │                                   #   反向断言：裸 cd 必须已经不被 bash-guard 拦）
 │   └── probe-throttle-verify.js        # probe-throttle 回归 45 条（判据两侧都有用例）

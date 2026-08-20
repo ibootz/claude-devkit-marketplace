@@ -421,6 +421,23 @@ const kName = (kind, suffix) => `${KEEPER_FIXED[kind].model}-${KEEPER_FIXED[kind
 const adKeeper = (kind, over) =>
   Object.assign({}, AD_BASE, { model: KEEPER_FIXED[kind].model, description: `${kind} 队列常驻管理` }, over)
 
+// 第二层 debug fixer 的 type、model 与 name 首段一一绑定。此处不复用 keeper helper：
+// keeper 的 description 前缀与常驻语义不属于一次性 fixer。
+const DEBUG_FIXER_FIXED = {
+  easy: 'sonnet',
+  medium: 'opus',
+  hard: 'fable',
+}
+const debugFixerType = (difficulty) => `task-keeper:debug-fixer-${difficulty}`
+const debugFixerName = (difficulty, suffix) => `${DEBUG_FIXER_FIXED[difficulty]}-debug-${suffix}`
+const adDebugFixer = (difficulty, over = {}) =>
+  Object.assign({}, AD_BASE, {
+    model: DEBUG_FIXER_FIXED[difficulty],
+    name: debugFixerName(difficulty, '4bb6'),
+    description: '修DBG-024分类归属',
+    subagent_type: debugFixerType(difficulty),
+  }, over)
+
 // 该拦：subagent_type 含冒号（插件专用 agent），name 不含任何身份词
 const ad8 = agent('本次事故原样 dbg vs debug-keeper', adKeeper('debug', { name: 'opus-dbg-open-audit', subagent_type: 'task-keeper:debug-keeper' }), 'DENY')
 check('agent-dispatch: check 8 finding 点明身份词', true, /身份词/.test(ad8.detail), ad8.detail)
@@ -640,6 +657,45 @@ const ad11n = agent(
   'DENY'
 )
 check('agent-dispatch: keeper 缺 description 的 hint 给带前缀的模板', true, /debug 队列 · <本批摘要>/.test(ad11n.detail), ad11n.detail)
+
+// ── agent-dispatch：精确第二层 debug fixer type ────────────────────────────
+//
+// 三种 type 是 Human 明示特例：difficulty 映射直接钉 easy=sonnet、medium=opus、hard=fable。
+// 所有回归都经 spawnSync 把 JSON 写入 stdin，避免 shell 引号改变被测 payload。
+for (const difficulty of ['easy', 'medium', 'hard']) {
+  agent(`debug-fixer-${difficulty} 正确组合放行`, adDebugFixer(difficulty), 'ALLOW')
+}
+
+for (const [difficulty, wrongModel] of [['easy', 'opus'], ['medium', 'sonnet'], ['hard', 'opus']]) {
+  agent(
+    `debug-fixer-${difficulty} 错 model 拒绝`,
+    adDebugFixer(difficulty, { model: wrongModel, name: `${wrongModel}-debug-4bb6` }),
+    'DENY'
+  )
+}
+
+agent('debug-fixer easy 名字首段错拒绝', adDebugFixer('easy', { name: 'opus-debug-4bb6' }), 'DENY')
+agent('debug-fixer medium 使用 debugger 段拒绝', adDebugFixer('medium', { name: 'opus-debugger-4bb6' }), 'DENY')
+agent('debug-fixer hard 后缀非四位拒绝', adDebugFixer('hard', { name: 'fable-debug-4bb' }), 'DENY')
+agent('debug-fixer 英文 description 拒绝', adDebugFixer('easy', { description: 'Fix login bug' }), 'DENY')
+agent('debug-fixer 超 15 code point description 拒绝', adDebugFixer('medium', { description: '修DBG-024分类归属并补齐跨模块集成验证' }), 'DENY')
+agent('debug-fixer debug 队列前缀拒绝', adDebugFixer('hard', { description: 'debug 队列修复' }), 'DENY')
+agent('debug-fixer debugger 队列前缀拒绝', adDebugFixer('hard', { description: 'debugger 队列修复' }), 'DENY')
+agent('debug-fixer 模型标签前缀拒绝', adDebugFixer('easy', { description: '[sonnet] 修复分类' }), 'DENY')
+agent('debug-fixer 明确繁体字形拒绝', adDebugFixer('easy', { description: '修復登入' }), 'DENY')
+agent('debug-fixer 简繁共用字放行', adDebugFixer('medium', { description: '查乾著归属' }), 'ALLOW')
+agent('普通 Agent 明确繁体字形不误伤', ad({ name: 'sonnet-fix-login', subagent_type: 'general-purpose', description: '修復登入' }), 'ALLOW')
+agent('debug-fixer 含 DBG-024 中文摘要放行', adDebugFixer('medium', { description: '修DBG-024分类归属' }), 'ALLOW')
+const fixerAutoName = agent(
+  'debug-fixer 缺 name 自动补精确形态',
+  adDebugFixer('hard', { name: undefined }),
+  'AUTONAME'
+)
+if (fixerAutoName.verdict === 'AUTONAME') {
+  check('agent-dispatch: fixer 自动名固定 fable-debug 形态', true, /fable-debug-[0-9a-z]{4}/.test(fixerAutoName.detail), fixerAutoName.detail)
+}
+agent('普通 Agent ASCII description 不误伤', ad({ name: 'sonnet-fix-login', subagent_type: 'general-purpose', description: 'Fix login timeout' }), 'ALLOW')
+agent('第一层 debug-keeper 不误伤', adKeeper('debug', { name: kName('debug', '4bb6'), subagent_type: 'task-keeper:debug-keeper' }), 'ALLOW')
 
 // ── 收尾 ────────────────────────────────────────────────────────────
 fs.rmSync(FIXTURE_ROOT, { recursive: true, force: true })

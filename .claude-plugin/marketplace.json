@@ -66,7 +66,7 @@
       "source": "./plugins/working-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒。零 skill，适合全局开启",
-      "version": "3.27.0"
+      "version": "3.29.0"
     },
     {
       "name": "agent-browser",
@@ -94,7 +94,7 @@
       "source": "./plugins/task-keeper",
       "category": "Productivity",
       "description": "多实例 keeper 并行托管 debug/杂务两队列：一 bug 一实例，原子认领 + 合并锁 + 单条归档",
-      "version": "4.4.0"
+      "version": "4.5.0"
     },
     {
       "name": "plain-talk-output-style",
