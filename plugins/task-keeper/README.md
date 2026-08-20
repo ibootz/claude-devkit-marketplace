@@ -45,6 +45,9 @@ keeper 子代理托管 debug 队列与杂务队列：主会话只做「分诊转
 | skill | `tk-board` | 进度看板：每条一行（编号 + 20 字说明 + 四态）+ 计数占比 + 告警段，纯只读、不唤醒 keeper。同目录另有 `pending_dispatch.py`——只算「漏派」一件事（已 triage 但既不在飞、也不在等拍板），三种输出模式 |
 | agent | `debug-keeper` | 独占 `.keeper/<交付id>/debug/` 写权限，承接 bug 报告全流程。**v7 起一条 bug 一个实例**，同档可并存多个 |
 | agent | `chore-keeper` | 独占 `.keeper/<交付id>/chore/` 写权限，承接杂务登记与攒批执行。**默认同一交付只有一个实例**，仅在明确要求并行清账时才多开 |
+| agent | `debug-fixer-easy` | 第二层单文件、明确锚点、改法唯一的修复；精确 type `task-keeper:debug-fixer-easy`，固定 `sonnet` |
+| agent | `debug-fixer-medium` | 第二层跨 2–3 文件或须先定位的修复；精确 type `task-keeper:debug-fixer-medium`，固定 `opus` |
+| agent | `debug-fixer-hard` | 第二层跨模块、数据结构或集成缺失的修复；精确 type `task-keeper:debug-fixer-hard`，固定 `fable` |
 | script | `scripts/keeper_cli.py` | v7 新增的多实例并发原语 CLI：`claim`（原子认领编号）/ `bind`（登记 issue→name）/ `lock acquire\|release\|status`（合并锁，debug 侧合并回主仓用，超时 15 分钟自动抢占）/ `peers`（看同档其它实例）；exit 3 = 锁被占用（正常竞争，非故障） |
 | hook × 9 | 见下表 | 注入路由（session-start + user-prompt-submit）+ debug/chore 两份队列快照 + 三道窄判据守卫 + 1 个 keeper 实例登记（含 issue 提取） + 1 个 debug-keeper 专属的漏派清单注入 |
 
@@ -180,7 +183,24 @@ keeper 的 `name` 强制带 4 位随机短哈希。**2026-08-18 起两个 keeper
 判据是**等值不是下限**：chore-keeper 派成 `opus` 与派成 `haiku` 一样会被硬拦。降档
 理由是 chore-keeper 的活（登记/分类/攒批/归档）每一步都有明确判据可照着走，不需要
 debug-keeper 那种「判错一次、代价由后面整条流水线承担」的跨层追根因能力（triage
-错一次整条队列跟着错，这条论证只对 debug 成立）。旧版逐字固定名（`opus-debug-keeper`）
+错一次整条队列跟着错，这条论证只对 debug 成立）。
+
+### 第二层 debug fixer（精确 type）
+
+第一层 `task-keeper:debug-keeper` 的 `opus-debugger-<4位>`、`debug 队列` description
+前缀与常驻实例规则**保持不变**。它派发的第二层 fixer 则由 issue 的 `difficulty` 一一绑定：
+
+| difficulty | subagent_type | model | name 正则 |
+|---|---|---|---|
+| easy | `task-keeper:debug-fixer-easy` | `sonnet` | `^sonnet-debug-[0-9a-z]{4}$` |
+| medium | `task-keeper:debug-fixer-medium` | `opus` | `^opus-debug-[0-9a-z]{4}$` |
+| hard | `task-keeper:debug-fixer-hard` | `fable` | `^fable-debug-[0-9a-z]{4}$` |
+
+第二层 description 必为全串简体中文任务摘要，按 JS code point 最多 15，可含 `DBG-024`；不带
+模型标签、`debug 队列` 或 `debugger 队列` 前缀。`agent-dispatch` 只根据本次 `Agent` input
+的精确 type、model、name、description 校验这三个类型；普通 `general-purpose` 与其他 Agent
+仍可用 ASCII description，且全局 `fable` 规则不变：同一任务须先以 `opus` 完整跑至少两轮无进展。
+旧版逐字固定名（`opus-debug-keeper`）
 在「同一段会话里前一个实例结束、下一个又叫同名」时会撞车——`SendMessage` 的 name
 寻址是 latest wins，唤起前一个就会失联——这条起因两个 kind 都继承，是加短哈希后缀
 的根本原因。

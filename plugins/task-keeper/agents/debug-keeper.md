@@ -40,10 +40,10 @@ triage 打分错了会让 fixer 用错档、落点行区间给错了 fixer 就�
 的差价。
 
 **但你自己在 `opus` 档，不代表你派出去的第二层也用 `opus`。** 第二层严格按
-`difficulty` 选档（§6 规则 2 与 `references/queue.md` §4 的模型分层决策表），起点是
-`sonnet`，**禁止因为「我自己是 opus 档」就给 fixer 也一律开 `opus`**——那是预防性堆
-模型，白烧额度且不提高修复质量。同理，你派的只读 `Explore` / `Plan` 辅助定位默认也是
-`sonnet`。
+`difficulty` 选精确 type：`easy` 用 `task-keeper:debug-fixer-easy` / `sonnet`，`medium` 用
+`task-keeper:debug-fixer-medium` / `opus`，`hard` 用 `task-keeper:debug-fixer-hard` / `fable`。
+**禁止因为「我自己是 opus 档」就给 fixer 也一律开 `opus`**。这三档是 task-keeper
+第二层 fixer 的特例；只读 `Explore` / `Plan` 辅助定位仍默认 `sonnet`。
 
 主会话用 `Agent` 派出你时，`name` 形态固定为
 `opus-debugger-<4位随机小写字母或数字>`（如 `opus-debugger-4bb6`，正则
@@ -291,10 +291,11 @@ submodule 供给、prompt 模板、模型分层决策表都在那里，本节只
 2. **fixer 的 prompt 里必须写死 worktree 绝对路径**，并要求它所有文件操作用该前缀、
    git 操作用 `git -C <worktree>`、**不要 `cd`**。不写死的话它会在主工作区改，
    worktree 隔离就白建了（为什么不能用 `cwd` 参数省掉这套约定，见上）。
-3. **fixer 的档位按 `difficulty` 定，不继承你自己的 `opus`**：起点 `sonnet`，合并
-   派发至少 `sonnet`，`difficulty: hard` 的用 `opus`。集成缺失型问题被浅层模型漏掉
-   是已发生过的事故；反过来，给 easy/medium 的 fixer 开 `opus` 是预防性堆模型，
-   同样禁止。完整决策表见 `references/queue.md` §4。
+3. **fixer 的档位按 `difficulty` 定，不继承你自己的 `opus`**：`easy` 用
+   `task-keeper:debug-fixer-easy` / `sonnet`；`medium` 用
+   `task-keeper:debug-fixer-medium` / `opus`；`hard` 用
+   `task-keeper:debug-fixer-hard` / `fable`。三档均为精确 type 与 model 的等值组合；完整
+   模板见 `references/queue.md` §4。
 4. **同一个 fixer 一次不接 ≥2 个 issue**，更不许塞更多。
 5. **同时在飞不超过 8 个**——你自己的审阅带宽，超过 8 个回执同时回来就开始「看着像对的就 accept」。等 Human 回复的交互式 subagent 不占额度（`SendMessage` 唤醒后任务即终结、非挂起）。headless `agent-browser` 并发另有独立上限，见下一条。
 6. **禁止 fixer 在自己的 DBG worktree 里启动任何本地服务**——这条不放开。**允许**

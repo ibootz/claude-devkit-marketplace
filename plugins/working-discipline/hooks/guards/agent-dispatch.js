@@ -181,6 +181,23 @@ const KEEPER_SPECS = {
   chore: { model: 'sonnet', nameSeg: 'chore', descPrefix: 'chore 队列' },
 }
 
+// 第二层 debug fixer 是 Human 明确指定的 type → model 特例。只精确匹配这三个
+// subagent_type，不从 prompt、description 或任务语义推断 fixer 身份；普通 Agent 仍按
+// ROUTING_TABLE 的全局升级规则执行（fable 需 opus 两轮无进展）。
+const DEBUG_FIXER_SPECS = {
+  'task-keeper:debug-fixer-easy': { model: 'sonnet' },
+  'task-keeper:debug-fixer-medium': { model: 'opus' },
+  'task-keeper:debug-fixer-hard': { model: 'fable' },
+}
+
+function debugFixerSpec(stLower) {
+  return DEBUG_FIXER_SPECS[String(stLower || '').toLowerCase()] || null
+}
+
+function debugFixerNamePattern(spec) {
+  return new RegExp(`^${spec.model}-debug-[0-9a-z]{4}$`)
+}
+
 // subagent_type → 该 keeper 的规格；非 keeper（或表内没登记的新 keeper）返回 null，
 // 调用方据此整条跳过（fail-open，与白名单口径一致）。
 function keeperSpec(stLower) {
@@ -442,6 +459,13 @@ function autoName(ti, model) {
   // 直接按这个形态生成，复用与非 keeper 分支相同的 shortHash 输入口径
   // （prompt + description + slug），确保自己补的名自己能通过 check 10。
   const stLowerForKeeper = String(ti.subagent_type || '').toLowerCase()
+  const fixerSpec = debugFixerSpec(stLowerForKeeper)
+  if (fixerSpec) {
+    const fixerHash = shortHash(
+      String(ti.prompt || '') + '|' + String(ti.description || '') + '|' + stLowerForKeeper
+    )
+    return `${fixerSpec.model}-debug-${fixerHash}`
+  }
   if (KEEPER_SLUG_PATTERN.test(stLowerForKeeper)) {
     const keeperHash = shortHash(
       String(ti.prompt || '') + '|' + String(ti.description || '') + '|' + stLowerForKeeper
@@ -480,6 +504,7 @@ function checkNaming(ti) {
   // 变量名沿用 keeperDesc，但 2026-08-10 起它存的是**必需前缀**而非完整固定串，
   // 判据也从等值比较改成 startsWith，理由见 KEEPER_DESC_PREFIXES 上方那段。
   const keeperDesc = keeperDescPrefix(stLower)
+  const fixerSpec = debugFixerSpec(stLower)
 
   const findings = []
   const hints = []
@@ -573,18 +598,32 @@ function checkNaming(ti) {
   const fixedSpec = keeperSpec(stLower)
   if (fixedSpec && model !== fixedSpec.model) {
     findings.push(
-      `subagent_type="${ti.subagent_type}" 是固定 ${fixedSpec.model} 档的常驻 keeper,` +
-        `本次 model=${model ? `"${model}"` : '(缺失)'};` +
-        `agent 定义 frontmatter 的 model:${fixedSpec.model} 会被这里显式传的 model 顶掉` +
-        `(Agent 工具的 model 参数优先级高于 frontmatter),所以档位只能在这里给对`
+      `subagent_type="${ti.subagent_type}" 是固定 ${fixedSpec.model} 档的常驻 keeper,`
+      + `本次 model=${model ? `"${model}"` : '(缺失)'};`
+      + `agent 定义 frontmatter 的 model:${fixedSpec.model} 会被这里显式传的 model 顶掉`
+      + `(Agent 工具的 model 参数优先级高于 frontmatter),所以档位只能在这里给对`
     )
     hints.push(
-      `model 改 "${fixedSpec.model}",name 同改 "${fixedSpec.model}-${fixedSpec.nameSeg}-xxxx"` +
-        `(xxxx 为 4 位小写字母数字);两个 keeper 的档位各自钉死、互不参照:` +
-        `debug-keeper 恒 opus(triage/去重/对账错一次整条队列跟着错),` +
-        `chore-keeper 恒 sonnet(台账登记与归档是机械杂务,不需要 opus 的因果链深度);` +
-        `档位不按这条 bug 或这批杂务看起来难不难上下调,也不受三档标尺那句` +
-        `"没 opus 触发信号就留在 sonnet"约束`
+      `model 改 "${fixedSpec.model}",name 同改 "${fixedSpec.model}-${fixedSpec.nameSeg}-xxxx"`
+      + `(xxxx 为 4 位小写字母数字);两个 keeper 的档位各自钉死、互不参照:`
+      + `debug-keeper 恒 opus(triage/去重/对账错一次整条队列跟着错),`
+      + `chore-keeper 恒 sonnet(台账登记与归档是机械杂务,不需要 opus 的因果链深度);`
+      + `档位不按这条 bug 或这批杂务看起来难不难上下调,也不受三档标尺那句`
+      + `"没 opus 触发信号就留在 sonnet"约束`
+    )
+  }
+
+  // 第二层 debug fixer 的档位同样按精确 type 等值校验：easy=sonnet、medium=opus、
+  // hard=fable。它是 task-keeper 内受 Human 明示的特例，不扩展到普通 Agent。
+  if (fixerSpec && model !== fixerSpec.model) {
+    findings.push(
+      `subagent_type="${ti.subagent_type}" 是固定 ${fixerSpec.model} 档的第二层 debug fixer,`
+      + `本次 model=${model ? `"${model}"` : '(缺失)'};difficulty 对应档位必须等值一致`
+    )
+    hints.push(
+      `model 改 "${fixerSpec.model}",name 同改 "${fixerSpec.model}-debug-xxxx"`
+      + `(xxxx 为 4 位小写字母数字);easy=sonnet、medium=opus、hard=fable；`
+      + `此例外只适用于 task-keeper:debug-fixer-easy/medium/hard，普通 Agent 的 fable 仍须 opus 两轮无进展`
     )
   }
 
@@ -649,6 +688,20 @@ function checkNaming(ti) {
     }
   }
 
+  // 精确第二层 fixer 的 name 是 type 对应 model 加 debug 身份段和 4 位短哈希。
+  // 这里使用 type 查表后的完整锚定正则，故 `opus-debug-*` 不能冒充 easy，
+  // `*-debugger-*` 也不会误作 fixer；不检查或解释 prompt。
+  if (!nameMissing && fixerSpec && !debugFixerNamePattern(fixerSpec).test(name)) {
+    findings.push(
+      `subagent_type="${ti.subagent_type}" 是第二层 debug fixer,name 必须形如 "${fixerSpec.model}-debug-xxxx"`
+      + `(固定 model 段 + debug + 恰好 4 位小写字母数字),本次 name="${name}" 不满足`
+    )
+    hints.push(
+      `name 改成 "${fixerSpec.model}-debug-4bb6" 这种形态；首段必须与该 type 的实际 model 一致，`
+      + `中段只能是 debug，后缀为 4 位小写字母数字`
+    )
+  }
+
   // 5. description 必填且有正文（description 是 schema 里的必填字段，缺失基本由工具层
   //    拦掉，这里仍留判定以防 harness 放宽）。**不再要求 [模型名] 前缀**：name 的模型
   //    前缀已是强制校验（见上 check 3~4），在飞面板 name 与 description 并排显示，
@@ -706,6 +759,32 @@ function checkNaming(ti) {
   if (description && description.length > DESC_BODY_MAX) {
     findings.push(`description ${description.length} 字符超过 ${DESC_BODY_MAX};纪律要求 3-5 词摘要,超长说明塞了 prompt 内容`)
     hints.push(`description 压到 ${DESC_BODY_MAX} 字符以内(带 [模型名] 前缀的话前缀也算在内,直接删掉前缀最省)`)
+  }
+
+  // 精确第二层 debug fixer 的 description 是面板任务摘要，不是常驻队列标签。允许的字符
+  // 仅为汉字、DBG-数字编号、数字及常用中文标点；该 allowlist 和 code point 长度都只读
+  // 本次 tool input 的 description。须含至少一个汉字，因此纯英文不会通过。
+  if (fixerSpec && description) {
+    const codePointLength = Array.from(description).length
+    const fixerDescriptionPattern = /^(?:\p{Script=Han}|DBG-\d+|\d|[，。、：；（）()·—\-\s])+$/u
+    if (!/[\p{Script=Han}]/u.test(description) || !fixerDescriptionPattern.test(description)) {
+      findings.push(
+        `subagent_type="${ti.subagent_type}" 的 description 必须是简体中文任务摘要，可含 DBG-024 与常用标点；本次写的是 "${description}"`
+      )
+      hints.push('description 改成 "修DBG-024分类归属" 这类全串简体中文摘要；不要写纯英文、模型标签或其他英文词')
+    }
+    if (codePointLength > 15) {
+      findings.push(`第二层 debug fixer 的 description 有 ${codePointLength} 个 JS code point，超过 15`)
+      hints.push('description 压到 15 个 JS code point 以内，例如 "修DBG-024分类归属"')
+    }
+    if (/^(?:\[(?:sonnet|opus|fable)\]\s*)?(?:debug|debugger)\s*队列/u.test(description)) {
+      findings.push('第二层 debug fixer 的 description 不能以 "debug 队列" 或 "debugger 队列" 起头；那是第一层常驻 keeper 的前缀')
+      hints.push('description 改成具体修复摘要，例如 "修DBG-024分类归属"；不要使用队列前缀')
+    }
+    if (/^\[(?:sonnet|opus|fable)\]/u.test(description)) {
+      findings.push('第二层 debug fixer 的 description 不能带模型标签前缀')
+      hints.push('删掉 [sonnet]/[opus]/[fable]，模型只由 model 与 name 首段表达')
+    }
   }
 
   // 11. keeper 类常驻 agent 的 description 必须带队列前缀（2026-08-05 用户拍板加，
@@ -778,6 +857,9 @@ function main() {
     // 这个名字不可预测、唤醒前要先读登记文件——否则又是一处"效力与描述各自漂移"
     // （见 .claude/rules/project/hook-restraint.md 实证 5）。
     const keeperSpecForName = keeperSpec(String(ti.subagent_type || '').toLowerCase())
+    // 精确 fixer 的自动名已有固定 type/model/name 形态，提示也须给该形态；否则通用
+    // `<model>-<任务语义-kebab>` 会教出下一轮必被 check 12 拒绝的名字。
+    const fixerSpecForName = debugFixerSpec(String(ti.subagent_type || '').toLowerCase())
     allowWithName(
       ti,
       generated,
@@ -790,12 +872,17 @@ function main() {
             `（SendMessage 的 name 寻址是 latest wins），这个名字因此不可预测。` +
             `唤醒它前先读 .keeper/<交付id>/.keeper-instance.json 里登记的实际 name，` +
             `读不到才首次派发。下次派发请自己写上这种形态的 name。`
-        : `[agent-dispatch] 本次派发没给 name（Agent 工具的 JSON Schema 未声明该字段，` +
-            `但运行时接受并会存进 subagent 元数据），已自动补为 "${generated}" 并放行。` +
-            `自动名只有 description/subagent_type 里抽出的弱语义 + prompt·description 的短哈希，` +
-            `在飞面板上看不出任务差异——` +
-            `下次派发请自己给 "${model}-<任务语义-kebab>"（如 ${model}-review-login-flow），` +
-            `同批并发时把分片依据写进名字。`
+        : fixerSpecForName
+          ? `[agent-dispatch] 本次精确第二层 debug fixer 没给 name，已按 type 固定规则补为` +
+              ` "${generated}" 并放行。下次派发请自己给` +
+              ` "${fixerSpecForName.model}-debug-<4位小写字母数字>"；` +
+              `easy=sonnet、medium=opus、hard=fable。`
+          : `[agent-dispatch] 本次派发没给 name（Agent 工具的 JSON Schema 未声明该字段，` +
+              `但运行时接受并会存进 subagent 元数据），已自动补为 "${generated}" 并放行。` +
+              `自动名只有 description/subagent_type 里抽出的弱语义 + prompt·description 的短哈希，` +
+              `在飞面板上看不出任务差异——` +
+              `下次派发请自己给 "${model}-<任务语义-kebab>"（如 ${model}-review-login-flow），` +
+              `同批并发时把分片依据写进名字。`
     )
   }
 

@@ -584,8 +584,8 @@ const SECTION_NAMING = [
   '**5.4.4 `Workflow` 的命名**',
   '`agent(prompt, {label})` 的 `label` 当必填处理；它单独显示、无配对 `name`，所以**仍带 `[模型名]` 前缀** + 任务语义（可用中文）。`meta.name` 用 kebab-case：整个 workflow 走一档时加 `模型名-` 前缀，跨档混用时不加。`meta.description` / `meta.phases[].*` 只写任务摘要——`meta.description` 会出现在权限弹窗里。',
   '',
-  '**5.4.5 `task-keeper` 的两个 keeper：档位各自钉死，`name` 必须带 4 位短哈希**',
-  '`task-keeper:debug-keeper` → `model` 必须写 `"opus"`、`name` 形如 **`opus-debugger-xxxx`**；`task-keeper:chore-keeper` → `model` 必须写 `"sonnet"`、`name` 形如 **`sonnet-chore-xxxx`**（`xxxx` 是 4 位小写字母数字，如 `opus-debugger-4bb6`）。两档**各自等值校验、互不参照**：给 chore 派 opus 与给 debug 派 sonnet 一样会被拦。它们的 agent 定义里虽写了 `model`，但 `Agent` 调用里显式传的 `model` **优先级更高、会把它顶掉**，所以档位只能在派发处给对，且不按这条 bug 或这批杂务看起来难不难上下调。后缀不许省、不许写成逐字固定值——它让名字**不可预测**，从而逼你唤醒前先读 `.keeper/<交付id>/.keeper-instance.json` 拿当前有效 name（task-keeper 的 hook 每次派发都登记进去，v7 起同一档是一个实例列表、按 issue 编号区分），读不到才首次派发。',
+  '**5.4.5 `task-keeper` 的 keeper 与第二层 debug fixer：精确 type 决定固定档**',
+  '`task-keeper:debug-keeper` → `model: "opus"`、`name` 形如 **`opus-debugger-xxxx`**；`task-keeper:chore-keeper` → `model: "sonnet"`、`name` 形如 **`sonnet-chore-xxxx`**（`xxxx` 是 4 位小写字母数字）。第二层仅三个精确 type 例外：`task-keeper:debug-fixer-easy` → `sonnet-debug-xxxx` / `sonnet`，`task-keeper:debug-fixer-medium` → `opus-debug-xxxx` / `opus`，`task-keeper:debug-fixer-hard` → `fable-debug-xxxx` / `fable`。fixer description 必须全串简体中文、≤15 个 code point，可含 `DBG-024`，不用模型标签或 `debug 队列` 前缀。**此 `fable` 首用例外只限这三个 type**；其余 Agent 仍须同一任务以 `opus` 完整跑过 ≥2 轮无进展。keeper 两档仍各自等值校验、常驻实例 name 不可预测，唤醒前读 `.keeper/<交付id>/.keeper-instance.json`。',
   '**一条 bug 一个实例**：同轮报来多条 bug 就在同一条消息里并行派多个 debug-keeper，别把它们塞给同一个——那等于把并行退化回顺序处理。既有实例只在**继续处理它自己那条 issue** 时才唤醒。',
   '',
   '**本节字段由 `guards/agent-dispatch.js` 在 `PreToolUse` 硬校验，多条违规一次报清。**',
@@ -664,7 +664,7 @@ const SECTION_AGENT_CALL = [
   '| `name` | 必填（schema 里没有它，靠你自己记）。`<模型名>-<任务语义-kebab>`，模型名与 `model` 逐字一致；只收 ASCII，合 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`；同批并发互相可辨（分片依据写进名字）；`subagent_type` 含冒号时还须含其身份词（`task-keeper:debug-keeper` → 含 `debug` 或 `keeper`） |',
   '| `model` | 必填，禁止默认回落。`sonnet`（默认档）/ `opus`（跨层追根因·高正确性·sonnet 已吃力）/ `fable`（opus 跑 ≥2 轮无进展）。无 `haiku` 档 |',
   '| `subagent_type` | 必填。只读任务一律 `Explore`；要 Edit/Write 才 `general-purpose`；设计与拆解用 `Plan` |',
-  '| `description` | 必填。3-5 词任务摘要，≤60 字符；只写这次任务干什么，不带 `[模型名]` 前缀，不放 `prompt` 原文与"你是第 1 层子代理"这类角色设定句（常驻 keeper 例外：必须以「debug 队列」/「chore 队列」起头，之后接**这一代**接的活而不是某一个动作） |',
+  '| `description` | 必填。3-5 词任务摘要，≤60 字符；只写这次任务干什么，不带 `[模型名]` 前缀，不放 `prompt` 原文与"你是第 1 层子代理"这类角色设定句（常驻 keeper 例外：必须以「debug 队列」/「chore 队列」起头；精确 `task-keeper:debug-fixer-*` 例外：全串简体中文、≤15 code point，可含 `DBG-024`，不用队列或模型前缀） |',
   '| `run_in_background` | 选填。要并发多个、或本轮还接着干别的时给 `true`；要拿到结果才能继续时给 `false` |',
   '| `prompt` | 必填。四段式，见上 |',
   '',
@@ -686,7 +686,7 @@ const SECTION_DISPATCH = [
   '- **`opus`**：命中任一即用——(a) 需严密因果链（跨层追根因）；(b) 极高正确性要求（安全/并发/协议/资金/权限）；(c) `sonnet` 已明显吃力（漏点多、方案有硬缺陷、修 A 又出 B）',
   '- **`fable`**：同一任务用 `opus` 完整跑过 ≥2 轮仍无进展才启用，不作首选',
   '- 没有 `opus` 触发信号就留在 `sonnet`，不确定时一档一档升，**禁止预防性堆模型**。写 `model: "haiku"` 或 `name` 用 `haiku-` 前缀会被 hook 拦下',
-  '- **`task-keeper` 的两个 keeper 是本章唯一的固定档，且两档不同**：`task-keeper:debug-keeper` → `model: "opus"`、`name` 形如 `opus-debugger-xxxx`；`task-keeper:chore-keeper` → `model: "sonnet"`、`name` 形如 `sonnet-chore-xxxx`（`xxxx` 为 4 位小写字母数字，如 `opus-debugger-4bb6`，不许省后缀、不许写成逐字固定值）。上一条那句「没触发信号就留在 `sonnet`」对它们不成立——档位是**等值钉死**，按类型定，不按这条 bug 或这批杂务看起来难不难上下调（给 chore 派 opus 同样被拦）。debug 恒 opus 是因为 triage / 去重 / 合并前对账错一次整条队列跟着错；chore 恒 sonnet 是因为台账登记与归档是机械杂务。它们的 agent 定义里虽写了 `model`，但你显式传的 `model` **优先级更高、会把它顶掉**，所以档位只能由你这里给对。后缀随机、名字因此**不可预测**：唤醒前先读 `.keeper/<交付id>/.keeper-instance.json` 拿当前实际 name（v7 起同一档是一个实例列表，按 issue 编号找你要的那个），读不到才首次派发。**一条 bug 一个实例**：同轮报来多条就并行派多个，别塞给同一个',
+  '- **`task-keeper` 的两个 keeper 固定档不变**：`task-keeper:debug-keeper` → `model: "opus"`、`name` 形如 `opus-debugger-xxxx`；`task-keeper:chore-keeper` → `model: "sonnet"`、`name` 形如 `sonnet-chore-xxxx`。**另有仅限第二层 debug fixer 的精确 type 特例**：`task-keeper:debug-fixer-easy` → `sonnet`，`task-keeper:debug-fixer-medium` → `opus`，`task-keeper:debug-fixer-hard` → `fable`，对应 name 分别为 `sonnet-debug-xxxx` / `opus-debug-xxxx` / `fable-debug-xxxx`。这不改变普通 Agent 的 `fable` 规则：普通 Agent 仍须同一任务以 `opus` 完整跑 ≥2 轮无进展。',
   '',
   '### 5.3 prompt 内容',
   '',
@@ -718,7 +718,7 @@ const SECTION_DISPATCH = [
 // `Agent` 那条单独抽出来：它是三条里唯一只对「能派下一层的 agent」有意义的一条，
 // 且它指向「完整调用形态」那一节，必须与那一节同进同出，否则会留下悬空引用。
 const HOOK_ENFORCED_AGENT_BULLET =
-  '- **`Agent`**（`guards/agent-dispatch.js`）校验 `model` / `name` / `description` 的结构，判据就是「派发 `Agent` 的完整调用形态」那张六字段表（主会话每轮注入一份，子代理版在上面第五章里），外加三条 keeper 专项：档位钉 `opus`、`name` 带 4 位短哈希、`description` 必须以「debug 队列」/「chore 队列」起头、之后接本批摘要（如「debug 队列 · 关三条 + 开工 DBG-140」）。面板显示的是首次派发那一刻的值、`SendMessage` 唤醒改不了它，所以那句描述的是**这一代**而不是当前这一秒；队列做完一批（task-keeper 每轮注入会现算并提示）就新派一代、换新摘要。照那张表写就不会撞'
+  '- **`Agent`**（`guards/agent-dispatch.js`）校验 `model` / `name` / `description` 的结构。第一层 keeper 仍按 kind 固定档、4 位短哈希与 `debug 队列` / `chore 队列` 前缀。第二层仅精确 `task-keeper:debug-fixer-easy` / `medium` / `hard` 受 `easy=sonnet` / `medium=opus` / `hard=fable`、`<model>-debug-xxxx` 与全串简体中文 ≤15 code point description 约束；普通 Agent 不受此例外，`fable` 仍须 `opus` 两轮无进展。所有判据只读取本次 Agent input，不扫描 prompt。'
 
 // `probe-throttle` 那条同样单独抽出来，理由与 `Agent` 那条相反：它**只对主会话生效**。
 // 该 hook 读到 payload.agent_id（仅子代理触发时存在）就直接放行、连计数都不做——因为
