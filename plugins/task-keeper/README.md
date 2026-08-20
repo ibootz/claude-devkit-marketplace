@@ -210,6 +210,17 @@ debug-keeper 实例，多个并存互不干扰**；chore-keeper 默认仍是**�
 `prompt`（抽不到再退 `description`）里正则抽第一个 `DBG-NNN`/`CHR-NNN`，抽不到就
 不写这个键——登记照常写入，只是退回按时间定位，不为了"总得有个值"去编一个。
 
+**4.3.0 起 `description` 的规约收成「全串简体中文、上限 15 字」**（按 code point 计，
+一个汉字与一个 ASCII 字符都算 1 字），覆盖两层：主会话派 keeper（前缀 `<kind> 队列`
+占 8 字，分隔符改用不带空格的 `·`，摘要剩 6 字）与 keeper 派 fixer（形如
+`修 DBG-024 分类归属`，14 字）。**同时定下「keeper 的 description 里不写 issue 编号」**——
+编号靠 `prompt`，上面那条抽取链本来就是 `prompt` 优先。理由有两层，第二层是实测出来的：
+`debug 队列·DBG-042` 已是 16 字超限，而想省掉分隔符压到 15 字的 `debug 队列DBG-042`
+会让 `keeper_instance_register.py:84` 的 `\bDBG-\d{3,}\b` **抽不到编号**（汉字在 Python
+的 Unicode 模式下属于 `\w`，「列」与 `DBG` 之间没有词边界），登记文件因此静默少一个
+`issue` 键。`hooks/tests/cases/25-h30-multi-instance.sh` 的 `[156]` 保留带分隔符的
+21 字形态并注明有意超限——它测的是这条兜底通道的 hook 行为，不是文档样例。
+
 读侧（`read_keeper_instances` / `live_instances`）兼容 v6 的单 record 格式（自动
 升维成单元素列表），存量登记文件不需要迁移；写侧一律吐 v7 格式，不做"只有一条就
 退回 v6"的分支。登记是**追加**而不是覆盖——同名重复登记按更新处理（幂等，重复
@@ -510,7 +521,7 @@ git log --oneline -- '.keeper/' | wc -l   # 已推送的历史有多少
 清但要 force push、会打断所有协作者；什么都不做则该仓维持 v4 行为。v4 期间那四条精确
 规则（`.keeper/**/worktree/` 等）留着无害，被整树规则完全覆盖。
 
-## 已知的文档/实现滞后：当前为空（4.2.0）
+## 已知的文档/实现滞后：当前为空（4.3.0）
 
 **这张清单只登记当前仍然成立的滞后。** 4.0.0 交付过程中登记过四条（`keeper-dispatch.md`
 §4 的"换代"描述、`.merge.lock` 未列入 gitignore、CLI 与合并锁无回归测试、

@@ -606,6 +606,11 @@ issue 在上一节批量建 worktree 时没通过自校验时（那一条跳过�
 `DBG-024` 这种名字，报 `name="DBG-probe-subagent" 缺模型档次前缀`，改成
 `sonnet-DBG-024` 这类形态才放行。
 
+`description` 用**简体中文**、**上限 15 字**：按 code point 计，一个汉字与一个 ASCII
+字符都算 1 字，`DBG-024` 记 7 字，`修 DBG-024 分类归属` 恰好 14 字。下面两个模板里的
+那一行就是照这个口径写的，改写时保留编号、删修饰词——在飞面板只显示这一行，编号是
+认出「这是哪条 issue 的 fixer」的唯一线索。
+
 #### easy 档模板：一次性 subagent
 
 ```
@@ -685,7 +690,7 @@ Agent(
 Agent(
   subagent_type: "general-purpose",
   name: "sonnet-DBG-024",
-  description: "修 DBG-024 序列模型分类归属",
+  description: "修 DBG-024 分类归属",
   model: "sonnet",
   run_in_background: true,
   prompt: "【目标】修 DBG-024。

@@ -289,6 +289,10 @@ else bad "应取第一个匹配" "DBG-207" "$E1"; fi
 rm -rf "$T"
 
 echo "[156] prompt 里没有、description 里有 → 从 description 兜底抽"
+# 这条的 description 有意超出「简体中文 ≤15 字」那条规约（21 字），因为它测的是 hook 行为
+# 而不是文档样例：`\bDBG-\d{3,}\b` 要求编号两侧有词边界，而汉字在 Python 的 Unicode 模式下
+# 属于 `\w`——把编号紧贴中文写成 `debug 队列DBG-042`（正好 15 字）会让这里抽到 None。
+# 所以规约那侧的结论是「编号写进 prompt、不写进 description」，兜底通道只覆盖历史与例外形态。
 T="$(newtmpdir)"; mkrealrepo "$T"
 E2="$(mi_py "$T" 'str(extract_issue({"prompt": "照队列纪律处理", "description": "debug 队列 · DBG-042 白屏"}, "debug"))')"
 if [ "$E2" = "DBG-042" ]; then ok "description 兜底通道生效"
@@ -297,7 +301,7 @@ rm -rf "$T"
 
 echo "[157] 两个字段都没有编号 → 返回 None，**绝不编造**（错的 issue 键比缺键更糟）"
 T="$(newtmpdir)"; mkrealrepo "$T"
-E3="$(mi_py "$T" 'str(extract_issue({"prompt": "去把队列里的活干了", "description": "debug 队列 · 收尾"}, "debug"))')"
+E3="$(mi_py "$T" 'str(extract_issue({"prompt": "去把队列里的活干了", "description": "debug 队列·收尾"}, "debug"))')"
 if [ "$E3" = "None" ]; then ok "抽不到时返回 None"
 else bad "抽不到时应返回 None" "None" "$E3"; fi
 rm -rf "$T"

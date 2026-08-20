@@ -38,22 +38,24 @@ when_to_use: |
 §0）。它派的只读 `Explore` 同样用 `sonnet`，不再下探。
 
 首次派发的 `Agent` 调用形态（三岔口注入说「首次派发」时照这模板填，name 自己生成
-4 位随机短哈希、description 以 `chore 队列` 起头）：
+4 位随机短哈希、description 以 `chore 队列` 起头且全串简体中文、上限 15 字）：
 
 ```
 Agent(
   name: "sonnet-chore-9f2a",   // 自己生成 4 位随机小写字母/数字后缀，不要逐字抄这个例子
   subagent_type: "task-keeper:chore-keeper",   // 插件 agent；不可用时退 general-purpose 并把 agents/chore-keeper.md 全文放进 prompt
-  description: "chore 队列 · 登记五项杂务",   // 前缀 `chore 队列` 不可省，之后写这一批接的活（不是当次单个动作）
+  description: "chore 队列·登记杂务",   // 13 字。前缀 `chore 队列` 不可省（占 8 字），之后写这一批接的活（不是当次单个动作）
   model: "sonnet",
   run_in_background: true,
   prompt: "<用户原话逐字> + 项目根绝对路径"
 )
 ```
 
-**`description` 锚定 `<prefix>` 起头 + 这一批的摘要**，不要写成某个具体动作——完整
-机制（为什么前缀锚定而不是逐字固定串、面板渲染时机、check 11 拦下、向后兼容旧固定串）
-见 `../tk-debug/references/keeper-dispatch.md` §3，该节未受 2026-08-18 改动影响，
+**`description` 锚定 `<prefix>` 起头 + 这一批的摘要，全串简体中文、上限 15 字**（按
+code point 计，前缀 `chore 队列` 已占 8 字，分隔符用不带空格的 `·`，摘要剩 6 字），
+不要写成某个具体动作——完整机制（为什么前缀锚定而不是逐字固定串、面板渲染时机、
+check 11 拦下、向后兼容旧固定串、为什么摘要里不写 issue 编号）见
+`../tk-debug/references/keeper-dispatch.md` §3，该节未受 2026-08-18 改动影响，
 可以照抄。
 
 派发成功后 `PreToolUse(Agent)` hook 会自动把这个 name（连同它从 prompt 里提取到的

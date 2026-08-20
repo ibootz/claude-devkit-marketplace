@@ -141,14 +141,15 @@ TRIAGE_TAIL = """
 # 那个值只存在于主会话这一侧的派发参数里。不传下去，实例就只能瞎猜一个标识，合并锁的
 # 持有者校验会因此失效（谁都能释放谁的锁）。
 WAKE_LINE_NONE = ("本会话还没有实例：用 `Agent` 派出，name 自带 4 位随机短哈希后缀，"
-                   "description 写『<kind> 队列 · <本条摘要>』（前缀不可省），"
+                   "description 写『<kind> 队列·<本条摘要>』（前缀不可省，全串简体中文、上限 15 字），"
                    "并把这个 name 原样写进 prompt 第一行——实例要用它取合并锁。")
 
 # 分支 2：登记存在但不属于本会话（session_id 不一致，或是加会话隔离之前落的旧格式、
 # 压根没有 session_id 键）——一律当陈旧处理，判据见 keeper_paths.live_instances。
 WAKE_LINE_STALE = ("`.keeper-instance.json` 里的登记来自上一个会话，已失效：当首次派发，"
                     "用 `Agent` 派出并生成新的 4 位随机短哈希后缀，"
-                    "description 写『<kind> 队列 · <本条摘要>』，name 原样写进 prompt 第一行。")
+                    "description 写『<kind> 队列·<本条摘要>』（全串简体中文、上限 15 字），"
+                    "name 原样写进 prompt 第一行。")
 
 # 分支 3（v7 改）：本会话有活着的实例。与 v6 最大的差别是**这里不再劝你唤醒**——
 # 唤醒只对「补充某条既有 issue 的信息」成立，新 bug 一律新派一个实例。
