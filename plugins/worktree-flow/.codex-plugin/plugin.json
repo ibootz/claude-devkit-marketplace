@@ -1,7 +1,7 @@
 {
   "name": "worktree-flow",
-  "version": "1.2.0",
-  "description": "主分支保护 - main/master 默认走 worktree；确需直写时由 Human 本轮批准。Codex 侧只有 skill，Claude Code 侧另有机械门控",
+  "version": "1.3.0",
+  "description": "主分支保护 + worktree 隔离边界 - main/master 默认走 worktree 或由 Human 本轮批准直写；Codex 侧只有 skill，无机械门控",
   "author": {
     "name": "zhangq"
   },

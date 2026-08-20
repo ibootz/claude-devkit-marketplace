@@ -1,6 +1,6 @@
 ---
 name: worktree-flow
-description: 在 main/master 分支改文件或 git commit 时，默认走「开 worktree 临时分支 → 提交 → --no-ff 合回 → 清理」；确需直接写时，用 AskUserQuestion 取得 Human 本轮授权。被 `[L1-BLOCKER] check=worktree-flow` 拦下、用户说“开 worktree”“别在 main 上改”“本轮允许直接改 main/master”“合并回主分支”“清理 worktree”时使用。
+description: 在 main/master 分支改文件或 git commit 时，默认走「开 worktree 临时分支 → 提交 → --no-ff 合回 → 清理」；确需直接写时，用 AskUserQuestion 取得 Human 本轮授权。被 `[L1-BLOCKER] check=worktree-flow` 拦下、用户说“开 worktree”“别在 main 上改”“本轮允许直接改 main/master”“合并回主分支”“清理 worktree”时使用。管的是**进入 worktree 之前**那个决策；已经在 worktree 会话里、要落笔或要退出时的隔离边界纪律走 worktree-boundary skill。
 ---
 
 # 主分支保护流程（worktree-flow）
@@ -39,6 +39,12 @@ git -C <仓根> rev-parse HEAD origin/$(git -C <仓根> symbolic-ref --short HEA
 git -C <worktree 路径> add -A
 git -C <worktree 路径> commit -m "feat(xxx): ..."
 ```
+
+切进 worktree 之后本 skill 的职责就结束了。**落笔前先定位自己在哪一份 checkout、撞到写拦截时
+先分清是哪一层闸、退出前先确认改动已提交**，这三件事见
+[worktree-boundary · worktree 隔离边界与退出](../worktree-boundary/SKILL.md#时刻一--动手前定位自己在哪一份-checkout)
+（同名相对路径在父仓与 worktree 里指向两个不同文件且不报错；`isolated in the worktree` 与
+`[L1-BLOCKER] check=worktree-flow` 的归因对照表；`ExitWorktree` 两个 action 的取舍）。
 
 ### 3. 合回主分支
 

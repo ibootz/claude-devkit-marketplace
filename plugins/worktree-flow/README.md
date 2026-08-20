@@ -12,6 +12,12 @@
 | `hooks/round-approval-state.js` | `PostToolUse(AskUserQuestion)` + `SessionStart` + `UserPromptSubmit` + `Stop` + `SessionEnd` | Human 明确批准后记本轮状态，并在边界事件撤销 |
 | `hooks/worktree-flow-inject.js` | `SessionStart` + `UserPromptSubmit` + `SubagentStart` | 事前注入流程与授权边界 |
 | `skills/worktree-flow/SKILL.md` | skill | worktree 四步、授权路径、submodule 边界 |
+| `skills/worktree-boundary/SKILL.md` | skill | 已在 worktree 会话内的隔离边界与退出纪律 |
+
+两个 skill 按**决策时刻**分工，不是按主题分工：`worktree-flow` 管「我在 main 上要落笔，该不该开
+worktree / 要不要申请直写授权」——进入之前；`worktree-boundary` 管「我已经在 worktree 会话里了，
+该写哪一份副本、撞的是哪一层闸、怎么安全退出与合回」——进入之后到退出之前。两份 description 各自
+点明了这条界限，并互相指路。
 
 `UserPromptSubmit` 只触达主会话，`SubagentStart` 单独触达子代理；二者都可能写文件，故双挂。
 `SessionStart` 覆盖启动与 compact 后重注。
@@ -85,6 +91,20 @@ SessionEnd 撤销；非批准、自由文本、备注、AFK、问题篡改、损
 普通 worktree 不初始化 submodule。完整聚合仓 worktree 用 `task-keeper:tk-worktree`；嵌套提交推送
 用 `devkit-tool:cascade-push`。若现有 checkout 才持有脏改动，可向 Human 申请本轮直写，勿开空
 worktree 后再跨隔离边界操作原仓。
+
+## 隔离边界与主分支保护是两层，别混
+
+两层闸都在写操作那一刻拦下，成因与解法完全不同。归因错了的代价是实测过的：把隔离误报成主分支
+保护，会去申请一个根本用不上的授权；反过来会以为「换个目录就行」而漏掉授权环节。
+
+| 报错里的判据句 | 拦截者 | 判据 | 解法 |
+|---|---|---|---|
+| `isolated in the worktree` | worktree 会话隔离（harness 工具层，非本插件） | 目标路径落在父仓共享 checkout 内 | 改 worktree 副本，或 `ExitWorktree {"action":"keep"}` 后再写 |
+| `[L1-BLOCKER] check=worktree-flow` | 本插件的 `main-branch-guard.js` | 目标仓当前分支逐字等于 `main` / `master` | 走 worktree 流程，或 Human 当轮授权 |
+
+worktree 建在 `<仓根>/.claude/worktrees/<名>`，而 `.claude/` 是本插件的自动豁免目录之一——所以
+worktree 内的写操作**不会**被主分支保护拦，拦它的只有会话隔离那一层。完整判据、`ExitWorktree`
+两个 action 的取舍、跨会话代做的明禁与例外，见 `skills/worktree-boundary/SKILL.md`。
 
 ## 目录豁免与全局关闭
 
