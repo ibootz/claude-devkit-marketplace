@@ -85,7 +85,21 @@
 ## 3. description：前缀锚定，通常只描述一个实例认领的那条 issue
 
 **`description` 必须以 `<prefix>` 起头，前缀之后接这条 issue 的摘要**，例如
-「`<prefix>` · 登录页白屏」（分隔符 `·` 推荐但不强制）。
+「`<prefix>`·登录页白屏」（分隔符 `·` 推荐但不强制）。
+
+**全串简体中文、上限 15 字**——按 code point 计，一个汉字与一个 ASCII 字符都算 1 字，
+`DBG-042` 记 7 字。`<prefix>` 本身（`debug 队列` / `chore 队列`）已占 8 字，所以分隔符
+用不带空格的 `·`（1 字）而不是 ` · `（3 字），给摘要留 6 字：`debug 队列·登录页白屏`
+恰好 14 字。
+
+**摘要里不写 issue 编号**，写 bug 现象——编号靠 `prompt`（派发模板要求认领目标写在
+开头，`extract_issue` 正是先读 `prompt`）。两个理由叠起来堵死了另一条路：一是
+`<prefix>` 8 字 + `·` 1 字 + `DBG-042` 7 字 = 16 字，本来就超限；二是想省掉分隔符压到
+15 字的话，`debug 队列DBG-042` 会让 `hooks/lib/keeper_instance_register.py:84` 的
+`\bDBG-\d{3,}\b` **抽不到编号**——汉字在 Python 的 Unicode 模式下属于 `\w`，「列」与
+`DBG` 之间没有词边界。实测：改成这个形态后 `hooks/tests/cases/25-h30-multi-instance.sh`
+的 `[156]` 从 `DBG-042` 变成 `None`，登记文件会静默少一个 `issue` 键，主会话此后只能按
+时间猜是哪个实例。
 
 **v7 下这句话通常不再需要覆盖"一整批活"**：v6 是一档一个常驻实例、此后一律靠
 `SendMessage` 唤醒反复接不同的活，所以 description 要写"这一代"的批次摘要；v7 一条

@@ -151,15 +151,15 @@ triage 打分、落点行区间、同根因判定、对账三件套误报识别�
 时按 `difficulty` 从 `sonnet` 起选，见 `references/queue.md` §4「模型分层」。
 
 每条新 bug 的 `Agent` 调用形态（三岔口注入说「新派」时照这模板填，name 自己生成
-4 位随机短哈希、description 以 `debug 队列` 起头——完整规则与反模式清单见
-`references/keeper-dispatch.md` §2/§3）。**同轮报来多条 bug 时，把下面这个调用
+4 位随机短哈希、description 以 `debug 队列` 起头且全串简体中文、上限 15 字——完整
+规则与反模式清单见 `references/keeper-dispatch.md` §2/§3）。**同轮报来多条 bug 时，把下面这个调用
 重复多份、放进同一条消息里一次性发出**（各自 name 不同），不要一条一条发：
 
 ```
 Agent(
   subagent_type: "task-keeper:debug-keeper",   # 若该 subagent_type 不可用则退回 "general-purpose"
   name: "opus-debugger-4bb6",   # 自己生成 4 位随机小写字母/数字后缀，不要逐字抄这个例子
-  description: "debug 队列 · 登录页白屏",   # 前缀 `debug 队列` 不可省，之后写这条 bug 的摘要（一个实例只认领一条 issue）
+  description: "debug 队列·登录页白屏",   # 14 字。前缀 `debug 队列` 不可省（占 8 字），之后写这条 bug 的摘要（一个实例只认领一条 issue）
   model: "opus",
   run_in_background: true,
   prompt: "opus-debugger-4bb6\n
@@ -187,10 +187,12 @@ Agent(
 参数，而它认领 issue 后要用这个 name 去跑 `keeper_cli.py bind` / `lock`，读不到就
 没法完成登记与合并互斥（完整原因见 `references/keeper-dispatch.md` §2）。
 
-**`description` 锚定 `<prefix>` 起头**：前缀 `debug 队列` 不可省，之后接这条 bug 的
-摘要即可——v7 下一个实例通常只对应一条 issue，不再需要像 v6 那样凑「这一代接的
-整批活」。完整机制（为什么前缀锚定而不是逐字固定串、面板渲染时机、check 11 拦下、
-向后兼容旧固定串）见 `references/keeper-dispatch.md` §3。
+**`description` 锚定 `<prefix>` 起头、全串简体中文、上限 15 字**：前缀 `debug 队列`
+不可省（按 code point 计已占 8 字），之后接这条 bug 的摘要即可——v7 下一个实例通常
+只对应一条 issue，不再需要像 v6 那样凑「这一代接的整批活」。分隔符用不带空格的 `·`
+而不是 ` · `，省下的 2 字留给摘要。完整机制（为什么前缀锚定而不是逐字固定串、面板
+渲染时机、check 11 拦下、向后兼容旧固定串、为什么摘要里不写 issue 编号）见
+`references/keeper-dispatch.md` §3。
 
 `run_in_background: true` 是必须的——它让 keeper 在后台跑，你不必等它，也让它具备
 `SendMessage` 到 `main` 的能力。`name` 派发成功后 `PreToolUse(Agent)` hook 会自动
