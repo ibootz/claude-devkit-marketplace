@@ -8,7 +8,7 @@
 
 1. [验证基础](#验证基础)——本 skill 经过哪些真实执行
 2. [性能计时基准](#性能计时基准)——正文"每次 update 25s"等数字的来源
-3. [探测剪枝率](#探测剪枝率)——正文"113 条中 82 跳过 31 需刷"的来源
+3. [探测剪枝率](#探测剪枝率)——正文"190 条中 186 跳过 4 需刷"的来源（判据修正前是 "113 中 82/31"）
 4. [project/local scope 专项坑的复现](#projectlocal-scope-专项坑的复现)——`--scope` 默认值与 cwd 假成功的实测场景
 5. [/reload-plugins 与生命周期挂载点](#reload-plugins-与生命周期挂载点)——`working-discipline` 3.0.0 → 3.2.0 的 reload 实测
 6. [hook 定义方式双检测](#hook-定义方式双检测)——目录式 hook 的 `radnove-core` 4.5.1 案例
@@ -43,7 +43,8 @@
 | `claude plugin marketplace update <单个 git 市场>` | 3.9s | 市场层反而便宜 |
 | `claude plugin marketplace update`（不带参数，全量 17 个） | **14~16 分钟** | 逐市场**串行** clone，期间不流式打印进度；其中一个 SSH 源曾单独卡 1.5 分钟 |
 | 并发 `git ls-remote` 探测全部 17 个市场 | **4.5s** | 替代上面那 14~16 分钟的探测手段 |
-| 并发 `git ls-remote` 探测全部 53 条 url 源插件记录 | **2.9s** | 替代逐个 `plugin update` 的探测手段 |
+| 并发 `git ls-remote` 探测全部 53 条 url 源插件记录 | **2.9s** | 已废弃的手段（判据错，见下）；替代逐个 `plugin update` |
+| 并发取远端 manifest 探测全部 110 条 url 源记录（去重成 15 个远端仓） | **0.8s** | 现行手段；6 个内网 GitLab 仓并发实测 0.282s，单个 GitHub 仓 1.354s |
 
 **"跳过 no-op 等价"的实测**：`claude plugin update insight-addon@claude-devkit-marketplace` 回执 `already at the latest version (1.1.0)`，前后 `diff <(jq -S . 快照) <(jq -S . installed_plugins.json)` 是 **0 行**。零改动意味着跳过它不丢任何东西——这是正文全部剪枝的合法性基础。
 
@@ -194,9 +195,56 @@ PATH 只在该次 Bash 调用的子 shell 内被破坏，**不影响后续调用
 
 **macOS 默认没有 `timeout` 这个二进制**（GNU coreutils 才有，Homebrew 装的叫 `gtimeout`），命令整体 `command not found`，输出为空被误判成远端不可达。对策：`command -v timeout gtimeout` 先确认；没有就别包，或改用 python 的 `subprocess.run(..., timeout=)`（探测器脚本走的就是后者）。
 
-### `gitCommitSha` 对市场仓内源插件语义错位
+### url 源判据是 version 不是 sha（原「`gitCommitSha` 对市场仓内源插件语义错位」）
 
-这个字段的语义**按插件源类型不同**：url 独立仓源的插件，它就是那个独立仓的 commit sha（可直接比）；市场仓内源的插件，它记的是上次刷新时市场仓的某个 commit，与该插件目录最后改动的 commit 大面积不相等——**2026-08-06 抽 14 个样本只 1 个吻合**。对策：市场仓内源**只比版本号**（marketplace.json 条目的 `version`，缺失时回落读该目录 `plugin.json`）；url 源才比 sha（`git ls-remote <url> <ref>`）。
+**2026-08-20 更正：这一节原先的结论「url 源比 sha」是错的。** 两类源的判据其实是同一个——版本号；`gitCommitSha` 从不参与 CLI 的 no-op 判断。原结论只对了一半（市场仓内源不能比 sha 那半），错的那半让 url 源的剪枝完全失效。
+
+#### 代码级依据（claude 2.1.237）
+
+`claude` 是 bun 单文件产物，`strings` 可取出内嵌 JS。`plugin update` 的实现函数 `yJT`（遥测事件名 `plugin_update_op`）里判 `up_to_date` 的条件是：
+
+```js
+let j=Ife(c,J),z=J==="unknown",Z=Cht(c,J),
+    re=!z&&(v.version===J||v.installPath===j||v.installPath===Z);
+if(re&&!Q){ ... `${s} is already at the latest version (${J}).` }
+```
+
+`v` 是 `installed_plugins.json` 里匹配出的那条记录，`J` 是 CLI 从远端解析出的版本号。`Ife(c,J)` 是 `~/.claude/plugins/cache/<市场>/<插件>/<J>`——`installPath` 末段就是 version，所以两个比较项在实际数据上等价。**`gitCommitSha` 一次都没出现在这个判断里。**
+
+版本号解析函数 `S1e` 的优先级逐条是：
+
+1. 远端仓根 `.claude-plugin/plugin.json` 的 `version` ← 本机绝大多数 url 源命中这一支
+2. 所属 `marketplace.json` 条目上的 `version`
+3. `gitCommitSha` 的前 12 位 ← 仓里没有 manifest 时落到这里
+4. archive / 本地 sha / 字面量 `"unknown"`
+
+落到第 3 支时被比较的仍是记录的 **`version`** 字段（此时它存的就是那 12 位），不是 `gitCommitSha`。本机 `cctx-dev-agent-cli` 是活样本：`version` = `02128add7690`，`gitCommitSha` = `02128add7690a86723443faf88b5d0c57371198e`，远端 `refs/heads/main` 也是后者——三者吻合。
+
+#### 误判规模（2026-08-20 实测）
+
+`--stage plugin` 判 73 条需刷 / 121 条跳过。那 73 条真跑一遍的回执分布：
+
+| 回执 | 条数 | 实际身份 |
+|---|---|---|
+| `already at the latest version` | **54** | 全部是 url 源，**全部误判**（误判率 100%）|
+| `updated from X to Y` | 15 | 市场仓内源（`sdlc@ai-sdlc` 13 条 + `fusion@aisdlc-fusion` 2 条）|
+| `refreshed from source` | 4 | 记录 `version` 是字面量 `unknown`（`skill-creator` / `plugin-dev` 各 2 条）|
+
+54 × 25s ≈ **22.5 分钟白付**。成因是判据比的是 sha：同一 id 的多条记录共享同一个 `version` 却带不同 sha（`cctx-dev-yxt-design-system` 14 条里 3 个不同 sha、`version` 全是 `1.9.12`；`cctx-dev-gpb` 是 2 sha / 1 version），于是恒判「有新提交」。
+
+#### 修正后（2026-08-20 同一台机器实测）
+
+190 条已启用记录 → **4 条需刷 / 186 条跳过**，url 源探测 0.8s。那 4 条正是上表里 `version` 为 `unknown` 的那批——与真跑一遍的结果 100% 吻合。回归用例见 `plugins/devkit-tool/tests/probe-refresh-url-criterion.test.py`（27 条断言，纯离线）。
+
+#### 仍然成立的那半：市场仓内源不能比 sha
+
+市场仓内源的 `gitCommitSha` 记的是上次刷新时市场仓的某个 commit，与该插件目录最后改动的 commit 大面积不相等——**2026-08-06 抽 14 个样本只 1 个吻合**。这一半结论不变。
+
+#### 未追的边界
+
+- `yJT` 里还有一条更早的分支：有别的插件对本插件声明版本约束时走 tag 解析，判据变成 `re.version===v.resolvedVersion && re.sha===v.gitCommitSha`（回执文案带 `satisfying`）。本机 221 条安装记录**没有任何 `resolvedVersion` 字段**，54 条回执也都不带 `satisfying`，所以这支当前不生效。但它是「将来有人给插件加版本约束就会换判据」的敞口。**只读代码、未构造样本实测。**
+- `archive` / `npm` / `command` / `git-subdir` / `github` 这几种 source 形态的判据路径**完全没追**（本机零样本）。探测器会把它们丢进 `unknown` 桶无条件列入待刷——保守但不精确。
+- 「`updated` 那 15 条是市场仓内源」这条身份由 `lastUpdated` 时间窗反推（`already` 路径对配置零写入，只有 `updated` / `refreshed` 才写回），**强证据、非代码级证实**。
 
 ### `claude plugin list --json` 一条命令等 23 秒
 

@@ -35,7 +35,7 @@
 
 - `claude-session-launch` — 再起一个 Claude Code 会话干活时的两条路与选型判据：`claude --bg`（被 `claude agents` 托管，有 8 位短 id、`attach` / `logs` / `stop`）对上 osascript 弹 iTerm2 tab（普通 TTY 进程，Claude Code 侧零管控入口）。**选型要害是「托管」而不是「顺手」**。含四个实测坑：`claude logs <id>` 是满屏 ANSI 的 TTY 快照、不能贴给人也不能喂下游（结构化只走 `claude agents --json`）；判前后台看 `kind`（取值 `background` / `interactive`）而**不是** `type` / `mode`（那两个键根本不存在，拿它们判会静默走错分支），且 8 位 `id` 只有后台会话才有、所以 `attach` / `logs` / `stop` 对前台会话不可用；AppleScript 应用名是 `iTerm` 不是 `iTerm2`（`pgrep -l iTerm2` 查不到进程，不能据此判断 iTerm 没在跑）；osascript 新建 tab 的 cwd 继承 iTerm 默认目录而非发起目录、且**不报错**——所以显式 `cd /abs/path &&` 是默认做法不是可选项。另明确划界：派活给已存在的会话走 `ListAgents` + `SendMessage`，本会话内并行干活走 `Agent` 子代理，本地测试服务走 Bash 的 `run_in_background`，三者都不该用起会话代替。
 - `orphan-process-cleaner`
-- `marketplace-cache-sync` — 市场源 + 已启用插件缓存两层同步，含缓存清理。6.2.1 起修正了「让新版本生效」的判据：默认 `/reload-plugins` 即可（实测能热载 skill / agent / hook 脚本与新增的 `PreToolUse` / `PostToolUse` / `UserPromptSubmit` 挂载点），**只有** `SessionStart` / `SessionEnd` / `PreCompact` 这类生命周期挂载点变动才必须重启会话——`/reload-plugins` 不重放生命周期事件，否则会出现「每轮注入已是新版指针、它引用的静态主体却从未投放」的割裂状态。6.2.2 起补上 project/local scope 插件的刷新：常规刷新循环默认只处理 `user` scope，只装在项目目录下（`project`/`local` scope）的插件会静默刷新失败且无任何报错提示；新增按 (id, projectPath) 逐条 `cd` 进目标项目再刷新的写法，并记录了 `--scope project` 靠 cwd 隐式定位、cwd 不匹配时静默假成功的陷阱。
+- `marketplace-cache-sync` — 市场源 + 已启用插件缓存两层同步，含缓存清理。6.17.0 修正了 url 独立仓源的剪枝判据：原先比 `gitCommitSha`，而 CLI 比的是**远端仓根 `.claude-plugin/plugin.json` 的 `version`**（`gitCommitSha` 从不参与），实测 54 条被判待刷的 url 源记录 54 条回执全是 `already at the latest version`、白付 22.5 分钟；改成一次 HTTP GET 取远端 manifest（不 clone，按 `(url, revision)` 去重后 110 条记录只发 15 个请求、0.8s），同一批数据从 73 条待刷降到 4 条、与真跑一遍的结果 100% 吻合。同时修掉「`source` 钉了 `sha` 却去探 `ref` 的 HEAD」这个结构性误判，并把「候选端点全部 404」与「探测失败」分开——前者是确定答案（仓里没 manifest），跟着 CLI 回落去比 sha。判据两侧共 27 条离线断言在 `tests/probe-refresh-url-criterion.test.py`。6.2.1 起修正了「让新版本生效」的判据：默认 `/reload-plugins` 即可（实测能热载 skill / agent / hook 脚本与新增的 `PreToolUse` / `PostToolUse` / `UserPromptSubmit` 挂载点），**只有** `SessionStart` / `SessionEnd` / `PreCompact` 这类生命周期挂载点变动才必须重启会话——`/reload-plugins` 不重放生命周期事件，否则会出现「每轮注入已是新版指针、它引用的静态主体却从未投放」的割裂状态。6.2.2 起补上 project/local scope 插件的刷新：常规刷新循环默认只处理 `user` scope，只装在项目目录下（`project`/`local` scope）的插件会静默刷新失败且无任何报错提示；新增按 (id, projectPath) 逐条 `cd` 进目标项目再刷新的写法，并记录了 `--scope project` 靠 cwd 隐式定位、cwd 不匹配时静默假成功的陷阱。
 
 - `restore-subscription` — 把因自定义模型配置（第三方 API 中转 / 本地 LLM）而回不到 Claude 订阅鉴权的会话切回订阅。核心是**三层污染源**模型：shell 环境变量 / settings 文件的 `env` 段 / **daemon 进程继承**——第三层最隐蔽，`claude daemon run` 由某个加载过第三方配置的 claude 拉起后常驻，此后一切由它承载的后台会话全部继承，与当前终端干不干净无关。两条实测结论：会话形态可变（交互式会话切进 `claude agents` 视图会转为 `bg` 归 daemon 管，当场中毒，判据是 transcript 里的 `sessionKind` 字段而非进程 env）；换 daemon 可由 AI 全自动完成（前提是 AI 自身进程链干净），换完新起会话默认走订阅。判成败只认 transcript 的实际应答模型，不认 `/login` 是否成功。
 
@@ -72,6 +72,8 @@ plugins/devkit-tool/
 ├── hooks/
 │   ├── codegraph-hint.js   # 纯注入（双挂 UserPromptSubmit + SubagentStart）：已建图仓才输出两行 codegraph 引导
 │   └── tests/codegraph-hint-gating.sh    # gating 回归用例（13 条，判据两侧都覆盖）
+├── tests/
+│   └── probe-refresh-url-criterion.test.py  # url 源判据回归（27 条，纯离线不发请求）
 └── skills/
     ├── cascade-pull/       # 带 submodule 的仓库同步拉取（只处理直接声明的一层）
     │   └── scripts/        # diagnose-sync.sh / sync-to-gitlink.sh / preview-gitlink-bump.sh

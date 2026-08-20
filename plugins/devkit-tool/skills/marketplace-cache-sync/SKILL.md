@@ -37,7 +37,7 @@ Claude Code 的插件系统有两层独立状态，都在 `~/.claude/plugins/` �
 | 手段 | 耗时 | 替代什么 |
 |---|---|---|
 | 并发 `git ls-remote` 探测全部 17 个市场 | ≈ 4.5s | 替代不带参数的 `marketplace update` 全量串行 clone（≈ 14~16 分钟） |
-| 并发 `git ls-remote` 探测全部 53 条 url 源插件记录 | ≈ 2.9s | 替代逐个 `plugin update` |
+| 并发取远端 manifest 探测全部 110 条 url 源记录（去重成 15 个远端仓） | ≈ 0.8s | 替代逐个 `plugin update` |
 
 完整计时表（含 `claude --version` / `plugin update <不存在 id>` 等基线对照）见 `references/verification-log.md`「性能计时基准」。
 
@@ -46,11 +46,15 @@ Claude Code 的插件系统有两层独立状态，都在 `~/.claude/plugins/` �
 `marketplace.json` 里每个插件条目的 `source` 字段有两种形态，决定了「怎么判断它需不需要刷」：
 
 - **(a) 市场仓内源**（`"source": "./plugins/<name>"`）：插件内容就在市场仓里。判据是**版本号**——条目里的 `version`（缺失时回落读该目录的 `plugin.json`）与 `installed_plugins.json` 里该记录的 `version` 比，相等即跳过。这正是 CLI 判 `already at the latest version` 的依据，纯本地读、毫秒级。
-- **(b) url 独立仓源**（`"source": {"source": "url", "url": "http://…git", "ref": "master"}`）：**插件内容根本不在市场仓里**，在一个独立 git 仓中。判据是 **commit sha**——`installed_plugins.json` 里该记录的 `gitCommitSha` 就是那个独立仓的 sha，并发探测全部只需 2.9 秒（sha 字段语义见 `references/verification-log.md`「`gitCommitSha` 对市场仓内源插件语义错位」）。
+- **(b) url 独立仓源**（`"source": {"source": "url", "url": "http://…git", "ref": "master"}`）：**插件内容根本不在市场仓里**，在一个独立 git 仓中。判据**同样是版本号**，只是那个版本号住在**远端仓根的 `.claude-plugin/plugin.json`** 里——取一个 JSON 文件不需要 clone，一次 HTTP GET 即可（GitHub 走 raw、自建 GitLab 走 `api/v4/.../files/:path/raw`）。按 `(url, revision)` 去重后请求数从记录数塌缩到远端仓数，本机 110 条记录只有 15 个仓、并发合计 0.8 秒。
 
 **(b) 类正是最慢的那一类**：CLI 每次都要重新 clone 那个独立仓，实测一次 `plugin update` 期间峰值并发起 **4 个** `temp_git_*` 克隆，且会顺带 fetch 非目标市场——这同时解释了第五步要清的 `temp_git_*` 残留是怎么来的。
 
-**注意 `gitCommitSha` 对 (a) 类不是这个语义**，它记的是上次刷新时市场仓的某个 commit，与「该插件目录最后改动的 commit」在实测里大面积不相等（14 个样本只有 1 个吻合）。所以 (a) 类**只能比版本号，不要拿 sha 去比**。
+**两类源的判据其实是同一个：版本号。差别只在版本号从哪读。** 这一点容易判错，所以给出代码级依据——`claude plugin update` 判 `already at the latest version` 的条件（2.1.237 二进制的函数 `yJT`）是「`installed_plugins.json` 该记录的 `version` == CLI 从远端解析出的版本号」，解析优先级（`S1e`）依次是远端仓根 manifest 的 `version` → marketplace 条目的 `version` → `gitCommitSha` 前 12 位 → 字面量 `unknown`。
+
+**`gitCommitSha` 从不参与那个相等判断，拿它当判据必然大面积误判。** 同一 id 的多条记录共享同一个 `version` 却带不同 sha（`cctx-dev-yxt-design-system` 14 条里有 3 个不同 sha、`version` 全是 `1.9.12`）。2026-08-20 实测后果：54 条被判「待刷」的 url 源记录，54 条回执全是 `already at the latest version`——误判率 100%，白付 22 分钟。详见 `references/verification-log.md`「url 源判据是 version 不是 sha」。
+
+**反方向可以直接用**：记录的 `version` 是字面量 `unknown` 时 CLI 恒重装（回执 `refreshed from source`），这类一律列入待刷，剪掉它就是漏刷。
 
 ## 执行工作流
 
@@ -96,17 +100,18 @@ done < /tmp/mkt_to_update.txt
 ### 第二步：算出真正需要刷新的插件清单
 
 ```bash
-python3 "$PROBE" --stage plugin      # 本机实测 4.0s（含 53 条 url 源并发探测 2.9s）
+python3 "$PROBE" --stage plugin      # 本机实测 1.5s（含 110 条 url 源记录去重成 15 个仓、并发取 manifest 0.8s）
 ```
 
 输出写进 `/tmp/plugins_to_refresh.txt`，每行形如 `<id>|<scope>|<projectPath>`（user scope 的 projectPath 为空）。它做四件事：
 
 1. 遍历 `installed_plugins.json` 的**全部** `plugins[id][]` 数组元素——每个元素是一条独立的 (id, scope, projectPath) 记录，同一个 id 在不同项目目录可以各自钉着不同版本。
 2. 按 enabled 过滤。**不调 `claude plugin list --json`**（那条命令本机 23.2s），改为直读 `~/.claude/settings.json` 的 `enabledPlugins[<id>]`（user scope）与 `<projectPath>/.claude/settings.json` / `settings.local.json`（project/local scope）——直读值与 `plugin list` 的 `enabled` 字段一致（验证见 `references/verification-log.md`「`claude plugin list --json` 一条命令等 23 秒」）。要连未启用的一起刷时加 `--include-disabled`。
-3. 按上面「两类插件源」的判据分别剪枝：(a) 市场仓内源比版本号，(b) url 独立仓源并发 ls-remote 比 `gitCommitSha`。
-4. 三种情况一律**列入待刷**，不做剪枝：`installPath` 指向的缓存目录不存在、市场源没声明版本号（判不了）、远端探测失败。剪枝只在能确证"必然 no-op"时才生效。
+3. 按上面「两类插件源」的判据剪枝——两类都比版本号：(a) 市场仓内源读市场仓里的 manifest（纯本地），(b) url 独立仓源按 `(url, revision)` 去重后并发取远端仓根 manifest 的 `version`（不 clone）。`source` 上钉了 `sha` 时 **sha 优先于 `ref`**——钉死在某个提交的源去探 `ref` 的 HEAD 是结构性必然误判。
+4. 下列情况一律**列入待刷**，不做剪枝：`installPath` 指向的缓存目录不存在、市场源没声明版本号（判不了）、记录 `version` 是字面量 `unknown`（CLI 恒重装）、远端 manifest 取不到（超时 / 401 / DNS / 不是合法 JSON）。剪枝只在能确证"必然 no-op"时才生效。
+   **只有一种「取不到」不算失败**：候选端点全部 404，即远端仓里压根没有 manifest。404 是个确定答案，此时 CLI 自己也会回落到 `gitCommitSha` 前 12 位，探测器跟着回落去比 sha（此时才轮到 `git ls-remote`）。本机 `cctx-dev-fecenter` / `cctx-dev-agent-cli` 正是这一类，它们的记录 `version` 就是 sha 前 12 位。
 
-本机典型一轮：113 条已启用记录里 **82 条可跳过、31 条需刷**，光这一步就省下 82 × 25s ≈ **34 分钟**。
+本机典型一轮（2026-08-20 判据修正后实测）：190 条已启用记录里 **186 条可跳过、4 条需刷**，光这一步就省下 186 × 25s ≈ **77 分钟**。修正前同一批数据判成 73 条需刷，其中 54 条是误判。
 
 **这个剪枝不改变结果，也不修 CLI 自身的漏刷面。** 它做的只是"预测 CLI 会不会 no-op，会就别调"。若某插件的版本号没升但内容改了，CLI 自己也会说 `already at the latest version` 而不刷——那是 CLI 的行为，剪枝既不引入也不放大它。
 
@@ -279,7 +284,8 @@ xargs rm -rf < /tmp/cache_orphan.txt
 | 一次完整刷新要跑 30~50 分钟 | 没做探测剪枝，把两类固定开销全付了一遍。先跑 `probe-refresh.py` 两阶段（合计约 8.5s），只对真有变化的调 CLI |
 | 并发跑多个 `plugin update` 想加速 | 它们读改写同一 `installed_plugins.json` 且 CLI 内部无文件锁；flock 包住则退化成串行、零加速。加速只能靠减少调用次数 |
 | `timeout 20 git ls-remote` 全部"探测失败"且总耗时几十毫秒 | macOS 默认无 `timeout` 二进制（Homebrew 的叫 `gtimeout`），命令整体 command not found，输出为空被误判。先 `command -v timeout gtimeout` 确认；探测器脚本走 python `subprocess.run(..., timeout=)` |
-| 拿 `gitCommitSha` 判断插件要不要刷，几乎全判成"要刷" | 字段语义按源类型不同：url 源比 sha；市场仓内源只比版本号（sha 与"目录最后改动 commit"大面积不相等，14 个样本只 1 个吻合） |
+| 拿 `gitCommitSha` 判断插件要不要刷，几乎全判成"要刷"（实测 54/54 全错） | **`gitCommitSha` 从不参与 CLI 的 no-op 判断**，两类源都比版本号。url 源的版本号在远端仓根 manifest 里，取它不用 clone。见第四步 |
+| url 源的 `source` 钉了 `sha` 却去探 `ref` 的 HEAD | `sha` 优先于 `ref`（钉 sha 无 ref 的源如 `mattpocock-skills`），探 HEAD 拿到的必然不是钉住的那个提交，是结构性必然误判 |
 | `plugin list --json` 一条命令等 23 秒 | 共享同一类固定开销。enabled 直读 `~/.claude/settings.json` 与 `<projectPath>/.claude/settings.json`，探测器已内置 |
 
 ## 验证清单
