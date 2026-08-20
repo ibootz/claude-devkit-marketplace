@@ -17,7 +17,7 @@
         "name": "zhangq"
       },
       "category": "Development",
-      "description": "工具技能集：代码库分析、依赖排查、初始化、codegraph 建图、插件缓存刷新、submodule 拉取同步与嵌套提交推送、订阅鉴权恢复（9 技能）",
+      "description": "工具技能集：代码库分析、依赖排查、初始化、codegraph 建图、缓存刷新、submodule 同步与推送、起前后台会话、订阅鉴权恢复（10 技能）",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "devkit-tool",
       "source": {
@@ -28,7 +28,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "6.15.0"
+      "version": "6.16.0"
     },
     {
       "author": {
