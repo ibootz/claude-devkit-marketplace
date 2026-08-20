@@ -37,7 +37,7 @@
     ├── debug/
     │   ├── index.md         派生视图。hook 每轮重算，人和 AI 共用。入库，不要手改
     │   ├── _inbox/          主会话刚落盘、还没分配 DBG-id 的截图（v6 起入库；登记时 mv 进 <DBG-id>/）
-    │   ├── DBG-017/         **一 issue 一目录**——它的四样东西全在这里
+    │   ├── DBG-017/         **一 issue 一目录**——四样全在这里；index.md 与 archive/ 在上一层
     │   │   ├── issue.md     唯一信源。入库
     │   │   ├── receipts.md  fixer 的交付回执。入库，由 fixer commit 进自己分支
     │   │   ├── 01-xxx.png   登记后从 _inbox/ mv 到这里。落盘但**不入库**
@@ -58,7 +58,9 @@
 文件，那样第一轮就返回 None，aisdlc 交付跑在 `.sdlc/worktrees/D-NNN-<slug>/` 里时
 队列恒为空，而冷启动不检测外层已有队列、直接 mkdir 出第二份（实测两份各缺一半）。
 
-**一个 `DBG-NNN/` 目录里只有那四样，外加队列级的 `index.md` 与 `archive/`。**
+**这条断言只管单个 `DBG-NNN/` 目录内部**——它里面只有那四样。队列级的 `index.md` 与
+`archive/` 是 `DBG-NNN/` 的兄弟、不在其中；`_inbox/` / `decisions/` / `chore/` 层级更
+高，同样不受这条约束。
 v3 把 issue / receipts / attachments / worktree 分散在四棵平行子树里靠文件名对齐，
 删一条要记得删四处——实际从来没删干净过。
 v2 还有个 `journal.md` 装「跨 issue 的批次记录」，删除——它是 v2 `issues.yaml` 的
@@ -92,6 +94,68 @@ delta、本次交付的台账）属于项目自己的交付文档体系（如仓
 `.merge.lock.stale-<旧持有者>` 留在原地当诊断现场，写成 `.merge.lock/` 只匹配得到锁
 本身、匹配不到这个残留——于是抢占路径上仍会冒出未跟踪目录，merge-back 的前置校验判
 脏树，**抢到锁的那个实例反而合不了**。
+
+### 队列数据要豁免 L1 行数检查
+
+**只对装了 `dc:quality-lint` 的项目适用。判据：项目根有 `.deepcritique/` 目录**——没有
+就跳过本节，不要凭空创建那个目录。另一个信号是写完队列文件后 stderr 出现
+`[L1-WARN] ... 500` 这类行数告警。
+
+原因：dc 的内置 `fallback` profile 给一切 `**/*.md` / `**/*.yaml` / `**/*.json` 施 500
+行上限，只排除 `node_modules/**` / `dist/**` / `.git/**`（`profiles/fallback.js` 的
+`line-limit` check，`severity: 'warning'`）。那个上限是给**人写的文档**定的可读性阈值，
+而队列数据只增不减——`index.md` 随条目数单调增长，`issue.md` 带行级锚点与多场景复现步
+骤。为压行数删锚点，等于把派发修复时唯一有用的信息删掉。
+
+**`warning` 不等于「只提示」**：hook 里 warning 一样置 `hasError = true`，末尾
+`process.exit(hasError ? 2 : 0)`。所以每写一次超限的队列文件，那次 `Edit` / `Write` 的
+PostToolUse 都以退出码 2 收场，不是刷一行日志了事。
+
+冷启动时在 `<项目根>/.deepcritique/profiles/keeper-queue-exempt.js` 建这份文件，照抄：
+
+```js
+// dc:quality-lint 豁免 profile —— .keeper/ 下全部文件排除在 L1 检查之外。
+// 理由：task-keeper 的队列数据（index.md / issue.md / receipts.md / item.md）随条目数
+// 单调增长，不适用 fallback profile 给「人写文档」定的 500 行可读性上限。
+// 只关 L1（机械行数与结构检查）；未声明 l2/loops，不影响任何 L2 评审能力。
+module.exports = {
+  name: 'keeper-queue-exempt',
+  description: 'Exempt .keeper/ (task-keeper queue data) from L1 quality checks',
+  priority: 10,
+
+  l1: {
+    paths: ['.keeper/**'],
+    checks: []
+  }
+}
+```
+
+三个坑，写错任一条都是**静默不生效**——不报错、不警告，要等下次撞 exit 2 才发现：
+
+1. **`name` 不能撞 dc 内置 profile 的名字**（当前是 `fallback` 与 `meta-docs`）。profile
+   发现的顺序是「内置目录先扫、项目级后扫」，按 name 去重且**先加载者胜**，撞名的项目级
+   profile 会被静默跳过。
+2. **`priority` 必须严格小于 `fallback` 的 `100`**。profiles 按 priority 升序排，取第一个
+   `included && !excluded` 的就 return——只有排在 fallback 前面，才短路得掉它的
+   `line-limit`。取 `10`。
+3. **必须写 `.keeper/**`，不能写 `.keeper/*`**。dc 的路径匹配是自实现的四分支函数，只有
+   `dir/**` 那一支走目录前缀判断（`filePath.startsWith(dir + '/')`，故任意深度都命中）；
+   单星会掉进兜底的 basename / 后缀精确匹配分支，深层文件基本匹配不到。
+
+`checks: []` 已经保证命中该 profile 的文件零 finding，**不需要**再写 `!` 前缀的排除项；
+`!` 只在「大目录整体豁免、但其中某个子集仍要检查」时才用得上。
+
+这份 profile 落在项目根的 `.deepcritique/profiles/`，**不在 `.keeper/` 里面**，所以它不
+构成前面那条「一个 `DBG-NNN/` 目录里只有那四样」的第五样。
+
+建完回读一次：对 `.keeper/` 下某个超过 500 行的 md 做一次 `Edit`，确认 stderr 不再出现
+`[L1-WARN]`。文件写对了不等于 hook 真的按新值生效——同一条纪律与「改完 `.gitignore` 必须
+grep 回来确认」同源。
+
+若项目里已有一份别的豁免 profile（例如老 debug 队列时期的
+`.deepcritique/profiles/debug-queue-exempt.js`，`paths` 只写了 `.debug/**`），两条路都行：
+给它的 `paths` 补一条 `.keeper/**`，或按上面新建独立文件。选前者要同步改掉那份文件顶部
+「影响面仅限 .debug/」之类的注释，否则代码与注释脱节。
 
 `index.md` 由 hook 每轮重算，**不要手工编辑它**，下一轮就被覆盖。v6 起它是被跟踪
 文件，所以手改还会在 `git diff` 里留下一条随即被抹掉的假改动（这条 v4 的副作用随入库

@@ -128,7 +128,7 @@ fixer 在自己的 worktree 里改 issue 文件还会造成合并冲突。**任�
 2. **`check_staged_gitlink.py` 每次提交队列前都跑**，`exit 2` 时按它打印的命令撤出 gitlink。
 3. **`receipts.md` 随 `merge-back` 正常带回来**，不要手工 `cp`。但 `worktree/` 仍不入库，**销毁 delivery worktree 时 git 不会警告里面有未提交修复**——那条风险与入库策略无关，仍然成立。
 
-**一个 `DBG-NNN/` 目录里只放这四样（issue.md / receipts.md / 截图 / worktree/），加上队列级的 index.md 与 archive/，不要新建第五种混合职责的文件。** 批次级信息按归属分流：属于某条 issue 的（拍板、落点对账、字段变动）写进那条 issue 的「修订记录」；真正跨 issue 的交付级事实（批量流转结果、spec delta、交付台账）属于项目自己的交付文档体系（如 `.sdlc/`），`.keeper/debug/` 只装 bug 队列本身（v2 `journal.md` 的删除理由见 `references/history.md` §2）。
+**这条只管单个 `DBG-NNN/` 目录内部**：里面只放这四样（issue.md / receipts.md / 截图 / worktree/），不要新建第五种混合职责的文件。队列级的 `index.md` 与 `archive/` 是 `DBG-NNN/` 的兄弟、不在这四样里。批次级信息按归属分流：属于某条 issue 的（拍板、落点对账、字段变动）写进那条 issue 的「修订记录」；真正跨 issue 的交付级事实（批量流转结果、spec delta、交付台账）属于项目自己的交付文档体系（如 `.sdlc/`），`.keeper/debug/` 只装 bug 队列本身（v2 `journal.md` 的删除理由见 `references/history.md` §2）。
 
 `index.md` 由 hook 每轮重算——**不要手工编辑它**，下一轮就会被覆盖。v4 起它入库，
 所以手改还会在 `git diff` 里留下一条随即被抹掉的假改动。

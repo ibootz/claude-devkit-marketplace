@@ -110,4 +110,12 @@ Claude Code 把 `grep` 影子成自带 ugrep 且参数写死 `--ignore-files`（
 └── chore/                    ← chore-keeper 管，不归 debug-keeper 写
 ```
 
-一个 `DBG-NNN/` 目录里只放四样（issue.md / receipts.md / 截图 / worktree/），加上队列级的 index.md 与 archive/，不要新建第五种混合职责的文件。
+**这条断言只管单个 `DBG-NNN/` 目录内部**：里面只放四样（issue.md / receipts.md / 截图 / worktree/），不要新建第五种混合职责的文件。队列级的 `index.md` 与 `archive/` 是 `DBG-NNN/` 的兄弟、不在这四样里；`_inbox/` / `decisions/` / `chore/` 层级更高，同样不受这条约束。
+
+## 队列数据的 L1 豁免（仅装了 dc:quality-lint 的项目）
+
+判据：项目根有 `.deepcritique/` 目录。有则冷启动时顺手建一份豁免 `.keeper/**` 的 profile，落点 `<项目根>/.deepcritique/profiles/keeper-queue-exempt.js`；没有那个目录就跳过本节，不要凭空创建。
+
+不建的后果：队列文件一旦超 500 行，此后每次 `Edit` / `Write` 的 PostToolUse 都以退出码 2 收场。可直接照抄的文件内容、三个会静默失效的坑（name 撞名 / priority 排序 / `**` 写法）与回读验法，见 `references/queue.md` 的「队列数据要豁免 L1 行数检查」一节。
+
+这份 profile 落在项目根的 `.deepcritique/profiles/`，**不在 `.keeper/` 里面**，所以它不构成上面那条「只放四样」的第五样。
