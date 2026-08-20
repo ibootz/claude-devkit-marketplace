@@ -682,6 +682,9 @@ agent('debug-fixer 超 15 code point description 拒绝', adDebugFixer('medium',
 agent('debug-fixer debug 队列前缀拒绝', adDebugFixer('hard', { description: 'debug 队列修复' }), 'DENY')
 agent('debug-fixer debugger 队列前缀拒绝', adDebugFixer('hard', { description: 'debugger 队列修复' }), 'DENY')
 agent('debug-fixer 模型标签前缀拒绝', adDebugFixer('easy', { description: '[sonnet] 修复分类' }), 'DENY')
+agent('debug-fixer 明确繁体字形拒绝', adDebugFixer('easy', { description: '修復登入' }), 'DENY')
+agent('debug-fixer 简繁共用字放行', adDebugFixer('medium', { description: '查乾著归属' }), 'ALLOW')
+agent('普通 Agent 明确繁体字形不误伤', ad({ name: 'sonnet-fix-login', subagent_type: 'general-purpose', description: '修復登入' }), 'ALLOW')
 agent('debug-fixer 含 DBG-024 中文摘要放行', adDebugFixer('medium', { description: '修DBG-024分类归属' }), 'ALLOW')
 const fixerAutoName = agent(
   'debug-fixer 缺 name 自动补精确形态',

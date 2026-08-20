@@ -106,6 +106,7 @@
 
 const fs = require('fs')
 const crypto = require('crypto')
+const { firstStrictTraditionalForm } = require('./traditional-simplified-forms')
 
 // 可选模型三档。**不含 haiku**（2026-07-27 起）：haiku 在机械任务上省下的那点
 // 成本，抵不过它读错文件结构、漏掉边界条件后父代理返工重派的开销——最低档一律
@@ -776,6 +777,11 @@ function checkNaming(ti) {
     if (codePointLength > 15) {
       findings.push(`第二层 debug fixer 的 description 有 ${codePointLength} 个 JS code point，超过 15`)
       hints.push('description 压到 15 个 JS code point 以内，例如 "修DBG-024分类归属"')
+    }
+    const traditionalForm = firstStrictTraditionalForm(description)
+    if (traditionalForm) {
+      findings.push(`第二层 debug fixer 的 description 含有明确简繁差异的传统字形 "${traditionalForm}"`)
+      hints.push('description 改用对应简体字；例如 "修復登入" 改成 "修复登入"。简繁共用字可保留')
     }
     if (/^(?:\[(?:sonnet|opus|fable)\]\s*)?(?:debug|debugger)\s*队列/u.test(description)) {
       findings.push('第二层 debug fixer 的 description 不能以 "debug 队列" 或 "debugger 队列" 起头；那是第一层常驻 keeper 的前缀')

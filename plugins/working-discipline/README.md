@@ -446,7 +446,7 @@
 | 10 | `subagent_type` 的 slug 是 `debug-keeper` / `chore-keeper` 而 `description` 正文（strip 掉 `[模型名]` 前缀后）不以 `<kind> 队列` 起头 | 常驻 keeper 的面板描述必须保留 `debug 队列` / `chore 队列` 前缀；判据仅查精确 type 与 description 正文，前缀之后不解释任务语义。 |
 | 11 | 精确 `task-keeper:debug-fixer-easy` / `medium` / `hard` 的 `model` 不分别等于 `sonnet` / `opus` / `fable` | 第二层 debug fixer 的 Human 明示特例。判据只查本次 input 的精确 `subagent_type` 与 `model`：easy=sonnet、medium=opus、hard=fable；不扫描 prompt 判断任务像不像 fixer。此 `hard=fable` 首用例外不扩展到普通 Agent，普通 Agent 仍须同一任务 `opus` 完整跑至少两轮无进展。 |
 | 12 | 上述精确 fixer 的 `name` 不满足 `^<该 type 的 model>-debug-[0-9a-z]{4}$` | model、type、name 三字段一一绑定：`sonnet-debug-xxxx` / `opus-debug-xxxx` / `fable-debug-xxxx`。中段只能为 `debug`，故第一层的 `debugger` 不会混入第二层。 |
-| 13 | 上述精确 fixer 的 `description` 非全串简体中文任务摘要、超过 15 个 JS code point、带模型标签或以 `debug 队列` / `debugger 队列` 起头 | 允许必要的 `DBG-024` 与常用中文标点，且必须含汉字，故纯英文拒绝；使用 `Array.from(description).length` 按 code point 而非 UTF-16 code unit 计数。普通 Agent 的 ASCII description 仍走一般规则并放行。 |
+| 13 | 上述精确 fixer 的 `description` 非全串简体中文任务摘要、超过 15 个 JS code point、带模型标签或以 `debug 队列` / `debugger 队列` 起头 | 允许必要的 `DBG-024` 与常用中文标点，且必须含汉字，故纯英文拒绝；使用 `Array.from(description).length` 按 code point 而非 UTF-16 code unit 计数。对含明确简繁差异的字形，内置 OpenCC `TSCharacters.txt` 的 3203 个「传统源字不属于简体目标字列表」单字表逐 code point 拒绝，例如 `修復登入` 拒绝、`修复登入` 放行；简繁共用字（如 `乾`、`著`）不拒绝。普通 Agent 的 ASCII 或繁体 description 仍走一般规则并放行。 |
 
 **判据精度：不要再写成"零误判"。** 新增的第 11–13 项只取本次 `Agent` input 的精确
 `subagent_type`、`model`、`name`、`description` 与长度：不扫描 prompt，不推断任务身份。第 13 项的
