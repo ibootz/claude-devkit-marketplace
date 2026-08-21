@@ -66,11 +66,33 @@ PreToolUse 要求问题、选项、metadata 逐字段匹配，且输入不能带
 | 目标仓 |文件工具取目标路径；Bash 取 `cwd` 或 `git -C` | `git rev-parse --show-toplevel` 失败则放行 |
 | 分支 | `git rev-parse --abbrev-ref HEAD` | 逐字等于 `main` 或 `master` |
 | 豁免路径 | 文件相对仓根路径 | `.claude/`、`.keeper/`、`.git/` 或显式配置前缀 |
+| 提交范围 | `git diff --cached --name-only` + 命令里的 pathspec | 非空且**每一条**都豁免则放行；判不定则拦 |
 | 合流进行中 | git 目录标记 | merge / cherry-pick / revert / rebase 标记存在则放行 |
 | 本轮授权 | session-scoped 临时状态 | 有效则放行；缺失、过期、损坏则拒绝 |
 
 Bash 侧仍只认命令位上的 `git commit`。正则无法可靠判断 `sed -i`、重定向、heredoc 或解释器
 内部写入，故这些保持已知漏报，由注入纪律兜住。
+
+### `git commit` 的提交范围豁免（1.4.0）
+
+1.3.0 之前 Bash 侧一律 `evaluate(dir, null)`，`filePath` 为 `null` 时豁免判定整段被短路：
+**路径豁免对 `Write` / `Edit` 生效，对 `git commit` 不生效**。后果是 keeper 在 `main` 上写
+`.keeper/` 台账一路放行，到提交那一步被拦——而它无路可走（子代理不能调 `AskUserQuestion`）。
+
+1.4.0 起，命中受保护分支后再判这次提交能不能**证明**只动豁免路径，三条同时成立才放行：
+
+1. **flag 全在白名单内**。`-a` / `-A` / `--all` / `-i` / `--include` / `--amend` / `--patch` /
+   `--pathspec-from-file` 出局——它们在提交那一刻才扩大暂存范围或改写既有提交，事先读到的
+   索引不再是这次提交内容的权威快照。**未列入白名单的 flag 一律出局**，包括 git 日后新增的。
+2. **显式 pathspec 逐条豁免**（`--` 之后与裸路径形态都算）。通配符与 `:` 开头的 magic
+   pathspec 不展开，直接判不定。pathspec 带走的是工作区内容、绕开索引，故必须单独校验。
+3. **索引非空且逐条豁免**。读法钉死了三个配置（`diff.relative=false` /
+   `core.quotePath=false` / `--no-renames`），使输出不受本机 git 配置影响、重命名摊成
+   delete + add 两条而不是只看到新名字。
+
+**白名单不是黑名单，这是有意的。** 黑名单漏一个新 flag 会静默放行；白名单最坏只是多拦一次
+本来安全的写法，而出口一直都在（先窄 `git add` 再不带 `-a` 提交，或走 worktree）。判不定
+一律维持阻断，方向与本机制存在以来一致。
 
 ## 回归用例
 
@@ -81,7 +103,10 @@ node plugins/worktree-flow/tests/round-approval.test.js
 
 覆盖：无授权拒绝；固定授权卡放行调用；预填回答拒绝；批准后整轮多次放行；下一条用户消息、Stop、
 SessionEnd 撤销；非批准、自由文本、备注、AFK、问题篡改、损坏与过期状态皆 fail-closed；以及 feature
-分支、detached HEAD、豁免目录、合流进行中和 Bash 已知漏报不回归。
+分支、detached HEAD、豁免目录、合流进行中和 Bash 已知漏报不回归。`git commit` 提交范围豁免的
+判据两侧各有用例：全豁免暂存区 / 豁免 pathspec / `git -C` / 粘连值 `-m"msg"` 应放行；空索引 /
+混了源码 / `-a`·`-A`·`--all`·`-i`·`--include`·`--amend`·`--patch` / 源码 pathspec / glob /
+`--pathspec-from-file` / 未知 flag 应仍拦。
 
 ## worktree 与 submodule 边界
 

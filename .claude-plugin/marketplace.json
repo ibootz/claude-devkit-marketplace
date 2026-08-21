@@ -143,7 +143,7 @@
       "source": "./plugins/worktree-flow",
       "category": "Development",
       "description": "主分支保护 + worktree 隔离边界 - main/master 默认走 worktree，进入后写哪份/怎么退",
-      "version": "1.3.0"
+      "version": "1.4.0"
     },
     {
       "name": "cd-blocker",

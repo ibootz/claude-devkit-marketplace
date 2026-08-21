@@ -238,6 +238,103 @@ check(
   0
 )
 
+// ── git commit 的暂存区豁免（1.4.0）─────────────────────────────────
+//
+// 判据两侧都要有用例。这一组的成因：1.3.0 之前 Bash 侧一律 evaluate(dir, null)，
+// filePath 为 null 时 isExemptPath 那一步被短路，于是「只提交 .keeper/ 台账」这种
+// 本该豁免的提交照样被拦——路径豁免对 Write/Edit 生效、对 git commit 不生效。
+console.log('\n[git commit 暂存区豁免 · 应放行 exit 0]')
+
+const stagedRepo = makeRepo('main')
+fs.mkdirSync(path.join(stagedRepo, '.keeper/_main/chore/CHR-001'), { recursive: true })
+fs.writeFileSync(path.join(stagedRepo, '.keeper/_main/chore/CHR-001/item.md'), 'x\n')
+fs.mkdirSync(path.join(stagedRepo, '.claude'), { recursive: true })
+fs.writeFileSync(path.join(stagedRepo, '.claude/settings.local.json'), '{}\n')
+// -f 是必需的：本机可能有全局 gitignore 忽略 .claude/settings.local.json，用例不能取决于它
+git(['add', '-f', '--', '.keeper/_main/chore/CHR-001/item.md', '.claude/settings.local.json'], stagedRepo)
+
+check(
+  '暂存区全是豁免路径 → git commit 放行',
+  { tool_name: 'Bash', tool_input: { command: 'git commit -m "chore: 台账"' }, cwd: stagedRepo },
+  0
+)
+check(
+  '暂存区全豁免 + 显式 pathspec 也豁免 → 放行',
+  {
+    tool_name: 'Bash',
+    tool_input: { command: 'git commit -m "x" -- .keeper/_main/chore/CHR-001/item.md' },
+    cwd: stagedRepo,
+  },
+  0
+)
+check(
+  '暂存区全豁免 + git -C <repo> 从别处调用 → 放行',
+  {
+    tool_name: 'Bash',
+    tool_input: { command: `git -C ${stagedRepo} commit -m "x" --no-verify` },
+    cwd: os.tmpdir(),
+  },
+  0
+)
+check(
+  '暂存区全豁免 + 粘连值 -m"msg" → 放行（短 flag 粘连值不误判成 pathspec）',
+  { tool_name: 'Bash', tool_input: { command: 'git commit -m"chore: x"' }, cwd: stagedRepo },
+  0
+)
+
+console.log('\n[git commit 暂存区豁免 · 应仍阻断 exit 2]')
+
+check(
+  '暂存区为空 → 仍拦（证明不了这次提交只动豁免路径）',
+  { tool_name: 'Bash', tool_input: { command: 'git commit -m "x"' }, cwd: makeRepo('main') },
+  2
+)
+
+const mixedRepo = makeRepo('main')
+fs.mkdirSync(path.join(mixedRepo, '.keeper'), { recursive: true })
+fs.writeFileSync(path.join(mixedRepo, '.keeper/note.md'), 'x\n')
+fs.writeFileSync(path.join(mixedRepo, 'src.js'), 'x\n')
+git(['add', '-f', '--', '.keeper/note.md', 'src.js'], mixedRepo)
+check(
+  '暂存区混了源码 → 仍拦（every 而非 some）',
+  { tool_name: 'Bash', tool_input: { command: 'git commit -m "x"' }, cwd: mixedRepo },
+  2
+)
+
+// -a / -A / --all / -i / --include / --amend 在提交那一刻才扩大范围或改写既有提交，
+// 事先读到的索引不再是权威，故一律维持阻断。
+for (const flag of ['-a', '-am "x"', '-A', '--all', '-i', '--include', '--amend', '--patch']) {
+  check(
+    `暂存区全豁免但带 ${flag} → 仍拦（提交时才扩大范围 / 改写既有提交）`,
+    { tool_name: 'Bash', tool_input: { command: `git commit ${flag} -m "x"` }, cwd: stagedRepo },
+    2
+  )
+}
+check(
+  '暂存区全豁免但 pathspec 指向源码 → 仍拦',
+  { tool_name: 'Bash', tool_input: { command: 'git commit -m "x" -- src.js' }, cwd: stagedRepo },
+  2
+)
+check(
+  '暂存区全豁免但 pathspec 带 glob → 仍拦（不展开通配符）',
+  { tool_name: 'Bash', tool_input: { command: 'git commit -m "x" -- ".keeper/*"' }, cwd: stagedRepo },
+  2
+)
+check(
+  '暂存区全豁免但 --pathspec-from-file → 仍拦（范围来自文件，读不到）',
+  {
+    tool_name: 'Bash',
+    tool_input: { command: 'git commit -m "x" --pathspec-from-file=list.txt' },
+    cwd: stagedRepo,
+  },
+  2
+)
+check(
+  '暂存区全豁免但白名单外的 flag → 仍拦（白名单，未知 flag 维持阻断）',
+  { tool_name: 'Bash', tool_input: { command: 'git commit -m "x" --some-future-flag' }, cwd: stagedRepo },
+  2
+)
+
 fs.rmSync(STATE_DIR, { recursive: true, force: true })
 console.log(`\n结果：${passed} passed, ${failed} failed`)
 process.exit(failed === 0 ? 0 : 1)
