@@ -48,7 +48,10 @@ const CONTEXT = `# 主分支保护（worktree-flow）
 \`WORKTREE_GUARD=off\` 仍是独立的全局关闭开关，不是 Human 本轮授权；AI 不得自行启用。
 
 **既有自动豁免**：非 git 目录；detached HEAD；merge / rebase / cherry-pick 进行中；目标落在
-\`.claude/\`、\`.keeper/\`、\`.git/\` 或显式配置的豁免目录。
+\`.claude/\`、\`.keeper/\`、\`.git/\` 或显式配置的豁免目录。\`git commit\` 亦按此豁免——前提是
+暂存区非空且**每一条**都落在豁免目录下、显式 pathspec 也逐条豁免、且不带 \`-a\` / \`-A\` /
+\`--all\` / \`-i\` / \`--include\` / \`--amend\`（这些在提交那一刻才扩大范围，索引不再是权威）。
+写法不在白名单内就仍然拦：改法是先窄 \`git add\` 再不带 \`-a\` 提交。
 
 **Bash 已知漏报**：守卫只机械识别 \`git commit\`；\`sed -i\`、重定向、\`tee\`、heredoc、
 解释器内部写文件虽可能过闸，未经本轮授权仍不得在 main/master 使用。`

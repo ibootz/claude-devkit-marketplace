@@ -28,6 +28,16 @@
 //    rebase-merge / rebase-apply 任一 → 放行。理由是「解决冲突」这一步按设计就发生在
 //    主分支上，且必须能改文件、能 `git commit` 收尾；不豁免会把本插件推荐的 --no-ff
 //    合并流程自己卡死。
+// 6. `git commit` 的豁免（1.4.0 新增）：命中受保护分支后，若这次提交能**证明**只动豁免
+//    路径则放行。三个条件同时成立才算证明——(a) flag 全在白名单内（`-a` / `-A` / `--all`
+//    / `-i` / `--include` / `--amend` / `--patch` / `--pathspec-from-file` 与任何未列入
+//    的 flag 都出局，因为它们在提交那一刻才扩大暂存范围或改写既有提交，事先读到的索引
+//    不再是权威）；(b) 显式 pathspec 逐条豁免（含 `--` 之后与裸路径形态，通配符与
+//    `:` 开头的 magic pathspec 一律判不定）；(c) `git diff --cached --name-only` 非空
+//    且逐条豁免。判不定就维持阻断，方向与本机制存在以来一致。
+//    修的是这个结构性缺口：Bash 侧走 evaluate(dir, null)，filePath 为 null 时豁免判定
+//    整段被短路，于是路径豁免对 Write/Edit 生效、对 `git commit` 不生效——keeper 只提交
+//    `.keeper/` 台账也会被拦，而它写那批文件时一路放行。
 //
 // 【Bash 侧只认 `git commit` 这一种形态，这是有意的收窄】
 // 本仓 .claude/rules/project/hook-restraint.md 明令：判据需要理解语义的规则不得做成 deny。
@@ -47,6 +57,9 @@
 //     因为 .json / .yml 这类配置落在代码与文档的灰区，按扩展名切会切出一条模糊边界）。
 //     出口是 WORKTREE_GUARD=off。
 //   - 仓根就叫 main/master 的分支但用途不是主干（少见）——同样被拦，同一个出口。
+//   - `git commit` 只动豁免路径、但写法不在白名单内（`-a`、`--amend`、罕见 flag、
+//     glob pathspec）——仍被拦。这是白名单换来的代价：改法是先窄 `git add` 再不带 `-a`
+//     提交，或走 worktree。**不要为了过闸把判据放宽成黑名单。**
 //
 // Input: JSON on stdin（tool_name / tool_input / cwd）
 // Exit 0 = 放行；Exit 2 = 阻断（stderr 作为附加上下文回灌给 Claude）
@@ -269,7 +282,8 @@ function tokenize(segment) {
   return tokens
 }
 
-// 命中返回 { repoHint }（`git -C <path>` 时 repoHint 为那个 path），否则返回 null
+// 命中返回 { repoHint, args }（`git -C <path>` 时 repoHint 为那个 path，args 是 `commit`
+// 之后的全部 token），否则返回 null
 function findGitCommit(segment) {
   const cleaned = segment.replace(/^[\s(){]+/, '').replace(/[)}\s]+$/, '')
   const tokens = tokenize(cleaned)
@@ -296,9 +310,111 @@ function findGitCommit(segment) {
       continue
     }
     if (t.startsWith('-')) continue
-    return t === 'commit' ? { repoHint } : null
+    return t === 'commit' ? { repoHint, args: tokens.slice(i + 1) } : null
   }
   return null
+}
+
+// ── Bash 侧：这次 `git commit` 是否可证明只动豁免路径 ────────────────
+//
+// `git commit` 的 flag **白名单**：只列不改变暂存范围、也不改写既有提交的那些。
+// 白名单而非黑名单是有意的——未列入的 flag 一律按「证明不了」处理、维持阻断，与本机制
+// 存在以来的行为一致。黑名单在这里方向是错的：日后 git 新增一个扩大暂存范围的 flag，
+// 黑名单会静默放行它，而白名单最坏只是多拦一次本来安全的写法（出口是 worktree 或授权）。
+const COMMIT_FLAGS_NO_VALUE = new Set([
+  '-n', '--no-verify', '--verify',
+  '-q', '--quiet',
+  '-v', '--verbose',
+  '-s', '--signoff', '--no-signoff',
+  '-e', '--edit', '--no-edit',
+  '--allow-empty', '--allow-empty-message',
+  '--no-gpg-sign', '--no-post-rewrite',
+  '--status', '--no-status',
+  '--dry-run',
+  // -o/--only 把提交范围**限制**到 pathspec，比默认更窄；pathspec 本身下面逐条校验
+  '-o', '--only',
+])
+
+// 取一个独立 token（或 --x=y 的 y）作为值；那个值不是 pathspec，不参与豁免判定
+const COMMIT_FLAGS_WITH_VALUE = new Set([
+  '-m', '--message',
+  '-F', '--file',
+  '-t', '--template',
+  '-c', '--reedit-message',
+  '-C', '--reuse-message',
+  '--author', '--date', '--cleanup', '--trailer',
+  '--fixup', '--squash',
+])
+
+// pathspec 里出现这些就不展开、直接判「证明不了」：通配符要 glob、`:` 开头是 magic pathspec
+const UNRESOLVABLE_PATHSPEC = /[*?[\]]/
+
+// args 是 `commit` 之后的全部 token。返回 true 仅当能**证明**这次提交只会动豁免路径；
+// 任何一处判不定都返回 false（维持阻断）。
+//
+// 【为什么需要这个函数】Bash 侧走的是 evaluate(dir, null)，filePath 为 null 时
+// isExemptPath 那一步被短路，于是路径豁免对 Write/Edit 生效、对 `git commit` 不生效——
+// 「只提交 .keeper/ 台账」这种本该豁免的提交照样被拦。这是 1.4.0 修的结构性缺口。
+//
+// 【为什么 -a/-A/--all/-i/--include/--amend 一律不放】它们在**提交那一刻**才扩大暂存
+// 范围（-a 带走所有已跟踪的改动）或改写既有提交（--amend 带走上一个 commit 的内容），
+// 事先读到的索引不再是这次提交内容的权威快照。
+function commitConfinedToExempt(root, cwd, args) {
+  const pathspecs = []
+  let afterDashDash = false
+
+  for (let i = 0; i < args.length; i++) {
+    const t = args[i]
+    if (afterDashDash) {
+      pathspecs.push(t)
+      continue
+    }
+    if (t === '--') {
+      afterDashDash = true
+      continue
+    }
+    if (COMMIT_FLAGS_NO_VALUE.has(t)) continue
+    if (COMMIT_FLAGS_WITH_VALUE.has(t)) {
+      i++ // 跳过它的值
+      continue
+    }
+    if (t.startsWith('--') && t.includes('=')) {
+      const name = t.slice(0, t.indexOf('='))
+      if (COMMIT_FLAGS_WITH_VALUE.has(name) || COMMIT_FLAGS_NO_VALUE.has(name)) continue
+      return false
+    }
+    if (t.startsWith('-') && t.length > 1) {
+      // 短 flag 粘连值（-mmsg / -m"msg" 被 tokenize 去引号后成 -mmsg）
+      if (t.length > 2 && COMMIT_FLAGS_WITH_VALUE.has(t.slice(0, 2))) continue
+      return false // 未列入白名单的 flag，或 -am 这类短 flag 串
+    }
+    pathspecs.push(t) // `git commit <path>` 不带 -- 也是合法 pathspec
+  }
+
+  // 显式 pathspec 会带走**工作区**里那些路径的内容，绕开索引，故必须逐条豁免。
+  // pathspec 以命令自己的 cwd 为基准解析（`git -C <path>` 时是那个 path），不是仓根。
+  for (const spec of pathspecs) {
+    if (!spec || spec.startsWith(':') || UNRESOLVABLE_PATHSPEC.test(spec)) return false
+    const abs = path.isAbsolute(spec) ? spec : path.resolve(cwd, spec)
+    if (!isExemptPath(canonicalize(abs), root)) return false
+  }
+
+  // 索引就是这次提交会带走什么的权威快照。三个 -c 是为了钉死输出形态、不受本机配置影响：
+  //   diff.relative=false → 路径恒以仓根为基准（否则会相对 cwd）
+  //   core.quotePath=false → 非 ASCII 路径不转义成 \xxx（转义后必然判不豁免、只会多拦）
+  //   --no-renames → 重命名摊成 delete + add 两条，避免只看到新名字而漏掉旧名字
+  const staged = git(
+    [
+      '-c', 'diff.relative=false',
+      '-c', 'core.quotePath=false',
+      'diff', '--cached', '--name-only', '--no-renames', '-z',
+    ],
+    root
+  )
+  if (staged === null) return false // 读不到索引 → 判不定
+  const files = staged.split('\0').filter(Boolean)
+  if (!files.length) return false // 空索引 → 这次提交要么失败，要么在改写别的东西
+  return files.every((rel) => isExemptPath(canonicalize(path.resolve(root, rel)), root))
 }
 
 // ── 汇总 ────────────────────────────────────────────────────────────
@@ -369,6 +485,8 @@ function main() {
           : path.resolve(cwd, found.repoHint)
         : cwd
       hit = evaluate(dir, null)
+      // 命中受保护分支后再看这次提交能不能证明只动豁免路径；能证明就当没命中
+      if (hit && commitConfinedToExempt(hit.root, dir, found.args || [])) hit = null
       if (hit) break
     }
   } else {
