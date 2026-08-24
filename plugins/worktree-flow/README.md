@@ -110,7 +110,7 @@ SessionEnd 撤销；非批准、自由文本、备注、AFK、问题篡改、损
 
 ## worktree 与 submodule 边界
 
-`EnterWorktree` 默认 `worktree.baseRef = fresh`，本地主分支领先远端时会漏本地提交；先比
+`EnterWorktree` 的 `name` 使用 `<仓名短名>-<功能词1>-<功能词2>-<功能词3>`：仓名取仓根目录名并转为 lowercase `kebab-case`，功能最多 3 个词，不足不补；同名冲突时仅追加 4 位短 hash。这样目录与分支可直接识别来源仓和任务，例如 `claude-devkit-fix-hook`。`EnterWorktree` 默认 `worktree.baseRef = fresh`，本地主分支领先远端时会漏本地提交；先比
 `HEAD` 与 `origin/<branch>`，不一致则用 `head` 或从本地 `HEAD` 手动建。
 
 普通 worktree 不初始化 submodule。完整聚合仓 worktree 用 `task-keeper:tk-worktree`；嵌套提交推送

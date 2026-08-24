@@ -27,7 +27,8 @@ const CONTEXT = `# 主分支保护（worktree-flow）
 
 默认走四步：
 
-1. 调 \`EnterWorktree\` 工具 \`{"name":"<任务语义-kebab>"}\`，建临时分支并切入 worktree。
+1. 调 \`EnterWorktree\` 工具，参数名遵循 \`<仓名短名>-<功能词1>-<功能词2>-<功能词3>\`；功能最多 3 个词，不足不补，建临时分支并切入 worktree。
+   仓名取仓根目录名并转为 lowercase \`kebab-case\`；删除 \`fix\`、\`feat\`、\`task\`、\`worktree\` 等无辨识度前缀；同名冲突时仅追加 4 位短 hash。
 2. 在 worktree 内改与提交。
 3. \`ExitWorktree\` 传 \`{"action":"keep"}\` 回主目录，再
    \`git -C <仓根> merge --no-ff <临时分支>\`。
