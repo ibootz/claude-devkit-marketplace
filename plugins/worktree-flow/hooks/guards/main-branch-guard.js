@@ -501,7 +501,7 @@ function main() {
     approvalToolInput({ repository: hit.root, branch: hit.branch, target: hit.subject })
   )
   const hint =
-    '默认路径：调 EnterWorktree 工具 {"name":"<任务语义-kebab>"}，在临时分支改与提交，再 --no-ff 合回。' +
+    '默认路径：调 EnterWorktree 工具，name 用 <仓名短名>-<功能词1>-<功能词2>-<功能词3>；仓名取仓根目录名，功能最多 3 个词，不足不补，同名仅追加 4 位短 hash；在临时分支改与提交，再 --no-ff 合回。' +
     `若确需本轮直写：主会话原样调用 AskUserQuestion ${request}；` +
     'Human 选择“批准本轮”后重试，授权覆盖当前会话本轮全部 main/master 写入，下一次用户消息或本轮结束即失效。' +
     '子代理不能提问，须回主会话申请。WORKTREE_GUARD=off 是独立的全局关闭开关，不得拿它冒充 Human 本轮授权。'

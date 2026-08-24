@@ -27,8 +27,17 @@ git -C <仓根> rev-parse HEAD origin/$(git -C <仓根> symbolic-ref --short HEA
 一致则调：
 
 ```json
-{"name":"<任务语义-kebab>"}
+{"name":"<仓名短名>-<功能词1>-<功能词2>-<功能词3>"}
 ```
+
+命名规则：
+
+- 先取仓根目录名，转为合法的 lowercase `kebab-case`；仓名过长时保留能识别项目的短名。
+- 仓名后追加功能词，功能最多 3 个；删除 `fix`、`feat`、`task`、`worktree` 等无辨识度前缀。
+- 无需凑满 3 个功能词；优先使用 `hook`、`auth`、`config` 等能表达任务核心的词。
+- 同名冲突时，仅追加 4 位短 hash；目录名与临时分支名保持一致。
+
+例如：`claude-devkit-fix-hook`、`claude-devkit-review-auth`、`devkit-market-add-guard`。
 
 `EnterWorktree` 建 `worktree-<name>` 并切入 `.claude/worktrees/<name>/`。若本地主分支领先远端，
 默认 `worktree.baseRef = fresh` 会漏本地提交；改设 `head`，或从本地 `HEAD` 手动建 worktree。
