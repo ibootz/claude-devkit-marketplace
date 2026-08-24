@@ -1,6 +1,6 @@
 {
   "name": "readable-citations",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "引用别处章节要免跳可读 - 注入自足引用规约：必带标题原文与20字提要，对话用绝对路径、落盘 md 用相对路径。主会话+子代理双挂（READABLE_CITATIONS=off 可关）",
   "author": {
     "name": "zhangq"

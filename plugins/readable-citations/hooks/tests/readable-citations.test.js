@@ -72,6 +72,7 @@ const cases = [
       const ctx = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
       if (!ctx.includes('file:///')) return '缺对话正文那一轨（绝对路径）'
       if (!ctx.includes('../')) return '缺落盘 md 那一轨（相对路径）'
+      if (!ctx.includes('vscode://file/')) return '缺「落盘 md 指向源码用 vscode:」这条出口'
       return null
     },
   },

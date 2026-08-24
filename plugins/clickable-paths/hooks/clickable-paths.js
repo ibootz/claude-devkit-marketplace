@@ -39,10 +39,19 @@
 //      规则**打开（官方 escape codes 文档明文）。所以行号必须写在 `#` 后面。
 //   3. Semantic History 的 Run command 需指向 CLI 的**绝对路径**——GUI 应用继承的是
 //      launchd 环境，`launchctl getenv PATH` 可能为空。配置见 README。
+//   4. VS Code 的 markdown 预览拒渲染 `file:` 链接（2026-08-24 查 VS Code 侧
+//      `extensions/markdown-language-features/dist/extension.js`）：markdown-it 默认
+//      `validateLink` 的黑名单正则是 `/^(vbscript|javascript|file|data):/`（只放行
+//      `data:image`），VS Code 的覆盖是
+//      `validateLink = r => 默认(r) || startsWith('vscode:') || startsWith('vscode-insiders:')
+//      || /^data:image/`——**没有 file**。判为非法时 markdown-it 不生成 link_open，
+//      `[标签](file:///abs#43)` 原样输出成纯文本，看起来像"md 写坏了"。所以落盘 md
+//      走 `vscode://file/<绝对路径>:<行号>`，行号在 `:` 后（VS Code 的 URL handler 语法，
+//      与 `file:` 那轨的 `#行号` 不同）。
 //
 // 【与 readable-citations 的分工】
-// 本插件管**提到文件时的路径**，并把「写进文件的 md」排除在外（落盘文档里写
-// `file:///Users/...` 对别人、别的机器、GitLab 网页全是死链）。落盘 md 里**引用另一份
+// 本插件管**提到文件时的路径**，按落点分两个 scheme：对话正文用 `file:`（iTerm2 的
+// OSC 8），落盘 md 用 `vscode:`（见下方机制依赖第 4 条）。落盘 md 里**引用另一份
 // md 文档的章节**归 `readable-citations` 管，那边走相对路径 + 标题锚点。两者互补。
 //
 // Trigger: UserPromptSubmit（主会话） + SubagentStart（每个子代理）
@@ -158,7 +167,14 @@ function main() {
       ' `path/to/file.ext:行号` 由链接标签与 `#行号` 一并承载，套成链接同时满足两边；' +
       '写成裸路径只满足它们、漏了本条。',
     '',
-    '裸路径原样：代码块与命令行内部、commit message、写进文件的 md/代码/注释、' +
+    '**落盘 md 换一个 scheme：`[<文件名>:<行号>](vscode://file/<绝对路径>:<行号>)`**' +
+      '——写进文件的 md 里提到本机文件时用这个形态，行号跟在 `:` 后面（可再跟 `:<列号>`）。' +
+      '理由：VS Code 的 markdown 预览把 `file:` 判为非法链接、整条原样吐成纯文本，' +
+      '它的白名单里只有 `vscode:`。反过来对话正文只用 `file:`——' +
+      'Claude Code 只对 `file:` 发 OSC 8，`vscode:` 在终端里点不动。' +
+      '引用另一份 md 文档的章节仍走相对路径 + 标题锚点（readable-citations 那一条）。',
+    '',
+    '裸路径原样：代码块与命令行内部、commit message、代码与注释、' +
       '派给子代理的 prompt、提交给外部系统的内容（工单/评论/消息）、不在本机的路径' +
       '（他人仓库、报错原文、纯举例）。',
   ]
@@ -166,7 +182,9 @@ function main() {
   if (queues.length) {
     lines.push(
       '',
-      '本项目实际存在的队列前缀（已从磁盘探到，逐字照抄这个形状）：')
+      '本项目实际存在的队列前缀（已从磁盘探到，逐字照抄这个形状）。' +
+        '下面给的是**对话正文**的形状；把同一条编号写进 md 文件时换成 ' +
+        '`vscode://file/<同一个绝对路径>:1`：')
     for (const q of queues) {
       const sample = q.queue === 'debug' ? 'DBG-140' : 'CHR-014'
       lines.push(

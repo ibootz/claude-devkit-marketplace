@@ -1,7 +1,7 @@
 {
   "name": "clickable-paths",
-  "version": "1.5.0",
-  "description": "文件路径写成可点击链接 - 注入格式规约，iTerm2 里 cmd+click 跳 VS Code。1.5.0 起 DBG-/CHR- 队列编号同样算文件，样例从磁盘现探（CLICKABLE_PATHS=off 可关）",
+  "version": "1.6.0",
+  "description": "文件路径写成可点击链接 - 注入格式规约：对话正文用 file:（iTerm2 里 cmd+click 跳 VS Code），落盘 md 用 vscode:（预览里可跳）。CLICKABLE_PATHS=off 可关",
   "author": {
     "name": "zhangq"
   },
