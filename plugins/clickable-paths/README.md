@@ -63,10 +63,13 @@ Intel 机器或官方安装脚本可能是 `/usr/local/bin/code`）。
 4. href 必须绝对路径（`file://` + `/` = 三条斜杠）；
 5. **适用面显式圈定**：表格单元格、列表项、四要素的「现场证据」段、转述子代理回执的那几行，
    都算对话正文；
-6. 不适用场景：代码块与命令行内部、commit message、写进文件的 md 与代码、派给子代理的
+6. 不适用场景：代码块与命令行内部、commit message、代码与注释、派给子代理的
    prompt、提交给外部系统的内容、不在本机的路径（他人仓库 / 报错原文 / 纯举例）；
 7. **队列编号 `DBG-NNN` / `CHR-NNN` 同样算文件**（1.5.0 加），并要求链接后紧跟括号写
    ≤20 字问题简述——见下一节。
+8. **落盘 md 换 scheme**（1.6.0 加）：写进文件的 md 里提到本机文件时写
+   `[<文件名>:<行号>](vscode://file/<绝对路径>:<行号>)`，行号在 `:` 后而非 `#` 后
+   ——见下面「为什么落盘 md 不能用 `file:`」。
 
 **为什么第 3 条要补 `#1`**：无片段时 `\2` 会替换成空串，命令变成 `code --goto "/abs/path:"`，
 是否可用取决于编辑器对尾随冒号的容忍度。一律带片段就不必依赖这个未定行为。
@@ -160,6 +163,29 @@ node plugins/clickable-paths/hooks/tests/clickable-paths.test.js
 空 stdin、畸形 JSON；1.4.0 加的 4 条守注入正文的判据不被日后精简掉——三种漏套形态点名在场、
 四类适用场合在场、与 `working-discipline` 3.3 的关系在场、`#1` 兜底与三斜杠 href 在场。
 
+## 为什么落盘 md 不能用 `file:`（1.6.0 加）
+
+VS Code 的 markdown 预览**拒绝渲染 `file:` 链接**——不是点不动，是整条 `[标签](file:///abs#43)`
+原样吐成纯文本，看起来像 md 写坏了。
+
+证据在 VS Code 侧 `extensions/markdown-language-features/dist/extension.js`（2026-08-24 查）：
+
+```js
+// markdown-it 默认 validateLink 的黑名单，只放行 data:image
+/^(vbscript|javascript|file|data):/
+
+// VS Code 的覆盖：额外放行的只有 vscode: 与 vscode-insiders:，没有 file
+validateLink = r => 默认(r) || startsWith('vscode:') || startsWith('vscode-insiders:')
+                 || /^data:image\/.*?/.test(r)
+```
+
+判为非法时 markdown-it 不生成 `link_open`，于是原样输出文本。所以落盘 md 走
+`vscode://file/<绝对路径>:<行号>`：`vscode:` 在白名单里，且 `:行号[:列号]` 是 VS Code
+URL handler 的定位语法。
+
+两轨的差别记这一句：**`file:` 的行号写在 `#` 后（iTerm2 的 Semantic History 只认这个位置），
+`vscode:` 的行号写在 `:` 后。**
+
 ## 与 readable-citations 的分工
 
 两个插件都在让引用可跳转，管的东西不重叠，同时装不冲突：
@@ -167,8 +193,8 @@ node plugins/clickable-paths/hooks/tests/clickable-paths.test.js
 | | clickable-paths（本插件） | readable-citations |
 |---|---|---|
 | 管什么 | 提到**文件**时的路径 | 引用 **md 文档的章节** |
-| 作用范围 | 只管对话正文，明文把「写进文件的 md」排除在外 | 对话正文与落盘 md 都管 |
-| 形态 | `[文件名:行号](file:///绝对路径#行号)` | 对话正文同左；落盘 md 走相对路径 + 标题锚点 |
+| 作用范围 | 对话正文与落盘 md 都管，两轨用不同 scheme | 对话正文与落盘 md 都管 |
+| 形态 | 对话正文 `[文件名:行号](file:///绝对路径#行号)`；落盘 md `[文件名:行号](vscode://file/绝对路径:行号)` | 对话正文同左；落盘 md 走相对路径 + 标题锚点 |
 
 判据：**引用的是一份 md 文档里的某一节** → 那个插件；**提到一个源码文件的某一行** →
 本插件，锚点对 `.js` / `.py` 这类文件无效。
@@ -183,8 +209,9 @@ export CLICKABLE_PATHS=off     # 或 0 / false
 
 ## 已知走不通的路
 
-- **`vscode://file/路径:行号` 自定义 scheme**：Claude Code 只对 `file:` 做了特殊处理，
-  非 http/https/file 的 scheme 不会被包成 OSC 8（anthropics/claude-code#42519）。
+- **`vscode://file/路径:行号` 自定义 scheme**：**只对「对话正文」这一轨走不通**——
+  Claude Code 只对 `file:` 做了特殊处理，非 http/https/file 的 scheme 不会被包成 OSC 8
+  （anthropics/claude-code#42519）。落盘 md 那一轨恰好相反，必须用它，理由见下一节。
 - **VS Code 自带集成终端**：这类链接在那里点不动，是 VS Code 侧的 bug
   （microsoft/vscode#242371），与 iTerm2 无关。
 - **tmux 内**：社区报告 OSC 8 会失效，未实测。

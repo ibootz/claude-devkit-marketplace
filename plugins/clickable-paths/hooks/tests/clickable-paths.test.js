@@ -65,6 +65,16 @@ const cases = [
     },
   },
   {
+    name: '注入正文含落盘 md 那一轨（vscode: scheme，1.6.0 加）',
+    run: () => run({ hook_event_name: 'UserPromptSubmit', prompt: 'x' }),
+    check: (r) => {
+      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
+      if (!c.includes('vscode://file/')) return '缺落盘 md 那一轨（vscode://file/）'
+      if (!c.includes('file:///')) return '缺对话正文那一轨（file:///）'
+      return null
+    },
+  },
+  {
     name: '两路注入内容一致（同一份规约，不因事件而变）',
     run: () => ({
       a: run({ hook_event_name: 'UserPromptSubmit' }),

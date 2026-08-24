@@ -38,7 +38,7 @@ AI 写文档时爱写「具体判据见 working-discipline §5.2」。这句话�
 | 落点 | 形态 | 为什么 |
 |---|---|---|
 | **对话正文**（终端里说的话） | `[SKILL.md · §5.2 模型档位](file:///abs/path/SKILL.md#128)（提要）` | iTerm2 对 `file:` scheme 且带 `#` 片段的链接套用 Semantic History 规则，cmd+click 直达编辑器对应行。与 `clickable-paths` 插件同一套机制，需配 Semantic History（见那个插件的 README） |
-| **落盘 md**（写进文件的文档） | `[working-discipline · §5.2 模型档位](../working-discipline/SKILL.md#52-模型档位)（提要）` | 文档 commit 后会被别人、别的机器、GitLab 网页读到，`file:///Users/zhangq/...` 在那些地方全是死链。相对路径在 VS Code 预览与 GitLab 网页里都能跳 |
+| **落盘 md**（写进文件的文档） | `[working-discipline · §5.2 模型档位](../working-discipline/SKILL.md#52-模型档位)（提要）` | 两条理由：文档 commit 后会被别人、别的机器、GitLab 网页读到，`file:///Users/zhangq/...` 在那些地方全是死链；且 VS Code 的 markdown 预览把 `file:` 判为非法链接、整条原样吐成纯文本，连本机都跳不动（证据见 clickable-paths 的 README「为什么落盘 md 不能用 `file:`」）。相对路径在 VS Code 预览与 GitLab 网页里都能跳 |
 
 ## 锚点怎么算（算错就是静默死链）
 
@@ -95,11 +95,12 @@ GitLab 17.0」——旧版（Redcarpet）会把连续 `-` 合并成一个，17.0
 | | clickable-paths | readable-citations（本插件） |
 |---|---|---|
 | 管什么 | 提到**文件**时的路径 | 引用 **md 文档的章节** |
-| 作用范围 | 只管对话正文，明文把「写进文件的 md」排除在外 | 对话正文与落盘 md 都管 |
-| 形态 | `[文件名:行号](file:///绝对路径#行号)` | 上表两轨 |
+| 作用范围 | 对话正文与落盘 md 都管，两轨用不同 scheme | 对话正文与落盘 md 都管 |
+| 形态 | 对话正文 `[文件名:行号](file:///绝对路径#行号)`；落盘 md `[文件名:行号](vscode://file/绝对路径:行号)` | 上表两轨 |
 
 判据很简单：**引用的是一份 md 文档里的某一节** → 本插件；**提到一个源码文件的某一行**
-（`.js` / `.py` / `.java`）→ clickable-paths，锚点对那些文件无效。
+（`.js` / `.py` / `.java`）→ clickable-paths，锚点对那些文件无效——落盘 md 里指向源码时
+写 `vscode://file/<绝对路径>:<行号>`，那是那个插件的落盘轨。
 
 ## 为什么挂了两个事件
 
