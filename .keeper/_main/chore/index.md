@@ -10,15 +10,13 @@ generated_by: task-keeper hook
 > 每条的完整内容（原话 / 证据 / 处置记录 / 验证）都在它自己那个文件里——
 > 按需打开一条，不要为了看状态去读全部正文。
 
-## open 1
-
-| ID | 类别 | 外部写 | 摘要 |
-|---|---|---|---|
-| [CHR-002](CHR-002/item.md) | cleanup | False | gitignore缺两条keeper精确排除 |
-
-## done 0
+## open 0
 
 _无_
+
+## done 1
+
+[CHR-002](CHR-002/item.md)
 
 ## archived 1（见 archive/）
 
