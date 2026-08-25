@@ -186,6 +186,21 @@ URL handler 的定位语法。
 两轨的差别记这一句：**`file:` 的行号写在 `#` 后（iTerm2 的 Semantic History 只认这个位置），
 `vscode:` 的行号写在 `:` 后。**
 
+### 四种形态的实测结果（2026-08-25，VS Code 内置 md 预览 ⌘⇧V）
+
+| 形态 | 渲染 | 点击 |
+|---|---|---|
+| `[X](file:///abs/X.js#136)` | **不渲染**，整条原样成纯文本 | — |
+| `[X](vscode://file/abs/X.js:136)` | 渲染成链接 | **跳到第 136 行** |
+| `[X](vscode://file/abs/X.js:136:5)` | 渲染成链接 | **跳到第 136 行第 5 列** |
+| `[X](/abs/X.js#L136)`（裸绝对路径） | 渲染成链接 | **打不开**，见下 |
+
+**裸绝对路径这条路封死。** VS Code 把 `/` 开头的链接当成「相对 workspace 根」，于是把
+workspace 根与那条绝对路径**首尾相接**——实测点击后它去找的是
+`/Users/me/Workspace/xx/cc-analyze/Users/me/Workspace/mine/repo/plugins/…/x.js`
+（前一段是当时打开的 workspace 根），报文件不存在。所以绝对路径在落盘 md 里**只能**带
+`vscode://file/` 前缀，不能裸写。
+
 ## 与 readable-citations 的分工
 
 两个插件都在让引用可跳转，管的东西不重叠，同时装不冲突：
