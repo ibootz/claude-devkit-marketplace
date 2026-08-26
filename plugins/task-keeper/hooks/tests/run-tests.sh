@@ -191,6 +191,18 @@ source "$TESTS_DIR/cases/21-h26-spec-status.sh"
 source "$TESTS_DIR/cases/23-h28-gitignore-v6.sh"
 source "$TESTS_DIR/cases/24-h29-keeper-generation.sh"
 source "$TESTS_DIR/cases/25-h30-multi-instance.sh"
+source "$TESTS_DIR/cases/26-h31-single-active.sh"
+
+# 【2026-08-26 新增 H31，编号 [183]-[203]】
+#   v8 / 4.6.0「一个事项一个活跃主条目」规则的两个机械面：`keeper_cli.py
+#   candidates`（跨队列 open 候选列举，done 不列入，供 keeper 登记前语义查重；
+#   读队列失败或检出损坏条目都 fail closed：exit 2、stdout 不给候选、stderr 逐条可见）与
+#   `keeper_cli.py check-transfers`（规格空白转出互链的机械完整性校验：
+#   CHR 声明来源的 DBG 必须存在、CHR 为 open 时其源 status 必须为 done、
+#   双向互链标记必须成对写齐、top-level 与 archive/ 都纳入（归档不解除互链
+#   义务，已归档的 done 源不得误报为不存在）；检出 exit 2）。
+#   看板文案「已解决→已关闭」的断言随 H24 的 [99]/[100]/[102]/[104] 一起改，不
+#   另开一节（同一处代码改动）。
 
 echo
 printf '通过 %d / 失败 %d\n' "$pass" "$fail"

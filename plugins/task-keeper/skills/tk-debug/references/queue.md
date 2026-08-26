@@ -416,7 +416,7 @@ view spec / i18n 文案 / DB 列注释 / ADR 里原本是怎么写的。产出�
 | 值 | 判据 | 处置 |
 |---|---|---|
 | `violation` | 找到明确表述，实现与之不符 | **缺陷**。照常派 fixer，但 prompt 必带规格原文摘录 + 出处，修复判据 = 与规格逐条一致（§4 模板） |
-| `gap` | 下面八类来源全查过，无任何表述 | **不派 fixer**。这是规格空白不是缺陷——「正确行为是什么」从没人定义过，派 fixer 只会让它凭直觉补一个，把空白伪装成已定案。转 chore 队列，摘要写「待产品确认 X 的语义」 |
+| `gap` | 下面八类来源全查过，无任何表述 | **不派 fixer**。这是规格空白不是缺陷——「正确行为是什么」从没人定义过，派 fixer 只会让它凭直觉补一个，把空白伪装成已定案。v8 起走「关闭转出」闭环（详见本节末）：转 chore 队列，摘要写「待产品确认 X 的语义」，原 DBG 标 `done`（正文声明「关闭转出、未修复」）并写 `转出至：CHR-NNN` 互链标记，产品答复前只有 CHR 活跃 |
 | `conformant` | 规格写了、实现照做了，用户仍不满 | **规格本身要改**，走需求变更，不在 debug 队列里改代码 |
 | `unchecked` | 还没查——登记那一刻的初值 | triage 完成时必须落到上面三个之一。停在 `unchecked` 的 issue 视为 triage 未完成，不许派 fixer |
 
@@ -460,6 +460,40 @@ macOS 的 NFC-NFD 路径形态对不上。所以本节要的是**正面列举查
   `violation`，所以这样写不会污染统计。
 - reopen 第 2 次及以后——首次 triage 已产出过 `spec_status`，沿用即可。**例外**是
   reopen 原因本身就是「规格理解错了」，那要重查并回改。
+
+### 3.2 gap 转出闭环（v8：一个事项一个活跃主条目）
+
+判 `gap` 后的处置在 `agents/debug-keeper.md` §4 有完整五步，这里只写这条闭环
+的判据与互链形态——**正文标记逐字照抄，机械校验只认它们**：
+
+- 原 DBG 的 `issue.md`「修订记录」写：
+  `转出至：CHR-NNN（规格空白，待产品确认）`，`status` 改 `done`，H1 下方
+  blockquote 声明「`done` 在本条语义是**关闭转出、未修复**」。
+- 目标 CHR 的 `item.md` 正文写：`来源：DBG-NNN（规格空白转出）`。
+
+产品答复后按 `agents/debug-keeper.md` §4 收口：属 bug → 重开/新建 DBG（互链 +
+`spec_status` 改 `violation`，答复原文逐字抄进「规格依据」作第 8 类来源）；无需
+处理 → DBG 保持 `done`，CHR 由 chore-keeper 关闭。
+
+互链完整性由 `scripts/keeper_cli.py check-transfers` 机械校验（只读）：
+CHR 声明来源的 DBG 必须**存在**；CHR 为 `open` 时其来源 DBG 的 status 必须为
+`done`（未知值、损坏一律按「不是 done」报错，读不懂不能当作没这回事）；双向
+标记必须**成对**——CHR 写 `来源：DBG-NNN` 的同时 DBG 必须反向写
+`转出至：CHR-NNN`，反之亦然，只写半边会报错（互链的目标存在不等于互链完整）。
+**top-level 与 `archive/<批次>/` 都纳入**：done 条目会被 `archive_done.py`
+整目录搬去归档（互链标记原样保留），只扫 top-level 会把「已归档的合法 done
+源」误报成「不存在」——归档不解除互链义务。
+它只校验引用完整性，**不判两个自然语言事项是否相同**——那是 keeper 的语义判断，
+`candidates` 子命令负责把两队列全部 open 条目列全供它比对（只列不判；读不动或
+存在损坏条目时 exit 2 且不给候选，候选清单不完整不能当查重依据，先修队列再
+claim）。
+
+**为什么转出后 DBG 是 `done` 而不是保持 `open`**：`open` 意味着「这条还要被
+处理」，而规格空白在答复前**没有可处理的动作**（修它无从判对错）。两个队列各
+躺一条 open 条目指向同一件事，正是「一个事项一个活跃主条目」要消除的形态；
+`done` 只表示「debug 队列这边的处理已关闭」，不表示缺陷已修复——这正是 v8 把
+看板 done 总称从「已解决」改为「已关闭」的原因，两种「非修复关闭」共用同一个
+状态位、靠正文区分结局。
 
 ### reopen 升级阶梯
 
@@ -560,13 +594,17 @@ WT_019="$ROOT/.keeper/<交付id>/debug/DBG-019/worktree"
 另外源 worktree 里未提交的改动**不会**进目标 worktree（`worktree add ... HEAD` 只带走
 HEAD 内容），`init` 会把这些改动列出来警告，看到就要判断 fixer 是否依赖它们。
 
-**为什么用 `find` 动态发现而不是 `${CLAUDE_PLUGIN_ROOT}`**：`${CLAUDE_PLUGIN_ROOT}` 只在
-`hooks/hooks.json` 的 `command` 字段、MCP server 配置、slash command 里的 `!`command``
-执行块这几处会被 harness 预处理替换——那是宿主在调用前就做的静态替换，不是进程环境变量。
-本节这段命令是 keeper 自己在 `Bash` 工具里现场跑的普通 shell，实测当前会话 `env | grep
-CLAUDE_PLUGIN_ROOT` 空输出，写在这里的 `${CLAUDE_PLUGIN_ROOT}` 只会原样保留字面量或展开成
-空串，拼出的路径不存在。跨插件引用另一插件脚本时常撞到同一类问题——目标路径里含随插件
-版本变化的内容哈希，标准解法都是用 `find` 在 `~/.claude/plugins/cache` 下按固定的插件名
+**为什么用 `find` 动态发现而不是 `${CLAUDE_PLUGIN_ROOT}`**：本段命令是 keeper 在
+`Bash` 工具里跑的普通 shell，**Bash 工具进程拿不到** `${CLAUDE_PLUGIN_ROOT}`——
+官方 plugins-reference 明确它只作为环境变量导出给 hook 进程与 MCP/LSP 子进程，
+Bash 工具进程不在导出对象内（实测当前会话 `env | grep CLAUDE_PLUGIN_ROOT` 空
+输出）。`hooks/hooks.json` 的 `command` 字段、MCP server 配置、slash command
+里的 `!`command`` 执行块、以及 skill 与 agent 定义正文这几处是宿主**调用前的
+静态替换**，走的是另一条生效通道，与进程环境变量无关；references 文件由 keeper
+用 `Read` 读磁盘原文，同样不适用。所以写在这里的 `${CLAUDE_PLUGIN_ROOT}` 只会
+原样保留字面量或展开成空串，拼出的路径不存在。跨插件引用另一插件脚本时常撞到
+同一类问题——目标路径里含随插件版本变化的内容哈希，标准解法都是用 `find` 在
+`~/.claude/plugins/cache` 下按固定的插件名
 + 相对路径模式动态定位，不依赖任何 harness 只在特定上下文才生效的替换机制。上面的
 `WT_SUPPLY` 就是这个模式：`tk-worktree` 与 `tk-debug`、`debug-keeper` 同属
 `task-keeper` 插件，缓存路径形如 `~/.claude/plugins/cache/<marketplace>/task-keeper/

@@ -268,6 +268,103 @@ def load_all(queue_dir, spec):
     return sorted(out, key=sort_key)
 
 
+def scan_frontmatter(queue_dir, spec):
+    """扫 `<queue_dir>/<PREFIX>-NNN/<item_file>` 的 frontmatter，返回 [(fm, path)]。
+
+    `load_all` 的热路径变体：只返回 frontmatter 与路径，**不返回正文**。
+    `candidates` 这类只按状态列举候选的命令用它，避免把全部条目（含 done 的）
+    正文一起持有——done 条目可能很长（截图转录、处置记录），它们不该进任何
+    人的上下文，与 `render_index` 的「done 只列 id」同一原则。
+
+    损坏判定与 `load_all` 完全一致（缺正文文件 / frontmatter 解析失败 /
+    id 不一致都标 `_broken`），只是不携带正文——损坏条目不能因为「只要状态」
+    就从视图里消失。**改这里的判定逻辑必须同步改 `load_all`，反之亦然。**
+    """
+    if not os.path.isdir(queue_dir):
+        return []
+    idre = id_re(spec)
+    out = []
+    for name in sorted(os.listdir(queue_dir)):
+        if not idre.match(name):
+            continue
+        path = os.path.join(queue_dir, name, spec.item_file)
+        if not os.path.isfile(path):
+            out.append(({"id": name,
+                         "_broken": "条目目录存在但缺 %s" % spec.item_file},
+                        path))
+            continue
+        fm, _body = parse_item_file(path)
+        if fm is None:
+            out.append(({"id": name, "_broken": "frontmatter 解析失败"}, path))
+            continue
+        if not fm.get("id"):
+            fm = dict(fm)
+            fm["id"] = name
+            fm["_broken"] = "frontmatter 缺 id 字段，已按目录名回填"
+        elif str(fm["id"]) != name:
+            # 与 load_all 同一处置：以目录名为准，损坏可见。
+            fm = dict(fm)
+            fm["_broken"] = ("目录名 %s 与 frontmatter id %s 不一致，已按目录名为准"
+                             % (name, fm["id"]))
+            fm["id"] = name
+        out.append((fm, path))
+
+    def sort_key(item):
+        m = idre.match(str(item[0].get("id", "")))
+        return (0, int(m.group(1))) if m else (1, 0)
+
+    return sorted(out, key=sort_key)
+
+
+def load_archived(queue_dir, spec):
+    """扫 `archive/<批次>/<PREFIX>-NNN/<item_file>`，按 id 数字序返回 [(fm, body, path)]。
+
+    `check-transfers` 用它把已合法归档的条目纳入视野：`archive_done.py` 把 done
+    条目**整目录**搬走（正文与互链标记原样保留），转出源归档后互链仍然必须可
+    校验——只扫 top-level 会把「已归档的合法 done 源」误报成「不存在」。
+
+    损坏判定与 `load_all` 一致（缺正文文件 / frontmatter 解析失败 / id 不一致
+    都标 `_broken`）：归档不解除互链义务，读不懂同样要可见，不能静默消失。
+    """
+    root = archive_dir(queue_dir)
+    idre = id_re(spec)
+    out = []
+    if not os.path.isdir(root):
+        return out
+    for dirpath, _dirnames, _filenames in os.walk(root):
+        for name in sorted(os.listdir(dirpath)):
+            if not idre.match(name):
+                continue
+            path = os.path.join(dirpath, name, spec.item_file)
+            if not os.path.isfile(path):
+                out.append(({"id": name,
+                             "_broken": "归档条目目录存在但缺 %s" % spec.item_file},
+                            "", path))
+                continue
+            fm, body = parse_item_file(path)
+            if fm is None:
+                out.append(({"id": name, "_broken": "归档条目 frontmatter 解析失败"},
+                            body or "", path))
+                continue
+            if not fm.get("id"):
+                fm = dict(fm)
+                fm["id"] = name
+                fm["_broken"] = "frontmatter 缺 id 字段，已按目录名回填"
+            elif str(fm["id"]) != name:
+                # 与 load_all 同一处置：以目录名为准，损坏可见。
+                fm = dict(fm)
+                fm["_broken"] = ("目录名 %s 与 frontmatter id %s 不一致，已按目录名为准"
+                                 % (name, fm["id"]))
+                fm["id"] = name
+            out.append((fm, body, path))
+
+    def sort_key(item):
+        m = idre.match(str(item[0].get("id", "")))
+        return (0, int(m.group(1))) if m else (1, 0)
+
+    return sorted(out, key=sort_key)
+
+
 def scan_archived_ids(queue_dir, spec):
     """递归扫 `archive/<批次>/<PREFIX>-NNN/` 的**目录名**，返回 id 集合。
 

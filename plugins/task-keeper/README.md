@@ -48,7 +48,7 @@ keeper 子代理托管 debug 队列与杂务队列：主会话只做「分诊转
 | agent | `debug-fixer-easy` | 第二层单文件、明确锚点、改法唯一的修复；精确 type `task-keeper:debug-fixer-easy`，固定 `sonnet` |
 | agent | `debug-fixer-medium` | 第二层跨 2–3 文件或须先定位的修复；精确 type `task-keeper:debug-fixer-medium`，固定 `opus` |
 | agent | `debug-fixer-hard` | 第二层跨模块、数据结构或集成缺失的修复；精确 type `task-keeper:debug-fixer-hard`，固定 `fable` |
-| script | `scripts/keeper_cli.py` | v7 新增的多实例并发原语 CLI：`claim`（原子认领编号）/ `bind`（登记 issue→name）/ `lock acquire\|release\|status`（合并锁，debug 侧合并回主仓用，超时 15 分钟自动抢占）/ `peers`（看同档其它实例）；exit 3 = 锁被占用（正常竞争，非故障） |
+| script | `scripts/keeper_cli.py` | v7 新增的多实例并发原语 CLI：`claim`（原子认领编号）/ `bind`（登记 issue→name）/ `lock acquire\|release\|status`（合并锁，debug 侧合并回主仓用，超时 15 分钟自动抢占）/ `peers`（看同档其它实例）；exit 3 = 锁被占用（正常竞争，非故障）。**v8（4.6.0）补两个只读子命令**：`candidates`（当前交付 debug + chore 两队列全部 open 条目，供 keeper 登记前语义查重——「一个事项一个活跃主条目」，done 不列入；读队列失败或存在损坏条目时报错退出 exit 2、损坏条目 stderr 逐条报出且 stdout 不给候选，fail closed）与 `check-transfers`（规格空白转出互链的机械完整性校验：CHR 声明来源的 DBG 必须存在且 status 为 done、双向互链标记必须成对写齐；检出问题 exit 2） |
 | hook × 9 | 见下表 | 注入路由（session-start + user-prompt-submit）+ debug/chore 两份队列快照 + 三道窄判据守卫 + 1 个 keeper 实例登记（含 issue 提取） + 1 个 debug-keeper 专属的漏派清单注入 |
 
 ## hooks（挂载事件与实际行为）
@@ -381,12 +381,12 @@ AI 手写的业务字段当机械判据不可靠），另两态从文件系统�
 
 | 状态 | 判据 |
 |---|---|
-| 已解决 | `status: done` |
+| 已关闭 | `status: done`（v8 起总称从「已解决」改为「已关闭」——`done` 只表示队列处理已关闭，不保证缺陷已修复，具体结局在条目正文） |
 | 待拍板 | `decisions/` 里有未答复的 `.md`，其 `about:` 指向这条 |
 | 进行中 | 条目目录下有 `worktree/` |
 | 未解决 | 以上都不是的 `open` |
 
-判定自上而下短路。`done` 排最前，所以「修完了但 `worktree/` 忘删」不会冒充在飞——它进
+判定自上而下短路。`done` 排最前，所以「已关闭但 `worktree/` 忘删」不会冒充在飞——它进
 告警段（那正是归档跳过该条的原因）。「待拍板」优先于「进行中」：一条 issue 可以既派了
 fixer 又卡在等人答复，此时该突出需要人动作的那一面。
 
@@ -443,9 +443,15 @@ fixer 又卡在等人答复，此时该突出需要人动作的那一面。
 2. triage 多一个必做落点——定位完「代码在哪出的错」，还要定位「规格原本怎么写的」，依据
    逐条写进正文新增的「规格依据」章节。判 `gap`（规格空白）前必须把八类来源全查过并**逐条
    列出结果**，因为「没有」是唯一无法自证的检索结果：它可能是事实，也可能是正则写错 / 被
-   gitignore 静默吞掉 / NFC-NFD 路径形态对不上。判为 `gap` 的条目**不派 fixer**，退回主
-   会话转 chore 队列问产品——规格空白派 fixer，它会凭直觉补一个同样没人确认过的行为，把
-   空白伪装成已定案。
+   gitignore 静默吞掉 / NFC-NFD 路径形态对不上。判为 `gap` 的条目**不派 fixer**，v8 起走
+   「关闭转出」闭环：原 DBG 标 `done`（正文声明「关闭转出、未修复」）、写
+   `转出至：CHR-NNN` 互链标记，主会话把「待产品确认 X 的语义」逐字转给 chore 队列，产品
+   答复前只有那条 CHR 是活跃主条目；答复属 bug 则重开/新建 DBG（`spec_status` 改
+   `violation`，答复原文作规格依据）、无需处理则仅关闭 CHR。互链的机械完整性由
+   `keeper_cli.py check-transfers` 校验（只读：CHR 声明来源的 DBG 必须存在且为
+   `done`），`candidates` 子命令负责登记前把两队列全部 open 条目列全供语义查重
+   （一个事项一个活跃主条目；读不动或存在损坏条目时 exit 2 且不给候选，fail
+   closed——候选清单不完整不能当查重依据）。
 3. `spec_status: violation` 的 fixer prompt 带规格原文摘录与出处，**修复判据从「现象不再
    复现」换成「与规格逐条一致」**，回执要给规格逐条核对表。
 

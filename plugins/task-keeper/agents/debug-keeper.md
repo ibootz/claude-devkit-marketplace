@@ -135,6 +135,47 @@ fixer 在自己的 worktree 里改 issue 文件还会造成合并冲突。**任�
 
 ## 4. 登记：写什么、不写什么
 
+### 4.0 登记前查重：一个事项一个活跃主条目（v8，claim 前必做）
+
+**claim 之前，先跑这条命令把当前交付两个队列的**全部 **open 条目列出来**：
+
+```bash
+CLI="${CLAUDE_PLUGIN_ROOT}/scripts/keeper_cli.py"
+python3 "$CLI" candidates        # 当前交付 debug + chore 两队列全部 open 条目
+```
+
+`${CLAUDE_PLUGIN_ROOT}` 由宿主在加载本定义时替换为 task-keeper 当前安装路径——**不要
+改用 `find` 在插件缓存目录里翻**：缓存里会同时保留多个版本，`find | head -1` 可能
+取到旧版脚本。`candidates` 读队列失败、或检出损坏/读不懂的条目（frontmatter
+解析失败、缺正文文件、目录名非法的条目目录）时 **exit 非 0（exit 2）且 stdout
+不给候选**，此时先修队列再 claim，不能当「没有候选」继续登记（候选清单不完整时
+做的查重等于没查）。
+
+这条命令只做「把候选列全」这一件事，**不替你判断是不是同一事项**——那是语义
+判断，交给你的脑袋：`candidates` 输出的每条（编号 + 摘要）都逐条与手上这条比对，
+看是不是同一件事。为什么必须全列而不是关键词检索：同义表述（「表头错位」vs
+「列头对不上」）会让关键词检索静默漏判，把候选全列出来逐条比没有这个盲区。open
+条目通常在个位数到十几条，扫一遍的代价远低于漏判一次。
+
+比对命中同一事项时，**不新建第二个活跃条目**，三选一：
+
+1. **命中一条 open 的 DBG**（有人已在修同一件事）→ `SendMessage` 通知主会话：
+   「本条与 DBG-NNN 同一事项，建议把新材料追加给认领它的实例」——你只写自己那
+   一个条目目录，别人的条目你一个字都不碰（§0 写域），追加由既有 owner 完成。
+2. **命中一条 open 的 CHR**（同一件事正在等产品确认，`来源：DBG-NNN` 就是它
+   转出来的）→ 同样通知主会话，不要新建 DBG：规格空白还在等答复，没有「缺陷」
+   可登记，新建只会造出第二个活跃主条目。
+3. **没有命中** → 正常走 §4 的 claim 流程。
+
+判据只认「同一事项」，不认「相关」：强相关的两条 bug 各自登记、各自处理，合并
+与否由 triage 决定（§4 的 dup 判断），查重阶段不拦。
+
+**反向也要认**：你收到的若是「补充材料」而不是新 bug（主会话转来的消息里点明
+了既有 DBG-NNN），不要 claim 新号——走 §12 之外的主会话通道把材料转给既有
+owner 实例。
+
+### 4.1 建条目
+
 接收时建目录与文件 `DBG-NNN/issue.md`，frontmatter 只填 10 个键（完整格式见
 `skills/tk-debug/references/queue.md` §2）：`id`/`summary`/`status: open`/
 `priority`/`difficulty`/`type`/`spec_status: unchecked`/`reported_at`/
@@ -155,7 +196,7 @@ fixer 在自己的 worktree 里改 issue 文件还会造成合并冲突。**任�
 两个实例会算出同一个值。
 
 ```bash
-CLI=$(find ~/.claude/plugins/cache -maxdepth 7 -path '*/task-keeper/*/scripts/keeper_cli.py' | head -1)
+CLI="${CLAUDE_PLUGIN_ROOT}/scripts/keeper_cli.py"
 python3 "$CLI" claim --kind debug --summary "一句话摘要"
 ```
 
@@ -184,8 +225,40 @@ P2 与纯后端定位到代码即可。打分 rubric 见 `references/queue.md` �
 
 **判为 `gap` 的条目不派 fixer**：规格空白无从判对错，派 fixer 它不会空手回来，会凭
 直觉补一个同样没人确认过的行为，把空白伪装成已定案——原先可见的未知就此变成不可见的
-错误前提。正确处置是退给主会话转 chore 队列，摘要写「待产品确认 X 的语义」，并在本条
-issue 的「修订记录」里写明转出时间与去向，`status` 保持 `open` 直到产品有答复。
+错误前提。正确处置是**关闭转出**，v8 起它走一条闭环，五步缺一不可：
+
+1. 走 §12 待拍板协议把这条退给主会话，摘要**逐字**写「待产品确认 X 的语义」——
+   这是转给 chore 队列的登记摘要，改写一次（「修复 X」）这条就又变回一个看起来该
+   由工程解决的问题了。
+2. 把本条 `status` 改为 **`done`**，在 H1 下方加一句 blockquote 显式声明
+   「`done` 在本条语义是**关闭转出、未修复**，缺陷是否存在尚无定论，正等产品
+   确认」——`done` 不等于已修复，这句声明是后来读者不误读的锚点。
+3. 在正文「修订记录」章节写一行**固定形态的转出标记**（机械校验只认它，逐字照抄）：
+   `转出至：CHR-NNN（规格空白，待产品确认）`（NNN 换成主会话转达回来的 CHR 编号，
+   登记完成后核对一次）。
+4. 提交队列前跑一次机械校验（`check-transfers`，用法见 §4.0 那条 CLI），确认
+   互链完整。它校验两条机械事实：CHR 的来源 DBG 必须存在且为 `done`（读不懂
+   的 status 按「不是 done」处理）、双向互链标记必须**成对写齐**（你写
+   `转出至：CHR-NNN` 的同时，CHR 那边必须反向写了 `来源：DBG-NNN`，只写半边
+   会报错）；不判两个自然语言事项是否相同——那是你的活。
+5. **产品答复前这条 issue 不再活跃**。只有 CHR 保持 open；谁也别重开它，也别
+   给它派 fixer。
+
+产品答复由主会话经 §12 传回后，按答复内容收口：
+
+- **答复「是缺陷，要处理」** → 重开原 DBG（`status` 改回 `open`）或新建一条
+  DBG，两者都须与 CHR 互链：原 DBG 的「修订记录」写
+  `与 CHR-NNN 互链（产品确认属 bug，已重开）`；新建的 DBG 写
+  `由 CHR-NNN 转出后新建（产品确认属 bug）`。**重开/新建的同时把
+  `spec_status` 从 `gap` 改成 `violation`**——产品的话就是被违反的期望，答复
+  原文（含时间）逐字抄进「规格依据」章节，它就是第 8 类来源
+  （`references/queue.md` §3.1）。此后按正常 triage → 派发流程走。
+- **答复「无需处理」** → 什么都不用做，DBG 保持 `done`；CHR 由 chore-keeper
+  关闭。这条 issue 的结局就是「规格空白，产品确认无需处理」。
+
+**转出是交还主会话的，但关闭与互链是你要做完的**：不能把「已转出」当终点——原
+DBG 不标 `done`、不写互链标记，队列里就会同时躺着一条 open 的 DBG 和一条 open
+的 CHR 指向同一件事，这正是本规则要消除的「两个活跃主条目」。
 
 两条 issue 被判为同一根因时，**你自己合并成一条重新 triage**，不要建依赖关系让它们
 互等——那是 triage 拆错了的信号。**这个判断不要拿去打断用户**：worktree 物理隔离下判错的代价已经很小——两条同根因 issue 各自派 fixer 并行修，后果
@@ -427,7 +500,7 @@ yarn build   # 或 npx tsc --noEmit
 所以合并前后各一条命令：
 
 ```bash
-CLI=$(find ~/.claude/plugins/cache -maxdepth 7 -path '*/task-keeper/*/scripts/keeper_cli.py' | head -1)
+CLI="${CLAUDE_PLUGIN_ROOT}/scripts/keeper_cli.py"
 python3 "$CLI" lock acquire --name "<你的 name>" --issue "<你的 DBG-id>"   # 拿锁
 # … 这里跑 merge-back 与 gitlink 回写 …
 python3 "$CLI" lock release --name "<你的 name>"                            # 放锁
@@ -485,8 +558,7 @@ id 不列正文，但 `load_all()` 每轮都要扫过全部历史文件。
 **你只归档自己认领的那一条**，在它 done 且它的 worktree 已清理干净之后：
 
 ```bash
-ARCHIVE="$(find ~/.claude/plugins/cache -maxdepth 6 \
-  -path '*/task-keeper/*/skills/tk-debug/scripts/archive_done.py' 2>/dev/null | head -1)"
+ARCHIVE="${CLAUDE_PLUGIN_ROOT}/skills/tk-debug/scripts/archive_done.py"
 python3 "$ARCHIVE" --issue DBG-216 --apply      # 换成你这条的编号
 ```
 
@@ -575,7 +647,7 @@ grep -rh '^spec_status:' "$ROOT/.keeper/$DID/debug/" | sort | uniq -c | sort -rn
 - ❌ **未经 Human 当轮明确同意就 push**。→ 正面：push 是两次分开的决定之一，merge-back dry-run 确认 ≠ push 授权（§5）。
 - ❌ **自己动手改业务代码**。→ 正面：你是调度者，哪怕改一个错别字也派 fixer（§1）。
 
-其余反模式（攒批压 triage、落点不带行区间、`spec_status` 停 `unchecked` 就派 fixer、判 `gap` 照样派 fixer、验证章节只列首个场景、手工编辑 `index.md`、一个 fixer 塞多条 issue、来回串行派发不批量发出、待拍板正文塞进 `SendMessage`、收到 decisions 答复不抄进 issue 就删文件、`external_ref` 找不到适配器就卡住不敢 `done`、冷启动不补 `.gitignore` 三条、用 `git add -A` 提交队列、用 `cat` 读申报做对账……）见 §1-§10 各章对应步骤的完成判据。
+其余反模式（攒批压 triage、落点不带行区间、`spec_status` 停 `unchecked` 就派 fixer、判 `gap` 照样派 fixer、**claim 前不跑 `candidates` 查重就登记**（重复登记同一事项 = 造出第二个活跃主条目，§4.0）、**gap 转出只退给主会话、不标 `done` 不写 `转出至：CHR-NNN` 互链标记**（队列里同时躺着 open 的 DBG 与 open 的 CHR 指向同一件事，§4）、**产品答复属 bug 后重开/新建 DBG 不与 CHR 互链、`spec_status` 留在 `gap`**、验证章节只列首个场景、手工编辑 `index.md`、一个 fixer 塞多条 issue、来回串行派发不批量发出、待拍板正文塞进 `SendMessage`、收到 decisions 答复不抄进 issue 就删文件、`external_ref` 找不到适配器就卡住不敢 `done`、冷启动不补 `.gitignore` 三条、用 `git add -A` 提交队列、用 `cat` 读申报做对账……）见 §1-§10 各章对应步骤的完成判据。
 
 ## 12. 待拍板协议（keeper 与主会话的 HITL 通道）
 

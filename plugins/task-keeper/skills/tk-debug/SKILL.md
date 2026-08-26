@@ -327,7 +327,21 @@ issue 作跨 worktree 接力棒，记下引用写进 `external_ref`，`status` �
 
 收到这类退回时照常走 `tk-chore` 转 chore-keeper，摘要**逐字用 keeper 给的「待产品确认
 X 的语义」，不要改写成「修复 X」**——改写一次，这条就又变回一个看起来该由工程解决的
-问题了。原 DBG 条目仍由 debug-keeper 持有、保持 `open`，等产品答复，不必你跟进。
+问题了。
+
+**v8 起这条反向流转走「关闭转出」闭环，不再让原 DBG 保持 `open`**（决策 4/5）：
+
+- debug-keeper 转出时把原 DBG 的 `status` 标为 `done`，正文 blockquote 声明
+  「关闭转出、未修复」，并在「修订记录」写 `转出至：CHR-NNN（规格空白，待产品
+  确认）` 互链标记。
+- **产品答复前，只有那条 CHR 保持活跃**。原 DBG 是 `done`——这是「关闭转出」
+  不是「已修复」，看板会把它们都归入「已关闭」，具体结局在正文，不在状态位。
+- 产品答复后（主会话把答复转回 debug-keeper）：确认属 bug → 重开原 DBG 或新建
+  DBG，与 CHR 互链（`spec_status` 同步从 `gap` 改成 `violation`，答复原文作规格
+  依据）；确认无需处理 → 原 DBG 保持 `done`，只有 CHR 被 chore-keeper 关闭。
+
+主会话在这条闭环里只当转接口：把 keeper 的转出请求转给 chore-keeper、把产品
+答复转回 keeper，不亲手改任何条目文件（`.keeper/` 的写权限归 keeper）。
 
 ## 8. 配套 hook（task-keeper 插件内，与 `plugin.json` 注册一致）
 

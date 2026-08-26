@@ -1,6 +1,6 @@
 ---
 name: tk-board
-description: 出一张 debug / chore 队列的进度看板：每条一行（编号 + 20 字问题说明 + 已解决/未解决/进行中/待拍板），外加四态计数与占比、陈旧 worktree 与悬空拍板项告警。纯只读，跑多少次都不改队列、不唤醒 keeper。
+description: 出一张 debug / chore 队列的进度看板：每条一行（编号 + 20 字问题说明 + 已关闭/未解决/进行中/待拍板），外加四态计数与占比、陈旧 worktree 与悬空拍板项告警。纯只读，跑多少次都不改队列、不唤醒 keeper。
 when_to_use: |
   用户问「现在进度怎么样」「还有多少没修完」「队列里剩什么」「给我一张表看看」「哪些在等我拍板」「哪些还在跑」，或任何需要**一眼看到整体进度**的场合。也适用于交付收尾前的自检（还有没有 open 条目、有没有忘删的 worktree 卡住归档）。
   **不适用**：用户报新 bug / 新杂务（那是 tk-debug / tk-chore 的转发流程）；用户问某一条 issue 的细节（直接读那条 `issue.md`，看板只给 20 字摘要）；要改队列状态（看板是只读的，改状态得让 keeper 去做）。
@@ -47,7 +47,7 @@ python3 .../board.py --queue-dir <worktree根>/.keeper/<交付id>/debug
 
 | 状态 | 判据 | 为什么可信 |
 |---|---|---|
-| 已解决 | `status: done` | frontmatter 唯一的终态 |
+| 已关闭 | `status: done` | frontmatter 唯一的终态。**v8 起总称从「已解决」改为「已关闭」**：`done` 只表示队列处理已关闭，不保证缺陷已修复（wontfix、规格空白转出、推迟到外部 issue 都是 `done`），「已解决」这个总称会把具体结局伪装成「修好了」。具体结局留在条目正文，不在状态位 |
 | 待拍板 | `decisions/` 里有未答复的 `.md`，其 `about:` 指向这条 | 「未答复」= 文件名在 `decisions/` 而不在 `decisions/answers/`，纯文件名差集 |
 | 进行中 | 条目目录下有 `worktree/` 子目录 | fixer 派出去时才会有这个目录 |
 | 未解决 | 以上都不是的 `open` | 兜底 |

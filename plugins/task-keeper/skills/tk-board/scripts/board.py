@@ -28,7 +28,7 @@ v2 曾有 `in_progress`，v3 砍掉了，理由写在 `queue_snapshot.py` 模块
 
 | 看板状态 | 判据 | 判据出处 |
 |---|---|---|
-| 已解决 | `status: done` | frontmatter |
+| 已关闭 | `status: done` | frontmatter |
 | 待拍板 | `decisions/<未答复>.md` 的 `about:` 指向本条 | `decisions/` 与 `decisions/answers/` 的文件名差集 |
 | 进行中 | 条目目录下有 `worktree/` 子目录 | 文件系统 |
 | 未解决 | 以上都不是的 `status: open` | 兜底 |
@@ -92,10 +92,13 @@ except Exception:
 SPECS = {"debug": DEBUG, "chore": CHORE}
 
 # 四态。顺序即判定优先级，也是表格与总览的排序权重。
+# v8（4.6.0）把 done 的总称从「已解决」改为「已关闭」：done 只表示「队列处理已
+# 关闭」，不保证缺陷已修复（wontfix、规格空白转出、推迟到外部 issue 都是 done），
+# 「已解决」这个总称会把具体结局伪装成「修好了」。具体结局留在条目正文，不进状态位。
 S_PENDING = "待拍板"
 S_FLIGHT = "进行中"
 S_OPEN = "未解决"
-S_DONE = "已解决"
+S_DONE = "已关闭"
 STATE_ORDER = [S_PENDING, S_FLIGHT, S_OPEN, S_DONE]
 
 # 说明列默认宽度（汉字数）。用户口径是「20 字左右」，超出截断加省略号。
