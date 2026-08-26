@@ -4,7 +4,7 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 
 ## 概述
 
-本市场包含 **21 个插件**（以两份市场清单为准），覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论、输出风格等场景。下面的编号清单只有 20 节——`clickable-paths` 至今只登记在市场清单与目录树里，没有单独的介绍段落，属于既有遗漏。
+本市场包含 **23 个插件**（以两份市场清单为准），覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论、输出风格等场景。下面的编号清单只有 21 节——`clickable-paths` 与 `token-saver` 至今只登记在市场清单与目录树里，没有单独的介绍段落，属于既有遗漏。
 
 原 `devkit-git`、`devkit-dev`、`devkit-issue` 已从市场移除，不再作为独立插件提供。
 
@@ -227,6 +227,10 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - 逃生阀 `READABLE_CITATIONS=off`；7 条回归用例：
   `node plugins/readable-citations/hooks/tests/readable-citations.test.js`
 
+### 21. complexity-first（复杂度优先）
+
+动手新增之前先证明必要性的按需决策 skill：按「必要性 → 仓库已有代码/抽象/配置 → 标准库 → 平台原生 → 已有依赖 → 最小新增实现」的顺序穷尽复用路径，命中即停；全不成立才写最小新增，且安全、权限、错误处理、数据完整性、无障碍五类边界逐次保留。需求存在规格空白时要求澄清，不替用户定义业务行为。每次建议输出五项决策记录（方案比较、选择、放弃理由、不可删边界、验证）。1 个 Skill，零 hook、零命令——纯按需，不开就完全不在场。
+
 ## 安装
 
 ### Claude Code
@@ -292,6 +296,9 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 # 主分支保护（默认走 worktree，Human 可批准本轮直写）
 /plugin install worktree-flow@claude-devkit-marketplace
+
+# 复杂度优先（按需决策：先复用再新增）
+/plugin install complexity-first@claude-devkit-marketplace
 ```
 
 ### Codex CLI
@@ -438,7 +445,8 @@ claude-devkit-marketplace/
 │   ├── clickable-paths/
 │   ├── worktree-flow/
 │   ├── cd-blocker/
-│   └── readable-citations/
+│   ├── readable-citations/
+│   └── complexity-first/
 ├── .githooks/
 │   └── pre-commit             # 提交前强制跑版本四方校验（需 git config core.hooksPath .githooks）
 ├── scripts/

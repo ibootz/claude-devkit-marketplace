@@ -408,6 +408,24 @@
         "authentication": "ON_INSTALL"
       },
       "version": "0.1.0"
+    },
+    {
+      "author": {
+        "name": "zhangq"
+      },
+      "category": "Productivity",
+      "description": "复杂度优先 - 动手新增前先证明必要性：搜已有代码/标准库/平台原生，再写最小实现（1 技能）",
+      "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
+      "name": "complexity-first",
+      "source": {
+        "source": "local",
+        "path": "./plugins/complexity-first"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "version": "1.0.0"
     }
   ]
 }

@@ -1,0 +1,14 @@
+{
+  "name": "complexity-first",
+  "version": "1.0.0",
+  "description": "复杂度优先 - 动手新增前先证明必要性：搜已有代码/标准库/平台原生，全不成立才写最小新增实现，保留安全与无障碍边界",
+  "author": {
+    "name": "zhangq"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "复杂度优先 (complexity-first)",
+    "shortDescription": "先复用再新增的复杂度决策",
+    "category": "Productivity"
+  }
+}

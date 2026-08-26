@@ -1,0 +1,8 @@
+{
+  "name": "complexity-first",
+  "version": "1.0.0",
+  "description": "复杂度优先 - 按需决策 skill：新增功能/代码/脚本/依赖前，按顺序查已有实现、标准库、平台原生，全不成立才写最小新增，保留安全与无障碍边界（1 技能，见 README）",
+  "author": {
+    "name": "zhangq"
+  }
+}

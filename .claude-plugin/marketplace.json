@@ -165,6 +165,13 @@
       "category": "Productivity",
       "description": "运行时提醒 AI 节用 token - SessionStart 注入极简纪律 + 整读大文件软提醒，零硬拦",
       "version": "0.1.0"
+    },
+    {
+      "name": "complexity-first",
+      "source": "./plugins/complexity-first",
+      "category": "Productivity",
+      "description": "复杂度优先 - 动手新增前先证明必要性：搜已有代码/标准库/平台原生，再写最小实现（1 技能）",
+      "version": "1.0.0"
     }
   ]
 }
