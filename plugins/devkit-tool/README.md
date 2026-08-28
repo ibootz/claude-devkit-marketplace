@@ -1,10 +1,10 @@
 # DevKit-Tool
 
-**版本**: 6.14.0
+**版本**: 6.18.0
 **作者**: zhangq
 **许可证**: MIT
 
-工具技能套件（原 `devkit-core`），当前聚焦 10 个 Skills，覆盖代码库分析、依赖排查、代码知识图谱建图决策、submodule 仓库同步与提交推送、会话起法、多模型协作与 Claude Code 自身运维辅助工具。
+工具技能套件（原 `devkit-core`），当前聚焦 11 个 Skills，覆盖代码库分析、依赖排查、大头桶定性核实、代码知识图谱建图决策、submodule 仓库同步与提交推送、会话起法、多模型协作与 Claude Code 自身运维辅助工具。
 
 ---
 
@@ -23,6 +23,7 @@
 - `init-architect` — 初始化项目、生成 `CLAUDE.md` 与 `.claude/rules/project/`。6.2.0 起产物分三层：根级 `CLAUDE.md`（全局必知，守 200 行）／`.claude/rules/project/{topic}.md`（跨模块横切规则）／模块级 `CLAUDE.md`（该模块是什么）。**6.7.0 起** `.claude/rules/` 下按来源分三类子目录——`radnove/`（公司内部 radnove 插件市场自带规则）、`devkit/`（通用 devkit 插件市场自带规则）、`project/`（项目自有规则，判据是"内容属于谁"而非"谁写的文件"，本 skill 生成的规则即便是插件代笔也归这里）；顶层 `.claude/rules/*.md` 不再直接放文件，本 skill 只写 `project/` 子目录。
 
   `.claude/rules/**`（含三类子目录，无深度限制）由 Claude Code 自动加载、与 `CLAUDE.md` 并列，**不要**在 `CLAUDE.md` 里 `@import` 它们或加链接引用（前者会让同一份内容注入两次，后者纯冗余）。拆分的核心收益是 `paths` frontmatter 条件加载——只在改动命中这些路径时才进上下文，且**匹配基准恒为项目根、不随规则文件所在子目录层级变化**，规则文件挪到 `project/` 子目录不需要改写 `paths` 的值。三个必须避开的边界：不写 `paths` 字段等于无条件加载（省不下任何上下文）；`paths` 只写 `**` 会被判定为全通配而**退化成无条件加载**；尾部 `/**` 会被自动剥掉，`src/**` 与 `src` 等价。模式是 gitignore 风格（走 npm `ignore` 包语义，不是 picomatch）。
+- `bucket-audit` — 大头桶定性核实：启发式分桶的桶名写进报告会被当成事实，下游裁剪/ROI 全建在名字上。本 skill 在决策前做实证核实——复现分桶判据、回原始 transcript 拿未截断全文、精确对账、检索手段自证、**全量归类**（自描述信号优先、禁抽样代替全量）、宽/紧双窗口时间关联检验桶名暗示的成因；定性被推翻时按「改数据层 → 加权重算下游系数 → 留改正记录」三步改正，并立桶名纪律：起名描述内容（碰的是什么），不描述机制推断（为什么要做）。
 - `key-module-analysis`
 - `deps-investigator`
 - `codegraph-index` — codegraph 代码知识图谱的**建图决策**技能：先判某仓该不该建（源文件 ≥ 800 且日常检索跨文件调用关系才建；文档仓一律不建——实测 codegraph 不给 md 产任何节点），再判何时建（禁止挂 `SessionStart` 自动建，实测首次全量 9,810 文件 57.2s、峰值 RSS 4.2 GB）。核心结论：**worktree 图不可共用父仓的图**（分支新增类在 worktree 图查得到、主仓图查不到，用 `projectPath` 指父仓会静默拿到旧分支符号），长命 feature worktree 才各自建、短命 fix worktree 不建。另含 7 个已验证的坑（纯中文查询命中率为 0、watcher 进程叠加、`codegraph daemon` 是交互式菜单不可脚本调用等）与拆除路径。
