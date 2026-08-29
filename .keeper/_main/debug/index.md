@@ -10,7 +10,7 @@ generated_by: task-keeper hook
 > 每条的完整内容（原话 / 证据 / 处置记录 / 验证）都在它自己那个文件里——
 > 按需打开一条，不要为了看状态去读全部正文。
 
-## open 4
+## open 5
 
 | ID | 优先级 | 难度 | 类型 | 规格 | 摘要 |
 |---|---|---|---|---|---|
@@ -18,6 +18,7 @@ generated_by: task-keeper hook
 | [DBG-002](DBG-002/issue.md) | P2 | medium | bug | violation | 文档生成的 Markdown 文件链接失效不可点击 |
 | [DBG-005](DBG-005/issue.md) | P1 | medium | ux | violation | AskUserQuestion 题面缺少可判定上下文 |
 | [DBG-006](DBG-006/issue.md) | - | - | - | - | main 直写授权批准后仍被拦截 |
+| [DBG-008](DBG-008/issue.md) | P1 | easy | config | violation | vim 打开 .json 文件报 E10（FileType json 自动命令出错） |
 
 ## done 0
 
