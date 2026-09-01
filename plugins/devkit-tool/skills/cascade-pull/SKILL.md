@@ -1,9 +1,9 @@
 ---
 name: cascade-pull
-description: 带 submodule 的 Git 仓库同步拉取——父仓拉最新、子模块 checkout 到位、gitlink 对齐，是 `git pull` 增强版。与 `cascade-push` 配对但作用域相反：**只处理本仓直接声明的一层 submodule，绝不递归嵌套层**。诊断父仓/子模块/远端三方差异后由用户选拉取模式，移动 gitlink 前列新旧提交给用户确认。
+description: 带 submodule 的 Git 仓库同步拉取——父仓拉最新、子模块 checkout 到位、gitlink 对齐，是 `git pull` 增强版。与 `cascade-push` 配对但作用域相反：**只处理本仓直接声明的一层 submodule，绝不递归嵌套层**。诊断父仓/子模块/远端三方差异后由用户选拉取模式，移动 gitlink 前列新旧提交给用户确认。**仓库无 `.gitmodules` 时自动降级为普通 `git pull`，不询问模式。**
 when_to_use: |
   用户说"拉一下代码/更新代码/同步仓库"、"pull 完子模块还是旧的/没更新"、"submodule dirty 或 detached HEAD"、"更新/bump submodule 指针"、"把某个 submodule 提升到最新"、"submodule 落后要拉齐"、"更新 gitlink"时使用。
-  **核心判据**：仓库有 `.gitmodules` 且要把父仓与子模块同步到一致。单仓无 submodule 直接 `git pull` 即可，不需要本 skill。嵌套递归拉取（多层子模块一路往里 pull）不是本 skill——本 skill 只处理一层、严禁 `--recursive`；递归推送方向（由内向外提交）才用 `cascade-push`。
+  **核心判据**：仓库有 `.gitmodules` 且要把父仓与子模块同步到一致。单仓无 submodule（无 `.gitmodules`）时，本 skill 自动降级为普通 `git pull`——当作普通拉取指令直接执行，无需询问拉取模式。嵌套递归拉取（多层子模块一路往里 pull）不是本 skill——本 skill 只处理一层、严禁 `--recursive`；递归推送方向（由内向外提交）才用 `cascade-push`。
 ---
 
 # 带 submodule 的仓库同步拉取（增强版 pull）
@@ -105,11 +105,13 @@ SD="$CLAUDE_PLUGIN_ROOT/skills/cascade-pull/scripts"
 
 它输出：父仓 behind/ahead + 未提交改动，以及每个直接 submodule 的 G / W / R 三值与差异判级。**唯一副作用是 `git fetch`**（更新 remote-tracking），不改工作树、不改 gitlink、不 commit。
 
-诊断发现父仓或子模块有未提交改动时，先停下问用户（stash / commit / 放弃），**不要**用 `checkout -f` / `reset --hard` 覆盖别人的在制品。
+**降级路径（仓库无 submodule 时）**：当前仓库没有 `.gitmodules` 时，`diagnose-sync.sh` 不再报错，而是自动执行普通 `git pull` 完成拉取——把它当作普通的拉取指令，**不要向用户询问走模式 A 还是模式 B**（无 submodule 即无模式可选），也不要去别的仓库找 submodule。pull 不覆盖未提交改动，与上游冲突时 git 自行停下，属安全操作。
+
+诊断发现父仓或子模块有未提交改动时，先停下问用户（stash / commit / 放弃），**不要**用 `checkout -f` / `reset --hard` 覆盖别人的在制品。降级路径（普通 pull）除外——pull 本身不会覆盖未提交改动。
 
 ### S1 · 摆差异、由用户选模式（铁律三）
 
-把 S0 结果按 submodule 逐条列出，指明每条属于哪种状态（G≠W / W≠R / 两者兼有），再问走 A 还是 B。
+把 S0 结果按 submodule 逐条列出，指明每条属于哪种状态（G≠W / W≠R / 两者兼有），再问走 A 还是 B。若 S0 已走降级路径（普通 `git pull` 已完成），本步无 submodule 差异可摆，**直接跳过**。
 
 ### S2A · 模式 A：父仓 pull + 子模块对齐到 gitlink
 
@@ -244,3 +246,4 @@ git -C <sm> merge-base --is-ancestor <W> <G>                  # 此时的非零�
 - 不在未展示新旧 commit message、未获用户确认的情况下移动任何 gitlink（铁律二）。
 - 不替用户预设拉取模式；不擅自全量 bump，只动用户点名的 submodule（铁律三）。
 - 不用 `reset --hard` / `checkout -f` / `clean -fdx` 覆盖父仓或子模块里的未提交改动——发现在制品先停下问用户。
+- 仓库无 `.gitmodules` 时按普通 `git pull` 处理：不询问模式，也不去寻找其它仓库的 submodule。

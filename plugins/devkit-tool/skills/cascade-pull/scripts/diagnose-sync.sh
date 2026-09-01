@@ -18,12 +18,19 @@
 #
 # 副作用：仅 `git fetch`（父仓 + 目标子模块的 remote-tracking）。
 #         不改工作树、不改 gitlink、不 checkout、不 commit、不 pull。
+# 例外：仓库无 .gitmodules（无 submodule）时，本脚本自动降级为普通 `git pull`
+#       （当作普通拉取指令，无需用户选择模式；pull 不覆盖未提交改动，冲突时 git 自行停下）。
 # 兼容：bash 3.2（macOS 自带），未使用 mapfile 等 4.x 内建。
 
 set -euo pipefail
 
 if [ ! -f .gitmodules ]; then
-  echo "错误：当前目录没有 .gitmodules，请在父仓根目录执行。" >&2
+  if git rev-parse --git-dir >/dev/null 2>&1; then
+    echo "当前仓库无 submodule（无 .gitmodules），按普通 git pull 处理："
+    git pull
+    exit 0
+  fi
+  echo "错误：当前目录不是 git 仓库，也没有 .gitmodules，请在目标仓库根目录执行。" >&2
   exit 1
 fi
 
