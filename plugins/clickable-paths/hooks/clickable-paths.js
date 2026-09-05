@@ -138,6 +138,7 @@ function main() {
 
   const queues = keeperQueues(payload.cwd || process.cwd())
 
+  const isWin = process.platform === 'win32'
   const lines = [
     '# 文件路径写成可点击链接（clickable-paths）',
     '',
@@ -148,7 +149,10 @@ function main() {
       'inline code 只留给落点还没定的新文件。',
     '',
     '- 行号写在 `#` 后面，没有具体行号写 `#1`。',
-    '- href 用绝对路径：`file://` 后紧跟以 `/` 开头的路径（合起来三条斜杠）。',
+    '- href 用绝对路径：`file://` 后紧跟以 `/` 开头的路径（合起来三条斜杠）。' +
+      (isWin
+        ? '在 Windows 下盘符路径转为正斜杠且前置单个斜杠（如 `file:///C:/path/to/file.ext#1`）。'
+        : ''),
     '- 标签默认 `<文件名>:<行号>`；同名文件多处出现、或需表明模块归属时换成' +
       '相对仓库根路径+行号。',
     '- 一句话提到三个文件就给三个链接。表格单元格、列表项、四要素的「现场证据」段、' +
@@ -187,8 +191,9 @@ function main() {
         '`vscode://file/<同一个绝对路径>:1`：')
     for (const q of queues) {
       const sample = q.queue === 'debug' ? 'DBG-140' : 'CHR-014'
+      const normDir = q.dir.replace(/\\/g, '/').replace(/^\/?/, '/')
       lines.push(
-        `- ${q.queue}：[${sample}](file://${q.dir}/${sample}/${q.file}#1)（≤20 字问题简述）`)
+        `- ${q.queue}：[${sample}](file://${normDir}/${sample}/${q.file}#1)（≤20 字问题简述）`)
     }
   }
 

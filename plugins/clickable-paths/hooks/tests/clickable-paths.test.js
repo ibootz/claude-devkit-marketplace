@@ -198,6 +198,18 @@ const cases = [
       return null
     },
   },
+  {
+    name: '队列前缀在 Windows 盘符路径下已归一化为正斜杠（1.7.0）',
+    run: () => run({ hook_event_name: 'UserPromptSubmit', cwd: makeKeeperProject() }),
+    check: (r) => {
+      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
+      const links = c.split('\n').filter((l) => l.startsWith('- debug：') || l.startsWith('- chore：'))
+      for (const l of links) {
+        if (l.includes('\\')) return `队列链接含未归一化的反斜杠：${l}`
+      }
+      return null
+    },
+  },
 ]
 
 let failed = 0
