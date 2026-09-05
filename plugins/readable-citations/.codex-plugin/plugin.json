@@ -1,7 +1,7 @@
 {
   "name": "readable-citations",
-  "version": "1.1.0",
-  "description": "引用别处章节要免跳可读 - 每轮注入自足引用规约，让 AI 引用其它文档的章节时必带标题原文与 20 字提要、写明引用关系，链接按落点分两轨：对话正文用 file:/// 绝对路径（iTerm2 可点），落盘 md 用相对路径 + 锚点（VS Code 与 GitLab 可跳）。1.1.0 补上落盘 md 指向源码文件那条出口（vscode://file/绝对路径:行号）。零 skill，纯注入不拦截（READABLE_CITATIONS=off 可关）",
+  "version": "1.2.0",
+  "description": "引用别处章节要免跳可读 - 每轮注入自足引用规约，让 AI 引用其它文档的章节时必带标题原文与 20 字提要、写明引用关系，链接按落点分两轨：跨平台对话正文用 file:/// 绝对路径，落盘 md 用相对路径 + 锚点。1.1.0 补落盘 md 源码出口；1.2.0 适配 Windows 终端路径。零 skill，纯注入不拦截（READABLE_CITATIONS=off 可关）",
   "author": {
     "name": "zhangq"
   },

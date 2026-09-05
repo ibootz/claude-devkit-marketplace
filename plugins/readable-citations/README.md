@@ -144,3 +144,9 @@ node plugins/readable-citations/hooks/tests/readable-citations.test.js
 
 7 条用例覆盖：两个事件各自的回声正确性、白名单外事件不回声、关闭开关、空 stdin、畸形 JSON、
 两轨链接形态都在正文里。用 `spawnSync` 直接喂 JSON 到 stdin，不经过 shell。
+
+## Windows 适配（1.2.0）
+
+Windows 下对话正文绝对路径同样遵循 RFC 8089 盘符正斜杠与前置斜杠规范：`file:///C:/path/to/SKILL.md#128`。
+落盘 md 继续使用相对路径 + 锚点，或指向源码时使用 `vscode://file/C:/...:128`。
+

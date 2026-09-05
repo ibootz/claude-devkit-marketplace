@@ -239,3 +239,11 @@ export CLICKABLE_PATHS=off     # 或 0 / false
 ```bash
 export FORCE_HYPERLINK=1
 ```
+
+## Windows 终端与跨平台适配（1.7.0）
+
+- **Windows 盘符路径归一化**：Windows 下 `file://` 规范路径为 `file:///C:/path/to/file.ext#1`（盘符转正斜杠、前置单个 `/`，合起来三条斜杠）。
+- **Windows Terminal / PowerShell 7 / CMD 打开说明**：
+  - Windows Terminal 原生支持 OSC 8 超链接解析，点击将通过 Windows Shell (`ShellExecuteEx`) 分发打开。
+  - Windows 操作系统对 `file:///` URI 处理时，默认关联的程序通常不支持 URL Fragment（`#1`），若直接将带 `#` 的 `file:///` 传给不支持 URL 片段的 Win32 应用，可能会报找不到文件错误。在支持 URI fragment 的终端/编辑器（如带有终端链接拦截能力的 VS Code 或配合对应扩展）中可精准跳转；通用环境下推荐落盘文档使用 VS Code 专属协议 `[文件名:行号](vscode://file/C:/path/to/file.ext:行号)`，点击可由 Windows 协议处理器直接呼起 VS Code 并定位行号。
+
