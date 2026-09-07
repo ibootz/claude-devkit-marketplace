@@ -76,6 +76,8 @@ function approvalPayload(sessionId, request, responseOverrides) {
     {
       questions: clone(request.questions),
       answers: { [question]: APPROVE_LABEL },
+      // 真实 harness 回执恒带这个键；Human 没写备注时是空对象
+      annotations: {},
     },
     responseOverrides || {}
   )
@@ -184,6 +186,12 @@ answeredInputPayload.tool_input.answers = {
 checkCode('UI updatedInput 含一致 answers 时批准', run(STATE_HOOK, answeredInputPayload), 0)
 checkCode('updatedInput 形态批准后放行', run(MAIN_GUARD, editPayload(repo, session)), 0)
 
+run(STATE_HOOK, clearPayload('Stop', session))
+const noAnnotationsPayload = approvalPayload(session, request)
+delete noAnnotationsPayload.tool_response.annotations
+checkCode('回执无 annotations 键时仍批准', run(STATE_HOOK, noAnnotationsPayload), 0)
+checkCode('无 annotations 形态批准后放行', run(MAIN_GUARD, editPayload(repo, session)), 0)
+
 checkCode(
   '同轮另一个 main 仓也放行',
   run(MAIN_GUARD, editPayload(makeRepo('main'), session)),
@@ -223,6 +231,10 @@ expectRejected(
   approvalPayload(session, request, {
     annotations: { [request.questions[0].question]: { notes: '只允许 src.js' } },
   })
+)
+expectRejected(
+  'annotations 不是对象',
+  approvalPayload(session, request, { annotations: null })
 )
 expectRejected('AFK 自动继续', approvalPayload(session, request, { afkTimeoutMs: 60000 }))
 

@@ -127,7 +127,17 @@ function isApprovalResponse(payload) {
   if (!isApprovalRequest(payload?.tool_input, true)) return false
 
   const response = payload.tool_response
-  if (!hasExactKeys(response, ['questions', 'answers'])) return false
+  // harness 的 AskUserQuestion 回执恒带 annotations 键（Human 没写备注时是空对象），
+  // 该键只承载 Human 的补充备注、不参与授权判定，故按可选键处理；不放行会让
+  // 结构完全合规的 Human 批准被静默丢弃（grantRound 压根不被调用、无任何报错）。
+  // 但 annotations 非空仍然拒绝——Human 写了备注即说明这次批准是附条件的。
+  if (
+    !hasExactKeys(response, ['questions', 'answers']) &&
+    !hasExactKeys(response, ['questions', 'answers', 'annotations'])
+  ) {
+    return false
+  }
+  if (response.annotations !== undefined && !hasExactKeys(response.annotations, [])) return false
   if (!hasExactKeys(response.answers, [payload.tool_input.questions[0].question])) return false
   if (JSON.stringify(response.questions) !== JSON.stringify(payload.tool_input.questions)) return false
   if (

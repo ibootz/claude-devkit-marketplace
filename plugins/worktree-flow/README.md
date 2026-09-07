@@ -47,8 +47,8 @@ transcript。
 - 现场证据：仓、分支、目标的实值。
 
 PreToolUse 要求问题、选项、metadata 逐字段匹配，且输入不能带 `answers` / `annotations`。PostToolUse
-还要求 `tool_response` 只含原问题与单一 `answers` 映射；自由文本、备注、AFK、未知字段、跳过、
-非批准标签皆不落授权。
+还要求 `tool_response` 只含原问题、单一 `answers` 映射，以及一个**空的** `annotations`（该键可缺席，
+见下方 1.5.1）；自由文本、非空备注、AFK、未知字段、跳过、非批准标签皆不落授权。
 
 授权状态按 `session_id` 的 SHA-256 命名，存系统临时目录，目录权限 `0700`、文件权限 `0600`；
 下一次 `UserPromptSubmit`、`Stop`、`SessionEnd` 或新 `SessionStart` 删除。另设 24 小时 fail-safe，防异常退出遗留。
@@ -93,6 +93,23 @@ Bash 侧仍只认命令位上的 `git commit`。正则无法可靠判断 `sed -i
 **白名单不是黑名单，这是有意的。** 黑名单漏一个新 flag 会静默放行；白名单最坏只是多拦一次
 本来安全的写法，而出口一直都在（先窄 `git add` 再不带 `-a` 提交，或走 worktree）。判不定
 一律维持阻断，方向与本机制存在以来一致。
+
+### `tool_response.annotations` 按可选键处理（1.5.1）
+
+1.5.0 及之前，PostToolUse 侧要求 `tool_response` 的键集**恰好**是 `{questions, answers}`
+（`hooks/lib/round-approval.js` 的 `isApprovalResponse()`）。而 harness 实际回执**恒带第三个键
+`annotations`**——Human 没写备注时它是空对象，键本身始终在。两者一撞，结果是**每一次结构完全
+合规的 Human 批准都被丢弃**：`grantRound()` 压根不被调用，状态文件不出现，下一次写入照旧被拦，
+且全程无任何报错或提示。Human 反复点“批准本轮”，看起来像插件是硬拦截、没有授权通道。
+
+1.5.1 起 `annotations` 按可选键处理：缺席或为空对象都放行，**非空仍然拒绝**——Human 写了备注即
+说明这次批准是附条件的，不能当无条件放行（`expectRejected('Human 备注存在', ...)` 那条用例语义
+不变）。`annotations` 存在但不是对象（`null`、数组、字符串）同样拒绝。
+
+**为什么测试全绿却挡不住这个 bug**：`tests/round-approval.test.js` 的 `approvalPayload()` fixture
+造的回执只有两个键，与真实 harness 形态不一致，于是被测的恰好是唯一能通过的那个形状。1.5.1 把
+fixture 的默认回执改成带 `annotations: {}`，让测试基线等于真实形态，并补了“回执无 annotations
+键时仍批准”与“annotations 不是对象”两侧用例。
 
 ## 回归用例
 
