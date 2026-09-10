@@ -142,8 +142,8 @@
       "name": "worktree-flow",
       "source": "./plugins/worktree-flow",
       "category": "Development",
-      "description": "主分支保护 + worktree 隔离边界 - main/master 默认走 worktree，进入后写哪份/怎么退",
-      "version": "1.5.1"
+      "description": "主分支保护 + worktree 隔离边界 - 默认走 worktree，进入后写哪份/怎么退，撞闸怎么自救",
+      "version": "1.6.0"
     },
     {
       "name": "cd-blocker",

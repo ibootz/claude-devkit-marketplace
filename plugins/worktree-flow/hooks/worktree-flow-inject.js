@@ -48,6 +48,13 @@ const CONTEXT = `# 主分支保护（worktree-flow）
 本机制不使用 \`permissionDecision: "ask"\`，因本机 \`bypassPermissions\` 下该档实测失效。
 \`WORKTREE_GUARD=off\` 仍是独立的全局关闭开关，不是 Human 本轮授权；AI 不得自行启用。
 
+**撞闸不是把命令交给 Human 敲的理由。** 三道闸各自的解都在你手上：会话隔离
+（\`isolated in the worktree\` / \`worktree-isolated session\`）用 \`ExitWorktree {"action":"keep"}\`
+纯自解，改完再 \`EnterWorktree {"path": 原路径}\` 回去接着干；主分支保护用上面那份
+\`AskUserQuestion\` 就地申请——**他点一下选项，不是替你敲命令**。用户级 \`CLAUDE.md\` 第 4 条
+闭集第 1 项「已经真撞上守卫」**不覆盖自带自救路的闸**：先走那条路，被 Human 亲口否了才算
+到头。展开与三次实测反例见 \`worktree-boundary\` skill 的「撞闸不是终点」一节。
+
 **既有自动豁免**：非 git 目录；detached HEAD；merge / rebase / cherry-pick 进行中；目标落在
 \`.claude/\`、\`.keeper/\`、\`.git/\` 或显式配置的豁免目录。\`git commit\` 亦按此豁免——前提是
 暂存区非空且**每一条**都落在豁免目录下、显式 pathspec 也逐条豁免、且不带 \`-a\` / \`-A\` /
