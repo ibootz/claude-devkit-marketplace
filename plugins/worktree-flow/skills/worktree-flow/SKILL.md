@@ -1,6 +1,6 @@
 ---
 name: worktree-flow
-description: 在 main/master 分支改文件或 git commit 时，默认走「开 worktree 临时分支 → 提交 → --no-ff 合回 → 清理」；确需直接写时，用 AskUserQuestion 取得 Human 本轮授权。被 `[L1-BLOCKER] check=worktree-flow` 拦下、用户说“开 worktree”“别在 main 上改”“本轮允许直接改 main/master”“合并回主分支”“清理 worktree”时使用。管的是**进入 worktree 之前**那个决策；已经在 worktree 会话里、要落笔或要退出时的隔离边界纪律走 worktree-boundary skill。
+description: 在 main/master 分支改文件或 git commit 时，默认走「开 worktree 临时分支 → 提交 → --no-ff 合回 → 清理」；确需直接写时，用 AskUserQuestion 取得 Human 本轮授权。被 `[L1-BLOCKER] check=worktree-flow` 拦下、用户说“开 worktree”“别在 main 上改”“本轮允许直接改 main/master”“合并回主分支”“清理 worktree”“还有别的会话在跑这个仓”“另开一个隔离空间做”时使用。管的是**进入 worktree 之前**那个决策；已经在 worktree 会话里、要落笔或要退出时的隔离边界纪律走 worktree-boundary skill。
 ---
 
 # 主分支保护流程（worktree-flow）
@@ -13,6 +13,33 @@ worktree；只有 Human 明确批准本轮直写，才留在主分支操作。
 不触发：非 git 目录；detached HEAD；已在其他分支；merge / rebase / cherry-pick 进行中；
 目标落在 `.claude/`、`.keeper/`、`.git/`、`WORKTREE_GUARD_EXEMPT` 目录，或启用
 `WORKTREE_GUARD_EXEMPT_DOTDIRS=1` 后的顶层点目录。
+
+## 第二个触发时刻：同仓有别的会话在动
+
+上面那条判据看的是**分支**。还有一个更早的时刻看的是**并发**——会话刚接到一个要改文件的
+需求，而同一个仓可能正有别的会话在工作。此时开 worktree 的理由与主分支保护无关：`git` 的
+索引是**全仓共享**的，两个会话各自 `git add` 之后谁先 `git commit`，谁就带走当时索引里的
+全部暂存，与「是谁 add 的」无关。受害方会看到 `no changes added to commit`——一个字面说得通、
+但完全不指向真因的报错。
+
+**判据交给 Human，不要自己探测。** 五类探测手段已逐条实测（`git worktree list`、
+`.claude/worktrees/` 目录、`ps` 配 `lsof -a -p <pid> -d cwd -Fn` 查 claude 进程 cwd、
+`~/.claude/projects/` 下 session 文件的 mtime、`~/.claude/` 下的 socket 与 lock 文件），
+**没有一种是单条命令、秒级、且可靠的**：`~/.claude/` 下不存在任何仓库级的活跃标记，
+`daemon.lock` 是全局单例且 cwd 会漂到 `$HOME`，`$CLAUDE_CODE_MESSAGING_SOCKET` 按 pid 命名。
+最接近的是 `ps` 抓带 `--resume` 的主进程再用 `lsof` 核 cwd 这个组合，但它**漏报**（对方走
+IDE 插件启动，或 cwd 落在某个 worktree 子目录——每个 worktree 有自己独立的 projects 转义
+目录，要逐个枚举）也**误报**（残留的 spare 进程），且必须先排掉自己那条进程链——实测中
+险些把本会话自己 fork 的源 session 当成「另一个会话」。
+
+所以：**Human 说了「还有别的会话在跑这个仓」才走隔离流程**，不主动探测、不主动弹选择框。
+理由是错报的代价不对称——漏报只是回到默认行为（他会说），误报却是每次落笔都打断他一次，
+而这种噪音会让整条纪律被他亲手关掉。
+
+**允许的弱提示，仅此一种**：`git worktree list` 里除主仓外还挂着别的条目时，可以在回复里
+附**一句话**——「盘上还挂着 N 个 worktree，要隔离就说一声」。不要把它升格成选择框，也不要
+把「盘上有 worktree」当成硬触发——一个长期使用 worktree 的仓里这个条件恒真，硬触发会立刻
+退化成每轮噪音。
 
 ## 默认路径：worktree
 
@@ -50,10 +77,16 @@ git -C <worktree 路径> commit -m "feat(xxx): ..."
 ```
 
 切进 worktree 之后本 skill 的职责就结束了。**落笔前先定位自己在哪一份 checkout、撞到写拦截时
-先分清是哪一层闸、退出前先确认改动已提交**，这三件事见
+先分清是三道闸里的哪一道、退出前先确认改动已提交**，这三件事见
 [worktree-boundary · worktree 隔离边界与退出](../worktree-boundary/SKILL.md#时刻一--动手前定位自己在哪一份-checkout)
-（同名相对路径在父仓与 worktree 里指向两个不同文件且不报错；`isolated in the worktree` 与
-`[L1-BLOCKER] check=worktree-flow` 的归因对照表；`ExitWorktree` 两个 action 的取舍）。
+（同名相对路径在父仓与 worktree 里指向两个不同文件且不报错；三道闸的归因对照表；
+`ExitWorktree` 两个 action 的取舍）。
+
+**其中一节现在就要记住：撞闸不是终点。** 三道闸各自的解都在你手上，没有一道的正解是把命令
+交给 Human 敲——会话隔离用 `ExitWorktree {"action":"keep"}` 纯自解，主分支保护用 finding 里
+那份 `AskUserQuestion` 就地申请（他点一下选项，不是替你敲命令）。展开与三次实测反例见
+[worktree-boundary · 撞闸不是终点——三道闸的解都在你手上](../worktree-boundary/SKILL.md#撞闸不是终点三道闸的解都在你手上)
+（含退—改—回三步往返，与「唯一真的退不出去」那种情形该怎么办）。
 
 ### 3. 合回主分支
 

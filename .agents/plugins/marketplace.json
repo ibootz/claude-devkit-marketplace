@@ -342,7 +342,7 @@
         "name": "zhangq"
       },
       "category": "Development",
-      "description": "主分支保护 + worktree 隔离边界 - main/master 默认走 worktree，进入后写哪份/怎么退",
+      "description": "主分支保护 + worktree 隔离边界 - 默认走 worktree，进入后写哪份/怎么退，撞闸怎么自救",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "worktree-flow",
       "source": {
@@ -353,7 +353,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "1.5.1"
+      "version": "1.6.0"
     },
     {
       "author": {

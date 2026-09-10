@@ -1,6 +1,6 @@
 ---
 name: worktree-boundary
-description: 已经在 worktree 会话里、要动手写文件或要退出时的隔离边界纪律。动手前先定位自己在哪一份 checkout（同名相对路径在父仓与 worktree 里指向两个不同文件，且这个歧义不报错），退出前先确认改动已提交、合回与清理的顺序。撞到 `isolated in the worktree`、`Shell cwd was reset to`、「在 worktree 里改不了父仓的文件」、「cd 出去被弹回」、「worktree 里的 test 和父仓的 test 不是同一个文件」、「改完要不要提交才能合回」、`ExitWorktree`、「合并回主分支」、「清理 worktree」、「让另一个会话帮我改被拦的那一步」时使用。**准备操作 worktree 之前与准备退出 worktree 之前都要读**，别等撞了闸才来。「我在 main 上要落笔、该不该开 worktree」是另一个时刻，走 worktree-flow skill。
+description: 已经在 worktree 会话里、要动手写文件或要退出时的隔离边界纪律。动手前先定位自己在哪一份 checkout（同名相对路径在父仓与 worktree 里指向两个不同文件，且这个歧义不报错），退出前先确认改动已提交、合回与清理的顺序。撞到 `isolated in the worktree`、`Shell cwd was reset to`、「在 worktree 里改不了父仓的文件」、「cd 出去被弹回」、「worktree 里的 test 和父仓的 test 不是同一个文件」、「改完要不要提交才能合回」、`ExitWorktree`、「合并回主分支」、「清理 worktree」、「让另一个会话帮我改被拦的那一步」、`Refusing to run it — a worktree-isolated session's git operations`、「命令太复杂无法验证是否留在 worktree 内」，以及**你正准备把一条改父仓的命令交给 Human 自己敲**时使用。**准备操作 worktree 之前与准备退出 worktree 之前都要读**，别等撞了闸才来。「我在 main 上要落笔、该不该开 worktree」是另一个时刻，走 worktree-flow skill。
 ---
 
 # worktree 隔离边界与退出
@@ -39,13 +39,17 @@ git worktree list
 
 ## 报错原文 → 拦截者对照表
 
-两层闸的形态相似——都在写操作那一刻拦下——但成因与解法完全不同。**先看报错原文里有没有
-`isolated in the worktree` 这句**，有就是隔离，没有再往主分支保护上想。
+三道闸的形态相似——都在写操作那一刻拦下——但成因与解法完全不同。按报错原文分流：含
+`isolated in the worktree` 或 `worktree-isolated session` 是**会话隔离**，含
+`[L1-BLOCKER] check=worktree-flow` 是**主分支保护**。
+
+**三道闸的解法都在你手上，没有一道的正解是把命令交给 Human 敲**——见本文「撞闸不是终点」一节。
 
 | 报错里的判据句 | 拦截者 | 真正的判据 | 解法 |
 |---|---|---|---|
 | `isolated in the worktree` | worktree 会话隔离（harness 工具层） | 目标路径落在父仓共享 checkout 内 | 改 worktree 副本，或 `ExitWorktree {"action":"keep"}` 退出后再写 |
 | `[L1-BLOCKER] check=worktree-flow` | 主分支保护（worktree-flow 插件的 PreToolUse） | 目标仓当前分支逐字等于 `main` / `master` | 走 worktree 流程，或由 Human 当轮授权直写 |
+| `Refusing to run it — a worktree-isolated session's git operations must target its own worktree` | 会话隔离管 Bash 命令的那一半（harness 工具层） | 两种成因，报错原文相同：①用 `git -C <父仓>` / `--git-dir` / `GIT_DIR` 把 git 指回共享检出且这次是**写**；②**命令复杂到它无法静态判定落点**（`python3 - <<EOF` 之类内联脚本、多段串联），此时它保守拒绝，**哪怕目标就在 worktree 内** | ①`ExitWorktree {"action":"keep"}` 退出后再跑；②拆成平铺的简单命令，或改用 `Read` / `Edit` / `Write` 文件工具——它们不过这道闸 |
 
 隔离那条的完整原文（一字不改，实测抄录）：
 
@@ -81,9 +85,54 @@ This session is isolated in the worktree /path/to/repo/.claude/worktrees/<名>. 
 逐版本补，不是留给你用的通道**。（版本沿革属文档转述，未实测；本机 2.1.237 上只实测了 `git -C`
 的只读查询可用。）
 
-**遇到「A 与 B 不能并存」时，先检查 A 是不是可以先退掉，再断言做不到。** 实测反例：AI 一度把
-结论说成「worktree 期间要写父仓只能人自己搞」——判断偏软，正路是自己调 `ExitWorktree` 把 A
-退掉。
+---
+
+## 撞闸不是终点——三道闸的解都在你手上
+
+**这一条要对抗的不是无知，是一条读起来更硬的规则**，所以它单独成节。
+
+用户级 `CLAUDE.md` 第 4 条「没有阻断，就不许把命令抄给用户敲」列了一个闭集，第 1 项旧文是
+「已经真撞上守卫……跑过一次、拿到了 L1-BLOCKER」。字面读下来，撞了闸就获准把命令交出去。
+2026-09-09 至 09-10 的历史会话里**实测被这么用了三次**，其中一次原话：
+
+> 我跑不了它——本会话被隔离在 worktree 里……**这属于「已经真撞上守卫」，所以交给你**：
+> `! git -C ~/Workspace/xx/sdlc/tech-support-plugin pull --ff-only`
+
+那条命令本来自己就跑得完：退出、pull、再进来，三步全在工具表里，Human 一件事都不用做。
+另一次里 Human 不得不亲口说「授权你通过 exitworktree 退出到主 checkout 修改 然后再回来」，
+AI 才动——**`ExitWorktree` 这条路在那三次里没有一次是 AI 自己想起来的。**
+
+该规则已于 2026-09-10 修订：第 1 项现在要求拿到 L1-BLOCKER 之后先问一句「这道闸自带申请
+通道或自解手段吗」。三道闸的答案都是「有」：
+
+| 撞到 | 自救动作 | Human 要做什么 |
+|---|---|---|
+| 会话隔离（写父仓文件，或 `git -C <父仓>` 的写操作） | `ExitWorktree {"action":"keep"}` | **什么都不做**，纯自解 |
+| 会话隔离（命令太复杂，无法验证落点） | 拆成平铺命令，或改用 `Edit` / `Write` 文件工具 | **什么都不做**，纯自解 |
+| 主分支保护（父仓停在 `main` / `master`） | 原样调用 finding 里给的那份 `AskUserQuestion` | 点一下选项 |
+| 两道叠加（退出后落在 main 上要写） | 先退出，再就地申请本轮授权 | 点一下选项 |
+
+**「请 Human 点一下」与「把命令交给 Human 敲」是两件事。** 前者他花两秒做一个只有他能做的
+决定；后者他花两分钟做本该我做的执行，而那条命令还会在他的环境里踩我没验过的坑——实测过一次：
+`P="a b c"; git add $P` 交给 Human 在 zsh 里敲，zsh 默认不对未加引号的变量做单词分割（bash 会），
+整串被当成一个路径名，`fatal: pathspec ... did not match any files`。我自己跑的话当场就能改掉。
+
+### 退—改—回的完整往返
+
+1. `ExitWorktree {"action":"keep"}` —— `keep` 不可换成 `remove`，后者连目录带分支一起删。
+2. 在主目录改、跑、提交。父仓若停在 `main` / `master`，这一步会撞主分支保护——那是**下一道
+   闸，不是折返点**，照上表申请本轮授权。
+3. `EnterWorktree {"path": "<仓根>/.claude/worktrees/<名>"}` 回到原 worktree 接着干。
+
+### 唯一真的退不出去的情形
+
+这个 worktree 不是本会话 `EnterWorktree` 亲手建的——手工 `git worktree add` 的、以 `path`
+进来的、上一个会话留下的。此时 `ExitWorktree` 是**静默 no-op**，只报「无活动 worktree 会话」。
+
+**它同样不是交出去的理由。** 没调过 `EnterWorktree` 就没有会话隔离那一层介入（**推断，未实测**：
+隔离随 `EnterWorktree` 启用；会话若一开始 cwd 就落在某个手工 worktree 里，判据不成立），
+此时用绝对路径写父仓文件撞到的多半只有主分支保护，照上表申请即可。**先跑一次看撞到哪道闸，
+再按那道闸的解法走——不要凭预判断言无路。**
 
 ---
 
