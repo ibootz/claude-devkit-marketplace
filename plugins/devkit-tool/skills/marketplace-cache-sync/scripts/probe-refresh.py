@@ -11,9 +11,10 @@
   --stage market   探测各 marketplace 远端是否有新提交（并发 git ls-remote，本机 17 个约 5 秒）。
                    输出需要执行 `claude plugin marketplace update <name>` 的市场名单。
   --stage plugin   在市场已更新之后，算出真正需要 `claude plugin update` 的记录清单。
-                   两类源都比版本号，只是版本号读的位置不同：市场仓内源读市场仓里的
-                   manifest（纯本地）；url 独立仓源读远端仓根 .claude-plugin/plugin.json
-                   （一次 HTTP GET，不 clone），按远端仓去重后本机只有十几个请求。
+                   两类源都比版本号，只是版本号读的位置不同：市场仓内源读该插件目录自己的
+                   .claude-plugin/plugin.json（纯本地，条目 version 仅兜底）；url 独立仓源
+                   读远端仓根 .claude-plugin/plugin.json（一次 HTTP GET，不 clone），
+                   按远端仓去重后本机只有十几个请求。
 
 输出一律是「给人看的诊断 + 机器可读清单文件」两部分，清单文件路径见 --out 参数。
 """
@@ -99,12 +100,18 @@ def marketplace_entry(mkt, plugin):
 def source_version(mkt, entry):
     """取「市场源里该插件当前声明的版本号」。
 
-    marketplace.json 的条目上通常有 version；没有时回落去读该插件目录自己的 plugin.json。
+    **先读该插件目录自己的 plugin.json，读不到才回落 marketplace.json 条目的 version。**
+    这个顺序是实测出来的、与 CLI 一致，不要凭直觉反过来：CLI 判 already at the latest
+    version 时解析出的版本号取自**插件目录的 manifest**，条目上那个 version 只是它的兜底。
+
+    2026-09-18 实测 fusion@aisdlc-fusion：marketplace.json 条目写 1.21.2、插件目录
+    .claude-plugin/plugin.json 写 1.21.3，而 installed_plugins.json 的记录也是 1.21.3，
+    CLI 回执 `already at the latest version (1.21.3)`。按旧顺序（条目优先）会判成「版本号
+    落后：1.21.3 -> 1.21.2」，白付 2 × 25 秒；同一条误判在 project scope 上还会顺带把一个
+    实际没有变化的版本标成「落后」。
+
     两处都拿不到返回 None，调用方按「判不了、保守刷一次」处理。
     """
-    v = entry.get("version")
-    if v:
-        return v
     src = entry.get("source")
     if isinstance(src, str):
         base = os.path.join(MARKETPLACES, mkt, src.lstrip("./"))
@@ -112,7 +119,7 @@ def source_version(mkt, entry):
             data = load_json(os.path.join(base, rel))
             if data and data.get("version"):
                 return data["version"]
-    return None
+    return entry.get("version") or None
 
 
 def is_enabled(pid, rec):
