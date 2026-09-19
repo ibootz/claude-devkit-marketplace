@@ -25,7 +25,7 @@ echo "== H29 · 整档收口判定（retirable_kinds：五项全过才算这一�
 # 写死 basename 会把队列条目造到一个判定函数根本不看的路径下，表现成「造了条目却
 # 判不出收口」（第一版本文件就是这么错的，四条断言全红而判定函数本身是对的）。
 gen_delivery_root() {
-  /usr/bin/python3 -c '
+  python3 -c '
 import sys, os
 sys.path.insert(0, sys.argv[2])
 from keeper_paths import resolve_delivery_id
@@ -37,7 +37,7 @@ print(os.path.join(sys.argv[1], ".keeper", resolve_delivery_id(sys.argv[1])))
 # 用固定字符串比较而不是子串包含——`has "debug"` 在返回 `debug chore` 时也会通过，
 # 那正好放过「不该收口的档也被判收口」这一类错误，而那是本节最要防的方向。
 gen_retirable() {   # $1=仓库根
-  /usr/bin/python3 -c '
+  python3 -c '
 import sys
 sys.path.insert(0, sys.argv[2])
 from keeper_generation import retirable_kinds

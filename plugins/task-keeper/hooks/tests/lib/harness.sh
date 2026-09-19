@@ -10,8 +10,10 @@
 #
 # 【可移植性】本仓库要求脚本同时兼容 Linux 与 macOS，故：mktemp 一律带
 #   XXXXXX 模板（BSD 不接受省略）；不使用 sed -i 原地编辑（GNU 与 BSD 的
-#   -i 语义冲突）；python 解释器统一写死 `/usr/bin/python3`（避免 PATH 上
-#   装了别的 python3 导致依赖版本漂移）；日期计算一律用 python 现算
+#   -i 语义冲突）；python 解释器一律写 `python3` 走 PATH 解析——原先写死
+#   `/usr/bin/python3` 是为了避免 PATH 上装了别的 python3 导致版本漂移，但
+#   Windows 的 Git Bash 下该路径不存在，写死会让脚本静默零输出（`|| true`
+#   还会把失败吞成成功），可移植性优先于版本锁定；日期计算一律用 python 现算
 #   （`datetime.date.today()`），不写死具体年份/日期字面量。
 #   （本节原文位于拆分前 run-tests.sh 文件头 57-61 行，随 helper 实现一起
 #   搬到这里；run-tests.sh 头部留了指回本文件的指针，不再重复这段文字。）
@@ -22,9 +24,9 @@ newtmpdir() { mktemp -d "${TMPDIR:-/tmp}/tk-dbgq.XXXXXX"; }
 
 # 取文件 mtime。不用 stat——它的格式参数在两个平台互不兼容（BSD/macOS 是 -f、
 # GNU/Linux 是 -c），而 `stat -f … || stat -c …` 那种兜法会把「命令失败」变成
-# 正常控制流，出真错时也被吞掉。本脚本本来就依赖 /usr/bin/python3，用它最干净。
+# 正常控制流，出真错时也被吞掉。本脚本本来就依赖 python3，用它最干净。
 mtime() {
-  /usr/bin/python3 -c 'import os,sys;print(int(os.stat(sys.argv[1]).st_mtime))' "$1"
+  python3 -c 'import os,sys;print(int(os.stat(sys.argv[1]).st_mtime))' "$1"
 }
 
 # fixture 的默认 reported_at。**必须现算，不能写死字面量。**
@@ -33,7 +35,7 @@ mtime() {
 # 的 fixture 变成"全部超龄"，用例从那天起恒红，且报错文案指向归档逻辑、与真实成因
 # （fixture 过期）毫无关系。判据没错、代码没坏，坏的是一个会随时间失效的常量。
 today_iso() {
-  /usr/bin/python3 -c 'import datetime;print(datetime.date.today().isoformat())'
+  python3 -c 'import datetime;print(datetime.date.today().isoformat())'
 }
 
 # 造一条 debug 队列 issue 文件（v4：一条目一目录）。$1=队列目录
@@ -84,14 +86,14 @@ mkchore() {
 }
 
 run_hook() {         # $1 = cwd, $2 = prompt —— debug 队列快照 hook
-  /usr/bin/python3 -c '
+  python3 -c '
 import json,sys
 print(json.dumps({"hook_event_name":"UserPromptSubmit","cwd":sys.argv[1],"prompt":sys.argv[2]}))
 ' "$1" "$2" | bash "$HOOK"
 }
 
 run_chore() {         # $1 = cwd, $2 = prompt —— chore 队列快照 hook
-  /usr/bin/python3 -c '
+  python3 -c '
 import json,sys
 print(json.dumps({"hook_event_name":"UserPromptSubmit","cwd":sys.argv[1],"prompt":sys.argv[2]}))
 ' "$1" "$2" | bash "$HOOK_CHORE"
@@ -102,7 +104,7 @@ run_routing() {       # $1 = cwd —— SessionStart 路由注入 hook
   # heredoc 会占用 python 自己的 stdin，事件 JSON 反而读不到、cwd 拿不到。本 helper
   # 必须走「独立进程生成 JSON → 管道喂给薄壳」这条路径，不能改写成 heredoc 形态，
   # 否则这条测试就不再是它的回归。
-  /usr/bin/python3 -c '
+  python3 -c '
 import json,sys
 print(json.dumps({"hook_event_name":"SessionStart","cwd":sys.argv[1]}))
 ' "$1" | bash "$ROUTING"
@@ -110,7 +112,7 @@ print(json.dumps({"hook_event_name":"SessionStart","cwd":sys.argv[1]}))
 
 run_triage() {        # $1 = cwd —— UserPromptSubmit 三岔口分诊注入 hook
   # 与 run_routing 同一条 heredoc-stdin 回归约束，不要改写成 heredoc 形态。
-  /usr/bin/python3 -c '
+  python3 -c '
 import json,sys
 print(json.dumps({"hook_event_name":"UserPromptSubmit","cwd":sys.argv[1]}))
 ' "$1" | bash "$TRIAGE_HOOK"
@@ -118,7 +120,7 @@ print(json.dumps({"hook_event_name":"UserPromptSubmit","cwd":sys.argv[1]}))
 
 run_triage_sess() {   # $1=cwd $2=session_id(可省，省则 payload 不带 session_id 键)
   # 与 run_triage 的差异只是多带 session_id——H22 用它构造"本会话匹配/不匹配"两侧。
-  /usr/bin/python3 -c '
+  python3 -c '
 import json,sys
 ev = {"hook_event_name": "UserPromptSubmit", "cwd": sys.argv[1]}
 if len(sys.argv) > 2 and sys.argv[2]:
@@ -129,7 +131,7 @@ print(json.dumps(ev))
 
 run_subagent_start() {   # $1=cwd $2=hook_event_name(可省，默认 SubagentStart) $3=agent_type(可省，默认 task-keeper:debug-keeper)
   # 与 run_routing 同一条 heredoc-stdin 回归约束，不要改写成 heredoc 形态。
-  /usr/bin/python3 -c '
+  python3 -c '
 import json,sys
 ev = {
     "hook_event_name": sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else "SubagentStart",
@@ -143,7 +145,7 @@ print(json.dumps(ev))
 run_keeper_instance() {   # $1=cwd $2=subagent_type(可省) $3=name(可省) $4=tool_name(可省，默认 Agent) $5=session_id(可省)
   # PreToolUse(Agent) keeper 实例登记 hook。$2/$3/$5 省略时 tool_input/顶层对应键就
   # 不写，用来构造「缺 subagent_type」「缺 name」「缺 session_id」这类假阴性输入。
-  /usr/bin/python3 -c '
+  python3 -c '
 import json,sys
 ti = {}
 if len(sys.argv) > 2 and sys.argv[2]:
@@ -167,7 +169,7 @@ run_keeper_agent() {   # $1=cwd $2=subagent_type $3=name $4=session_id(可省) $
   # `keeper_instance_register.extract_issue` 的抽取通道（prompt 优先、description 兜底）。
   # 两者省略时**不写这两个键**，构造「派发参数里压根没有编号」这一侧——它与「写了但
   # 抽不到」是两种不同的输入，不能混用。
-  /usr/bin/python3 -c '
+  python3 -c '
 import json,sys
 ti = {"subagent_type": sys.argv[2], "name": sys.argv[3]}
 if len(sys.argv) > 5 and sys.argv[5]:
@@ -203,7 +205,7 @@ mkrealrepo() {
 #     · 没给          → 取列表里最新的一条（ts 倒序第一条，写侧已排好序）
 #   v6 的单条格式（kind 直接是 dict）照样读得出来，`_norm` 负责归一。
 ki_field() {
-  /usr/bin/python3 -c '
+  python3 -c '
 import json,sys
 
 def _norm(entry):
@@ -228,7 +230,7 @@ except Exception:
 
 # ki_count <登记文件> <kind> —— 某一档登记了几个实例。多实例断言的主力判据。
 ki_count() {
-  /usr/bin/python3 -c '
+  python3 -c '
 import json,sys
 try:
     d = json.load(open(sys.argv[1]))

@@ -11,14 +11,14 @@ echo "== H7 · 截图证据路径守卫（写 issue 文件时拦 image-cache 路
 # 检出方式是行级扫描，豁免同行标注 origin_path 的留档。
 EVD="$HOOK_DIR/pre-tool-use-debug-evidence.sh"
 run_evd() {   # $1=tool_name $2=file_path $3=输入字段名 $4=值 $5=session_id
-  /usr/bin/python3 -c '
+  python3 -c '
 import json,sys
 tn,fp,key,val,sid = sys.argv[1:6]
 print(json.dumps({"tool_name":tn,"tool_input":{"file_path":fp,key:val},"session_id":sid},
                  ensure_ascii=False))
 ' "$1" "$2" "$3" "$4" "$5" | bash "$EVD"
 }
-CNT_DIR2="$(/usr/bin/python3 -c 'import tempfile;print(tempfile.gettempdir())')"
+CNT_DIR2="$(python3 -c 'import tempfile;print(tempfile.gettempdir())')"
 # 前缀 tk-（task-keeper）与 radnove-core 的 rn- 区分，见 hook_counter.py 模块头注释
 find "$CNT_DIR2" -maxdepth 1 -name 'tk-evidence-EVDTEST*.json' -delete
 

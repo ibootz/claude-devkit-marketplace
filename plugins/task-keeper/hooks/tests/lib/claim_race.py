@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """并发认领编号的压测驱动（H30 用）：起 N 个真实进程同时调 `queue_files.claim_id`。
 
-用法：`/usr/bin/python3 claim_race.py <lib目录> <队列目录> <并发数>`
+用法：`python3 claim_race.py <lib目录> <队列目录> <并发数>`
 输出：每行一个被认领的编号，顺序不定；调用方自己去重计数。
 
 ## 为什么必须是真实进程，不能用线程

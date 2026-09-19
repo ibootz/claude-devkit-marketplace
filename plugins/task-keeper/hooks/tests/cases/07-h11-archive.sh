@@ -34,7 +34,7 @@ mkarchfixture() {
   echo "$d"
 }
 py_nextid() {   # $1=queue_dir(.keeper/_main/debug) —— 打印 DEBUG spec 下的 next_id()
-  /usr/bin/python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import queue_files as f; print(f.next_id(sys.argv[2], f.DEBUG))' \
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import queue_files as f; print(f.next_id(sys.argv[2], f.DEBUG))' \
     "$LIBDIR" "$1"
 }
 
@@ -42,7 +42,7 @@ echo "[46] dry-run 零副作用：列出计划但不动任何文件，next_id �
 D="$(mkarchfixture)"
 DQ="$D/.keeper/_main/debug"
 before="$(py_nextid "$DQ")"
-out="$(/usr/bin/python3 "$ARCH" --queue-dir "$DQ" --batch D-999-test 2>&1)"
+out="$(python3 "$ARCH" --queue-dir "$DQ" --batch D-999-test 2>&1)"
 has "dry-run 列出 DBG-001 的搬迁计划" "$out" "DBG-001"
 has "dry-run 明确标注未移动"          "$out" "未移动任何文件"
 if [ -z "$(git -C "$D" status --short)" ]; then ok "dry-run 后工作区仍干净"
@@ -50,7 +50,7 @@ else bad "dry-run 后工作区仍干净" "空" "$(git -C "$D" status --short)"; 
 has "dry-run 后 next_id 不变（${before}）" "$(py_nextid "$DQ")" "$before"
 
 echo "[47] --apply 整目录搬迁（issue.md/receipts.md/截图一起走），open 与带 worktree 的 done 不动"
-out="$(/usr/bin/python3 "$ARCH" --queue-dir "$DQ" --batch D-999-test --apply 2>&1)"
+out="$(python3 "$ARCH" --queue-dir "$DQ" --batch D-999-test --apply 2>&1)"
 has "汇总报成功 2 条" "$out" "成功 2 条"
 for f in DBG-001/issue.md DBG-002/issue.md DBG-002/receipts.md DBG-002/01.png; do
   if [ -e "$DQ/archive/D-999-test/$f" ]; then ok "已归档 archive/D-999-test/$f"
@@ -64,7 +64,7 @@ has "DBG-003 给出跳过警告" "$out" "DBG-003"
 
 echo "[48] 归档不得造成 id 复用（最关键的不变量）+ index.md 只统计不逐条 + 幂等"
 has "归档后 next_id 未回退（仍为 ${before}）" "$(py_nextid "$DQ")" "$before"
-idx="$(/usr/bin/python3 -c '
+idx="$(python3 -c '
 import sys; sys.path.insert(0, sys.argv[1]); import queue_files as f
 a = f.render_index(sys.argv[2], f.DEBUG); b = f.render_index(sys.argv[2], f.DEBUG)
 print("IDEMPOTENT" if a == b else "DIFFERS")
@@ -72,6 +72,6 @@ print(a)' "$LIBDIR" "$DQ")"
 has "render_index 两次调用逐字节相同" "$idx" "IDEMPOTENT"
 has "index.md 含 archived 计数节"     "$idx" "## archived 2"
 hasnt "archived 节不逐条列归档 id"     "$idx" "archive/D-999-test/DBG-001/issue.md"
-out="$(/usr/bin/python3 "$ARCH" --queue-dir "$DQ" --batch D-999-test --apply 2>&1)"
+out="$(python3 "$ARCH" --queue-dir "$DQ" --batch D-999-test --apply 2>&1)"
 has "重跑幂等（已归档的不再重复搬）" "$out" "0 条"
 rm -rf "$D" 2>/dev/null

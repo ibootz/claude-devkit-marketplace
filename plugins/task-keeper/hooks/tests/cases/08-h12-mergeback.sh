@@ -16,7 +16,7 @@ git -C "$T" config user.email t@t.t; git -C "$T" config user.name t
 echo v1 > "$T/zz.txt"; git -C "$T" add -A >/dev/null 2>&1
 git -C "$T" commit -qm init >/dev/null 2>&1
 echo v2 > "$T/zz.txt"     # 唯一一项改动，未 staged ⇒ porcelain 首行就是 " M zz.txt"
-DP="$(/usr/bin/python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import wt_git as g; print(sorted(g.dirty_paths(sys.argv[2])))' \
+DP="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import wt_git as g; print(sorted(g.dirty_paths(sys.argv[2])))' \
   "$HOOK_DIR/../skills/tk-worktree/scripts" "$T" 2>&1)"
 has "dirty_paths 取到完整路径 zz.txt（错位会得到 z.txt）" "$DP" "'zz.txt'"
 rm -rf "$T" 2>/dev/null

@@ -16,7 +16,7 @@ echo "== H8 · wt_supply.py（worktree submodule 供给：跨对象库共享 / g
 # basename 恒不匹配 keeper_paths.DELIVERY_RE，交付 id 因此恒为兜底桶 _main。
 
 WT_SUPPLY="$HOOK_DIR/../skills/tk-worktree/scripts/wt_supply.py"
-run_supply() { /usr/bin/python3 "$WT_SUPPLY" "$@"; }
+run_supply() { python3 "$WT_SUPPLY" "$@"; }
 
 # 造一个 submodule 源仓（供 `git submodule add` 用）。$1=路径
 mksmrepo() {

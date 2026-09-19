@@ -18,7 +18,7 @@ printf -- '---\nblocking: true\n---\n\n需要拍板 A\n' > "$T/.keeper/_main/dec
 printf -- '---\nblocking: false\n---\n\n需要拍板 B\n' > "$T/.keeper/_main/decisions/2026-07-30-1300-debug-keeper.md"
 printf -- '---\nblocking: true\n---\n\n已经回复过的\n' > "$T/.keeper/_main/decisions/2026-07-30-1100-debug-keeper.md"
 printf -- '答复：已确认\n' > "$T/.keeper/_main/decisions/answers/2026-07-30-1100-debug-keeper.md"
-CNT="$(/usr/bin/python3 -c '
+CNT="$(python3 -c '
 import sys; sys.path.insert(0, sys.argv[1])
 import decision_inbox as d
 items = d.pending_decisions(sys.argv[2])

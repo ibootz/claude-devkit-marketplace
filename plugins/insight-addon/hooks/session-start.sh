@@ -19,7 +19,11 @@
 
 set -uo pipefail
 
-/usr/bin/python3 - <<'PYEOF' 2>/dev/null || true
+# 解释器解析：Windows 的 Git Bash 没有 /usr/bin/python3，写死会让本脚本静默零输出。
+# 按 python3 → python → 原绝对路径回落，PATH 缺失时行为不比写死更差。
+PY="$(command -v python3 || command -v python || echo /usr/bin/python3)"
+
+"$PY" - <<'PYEOF' 2>/dev/null || true
 import json
 
 STYLE = """本会话附加"教学洞察"：特定时刻多输出一个洞察框，不改变当前输出风格的句长/段落/列表要求。

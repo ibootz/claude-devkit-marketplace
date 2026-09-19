@@ -18,7 +18,7 @@ echo "[112] render_frontmatter 按 fm_order 固定位置输出 spec_status（typ
 echo "      reported_at 之前），不是按 dict 插入顺序也不是按字母序"
 # fm dict 的键故意打乱顺序（spec_status 排在最前、reported_at 排在中间偏后），
 # 用来证明输出顺序只由 spec.fm_order 决定，与传入顺序无关。
-OUT="$(/usr/bin/python3 -c '
+OUT="$(python3 -c '
 import sys
 sys.path.insert(0, sys.argv[1])
 import queue_files as f

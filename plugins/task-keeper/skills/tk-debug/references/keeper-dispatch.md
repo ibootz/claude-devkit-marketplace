@@ -203,7 +203,7 @@ transcript 停在"我已经交差"那一刻，被唤醒后要么懵掉、要么�
 ```bash
 python3 <插件根>/scripts/keeper_cli.py peers --kind <kind>
 # 或直接读登记文件、按 issue 字段过滤：
-/usr/bin/python3 -c '
+python3 -c '
 import json
 data = json.load(open(".keeper/<交付id>/.keeper-instance.json"))
 for rec in data.get("<kind>", {}).get("instances", []):
