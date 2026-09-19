@@ -47,8 +47,8 @@ transcript。
 - 现场证据：仓、分支、目标的实值。
 
 PreToolUse 要求问题、选项、metadata 逐字段匹配，且输入不能带 `answers` / `annotations`。PostToolUse
-还要求 `tool_response` 只含原问题与单一 `answers` 映射；自由文本、备注、AFK、未知字段、跳过、
-非批准标签皆不落授权。
+还要求 `tool_response` 只含原问题、单一 `answers` 映射，以及一个**空的** `annotations`（该键可缺席，
+见下方 1.5.1）；自由文本、非空备注、AFK、未知字段、跳过、非批准标签皆不落授权。
 
 授权状态按 `session_id` 的 SHA-256 命名，存系统临时目录，目录权限 `0700`、文件权限 `0600`；
 下一次 `UserPromptSubmit`、`Stop`、`SessionEnd` 或新 `SessionStart` 删除。另设 24 小时 fail-safe，防异常退出遗留。
@@ -94,6 +94,23 @@ Bash 侧仍只认命令位上的 `git commit`。正则无法可靠判断 `sed -i
 本来安全的写法，而出口一直都在（先窄 `git add` 再不带 `-a` 提交，或走 worktree）。判不定
 一律维持阻断，方向与本机制存在以来一致。
 
+### `tool_response.annotations` 按可选键处理（1.5.1）
+
+1.5.0 及之前，PostToolUse 侧要求 `tool_response` 的键集**恰好**是 `{questions, answers}`
+（`hooks/lib/round-approval.js` 的 `isApprovalResponse()`）。而 harness 实际回执**恒带第三个键
+`annotations`**——Human 没写备注时它是空对象，键本身始终在。两者一撞，结果是**每一次结构完全
+合规的 Human 批准都被丢弃**：`grantRound()` 压根不被调用，状态文件不出现，下一次写入照旧被拦，
+且全程无任何报错或提示。Human 反复点“批准本轮”，看起来像插件是硬拦截、没有授权通道。
+
+1.5.1 起 `annotations` 按可选键处理：缺席或为空对象都放行，**非空仍然拒绝**——Human 写了备注即
+说明这次批准是附条件的，不能当无条件放行（`expectRejected('Human 备注存在', ...)` 那条用例语义
+不变）。`annotations` 存在但不是对象（`null`、数组、字符串）同样拒绝。
+
+**为什么测试全绿却挡不住这个 bug**：`tests/round-approval.test.js` 的 `approvalPayload()` fixture
+造的回执只有两个键，与真实 harness 形态不一致，于是被测的恰好是唯一能通过的那个形状。1.5.1 把
+fixture 的默认回执改成带 `annotations: {}`，让测试基线等于真实形态，并补了“回执无 annotations
+键时仍批准”与“annotations 不是对象”两侧用例。
+
 ## 回归用例
 
 ```bash
@@ -117,19 +134,54 @@ SessionEnd 撤销；非批准、自由文本、备注、AFK、问题篡改、损
 用 `devkit-tool:cascade-push`。若现有 checkout 才持有脏改动，可向 Human 申请本轮直写，勿开空
 worktree 后再跨隔离边界操作原仓。
 
-## 隔离边界与主分支保护是两层，别混
+## 三道闸，别混（1.6.0 起从两道扩到三道）
 
-两层闸都在写操作那一刻拦下，成因与解法完全不同。归因错了的代价是实测过的：把隔离误报成主分支
+三道闸都在写操作那一刻拦下，成因与解法完全不同。归因错了的代价是实测过的：把隔离误报成主分支
 保护，会去申请一个根本用不上的授权；反过来会以为「换个目录就行」而漏掉授权环节。
 
 | 报错里的判据句 | 拦截者 | 判据 | 解法 |
 |---|---|---|---|
 | `isolated in the worktree` | worktree 会话隔离（harness 工具层，非本插件） | 目标路径落在父仓共享 checkout 内 | 改 worktree 副本，或 `ExitWorktree {"action":"keep"}` 后再写 |
 | `[L1-BLOCKER] check=worktree-flow` | 本插件的 `main-branch-guard.js` | 目标仓当前分支逐字等于 `main` / `master` | 走 worktree 流程，或 Human 当轮授权 |
+| `Refusing to run it — a worktree-isolated session's git operations must target its own worktree` | 会话隔离管 Bash 命令的那一半（harness 工具层，非本插件） | 两种成因共用一条报错：①`git -C <父仓>` / `--git-dir` / `GIT_DIR` 把 git 指回共享检出且这次是写；②命令复杂到它无法静态判定落点（`python3 - <<EOF` 之类内联脚本、多段串联），此时保守拒绝，**哪怕目标就在 worktree 内** | ①退出后再跑；②拆成平铺命令，或改用 `Read` / `Edit` / `Write` 文件工具——它们不过这道闸 |
+
+第三道是 2026-09-10 实测补入的：一条落点完全在 worktree 内的 `python3 - <<'PYEOF'` 改文件脚本
+被它拒绝，报错却与「把 git 指回父仓」那种情形逐字相同。**两种成因共用一条报错**，是这道闸最容易
+误判归因的地方。
 
 worktree 建在 `<仓根>/.claude/worktrees/<名>`，而 `.claude/` 是本插件的自动豁免目录之一——所以
-worktree 内的写操作**不会**被主分支保护拦，拦它的只有会话隔离那一层。完整判据、`ExitWorktree`
-两个 action 的取舍、跨会话代做的明禁与例外，见 `skills/worktree-boundary/SKILL.md`。
+worktree 内的写操作**不会**被主分支保护拦，拦它的只有会话隔离那两半。
+
+**三道闸都有自救路，没有一道的正解是把命令交给 Human 敲**（1.6.0 新增的纪律，起因见下）。完整
+判据、`ExitWorktree` 两个 action 的取舍、退—改—回三步往返、跨会话代做的明禁与例外，见
+`skills/worktree-boundary/SKILL.md`。
+
+### 撞闸不甩锅（1.6.0）
+
+用户级 `CLAUDE.md` 第 4 条「没有阻断，就不许把命令抄给用户敲」的闭集第 1 项旧文是「已经真撞上
+守卫……拿到了 L1-BLOCKER」。字面读下来撞了闸就获准把命令交出去，2026-09-09 至 09-10 的历史会话
+里**实测被这么用了三次**——其中一次 AI 逐字引用了那条规则的标题，而它当时只要 `ExitWorktree` →
+改 → `EnterWorktree {"path":...}` 三步就能自己做完；另一次 Human 不得不亲口说「授权你通过
+exitworktree 退出到主 checkout 修改 然后再回来」，AI 才动。三次里 `ExitWorktree` 没有一次是 AI
+自己想起来的。
+
+该规则已于 2026-09-10 修订，第 1 项现在要求拿到 L1-BLOCKER 之后先问「这道闸自带申请通道或自解
+手段吗」。本插件在 `hooks/worktree-flow-inject.js` 的注入文本里同步压了一句，因为要对抗的那条
+规则同样是每轮在场的——软注入对软注入，权重才对得上。
+
+### 第二个触发时刻：同仓并发会话（1.6.0）
+
+`skills/worktree-flow/SKILL.md` 新增一节：分支判据之外，「同一个仓正有别的会话在工作」也是开
+worktree 的理由——git 索引全仓共享，两个会话各自 `git add` 之后谁先 `git commit` 谁就带走当时
+索引里的全部暂存。
+
+**判据交给 Human，不自动探测。** 五类探测手段已逐条实测（`git worktree list`、
+`.claude/worktrees/` 目录、`ps` 配 `lsof` 查 claude 进程 cwd、`~/.claude/projects/` 下 session
+文件 mtime、`~/.claude/` 下的 socket 与 lock），**没有一种是单条命令、秒级且可靠的**——
+`~/.claude/` 下不存在仓库级活跃标记，`daemon.lock` 是全局单例且 cwd 会漂到 `$HOME`。最接近的
+`ps` + `lsof` 组合既漏报（对方走 IDE 插件启动、或 cwd 落在某个 worktree 子目录）也误报（残留
+spare 进程），且必须先排掉自己那条进程链。错报代价不对称：漏报只是回到默认行为，误报是每次
+落笔都打断人一次，而噪音会让整条纪律被关掉。
 
 ## 目录豁免与全局关闭
 

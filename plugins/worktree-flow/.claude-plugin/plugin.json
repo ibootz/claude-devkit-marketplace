@@ -1,7 +1,7 @@
 {
   "name": "worktree-flow",
-  "version": "1.5.0",
-  "description": "主分支保护 + worktree 隔离边界 - main/master 默认走 worktree，Human 批准后可本轮直写；进入 worktree 后的落笔定位与退出纪律另有 skill",
+  "version": "1.6.0",
+  "description": "主分支保护 + worktree 隔离边界 - main/master 默认走 worktree，Human 批准后可本轮直写；三道闸各有自救路，撞闸不把命令交给人敲",
   "author": {
     "name": "zhangq"
   },

@@ -17,7 +17,7 @@
         "name": "zhangq"
       },
       "category": "Development",
-      "description": "工具技能集：代码库分析、依赖排查、大头桶定性核实、CLAUDE.md/.claude rules 初始化、codegraph 建图、插件缓存刷新、submodule 拉取同步与嵌套提交推送、起前后台会话、孤儿进程清理、订阅鉴权恢复（11 技能）",
+      "description": "工具技能集：代码库分析、依赖排查、耗时/ROI 报告、submodule 同步推送、话题可视化等 13 技能",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "devkit-tool",
       "source": {
@@ -28,7 +28,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "6.19.0"
+      "version": "6.20.0"
     },
     {
       "author": {
@@ -155,7 +155,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "3.29.0"
+      "version": "3.31.0"
     },
     {
       "author": {
@@ -342,7 +342,7 @@
         "name": "zhangq"
       },
       "category": "Development",
-      "description": "主分支保护 + worktree 隔离边界 - main/master 默认走 worktree，进入后写哪份/怎么退",
+      "description": "主分支保护 + worktree 隔离边界 - 默认走 worktree，进入后写哪份/怎么退，撞闸怎么自救",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "worktree-flow",
       "source": {
@@ -353,7 +353,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "1.5.0"
+      "version": "1.6.0"
     },
     {
       "author": {

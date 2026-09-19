@@ -353,13 +353,36 @@ const ROUTING_TABLE = [
   '- 禁止预防性堆模型：没有 opus 触发信号就留在 sonnet，不确定时一档一档升，别一步跳顶',
 ].join('\n')
 
+// ── disclosed reference：拦下时把完整形态模板贴给 AI（3.31.0）──────────
+// 注入文本里只留六个字段的判据（约 0.9k），可整体照抄的调用 JSON、六字段表与命名细则
+// 住在 references/agent-dispatch.md。AI 真派错那一刻正是它最需要模板的时刻，所以这道闸
+// deny 时把对应段落**原文**读出来附在 finding 后面——不在本文件里手抄第二份，改那份 md
+// 即改所有出口。读不到文件就只发 finding（fail-open），不因为 reference 缺失而改变拦截判定。
+const REF_FILE = require('path').join(__dirname, '..', '..', 'references', 'agent-dispatch.md')
+
+function readRefSection(name) {
+  try {
+    const txt = require('fs').readFileSync(REF_FILE, 'utf8')
+    const m = txt.match(new RegExp('<!-- SEC:' + name + ' -->([\\s\\S]*?)<!-- /SEC -->'))
+    return m ? m[1].trim() : ''
+  } catch (e) {
+    return ''
+  }
+}
+
+function withRefTemplate(reason) {
+  const ref = readRefSection('agent-call')
+  if (!ref) return reason
+  return reason + '\n\n--- 可整体照抄的完整形态（原文取自 ' + REF_FILE + '，命名细则见同文件 SEC:naming）---\n\n' + ref
+}
+
 function deny(reason) {
   process.stdout.write(
     JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
         permissionDecision: 'deny',
-        permissionDecisionReason: reason,
+        permissionDecisionReason: withRefTemplate(reason),
       },
     }) + '\n'
   )
@@ -849,7 +872,7 @@ function main() {
     let reason =
       `[L1-BLOCKER] tool=Agent check=agent-dispatch ` +
       `finding="${findings.join(';')}" ` +
-      `hint="${hints.join(';')};完整规范见注入纪律 5.4 节;确需临时关闭本门禁用 AGENT_DISPATCH_GUARD=off"`
+      `hint="${hints.join(';')};完整形态模板已附在本条 finding 后面,命名细则见同一文件的 SEC:naming;确需临时关闭本门禁用 AGENT_DISPATCH_GUARD=off"`
     // model 本身有问题时附完整路由表，帮助选对档次（命名问题不附，避免长文本淹没重点）
     if (!modelOk) reason += `\n\n${ROUTING_TABLE}`
     deny(reason)
