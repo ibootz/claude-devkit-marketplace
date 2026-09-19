@@ -241,18 +241,81 @@ OSC 8（anthropics/claude-code#42519）」。**该断言在 2026-09-19 的 Windo
 原因未追到底，两个候选：#42519 已修复；或该形态本就随 Claude Code 版本 / 平台而异。
 **iTerm2 上是否同样已经可用，需要重测**——原断言是 2026-08-04 在 iTerm2 上得出的，当时确实走不通。
 
+## Claude Code for VSCode 扩展实测（2026-09-19 · Windows 11 + VS Code 侧边栏扩展）
+
+第三个环境，结论与前两个都不一样：**两种绝对路径 scheme 全部点不开，只有「相对
+workspace 根」的路径能点。**
+
+> **先区分两个 VS Code 环境，别混。** 本节说的是 **VS Code 侧边栏里的 Claude Code 扩展**
+> （extension 自带的对话面板）。「VS Code 内置终端里跑 CLI」是另一个环境，仍未测，
+> 见下面矩阵里那一行。
+
+| 形态 | 点击能打开 |
+|---|---|
+| `[README.md](README.md)`（相对路径，无行号） | **是** |
+| `[CLAUDE.md:42](CLAUDE.md#L42)`（相对 + `#L行号`） | **是** |
+| `[CLAUDE.md:42-51](CLAUDE.md#L42-L51)`（相对 + 行号区间） | **是** |
+| `[hooks/hooks.json:1](hooks/hooks.json#L1)`（相对，带子目录） | **是** |
+| `[skills/tech-support/](skills/tech-support/)`（文件夹） | **是** |
+| `[CLAUDE.md:42](CLAUDE.md#42)`（相对 + `#行号`，**不带 `L`**） | **是** |
+| `[X](file:///C:/abs/X.md#42)` | 否 |
+| `[X](vscode://file/C:/abs/X.md:42)` | 否 |
+| 裸 `path/to/X.md:42` | 否 |
+| 反引号包成 inline code | 否 |
+
+两条可直接拿去用的结论：
+
+1. **`#L` 里的 `L` 不是必需的**——带与不带都能点，第 2 条与第 6 条同样通过。
+2. **绝对路径在这里一条都不通**，`file:` 与 `vscode:` 一起失效。这与 Windows Terminal
+   恰好相反（那里 `vscode:` 是唯一能跳行的形态）。
+
+### 扩展自己注入了一段与本插件冲突的提示词
+
+VS Code 扩展在 system prompt 里注入了一节 `VSCode Extension Context`，原文：
+
+```
+## Code References in Text
+IMPORTANT: When referencing files or code locations, use markdown link syntax to make them clickable:
+- For files: [filename.ts](src/filename.ts)
+- For specific lines: [filename.ts:42](src/filename.ts#L42)
+- For a range of lines: [filename.ts:42-51](src/filename.ts#L42-L51)
+- For folders: [src/utils/](src/utils/)
+Unless explicitly asked for by the user, DO NOT USE backticks ` or HTML tags like code for file references
+The URL links should be relative paths from the root of the user's workspace.
+```
+
+**这与本插件的「对话正文」轨直接冲突**：本插件要 `file:///` 绝对路径，扩展要相对路径，
+而在扩展环境里只有后者点得开。两份提示词同时在场时模型每轮只能选一种，**选错的那一半
+不报错**——链接照样渲染成蓝色可点的样子，点下去没反应而已。
+
+**当前处置：插件代码未改**，仍按 `file:` 形态注入。在 VS Code 扩展里用本插件时二选一：
+
+```bash
+export CLICKABLE_PATHS=off     # 关掉本插件，让扩展那份提示词单独生效
+```
+
+或当轮明确告诉模型改用相对路径。
+
+**待做：让 hook 按环境自适应切形态。** 没有这次就做的原因是**识别手段本身还没找到**——
+hook 侧要先能可靠判定「当前这个会话跑在 VS Code 扩展里而不是终端里」，这个判据（环境变量？
+进程树？）尚未验证过，凭猜写进去会得到一个静默选错形态的 hook，比现在更糟。
+
 ### 跨终端兼容性矩阵（填写中）
 
 目标是找一个各终端都能点的形态。已测三行，其余待填。
 
-| 环境 | `file:` + `#行号` | `file:` 无行号 | `vscode://file/` + `:行号` |
-|---|---|---|---|
-| iTerm2 3.6.11（macOS） | ✓ 能跳行 | ✓ | ✗（2026-08-04 测，**待重测**） |
-| Windows Terminal（Win11） | ✗ | ✓ 但落不到行 | ✓ 能跳行 |
-| VS Code 内置终端 | 待测 | 待测 | 待测 |
-| cmd.exe / conhost | 待测 | 待测 | 待测 |
-| macOS Terminal.app | 待测 | 待测 | 待测 |
-| VS Code md 预览（落盘轨） | ✗ 整条不渲染 | ✗ 整条不渲染 | ✓ 能跳行 |
+| 环境 | `file:` + `#行号` | `file:` 无行号 | `vscode://file/` + `:行号` | 相对路径 + `#L行号` |
+|---|---|---|---|---|
+| iTerm2 3.6.11（macOS） | ✓ 能跳行 | ✓ | ✗（2026-08-04 测，**待重测**） | 待测 |
+| Windows Terminal（Win11） | ✗ | ✓ 但落不到行 | ✓ 能跳行 | 待测 |
+| **Claude Code for VSCode 扩展（Win11）** | **✗** | 待测 | **✗** | **✓ 能跳行** |
+| VS Code 内置终端 | 待测 | 待测 | 待测 | 待测 |
+| cmd.exe / conhost | 待测 | 待测 | 待测 | 待测 |
+| macOS Terminal.app | 待测 | 待测 | 待测 | 待测 |
+| VS Code md 预览（落盘轨） | ✗ 整条不渲染 | ✗ 整条不渲染 | ✓ 能跳行 | 待测 |
+
+**三个已测环境两两无交集**：iTerm2 只认 `file:`+`#`，Windows Terminal 只认 `vscode:`+`:`，
+VSCode 扩展只认相对路径。**不存在一个三处都能点的形态**，跨环境只能靠按环境切换。
 
 `vscode://file/` 有一个结构性劣势，选型时要算进去：**它硬依赖本机装了 VS Code 并注册了
 协议处理器**。没装 VS Code 的机器上这个形态必然失效，而 `file:` 至少还能把文件打开。
@@ -289,6 +352,9 @@ export CLICKABLE_PATHS=off     # 或 0 / false
 - **VS Code 自带集成终端**：这类链接在那里点不动，是 VS Code 侧的 bug
   （microsoft/vscode#242371），与 iTerm2 无关。**待在 Windows 侧复测**，上面那条的经验说明
   这类平台相关结论会随版本失效。
+  > **别把它与 VS Code 侧边栏的 Claude Code 扩展搞混**，那是另一个环境、另一套结论：
+  > 那里 `file:` 与 `vscode:` 两种绝对路径**都**点不开，只有相对 workspace 根的路径能点。
+  > 详见「Claude Code for VSCode 扩展实测」一节。
 - **tmux 内**：社区报告 OSC 8 会失效，未实测。
 
 ## 渲染没生效怎么办
