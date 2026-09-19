@@ -201,6 +201,62 @@ workspace 根与那条绝对路径**首尾相接**——实测点击后它去找
 （前一段是当时打开的 workspace 根），报文件不存在。所以绝对路径在落盘 md 里**只能**带
 `vscode://file/` 前缀，不能裸写。
 
+## Windows Terminal 实测（2026-09-19 · Windows 11 + Windows Terminal）
+
+对话正文那一轨在 Windows 上的结论跟 iTerm2 **完全相反**：`file:` 带行号全挂，`vscode:` 反而能点。
+
+前置：Windows Terminal 设置里「自动检测 URL 并使其可单击」（`experimental.detectURLs`）为开。
+
+| 形态 | 渲染成链接 | 点击能打开 |
+|---|---|---|
+| `[X](file:///C:/abs/X.md#1)` | 是（蓝色带下划线） | **否** |
+| `[X](file:///C:/abs/X.md:1)` | 是 | **否** |
+| `[X](file:///C:/abs/X.md)`（无行号） | 是 | 是 |
+| 裸 `file:///C:/abs/X.md`（无行号） | 是（靠 detectURLs） | 是 |
+| 裸 `file:///C:/abs/X.md#1` | **否，连下划线都没有** | 否 |
+| `[X](vscode://file/C:/abs/X.md:1)` | 是 | **是，且跳到第 1 行** |
+| `[X](https://…)` 与裸 https | 是 | 是 |
+| 裸 `C:\abs\X.md` / `C:\abs\X.md:1` / `C:/abs/X.md` | 否 | 否 |
+
+### 根因：链接生成没问题，是打开那一步失败
+
+1. **OSC 8 通路本身正常。** 带 `#1` 和 `:1` 的 `file:` 链接都被渲染成了蓝色带下划线——
+   超链接转义序列发出去了，终端也认了、也上色了。失败发生在下一步。
+2. **失败在「终端把 URL 交给系统打开」。** Windows Terminal 把 `file:` URL 交给
+   `ShellExecute`，后者当纯文件路径处理，既不解析 `#行号` 也不解析 `:行号`，于是去找一个名叫
+   `X.md#1` / `X.md:1` 的文件——不存在（而且 `:` 在 Windows 文件名里本就非法）。
+   点了没反应，也不报错。
+3. **`file:` 的 `#行号` 能跳行是 iTerm2 Semantic History 独有的能力**，不是 `file:` scheme
+   的通用语义。Windows 侧没有对应机制，所以这个形态在 Windows 上注定只能是个打不开的链接。
+
+裸 URL 那两条走的是另一条路（`detectURLs` 文本探测，与 OSC 8 无关）：探测器对带 `#` 的
+`file:` URL 压根没匹配上，连下划线都不给。裸 Windows 路径没有 scheme，探测器同样不认。
+
+### 这条推翻了「已知走不通的路」的第一条
+
+README 原先写着「`vscode://file/` 只对对话正文这一轨走不通，Claude Code 只对 `file:` 包
+OSC 8（anthropics/claude-code#42519）」。**该断言在 2026-09-19 的 Windows Terminal 上不成立**：
+`vscode:` 链接被正常包成了 OSC 8（终端里只显示标签、URL 藏起来了），点击能打开并跳到指定行。
+
+原因未追到底，两个候选：#42519 已修复；或该形态本就随 Claude Code 版本 / 平台而异。
+**iTerm2 上是否同样已经可用，需要重测**——原断言是 2026-08-04 在 iTerm2 上得出的，当时确实走不通。
+
+### 跨终端兼容性矩阵（填写中）
+
+目标是找一个各终端都能点的形态。已测三行，其余待填。
+
+| 环境 | `file:` + `#行号` | `file:` 无行号 | `vscode://file/` + `:行号` |
+|---|---|---|---|
+| iTerm2 3.6.11（macOS） | ✓ 能跳行 | ✓ | ✗（2026-08-04 测，**待重测**） |
+| Windows Terminal（Win11） | ✗ | ✓ 但落不到行 | ✓ 能跳行 |
+| VS Code 内置终端 | 待测 | 待测 | 待测 |
+| cmd.exe / conhost | 待测 | 待测 | 待测 |
+| macOS Terminal.app | 待测 | 待测 | 待测 |
+| VS Code md 预览（落盘轨） | ✗ 整条不渲染 | ✗ 整条不渲染 | ✓ 能跳行 |
+
+`vscode://file/` 有一个结构性劣势，选型时要算进去：**它硬依赖本机装了 VS Code 并注册了
+协议处理器**。没装 VS Code 的机器上这个形态必然失效，而 `file:` 至少还能把文件打开。
+
 ## 与 readable-citations 的分工
 
 两个插件都在让引用可跳转，管的东西不重叠，同时装不冲突：
@@ -227,8 +283,12 @@ export CLICKABLE_PATHS=off     # 或 0 / false
 - **`vscode://file/路径:行号` 自定义 scheme**：**只对「对话正文」这一轨走不通**——
   Claude Code 只对 `file:` 做了特殊处理，非 http/https/file 的 scheme 不会被包成 OSC 8
   （anthropics/claude-code#42519）。落盘 md 那一轨恰好相反，必须用它，理由见下一节。
+  > ⚠️ **这条 2026-08-04 在 iTerm2 上成立，2026-09-19 在 Windows Terminal 上已不成立**——
+  > 那里 `vscode:` 被正常包成 OSC 8 且点击可跳行。详见「Windows Terminal 实测」一节。
+  > iTerm2 上是否也已变化，未重测。
 - **VS Code 自带集成终端**：这类链接在那里点不动，是 VS Code 侧的 bug
-  （microsoft/vscode#242371），与 iTerm2 无关。
+  （microsoft/vscode#242371），与 iTerm2 无关。**待在 Windows 侧复测**，上面那条的经验说明
+  这类平台相关结论会随版本失效。
 - **tmux 内**：社区报告 OSC 8 会失效，未实测。
 
 ## 渲染没生效怎么办
