@@ -19,12 +19,21 @@
 // "这段引用够不够自足"要理解语义，判据只能靠猜，按 hook-restraint.md 的强度阶梯
 // 只能落在强度 2（注入提醒）。本 hook 不阻止任何操作，失败模式只是多占上下文预算。
 //
+// 【为什么 1.3.0 要按宿主切对话正文的形态】
+// 2026-09-19 四宿主实测：同一条绝对路径链接在 iTerm2 只认 `file:///abs#行号`、
+// 在 Windows 各终端只认 `vscode://file/abs:行号`、在 VS Code 侧边栏 webview 里
+// 两种绝对 scheme **一条都点不开**（只认相对 workspace 根的路径）。写死一种，
+// 就有宿主里的引用**渲染成蓝色可点的样子、点下去没反应**——不报错，最难发现的一类。
+// 探测判据与 `clickable-paths` 的 detectHost() 逐字相同，两个插件独立分发、
+// 不能互相 require，所以各带一份；改一处时另一处要一起改。
+//
+// **落盘 md 那一轨不参与宿主映射**，永远是相对路径 + 标题锚点：文档 commit 后会被
+// 别人、别的机器、GitLab 网页读到，跟着本机宿主变只会在别处变成死链。
+//
 // 【与 clickable-paths 的分工】
-// 那个插件管**对话正文里的文件路径**（`[文件名:行号](file:///绝对路径#行号)`），
-// 明文把"写进文件的 md"排除在外。本插件管的是**文档章节的引用**，两者互补不重叠：
-// 引用 md 文档的章节 → 相对链接 + 标题锚点（本插件）；
-// 提到源码文件的某一行 → 对话正文 `file://` 绝对路径、落盘 md `vscode://file/` 绝对路径
-// （那个插件；`file:` 在 VS Code 的 markdown 预览里渲染不出链接，理由见那边的头注释）。
+// 那个插件管**提到文件时的路径**，本插件管**文档章节的引用**，两者互补不重叠：
+// 引用 md 文档的章节 → 落盘走相对链接 + 标题锚点（本插件）；
+// 提到源码文件的某一行 → 那个插件（它的两轨与本插件的对话正文轨形态一致）。
 //
 // Trigger: UserPromptSubmit（主会话） + SubagentStart（每个子代理）
 // Output:  additionalContext → 注入到对应代理的上下文
@@ -38,8 +47,51 @@ const fs = require('fs')
 // 避免把任意字符串原样回声进 hookSpecificOutput。
 const ALLOWED_EVENTS = new Set(['UserPromptSubmit', 'SubagentStart'])
 
-function buildGuidance() {
-  const isWin = process.platform === 'win32'
+// 宿主环境探测。判据取自 Claude Code 与终端自己注入的环境变量，2026-09-20 四宿主实采。
+// 顺序从最特异到最泛，不可调换：VS Code 内置终端同时带 `VSCODE_*` 与
+// `CLAUDE_CODE_ENTRYPOINT=cli`，先判 webview 才不会把两者混为一谈。
+// 与 clickable-paths 的同名函数保持逐字一致，对照表见那个插件 README 的「宿主判别表」。
+function detectHost(env) {
+  if (env.CLAUDE_CODE_ENTRYPOINT === 'claude-vscode') return 'vscode-webview'
+  if (env.TERM_PROGRAM === 'vscode' || env.VSCODE_INJECTION === '1') return 'vscode-terminal'
+  if (env.WT_SESSION) return 'windows-terminal'
+  return 'generic'
+}
+
+// 宿主 + 平台 → 对话正文那一轨的形态。三个分支的实测依据见 clickable-paths 的
+// pickInlineForm()：Windows 侧 `file:` 带行号必挂（ShellExecute 不解析 `#行号`），
+// 非 Windows 侧 `file:` + `#行号` 是 iTerm2 Semantic History 已验证可用的形态。
+function pickInlineForm(host, platform) {
+  if (host === 'vscode-webview') return 'workspace-relative'
+  return platform === 'win32' ? 'vscode-absolute' : 'file-absolute'
+}
+
+// 对话正文那一轨的示例与要点。落盘那一轨是常量，不在这里。
+function inlineSpec(form) {
+  if (form === 'workspace-relative') {
+    return {
+      label: '相对 workspace 根的路径 + 行号',
+      sample: '`[SKILL.md · §5.2 模型档位](skills/working-discipline/SKILL.md#128)（三档模型分别什么时候用）`',
+      note: '这个宿主里绝对路径一条都点不开（`file:` 与 `vscode:` 一起失效），' +
+        '所以对话正文也用相对 workspace 根的路径，行号写在 `#` 后。',
+    }
+  }
+  if (form === 'vscode-absolute') {
+    return {
+      label: '绝对路径 + 行号',
+      sample: '`[SKILL.md · §5.2 模型档位](vscode://file/C:/path/to/SKILL.md:128)（三档模型分别什么时候用）`',
+      note: '行号写在 `:` 后面。这个宿主里 `file:` 带行号点不动——它被交给 ' +
+        '`ShellExecute`，后者把 `#128` 当文件名的一部分去找，找不到也不报错。',
+    }
+  }
+  return {
+    label: '绝对路径 + 行号',
+    sample: '`[SKILL.md · §5.2 模型档位](file:///abs/path/SKILL.md#128)（三档模型分别什么时候用）`',
+    note: '行号写在 `#` 后面，iTerm2 据此套 Semantic History 规则直达编辑器对应行。',
+  }
+}
+
+function buildGuidance(spec) {
   return [
     '# 引用别处的章节要自足（readable-citations）',
     '',
@@ -55,17 +107,17 @@ function buildGuidance() {
     '',
     '链接形态按**落点**分两轨，各自只在对应场合有效：',
     '',
-    '- **对话正文**（你在终端里说的话）——绝对路径 + 行号，iTerm2 / 终端直达编辑器：',
-    '  `[SKILL.md · §5.2 模型档位](file:///abs/path/SKILL.md#128)（三档模型分别什么时候用）`' +
-      (isWin ? '（Windows 盘符路径前置斜杠如 `file:///C:/path/to/SKILL.md#128`）' : ''),
+    `- **对话正文**（你在终端里说的话）——${spec.label}，直达编辑器：`,
+    `  ${spec.sample}`,
+    `  ${spec.note}`,
     '- **落盘 md**（写进文件的文档）——相对路径 + 标题锚点，VS Code 预览与 GitLab 网页都能跳：',
     '  `[working-discipline · §5.2 模型档位](../working-discipline/SKILL.md#52-模型档位)' +
       '（三档模型分别什么时候用）`',
     '',
-    '落盘 md 走相对路径的理由有两条：文档 commit 之后会被别人、别的机器、GitLab 网页读到，' +
-      '`file:///Users/...` 在那些地方是死链，而死链不报错——点了没反应而已；' +
-      '且 VS Code 的 markdown 预览把 `file:` 判为非法链接、整条原样吐成纯文本，' +
-      '连本机都跳不动。',
+    '落盘 md 走相对路径 + 标题锚点这一条**不跟宿主变**，理由有两条：文档 commit 之后会被' +
+      '别人、别的机器、GitLab 网页读到，本机绝对路径在那些地方是死链，而死链不报错——' +
+      '点了没反应而已；且 VS Code 的 markdown 预览把 `file:` 判为非法链接、' +
+      '整条原样吐成纯文本，连本机都跳不动。',
     '',
     '**锚点由标题原文算出**，三步：转小写 → 删去标点 → 空格转 `-`。两个坑：' +
       '中文标点（`、`「」（））**直接消失且不留分隔符**，' +
@@ -75,7 +127,7 @@ function buildGuidance() {
     '',
     '**什么时候不触发**：引用源码文件（`.js` / `.py` / `.java` 等非 md）的某一行时不套锚点' +
       '（锚点只对 md 标题有效），改按 clickable-paths 的两轨写——' +
-      '对话正文 `file:///绝对路径#行号`，落盘 md `vscode://file/绝对路径:行号`；' +
+      '对话正文与上面同形态，落盘 md 用 `vscode://file/绝对路径:行号`；' +
       '同一份文档内部的自引用直接写标题、不必给链接；' +
       '代码块与命令行内部、commit message、提交给外部系统的内容（工单 / 评论 / 消息）一律原样。',
   ].join('\n')
@@ -108,10 +160,12 @@ function main() {
     process.exit(0)
   }
 
+  const spec = inlineSpec(pickInlineForm(detectHost(process.env), process.platform))
+
   const output = {
     hookSpecificOutput: {
       hookEventName: event,
-      additionalContext: buildGuidance(),
+      additionalContext: buildGuidance(spec),
     },
   }
 

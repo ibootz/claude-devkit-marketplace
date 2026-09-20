@@ -37,8 +37,23 @@ AI 写文档时爱写「具体判据见 working-discipline §5.2」。这句话�
 
 | 落点 | 形态 | 为什么 |
 |---|---|---|
-| **对话正文**（终端里说的话） | `[SKILL.md · §5.2 模型档位](file:///abs/path/SKILL.md#128)（提要）` | iTerm2 对 `file:` scheme 且带 `#` 片段的链接套用 Semantic History 规则，cmd+click 直达编辑器对应行。与 `clickable-paths` 插件同一套机制，需配 Semantic History（见那个插件的 README） |
+| **对话正文**（终端里说的话） | **跟当前宿主走**，见下一节 | 能点的形态各宿主不一样，且两两无交集。与 `clickable-paths` 插件共用同一套探测判据 |
 | **落盘 md**（写进文件的文档） | `[working-discipline · §5.2 模型档位](../working-discipline/SKILL.md#52-模型档位)（提要）` | 两条理由：文档 commit 后会被别人、别的机器、GitLab 网页读到，`file:///Users/zhangq/...` 在那些地方全是死链；且 VS Code 的 markdown 预览把 `file:` 判为非法链接、整条原样吐成纯文本，连本机都跳不动（证据见 clickable-paths 的 README「为什么落盘 md 不能用 `file:`」）。相对路径在 VS Code 预览与 GitLab 网页里都能跳 |
+
+## 对话正文那一轨按宿主自适应（1.3.0）
+
+| 宿主 | 对话正文的形态 |
+|---|---|
+| VS Code 侧边栏 webview | `[SKILL.md · §5.2 模型档位](skills/working-discipline/SKILL.md#128)（提要）` |
+| Windows 各终端（含兜底） | `[SKILL.md · §5.2 模型档位](vscode://file/C:/path/to/SKILL.md:128)（提要）` |
+| 非 Windows（iTerm2 等） | `[SKILL.md · §5.2 模型档位](file:///abs/path/SKILL.md#128)（提要）` |
+
+探测判据与 `clickable-paths` 的 `detectHost()` **逐字相同**，四宿主实测数据与判别表都在
+那个插件的 README 里（「宿主判别表」与「跨宿主兼容性矩阵」两节）。两个插件独立分发、
+不能互相 `require`，所以各带一份实现——**改一处时另一处要一起改**。
+
+**落盘 md 那一轨不参与宿主映射**，永远是相对路径 + 标题锚点。文档 commit 之后会被别人、
+别的机器、GitLab 网页读到，跟着本机宿主变只会在别处变成死链，而死链不报错。
 
 ## 锚点怎么算（算错就是静默死链）
 
@@ -96,7 +111,7 @@ GitLab 17.0」——旧版（Redcarpet）会把连续 `-` 合并成一个，17.0
 |---|---|---|
 | 管什么 | 提到**文件**时的路径 | 引用 **md 文档的章节** |
 | 作用范围 | 对话正文与落盘 md 都管，两轨用不同 scheme | 对话正文与落盘 md 都管 |
-| 形态 | 对话正文 `[文件名:行号](file:///绝对路径#行号)`；落盘 md `[文件名:行号](vscode://file/绝对路径:行号)` | 上表两轨 |
+| 形态 | 对话正文**跟宿主走**；落盘 md 恒为 `[文件名:行号](vscode://file/绝对路径:行号)` | 上表两轨，对话正文同样跟宿主走 |
 
 判据很简单：**引用的是一份 md 文档里的某一节** → 本插件；**提到一个源码文件的某一行**
 （`.js` / `.py` / `.java`）→ clickable-paths，锚点对那些文件无效——落盘 md 里指向源码时
@@ -123,7 +138,8 @@ GitLab 17.0」——旧版（Redcarpet）会把连续 `-` 合并成一个，17.0
 2. 带标题原文，不写光秃秃的编号；
 3. 括注 20 字提要；
 4. 写明引用关系，必读的内联、延伸的才给链接；
-5. 两轨链接形态（见上表）；
+5. 两轨链接形态（见上表）——对话正文那一轨**按当前宿主注入对应形态**，落盘那一轨恒为
+   相对路径 + 标题锚点；
 6. 锚点三步算法与两个坑（见上文「锚点怎么算」）；
 7. 不触发的场合：引用源码文件保持原路径写法、同文档内自引用直接写标题、代码块与 commit
    message 与提交给外部系统的内容一律原样。
@@ -142,11 +158,19 @@ export READABLE_CITATIONS=off     # 或 0 / false
 node plugins/readable-citations/hooks/tests/readable-citations.test.js
 ```
 
-7 条用例覆盖：两个事件各自的回声正确性、白名单外事件不回声、关闭开关、空 stdin、畸形 JSON、
-两轨链接形态都在正文里。用 `spawnSync` 直接喂 JSON 到 stdin，不经过 shell。
+11 条用例覆盖：两个事件各自的回声正确性、白名单外事件不回声、关闭开关、空 stdin、畸形 JSON、
+两轨链接形态都在正文里；1.3.0 加的 4 条守宿主自适应——webview 切相对路径、落盘轨在 webview
+下也不变、webview 判据优先于内置终端（顺序不可调换）、三个终端宿主共用同一形态。
 
-## Windows 适配（1.2.0）
+用 `spawnSync` 直接喂 JSON 到 stdin，不经过 shell。**用例自己先把四个探测变量从 env 里删掉
+再 spawn**——不删的话跑测试那台机器自己的宿主会渗进子进程，换个终端跑结论就变。
 
-Windows 下对话正文绝对路径同样遵循 RFC 8089 盘符正斜杠与前置斜杠规范：`file:///C:/path/to/SKILL.md#128`。
-落盘 md 继续使用相对路径 + 锚点，或指向源码时使用 `vscode://file/C:/...:128`。
+## Windows 适配（1.2.0，形态已被 1.3.0 取代）
+
+1.2.0 在 Windows 下对话正文仍走 `file:///C:/path/to/SKILL.md#128`（RFC 8089 的盘符正斜杠
+与前置斜杠规范）。**这个形态在 Windows 上点不到行**：终端把 `file:` URL 交给 `ShellExecute`，
+后者把 `#128` 当文件名的一部分去找，找不到也不报错。
+
+1.3.0 起 Windows 各终端改用 `vscode://file/C:/path/to/SKILL.md:128`，见上面「对话正文那一轨
+按宿主自适应」。落盘 md 两个版本一致：相对路径 + 锚点，指向源码时用 `vscode://file/C:/...:128`。
 

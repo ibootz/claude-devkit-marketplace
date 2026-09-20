@@ -1,7 +1,7 @@
 {
   "name": "clickable-paths",
-  "version": "1.7.0",
-  "description": "文件路径写成可点击链接 - 注入格式规约：对话正文用 file:（跨平台/跨终端支持），落盘 md 用 vscode:。CLICKABLE_PATHS=off 可关",
+  "version": "1.8.0",
+  "description": "文件路径写成可点击链接 - 注入格式规约：对话正文按宿主切形态（vscode:/file:/相对路径），落盘 md 恒用 vscode:。CLICKABLE_PATHS=off 可关",
   "author": {
     "name": "zhangq"
   },

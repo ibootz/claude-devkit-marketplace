@@ -1,24 +1,28 @@
 # clickable-paths — 文件路径写成可点击链接
 
-在 iTerm2 里跑 Claude Code CLI 时，AI 输出的文件路径默认只是一段普通文本，看到了也得自己
-复制、切窗口、粘贴、翻行号。这个插件每轮注入一段极短的输出格式规约，让 AI 把路径写成
-markdown 链接——终端里只显示 `文件名:行号` 一小段带下划线的文本，**cmd+click 直接跳到
-VS Code 的对应行**。
+Claude Code 输出的文件路径默认只是一段普通文本，看到了也得自己复制、切窗口、粘贴、翻行号。
+这个插件每轮注入一段极短的输出格式规约，让 AI 把路径写成 markdown 链接——界面里只显示
+`文件名:行号` 一小段带下划线的文本，**点一下直接跳到 VS Code 的对应行**。
 
-GUI 版 Claude 与 VS Code 插件里本来就有这个体验，本插件把它补回终端。
+GUI 版 Claude 与 VS Code 插件里本来就有这个体验，本插件把它补回 CLI。
+
+**能点的形态各宿主不一样，而且两两无交集。** 1.8.0 起 hook 先探宿主再选形态，不再写死
+一种——写死的那一种在别的宿主里会**渲染成蓝色可点的样子、点下去没反应**，不报错，是最难
+发现的一类失效。五宿主实测见下面的兼容性矩阵。
 
 ## 效果
 
-AI 输出这样一行 markdown：
+AI 输出一行 markdown，形态跟着当前宿主走：
 
 ```
-[agent-dispatch.js:414](file:///Users/you/repo/plugins/x/hooks/guards/agent-dispatch.js#414)
+[agent-dispatch.js:414](vscode://file/C:/repo/plugins/x/hooks/agent-dispatch.js:414)    # Windows 各终端
+[agent-dispatch.js:414](file:///Users/you/repo/plugins/x/hooks/agent-dispatch.js#414)   # iTerm2 / macOS
+[agent-dispatch.js:414](plugins/x/hooks/agent-dispatch.js#414)                          # VS Code 侧边栏扩展
 ```
 
-iTerm2 里渲染成一个可点击的 `agent-dispatch.js:414`（蓝色带下划线），完整路径藏在链接里
-不占屏。
+界面里渲染成一个可点击的 `agent-dispatch.js:414`（蓝色带下划线），完整路径藏在链接里不占屏。
 
-## 三段机制（都已实测，2026-08-04 · CC 2.1.220 + iTerm2 3.6.11）
+## 三段机制：`file:` 那一支（都已实测，2026-08-04 · CC 2.1.220 + iTerm2 3.6.11）
 
 | 环节 | 行为 |
 |------|------|
@@ -26,7 +30,10 @@ iTerm2 里渲染成一个可点击的 `agent-dispatch.js:414`（蓝色带下划�
 | iTerm2 3.4+ | OSC 8 链接若为 `file` scheme **且带 `#` 片段**，套用 Semantic History 规则打开（官方 escape codes 文档明文）。所以行号必须写在 `#` 后面 |
 | Semantic History | 把点击动作交给你配的命令，`\1` = 文件名、`\2` = 行号 |
 
-## 安装后必须配这一步（不配就只是一个打不开的链接）
+## 安装后必须配这一步（只对 macOS / iTerm2 那一支）
+
+> Windows 各宿主不需要这一节：那里走的是 `vscode://file/`，由 Windows 协议处理器直接呼起
+> VS Code 并定位行号，没有 Semantic History 这一环。
 
 iTerm2 → Preferences（⌘,）→ **Profiles** → 选中你在用的 profile → **Advanced** →
 下拉找到 **Semantic History** → 选 `Run command...` → 填：
@@ -53,26 +60,28 @@ Intel 机器或官方安装脚本可能是 `/usr/local/bin/code`）。
 
 ## 注入了什么
 
-约 930 字符（450 → 730 → 930，两次扩容多出来的全是判据），要点七条：
+约 950 字符（450 → 730 → 930 → 950，历次扩容多出来的全是判据），要点八条：
 
-1. 形态 `[<文件名>:<行号>](file:///<绝对路径>#<行号>)`，**对话正文里每提到一个本机文件就给
+1. 形态**跟当前宿主走**（见「按宿主自适应」一节），**对话正文里每提到一个本机文件就给
    一个链接**；
 2. **三种漏套形态点名写出来**：只写文件名（`decisions.md`）、写成裸 `path/to/file.ext:130`、
    用反引号包成 inline code；
-3. 行号写 `#` 后而非 `:` 后（iTerm2 只认这个位置），**没有具体行号补 `#1`**；
-4. href 必须绝对路径（`file://` + `/` = 三条斜杠）；
+3. 行号的位置跟着 scheme 走：`file:` 写在 `#` 后（iTerm2 只认这个位置），`vscode:` 写在 `:` 后，
+   相对路径写在 `#` 后。**没有具体行号时补 `#1` / `:1`**；
+4. href 的形状跟着宿主走：两支绝对路径要求完整绝对路径，webview 那支要求相对 workspace 根；
 5. **适用面显式圈定**：表格单元格、列表项、四要素的「现场证据」段、转述子代理回执的那几行，
    都算对话正文；
 6. 不适用场景：代码块与命令行内部、commit message、代码与注释、派给子代理的
    prompt、提交给外部系统的内容、不在本机的路径（他人仓库 / 报错原文 / 纯举例）；
 7. **队列编号 `DBG-NNN` / `CHR-NNN` 同样算文件**（1.5.0 加），并要求链接后紧跟括号写
    ≤20 字问题简述——见下一节。
-8. **落盘 md 换 scheme**（1.6.0 加）：写进文件的 md 里提到本机文件时写
-   `[<文件名>:<行号>](vscode://file/<绝对路径>:<行号>)`，行号在 `:` 后而非 `#` 后
-   ——见下面「为什么落盘 md 不能用 `file:`」。
+8. **落盘 md 那一轨恒为 `[<文件名>:<行号>](vscode://file/<绝对路径>:<行号>)`，不跟宿主变**
+   （1.6.0 定形态，1.8.0 明确它不参与宿主映射）——文件 commit 后会被别的机器读到，跟着
+   本机宿主变只会在别处变成死链。理由见下面「为什么落盘 md 不能用 `file:`」。
 
-**为什么第 3 条要补 `#1`**：无片段时 `\2` 会替换成空串，命令变成 `code --goto "/abs/path:"`，
-是否可用取决于编辑器对尾随冒号的容忍度。一律带片段就不必依赖这个未定行为。
+**为什么第 3 条要补 `#1` / `:1`**：无片段时 iTerm2 的 `\2` 会替换成空串，命令变成
+`code --goto "/abs/path:"`，是否可用取决于编辑器对尾随冒号的容忍度。一律带片段就不必
+依赖这个未定行为。
 
 ## 1.5.0 把 task-keeper 的队列编号也算作文件
 
@@ -93,8 +102,9 @@ Intel 机器或官方安装脚本可能是 `/usr/local/bin/code`）。
 最多 8 层找 `.keeper/`，把实际存在的 debug / chore 目录各铺一行完整样例进注入，AI 逐字照抄
 形状即可。没有 `.keeper/` 的项目不铺这一段，注入回到原来的六条。
 
-编号后要紧跟 ≤20 字问题简述（`[DBG-140](file://…#1)（导出接口 500）`），因为编号本身零语义，
-只看编号无法判断值不值得点进去。
+编号后要紧跟 ≤20 字问题简述（`[DBG-140](…/DBG-140/issue.md)（导出接口 500）`），因为编号
+本身零语义，只看编号无法判断值不值得点进去。1.8.0 起这一段现探出来的前缀也跟宿主走：
+webview 下给相对路径，其余给对应 scheme 的绝对路径。
 
 ## 1.4.0 为什么要收紧措辞（一次通篇零链接的实测）
 
@@ -159,9 +169,16 @@ Intel 机器或官方安装脚本可能是 `/usr/local/bin/code`）。
 node plugins/clickable-paths/hooks/tests/clickable-paths.test.js
 ```
 
-11 条：前 7 条覆盖两个事件各自的回声正确性、两路注入内容一致、白名单外事件不回声、关闭开关、
-空 stdin、畸形 JSON；1.4.0 加的 4 条守注入正文的判据不被日后精简掉——三种漏套形态点名在场、
-四类适用场合在场、与 `working-discipline` 3.3 的关系在场、`#1` 兜底与三斜杠 href 在场。
+20 条：前 8 条覆盖两个事件各自的回声正确性、两路注入内容一致、白名单外事件不回声、关闭开关、
+空 stdin、畸形 JSON、落盘轨恒为 `vscode:`；中间 7 条守注入正文的判据不被日后精简掉（三种漏套
+形态点名在场、四类适用场合在场、与 `working-discipline` 3.3 的关系在场、队列编号与两个条目
+文件名在场、现算前缀不留尖括号占位符）；末 5 条是 1.8.0 的宿主自适应——webview 切相对路径、
+webview 下队列前缀也跟着切、webview 判据优先于内置终端（顺序不可调换）、三个终端宿主共用
+同一形态、认不出宿主时兜底到本平台的绝对形态。
+
+**用例自己先把四个探测变量从 env 里删掉再 spawn。** 不删的话，跑测试那台机器自己的宿主会
+渗进子进程：在 VS Code 内置终端里跑，`TERM_PROGRAM=vscode` 会让「默认形态」那几条实际验的
+是内置终端分支，换个终端跑结论就变——测试本身成了不可复现的。
 
 ## 为什么落盘 md 不能用 `file:`（1.6.0 加）
 
@@ -288,34 +305,97 @@ The URL links should be relative paths from the root of the user's workspace.
 而在扩展环境里只有后者点得开。两份提示词同时在场时模型每轮只能选一种，**选错的那一半
 不报错**——链接照样渲染成蓝色可点的样子，点下去没反应而已。
 
-**当前处置：插件代码未改**，仍按 `file:` 形态注入。在 VS Code 扩展里用本插件时二选一：
+**1.8.0 的处置：与扩展对齐，不再二选一。** hook 探到 webview 之后注入的就是相对 workspace
+根的形态，与扩展那段提示词要的东西一致——两份提示词不再打架，而对齐过去的这一种恰好是那里
+唯一点得开的。`export CLICKABLE_PATHS=off` 仍然可用，但不再是必需的规避手段。
 
-```bash
-export CLICKABLE_PATHS=off     # 关掉本插件，让扩展那份提示词单独生效
-```
+选「对齐」而不是「整段让路」，是因为本插件还带着扩展那段没有的约定：队列编号算文件、
+≤20 字问题简述、四类适用场合、与 `working-discipline` 3.3 的关系。整段不注入会把这些一并丢掉。
 
-或当轮明确告诉模型改用相对路径。
+## VS Code 内置终端实测（2026-09-19 · Windows 11 + VS Code 1.138.0）
 
-**待做：让 hook 按环境自适应切形态。** 没有这次就做的原因是**识别手段本身还没找到**——
-hook 侧要先能可靠判定「当前这个会话跑在 VS Code 扩展里而不是终端里」，这个判据（环境变量？
-进程树？）尚未验证过，凭猜写进去会得到一个静默选错形态的 hook，比现在更糟。
+第四个环境。它与侧边栏 webview 是**两个不同的宿主**，结论也不同：这里两种绝对 scheme 都能点。
 
-### 跨终端兼容性矩阵（填写中）
+| 形态 | 点击能打开 |
+|---|---|
+| `[X](file:///C:/abs/X.md#42)` | **是** |
+| `[X](file:///C:/abs/X.md:42)` | **是** |
+| `[X](vscode://file/C:/abs/X.md:42)` | **是** |
+| 裸 `file:///C:/abs/X.md`（无行号） | **是** |
+| 相对路径 + `#L42` | 否 |
 
-目标是找一个各终端都能点的形态。已测三行，其余待填。
+## cmd.exe / conhost 实测（2026-09-19 · Windows 11）
 
-| 环境 | `file:` + `#行号` | `file:` 无行号 | `vscode://file/` + `:行号` | 相对路径 + `#L行号` |
+| 形态 | 点击能打开 |
+|---|---|
+| 裸 `file:///C:/abs/X.md`（无行号） | **是** |
+| `file:` 带 `#行号` 或 `:行号` | 否 |
+| `[X](vscode://file/C:/abs/X.md:42)` | **是，且跳到第 42 行** |
+| 裸 Windows 路径 `C:\abs\X.md` | 否 |
+
+与 Windows Terminal 同因：两者都把 URL 交给 `ShellExecute`，`file:` 的行号一律解析不了。
+
+> **这一格的环境变量是推断的，不是实采。** 采集时在原生 cmd.exe 里跑命令得到
+> `'env' is not recognized` 与 `'Get-ChildItem' is not recognized`（cmd 既没有 `env`，
+> 也不认 PowerShell cmdlet，得用 `set`），那次没拿到数据。判别表里 cmd 那一行是按排除法
+> 推出来的——三个信号都不命中时落到 `generic`，而 `generic` 用的就是 Windows 侧那套形态，
+> 所以**即使这条推断是错的，注入的形态仍然是对的**。
+
+## 宿主判别表（2026-09-20 实采）
+
+`detectHost()` 的全部判据。顺序从最特异到最泛，**不可调换**：VS Code 内置终端同时带
+`VSCODE_*` 与 `CLAUDE_CODE_ENTRYPOINT=cli`，先判 webview 才不会把两者混为一谈。
+
+| 宿主 | `CLAUDE_CODE_ENTRYPOINT` | `WT_SESSION` | `TERM_PROGRAM` | VS Code 痕迹 |
+|---|---|---|---|---|
+| 侧边栏 webview | `claude-vscode` | — | — | `VSCODE_PID`、`VSCODE_CRASH_REPORTER_PROCESS_TYPE=extensionHost` |
+| VS Code 内置终端 | `cli` | — | `vscode` | `VSCODE_INJECTION=1`、`VSCODE_GIT_*` ×4 |
+| Windows Terminal | `cli` | 有 | — | — |
+| cmd / conhost（推断） | `cli` | — | — | — |
+
+两条用得上的细节：
+
+- `CLAUDE_CODE_ENTRYPOINT=claude-vscode` 是扩展启动 CLI 时自己写进去的，**webview 独有且
+  充分**，可作一等判据。
+- `AI_AGENT=claude-code_<版本>_agent` 在 webview 与内置终端里**都**出现，不能用来区分两者。
+
+## 按宿主自适应（1.8.0）
+
+| 宿主 | 对话正文那一轨 | 落盘 md 那一轨 |
+|---|---|---|
+| 侧边栏 webview | 相对 workspace 根 + `#行号` | `vscode://file/<绝对路径>:<行号>` |
+| Windows 各终端（含兜底） | `vscode://file/<绝对路径>:<行号>` | 同左 |
+| 非 Windows（iTerm2 等） | `file:///<绝对路径>#<行号>` | `vscode://file/<绝对路径>:<行号>` |
+
+三条设计判据，都是 2026-09-20 拍板的：
+
+1. **Windows 侧首选与兜底都是 `vscode:`。** 它是 Windows 三个终端宿主里唯一能**跳到行**的
+   形态。代价一并接受：`vscode://file/` 硬依赖本机装了 VS Code 并注册了协议处理器，没装的
+   机器上必然失效，而 `file:` 至少还能把文件打开。
+2. **非 Windows 保留 `file:`。** `file:` + `#行号` 能跳行是 iTerm2 Semantic History 的能力，
+   2026-08-04 实测可用，**同一次实测里 `vscode:` 走不通**。macOS 侧至今没有新数据推翻它，
+   一并切过去等于拿一个已验证可用的配置去换一个没验证过的。
+3. **落盘那一轨不参与宿主映射。** 文件 commit 后会被别人、别的机器、GitLab 网页读到，
+   跟着本机宿主变只会在别处变成死链——而死链不报错，点了没反应而已。
+
+**认不出宿主时兜底到本平台的绝对形态，而不是不给链接。** 新终端、远程 SSH、CI，以及未来
+Claude Code 改了变量名，都会落到 `generic` 这一支。
+
+### 跨宿主兼容性矩阵
+
+| 环境 | `file:` + `#行号` | `file:` 无行号 | `vscode://file/` + `:行号` | 相对路径 + `#行号` |
 |---|---|---|---|---|
 | iTerm2 3.6.11（macOS） | ✓ 能跳行 | ✓ | ✗（2026-08-04 测，**待重测**） | 待测 |
 | Windows Terminal（Win11） | ✗ | ✓ 但落不到行 | ✓ 能跳行 | 待测 |
+| **VS Code 内置终端（Win11）** | **✓ 能跳行** | **✓** | **✓ 能跳行** | **✗** |
+| **cmd.exe / conhost（Win11）** | **✗** | **✓ 但落不到行** | **✓ 能跳行** | **✗** |
 | **Claude Code for VSCode 扩展（Win11）** | **✗** | 待测 | **✗** | **✓ 能跳行** |
-| VS Code 内置终端 | 待测 | 待测 | 待测 | 待测 |
-| cmd.exe / conhost | 待测 | 待测 | 待测 | 待测 |
 | macOS Terminal.app | 待测 | 待测 | 待测 | 待测 |
 | VS Code md 预览（落盘轨） | ✗ 整条不渲染 | ✗ 整条不渲染 | ✓ 能跳行 | 待测 |
 
-**三个已测环境两两无交集**：iTerm2 只认 `file:`+`#`，Windows Terminal 只认 `vscode:`+`:`，
-VSCode 扩展只认相对路径。**不存在一个三处都能点的形态**，跨环境只能靠按环境切换。
+**五个已测环境里不存在一种通吃的形态。** 最接近的是 `vscode://file/` + `:行号`——Windows
+三个终端宿主与 VS Code md 预览全部能跳行，只在 iTerm2（2026-08-04 测）与侧边栏 webview
+失效。这既是 1.8.0 把它选作 Windows 侧首选与兜底的理由，也是它仍然必须按宿主切换的理由。
 
 `vscode://file/` 有一个结构性劣势，选型时要算进去：**它硬依赖本机装了 VS Code 并注册了
 协议处理器**。没装 VS Code 的机器上这个形态必然失效，而 `file:` 至少还能把文件打开。
@@ -328,7 +408,7 @@ VSCode 扩展只认相对路径。**不存在一个三处都能点的形态**，
 |---|---|---|
 | 管什么 | 提到**文件**时的路径 | 引用 **md 文档的章节** |
 | 作用范围 | 对话正文与落盘 md 都管，两轨用不同 scheme | 对话正文与落盘 md 都管 |
-| 形态 | 对话正文 `[文件名:行号](file:///绝对路径#行号)`；落盘 md `[文件名:行号](vscode://file/绝对路径:行号)` | 对话正文同左；落盘 md 走相对路径 + 标题锚点 |
+| 形态 | 对话正文**跟宿主走**（见「按宿主自适应」）；落盘 md 恒为 `[文件名:行号](vscode://file/绝对路径:行号)` | 对话正文同左；落盘 md 走相对路径 + 标题锚点 |
 
 判据：**引用的是一份 md 文档里的某一节** → 那个插件；**提到一个源码文件的某一行** →
 本插件，锚点对 `.js` / `.py` 这类文件无效。
@@ -339,22 +419,22 @@ VSCode 扩展只认相对路径。**不存在一个三处都能点的形态**，
 export CLICKABLE_PATHS=off     # 或 0 / false
 ```
 
-纯注入类 hook，不拦截任何工具调用，失败模式只是「多占了约 730 字符上下文预算」。
+纯注入类 hook，不拦截任何工具调用，失败模式只是「多占了约 950 字符上下文预算」。
 
 ## 已知走不通的路
 
-- **`vscode://file/路径:行号` 自定义 scheme**：**只对「对话正文」这一轨走不通**——
-  Claude Code 只对 `file:` 做了特殊处理，非 http/https/file 的 scheme 不会被包成 OSC 8
-  （anthropics/claude-code#42519）。落盘 md 那一轨恰好相反，必须用它，理由见下一节。
-  > ⚠️ **这条 2026-08-04 在 iTerm2 上成立，2026-09-19 在 Windows Terminal 上已不成立**——
-  > 那里 `vscode:` 被正常包成 OSC 8 且点击可跳行。详见「Windows Terminal 实测」一节。
-  > iTerm2 上是否也已变化，未重测。
-- **VS Code 自带集成终端**：这类链接在那里点不动，是 VS Code 侧的 bug
-  （microsoft/vscode#242371），与 iTerm2 无关。**待在 Windows 侧复测**，上面那条的经验说明
-  这类平台相关结论会随版本失效。
-  > **别把它与 VS Code 侧边栏的 Claude Code 扩展搞混**，那是另一个环境、另一套结论：
-  > 那里 `file:` 与 `vscode:` 两种绝对路径**都**点不开，只有相对 workspace 根的路径能点。
-  > 详见「Claude Code for VSCode 扩展实测」一节。
+- **`vscode://file/路径:行号` 自定义 scheme**：这条**只在 iTerm2 上成立且已过期为「待重测」**。
+  原断言是 Claude Code 只对 `file:` 做特殊处理、非 http/https/file 的 scheme 不会被包成
+  OSC 8（anthropics/claude-code#42519），2026-08-04 在 iTerm2 上实测如此。
+  > ⚠️ **2026-09-19 在 Windows 三个终端宿主上全部不成立**——那里 `vscode:` 被正常包成
+  > OSC 8 且点击可跳行，1.8.0 已把它选作 Windows 侧的首选形态。iTerm2 上是否也已变化，
+  > 未重测；在重测之前非 Windows 平台仍走 `file:`。
+- **VS Code 自带集成终端**：曾记为「这类链接在那里点不动」（microsoft/vscode#242371）。
+  **2026-09-19 在 Windows 侧复测已不成立**——那里 `file:` 与 `vscode:` 两种绝对 scheme
+  都能点且能跳行，见「VS Code 内置终端实测」一节。
+  > **别把它与 VS Code 侧边栏的 Claude Code 扩展搞混**，那是另一个宿主、另一套结论：
+  > 那里两种绝对路径**都**点不开，只有相对 workspace 根的路径能点。
+  > 两者在 `detectHost()` 里由 `CLAUDE_CODE_ENTRYPOINT` 区分，判据顺序不可调换。
 - **tmux 内**：社区报告 OSC 8 会失效，未实测。
 
 ## 渲染没生效怎么办
@@ -368,8 +448,9 @@ export FORCE_HYPERLINK=1
 
 ## Windows 终端与跨平台适配（1.7.0）
 
-- **Windows 盘符路径归一化**：Windows 下 `file://` 规范路径为 `file:///C:/path/to/file.ext#1`（盘符转正斜杠、前置单个 `/`，合起来三条斜杠）。
-- **Windows Terminal / PowerShell 7 / CMD 打开说明**：
-  - Windows Terminal 原生支持 OSC 8 超链接解析，点击将通过 Windows Shell (`ShellExecuteEx`) 分发打开。
-  - Windows 操作系统对 `file:///` URI 处理时，默认关联的程序通常不支持 URL Fragment（`#1`），若直接将带 `#` 的 `file:///` 传给不支持 URL 片段的 Win32 应用，可能会报找不到文件错误。在支持 URI fragment 的终端/编辑器（如带有终端链接拦截能力的 VS Code 或配合对应扩展）中可精准跳转；通用环境下推荐落盘文档使用 VS Code 专属协议 `[文件名:行号](vscode://file/C:/path/to/file.ext:行号)`，点击可由 Windows 协议处理器直接呼起 VS Code 并定位行号。
+- **Windows 盘符路径归一化**：Windows 下 `file://` 的规范路径是 `file:///C:/path/to/file.ext#1`
+  （盘符转正斜杠、前置单个 `/`，合起来三条斜杠）。队列前缀那一段同样归一化，不留反斜杠。
+- **1.7.0 仍对所有宿主写死 `file:`**，Windows 侧因此只能打开文件、落不到行：Windows Terminal
+  把 URL 交给 `ShellExecute`，后者既不解析 `#行号` 也不解析 `:行号`。这个缺口由 1.8.0 的
+  按宿主自适应补上，见上面那一节。
 
