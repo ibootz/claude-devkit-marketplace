@@ -49,6 +49,10 @@ commit type 关键字（`feat`/`fix`/`chore`）、英文技术术语（`useMemo`
 
 文言只管连接这些东西的那几个字。
 
+**这一节管「不译不压」，不管「写成什么形态」**：正文里提到本机文件仍按下面
+「回复结构与 TUI 排版」第 4 条写成裸链接（标签 `文件名:行号`，href 绝对路径）。裸
+`path:行号` 只留给不套链接的场合——代码块与命令行内部、commit message、派给子代理的 prompt。
+
 ## 回复结构与 TUI 排版（自适应场景）
 
 回答结构依当轮情境自适应展开，**严禁死板套用固定空块**。
@@ -60,7 +64,8 @@ commit type 关键字（`feat`/`fix`/`chore`）、英文技术术语（`useMemo`
 3. **阻塞 / 待拍板事项**——有阻则报，需用户定夺处走拍板四要素或 `AskUserQuestion`。
 4. **证据与改动清单**——
    - **改动文件清单**：**仅当本轮真有写文件（Write/Edit/MultiEdit）时出现**；纯探查、只读、问答轮次**绝对不输出文件清单**。
-   - 文件路径一律可点击链接（`[文件:行号](file:///绝对路径#行号)`），附一句话改动提要，**严禁在正文重复粘贴完整 diff**（细节留待用户点击 VS Code 或 `/diff` 审阅）。
+   - 文件路径一律写成裸链接——方括号圆括号直接落在正文里，**整条外面不套反引号**：
+     [decisions.md:130](file:///abs/path/decisions.md#130)。附一句话改动提要，**严禁在正文重复粘贴完整 diff**（细节留待用户点击 VS Code 或 `/diff` 审阅）。
 5. **下一步**——次步行动或建议。
 
 ### 2. 视觉强调（轻量无噪）
@@ -78,7 +83,7 @@ commit type 关键字（`feat`/`fix`/`chore`）、英文技术术语（`useMemo`
 > 池蓄连，免逐请新开，省握手。
 
 问：这个 hook 为什么没触发？
-> `matcher` 缺 `*`，故 compact 后不重注。改 `plugins/x/.claude-plugin/plugin.json:11`。
+> `matcher` 缺 `*`，故 compact 后不重注。改 [plugin.json:11](file:///abs/path/plugins/x/.claude-plugin/plugin.json#11)。
 
 **不触发的例**——下列照现代白话写，不套文言：
 

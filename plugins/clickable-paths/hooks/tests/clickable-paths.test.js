@@ -5,6 +5,10 @@
 // 一致，写死任一个都会让另一路**静默失效**——不报错、不告警，与「压根没挂」外观相同。
 // 1.2.0 及之前只挂 UserPromptSubmit，子代理从来收不到注入，正是这类失效。
 //
+// 1.8.0 起另有四条守着「示范本身必须是裸链接」：注入里的正例曾被反引号包成 inline code，
+// 模型照抄示范即产出 `[x.js:12](file:///…)` 形态的坏链接（markdown 只生成 code span，
+// 终端拿不到 URL、不发 OSC 8，看着像链接却点不动）。这类失效不报错，只能靠用例钉住。
+//
 // 用 spawnSync 直接把 JSON 喂给子进程 stdin，不经过 shell。
 // 跑法：node plugins/clickable-paths/hooks/tests/clickable-paths.test.js
 
@@ -111,10 +115,52 @@ const cases = [
     run: () => run({ hook_event_name: 'UserPromptSubmit' }),
     check: (r) => {
       const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
-      // 实测的漏套形态就是这三种：只写文件名、裸 path:行号、inline code。
+      // 实测的漏套形态：只写文件名、裸 path:行号、路径被包成 inline code。
       // 只留「套链接」的正面要求而不点名它们，模型会拿 inline code 当合法替代形态。
+      // 第四种「整条链接外面套反引号」另有一条用例守着（1.8.0）。
       for (const kw of ['只写文件名', 'path/to/file.ext:130', 'inline code']) {
         if (!c.includes(kw)) return `注入正文缺「${kw}」这条判据`
+      }
+      return null
+    },
+  },
+  {
+    name: '注入正文的示范本身是裸链接，全文没有反引号包起来的链接模板（1.8.0）',
+    run: () => run({ hook_event_name: 'UserPromptSubmit' }),
+    check: (r) => {
+      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
+      // 1.7.0 及之前，正例自己就是 `[<文件名>:<行号>](file:///…)`——模型照抄示范即产出
+      // 「整条链接被反引号包住」的坏形态，而那种链接看着像链接、点不动、不报错。
+      // 这条把「示范必须是可逐字照抄的裸链接」钉住：`[` 这个组合在注入里一次都不许出现。
+      if (c.includes('`[')) return '注入正文里仍有被反引号包起来的链接模板'
+      if (!c.includes('[decisions.md:130](file:///')) return '缺对话正文那一轨的裸链接示范'
+      if (!c.includes('[decisions.md:11](vscode://file/')) return '缺落盘 md 那一轨的裸链接示范'
+      return null
+    },
+  },
+  {
+    name: '注入正文点名第四种漏套：整条链接外面再套一层反引号，并写明后果（1.8.0）',
+    run: () => run({ hook_event_name: 'UserPromptSubmit' }),
+    check: (r) => {
+      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
+      // 前三种漏套管的是「路径被写成了 inline code」；第四种不同——链接已经写对，
+      // 只是外面多套一层反引号，markdown 于是只生成 code span、不生成 link 节点。
+      // 后果（拿不到 URL / 不发 OSC 8 / 点不动）必须一起写，只说禁令模型不会把它当硬约束。
+      for (const kw of ['把整条链接', '反引号', 'code span', 'link 节点', 'OSC 8']) {
+        if (!c.includes(kw)) return `注入正文缺「${kw}」`
+      }
+      return null
+    },
+  },
+  {
+    name: '注入正文不含尖括号占位符（`<` `>` 是非法 URL 字符，照抄即坏链）（1.8.0）',
+    run: () => run({ hook_event_name: 'UserPromptSubmit', cwd: makeKeeperProject() }),
+    check: (r) => {
+      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
+      // 判据是「注入里的每一个字符都可以被逐字抄进输出」：模板一旦留占位符，照抄它的人
+      // 得到的是含 `<` `>` 的非法 URL，iTerm2 识别失败、整条静默失效。
+      for (const line of c.split('\n')) {
+        if (line.includes('<') || line.includes('>')) return `残留尖括号占位符：${line}`
       }
       return null
     },

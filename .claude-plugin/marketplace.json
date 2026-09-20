@@ -115,7 +115,7 @@
       "source": "./plugins/wenyan-output-style",
       "category": "Productivity",
       "description": "文言极简输出风格 - 文言语法压缩、字形简体，代码与告警原样，启停即切换",
-      "version": "1.6.0"
+      "version": "1.7.0"
     },
     {
       "name": "insight-addon",
@@ -135,8 +135,8 @@
       "name": "clickable-paths",
       "source": "./plugins/clickable-paths",
       "category": "Productivity",
-      "description": "文件路径可点击 - 对话正文用 file: 支持 Win/macOS 终端，落盘 md 用 vscode: 可跳",
-      "version": "1.7.0"
+      "description": "文件路径可点击 - 裸链接不套反引号；对话正文用 file:、落盘 md 用 vscode:",
+      "version": "1.8.0"
     },
     {
       "name": "worktree-flow",

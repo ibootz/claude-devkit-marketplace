@@ -281,7 +281,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "1.6.0"
+      "version": "1.7.0"
     },
     {
       "author": {
@@ -324,7 +324,7 @@
         "name": "zhangq"
       },
       "category": "Productivity",
-      "description": "文件路径可点击 - 对话正文用 file: 支持 Win/macOS 终端，落盘 md 用 vscode: 可跳",
+      "description": "文件路径可点击 - 裸链接不套反引号；对话正文用 file:、落盘 md 用 vscode:",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "clickable-paths",
       "source": {
@@ -335,7 +335,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "1.7.0"
+      "version": "1.8.0"
     },
     {
       "author": {
