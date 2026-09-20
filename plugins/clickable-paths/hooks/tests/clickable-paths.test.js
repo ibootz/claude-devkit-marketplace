@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 // clickable-paths 的回归用例（1.3.0 双挂之后加的）。
 //
-// 重点验的是双挂回声：hookSpecificOutput.hookEventName 必须与入参 hook_event_name
-// 一致，写死任一个都会让另一路**静默失效**——不报错、不告警，与「压根没挂」外观相同。
-// 1.2.0 及之前只挂 UserPromptSubmit，子代理从来收不到注入，正是这类失效。
+// 重点验两件事：
+//   1. 双挂回声——hookSpecificOutput.hookEventName 必须与入参 hook_event_name 一致，
+//      写死任一个都会让另一路**静默失效**（不报错、不告警，与「压根没挂」外观相同）。
+//      1.2.0 及之前只挂 UserPromptSubmit，子代理从来收不到注入，正是这类失效。
+//   2. 宿主自适应（1.8.0）——注入的链接形态跟着 detectHost() 的结果走。
+//
+// **每次 run() 都先把四个探测变量从 env 里删掉**，否则跑测试那台机器自己的宿主会渗进
+// 子进程：在 VS Code 内置终端里跑，TERM_PROGRAM=vscode 会让「默认形态」那几条用例
+// 实际验的是 vscode-terminal 分支，换个终端跑结论就变——测试本身变成不可复现的。
 //
 // 用 spawnSync 直接把 JSON 喂给子进程 stdin，不经过 shell。
 // 跑法：node plugins/clickable-paths/hooks/tests/clickable-paths.test.js
@@ -17,14 +23,29 @@ const path = require('path')
 
 const HOOK = path.join(__dirname, '..', 'clickable-paths.js')
 
+// detectHost() 读的全部变量。逐个删，让每条用例自己声明宿主。
+const PROBE_VARS = ['CLAUDE_CODE_ENTRYPOINT', 'TERM_PROGRAM', 'VSCODE_INJECTION', 'WT_SESSION']
+
+// 非 webview 的三个宿主在同一平台上共用一种形态，所以用例只能分出「webview / 其余」
+// 两档——这不是测试偷懒，映射本身就是两态的，见 hook 里的 pickInlineForm()。
+const ABS_SCHEME = process.platform === 'win32' ? 'vscode://file/' : 'file:///'
+const ABS_PATTERN =
+  process.platform === 'win32'
+    ? 'vscode://file/<绝对路径>:<行号>'
+    : 'file:///<绝对路径>#<行号>'
+
 function run(payload, env = {}) {
+  const base = { ...process.env }
+  for (const k of PROBE_VARS) delete base[k]
   const r = spawnSync(process.execPath, [HOOK], {
     input: typeof payload === 'string' ? payload : JSON.stringify(payload),
     encoding: 'utf8',
-    env: { ...process.env, ...env },
+    env: { ...base, ...env },
   })
   return { status: r.status, stdout: (r.stdout || '').trim() }
 }
+
+const ctxOf = (r) => JSON.parse(r.stdout).hookSpecificOutput.additionalContext
 
 // 造一个带 `.keeper/<交付id>/{debug,chore}` 的临时项目根，用来验 1.5.0 的现算前缀。
 // 只建目录、不放条目文件——探测只看队列目录存不存在。
@@ -41,6 +62,9 @@ function makeBareProject() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'clickable-paths-bare-'))
 }
 
+const queueLines = (c) =>
+  c.split('\n').filter((l) => l.startsWith('- debug：') || l.startsWith('- chore：'))
+
 const cases = [
   {
     name: '主会话事件：回声 UserPromptSubmit 并注入正文',
@@ -49,7 +73,7 @@ const cases = [
       if (r.status !== 0) return `exit=${r.status}，期望 0`
       const d = JSON.parse(r.stdout)
       if (d.hookSpecificOutput.hookEventName !== 'UserPromptSubmit') return '事件名未按入参回声'
-      if (!d.hookSpecificOutput.additionalContext.includes('file:///')) return '注入正文缺链接形态'
+      if (!d.hookSpecificOutput.additionalContext.includes(ABS_SCHEME)) return '注入正文缺链接形态'
       return null
     },
   },
@@ -60,17 +84,19 @@ const cases = [
       if (r.status !== 0) return `exit=${r.status}，期望 0`
       const d = JSON.parse(r.stdout)
       if (d.hookSpecificOutput.hookEventName !== 'SubagentStart') return '事件名未按入参回声'
-      if (!d.hookSpecificOutput.additionalContext.includes('file:///')) return '注入正文缺链接形态'
+      if (!d.hookSpecificOutput.additionalContext.includes(ABS_SCHEME)) return '注入正文缺链接形态'
       return null
     },
   },
   {
-    name: '注入正文含落盘 md 那一轨（vscode: scheme，1.6.0 加）',
+    name: '落盘 md 那一轨恒为 vscode:，不随宿主变（文件会被别的机器读到）',
     run: () => run({ hook_event_name: 'UserPromptSubmit', prompt: 'x' }),
     check: (r) => {
-      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
+      const c = ctxOf(r)
       if (!c.includes('vscode://file/')) return '缺落盘 md 那一轨（vscode://file/）'
-      if (!c.includes('file:///')) return '缺对话正文那一轨（file:///）'
+      if (!c.includes('不跟着宿主变') && !c.includes('固定如此、不跟宿主变')) {
+        return '未写明落盘那一轨不跟宿主变'
+      }
       return null
     },
   },
@@ -80,11 +106,7 @@ const cases = [
       a: run({ hook_event_name: 'UserPromptSubmit' }),
       b: run({ hook_event_name: 'SubagentStart' }),
     }),
-    check: (r) => {
-      const ca = JSON.parse(r.a.stdout).hookSpecificOutput.additionalContext
-      const cb = JSON.parse(r.b.stdout).hookSpecificOutput.additionalContext
-      return ca === cb ? null : '两路注入正文不一致'
-    },
+    check: (r) => (ctxOf(r.a) === ctxOf(r.b) ? null : '两路注入正文不一致'),
   },
   {
     name: '白名单外的事件名：静默退出，不回声来路不明的字符串',
@@ -110,7 +132,7 @@ const cases = [
     name: '注入正文点名三种漏套形态（1.4.0 收紧的那段）',
     run: () => run({ hook_event_name: 'UserPromptSubmit' }),
     check: (r) => {
-      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
+      const c = ctxOf(r)
       // 实测的漏套形态就是这三种：只写文件名、裸 path:行号、inline code。
       // 只留「套链接」的正面要求而不点名它们，模型会拿 inline code 当合法替代形态。
       for (const kw of ['只写文件名', 'path/to/file.ext:130', 'inline code']) {
@@ -123,7 +145,7 @@ const cases = [
     name: '注入正文圈定适用面：表格 / 列表 / 现场证据 / 转述回执',
     run: () => run({ hook_event_name: 'UserPromptSubmit' }),
     check: (r) => {
-      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
+      const c = ctxOf(r)
       // 这四种场合此前都在「对话正文」的字面含义之外，模型据此漏套。
       for (const kw of ['表格', '列表项', '现场证据', '转述子代理回执']) {
         if (!c.includes(kw)) return `注入正文未把「${kw}」圈进适用面`
@@ -135,7 +157,7 @@ const cases = [
     name: '注入正文写明与 working-discipline 3.3 的关系（链接同时满足两边）',
     run: () => run({ hook_event_name: 'UserPromptSubmit' }),
     check: (r) => {
-      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
+      const c = ctxOf(r)
       // 3.3 与 readable-citations 每轮都注入裸 `path:行号` 的模板，
       // 不写明关系时模型满足了它们就以为交付完了，本条静默失效。
       if (!c.includes('working-discipline 3.3')) return '未提 working-discipline 3.3'
@@ -144,20 +166,10 @@ const cases = [
     },
   },
   {
-    name: '注入正文保留 #1 兜底与三斜杠 href 规则',
-    run: () => run({ hook_event_name: 'SubagentStart' }),
-    check: (r) => {
-      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
-      if (!c.includes('#1')) return '缺「没有行号写 #1」'
-      if (!c.includes('三条斜杠')) return '缺 href 绝对路径规则'
-      return null
-    },
-  },
-  {
     name: '注入正文把队列编号圈进适用面，并写死两队列的文件名（1.5.0）',
     run: () => run({ hook_event_name: 'UserPromptSubmit' }),
     check: (r) => {
-      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
+      const c = ctxOf(r)
       // 编号在模型的对象模型里是「一条 issue」不是「一个文件」，只写「提到文件就套
       // 链接」它不会触发。debug→issue.md、chore→item.md 必须写死，两者混用会指向
       // 一个不存在的路径，而链接坏掉不报错。
@@ -171,15 +183,15 @@ const cases = [
     name: '有 .keeper 的项目：注入现算的真实队列前缀，且不留尖括号占位符（1.5.0）',
     run: () => run({ hook_event_name: 'UserPromptSubmit', cwd: makeKeeperProject() }),
     check: (r) => {
-      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
+      const c = ctxOf(r)
       if (!c.includes('队列前缀')) return '未注入队列前缀段'
-      const links = c.split('\n').filter((l) => l.startsWith('- debug：') || l.startsWith('- chore：'))
+      const links = queueLines(c)
       if (links.length !== 2) return `期望 debug/chore 各一行，实得 ${links.length} 行`
       for (const l of links) {
         // 占位符是这条规则历史上的失效点：`<` `>` 是非法 URL 字符，iTerm2 识别失败
         // 后整条不可点，而模板本身在示范这个坏形态。现算就是为了根除它。
         if (l.includes('<') || l.includes('>')) return `队列前缀里残留尖括号占位符：${l}`
-        if (!l.includes('file:///')) return `队列前缀不是三斜杠绝对路径：${l}`
+        if (!l.includes(ABS_SCHEME)) return `队列前缀不是当前宿主的绝对形态：${l}`
         if (!l.includes('D-001-feat-x')) return `队列前缀没算进实际交付 id：${l}`
       }
       if (!links[0].includes('issue.md') || !links[1].includes('item.md')) {
@@ -192,21 +204,88 @@ const cases = [
     name: '没有 .keeper 的项目：不注入队列前缀段（1.5.0）',
     run: () => run({ hook_event_name: 'SubagentStart', cwd: makeBareProject() }),
     check: (r) => {
-      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
+      const c = ctxOf(r)
       if (c.includes('队列前缀')) return '没有队列的项目不该注入队列前缀段'
-      if (!c.includes('file:///')) return '主体规约本身仍应注入'
+      if (!c.includes(ABS_SCHEME)) return '主体规约本身仍应注入'
       return null
     },
   },
   {
-    name: '队列前缀在 Windows 盘符路径下已归一化为正斜杠（1.7.0）',
+    name: '队列前缀里没有未归一化的反斜杠（1.7.0）',
     run: () => run({ hook_event_name: 'UserPromptSubmit', cwd: makeKeeperProject() }),
     check: (r) => {
-      const c = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
-      const links = c.split('\n').filter((l) => l.startsWith('- debug：') || l.startsWith('- chore：'))
-      for (const l of links) {
+      for (const l of queueLines(ctxOf(r))) {
         if (l.includes('\\')) return `队列链接含未归一化的反斜杠：${l}`
       }
+      return null
+    },
+  },
+
+  // —— 1.8.0 宿主自适应 ——
+  {
+    name: '宿主 webview：对话正文切相对 workspace 根路径（绝对路径在那里全点不开）',
+    run: () =>
+      run({ hook_event_name: 'UserPromptSubmit' }, { CLAUDE_CODE_ENTRYPOINT: 'claude-vscode' }),
+    check: (r) => {
+      const c = ctxOf(r)
+      if (!c.includes('相对 workspace 根的路径>#<行号>')) return '对话正文未切成相对路径形态'
+      if (!c.includes('这个宿主里绝对路径一条都点不开')) return '未写明绝对路径在这里失效'
+      // 落盘那一轨仍是 vscode:，webview 下也不例外。
+      if (!c.includes('vscode://file/<绝对路径>:<行号>')) return 'webview 下落盘那一轨丢了'
+      return null
+    },
+  },
+  {
+    name: '宿主 webview：队列前缀也跟着走相对路径，不带 scheme',
+    run: () =>
+      run(
+        { hook_event_name: 'UserPromptSubmit', cwd: makeKeeperProject() },
+        { CLAUDE_CODE_ENTRYPOINT: 'claude-vscode' }),
+    check: (r) => {
+      const links = queueLines(ctxOf(r))
+      if (links.length !== 2) return `期望 debug/chore 各一行，实得 ${links.length} 行`
+      for (const l of links) {
+        if (l.includes('file://')) return `webview 下队列链接不该带 scheme：${l}`
+        if (!l.includes('.keeper/D-001-feat-x/')) return `队列相对路径算错：${l}`
+        if (l.includes('\\')) return `队列链接含未归一化的反斜杠：${l}`
+      }
+      return null
+    },
+  },
+  {
+    name: '宿主 webview 的判据优先于 VS Code 内置终端（顺序不可调换）',
+    run: () =>
+      run(
+        { hook_event_name: 'UserPromptSubmit' },
+        // 扩展启动的 CLI 会同时带上 VS Code 自己那套变量；先判 TERM_PROGRAM
+        // 就会把 webview 错归成内置终端，注入一套在那里全点不开的绝对路径。
+        { CLAUDE_CODE_ENTRYPOINT: 'claude-vscode', TERM_PROGRAM: 'vscode', VSCODE_INJECTION: '1' }),
+    check: (r) => {
+      const c = ctxOf(r)
+      return c.includes('相对 workspace 根的路径>#<行号>') ? null : '被错归成内置终端'
+    },
+  },
+  {
+    name: '三个终端宿主（内置终端 / Windows Terminal / 兜底）共用同一形态',
+    run: () => ({
+      term: run({ hook_event_name: 'UserPromptSubmit' }, { TERM_PROGRAM: 'vscode' }),
+      wt: run({ hook_event_name: 'UserPromptSubmit' }, { WT_SESSION: 'abc-123' }),
+      bare: run({ hook_event_name: 'UserPromptSubmit' }),
+    }),
+    check: (r) => {
+      const [a, b, c] = [ctxOf(r.term), ctxOf(r.wt), ctxOf(r.bare)]
+      if (a !== b || b !== c) return '三个终端宿主的注入正文本应逐字相同'
+      if (!a.includes(ABS_PATTERN)) return `未用本平台的绝对形态 ${ABS_PATTERN}`
+      return null
+    },
+  },
+  {
+    name: '认不出宿主时兜底到本平台的绝对形态，而不是不给链接',
+    run: () => run({ hook_event_name: 'SubagentStart' }),
+    check: (r) => {
+      const c = ctxOf(r)
+      if (!c.includes(ABS_PATTERN)) return `兜底未落到 ${ABS_PATTERN}`
+      if (!c.includes('对话正文每提到一个本机文件')) return '兜底把主体规约也丢了'
       return null
     },
   },

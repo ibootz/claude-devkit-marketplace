@@ -135,8 +135,8 @@
       "name": "clickable-paths",
       "source": "./plugins/clickable-paths",
       "category": "Productivity",
-      "description": "文件路径可点击 - 对话正文用 file: 支持 Win/macOS 终端，落盘 md 用 vscode: 可跳",
-      "version": "1.7.0"
+      "description": "文件路径可点击 - 对话正文按宿主自适应切形态，落盘 md 恒用 vscode: 可跳",
+      "version": "1.8.0"
     },
     {
       "name": "worktree-flow",
@@ -157,7 +157,7 @@
       "source": "./plugins/readable-citations",
       "category": "Productivity",
       "description": "引用别处章节要免跳可读 - 带标题原文与20字提要，链接分绝对/相对两轨",
-      "version": "1.2.0"
+      "version": "1.3.0"
     },
     {
       "name": "token-saver",
