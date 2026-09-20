@@ -15,7 +15,7 @@ echo "[67] 项目未启用 .keeper/：stdout 全空，等价于本 hook 不存�
 # 出一次就够。
 T="$(newtmpdir)"; : > "$T/.git"
 OUT="$(run_triage "$T")"
-BYTES="$(/usr/bin/python3 -c 'import sys; print(len(sys.argv[1]))' "$OUT")"
+BYTES="$(python3 -c 'import sys; print(len(sys.argv[1]))' "$OUT")"
 if [ "$BYTES" -eq 0 ]; then ok "未启用时 stdout 全空（0 字节）"
 else bad "未启用时应零输出" "0" "$BYTES"; fi
 
@@ -24,7 +24,7 @@ mkissue "$T/.keeper/_main/debug" DBG-001 open P1 "占位问题，仅用于触发
 OUT="$(run_triage "$T")"
 # 【为什么断言 hookEventName】harness 用它匹配事件；写成 SessionStart 会被**静默
 # 丢弃且不报错**，注入等于没发生而测试仍能靠正文断言通过。必须单独测这个字段。
-EV="$(printf '%s' "$OUT" | /usr/bin/python3 -c '
+EV="$(printf '%s' "$OUT" | python3 -c '
 import json, sys
 try:
     print(json.load(sys.stdin)["hookSpecificOutput"]["hookEventName"])
@@ -33,14 +33,14 @@ except Exception:
 ')"
 if [ "$EV" = "UserPromptSubmit" ]; then ok "hookEventName 为 UserPromptSubmit"
 else bad "hookEventName 必须与真实事件一致" "UserPromptSubmit" "$EV"; fi
-TEXT="$(printf '%s' "$OUT" | /usr/bin/python3 -c '
+TEXT="$(printf '%s' "$OUT" | python3 -c '
 import json, sys
 try:
     print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])
 except Exception:
     print("")
 ')"
-CHARS="$(/usr/bin/python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
+CHARS="$(python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
 # 每轮注入，成本乘以轮数，上限压得比 SessionStart 那份紧得多。
 if [ "$CHARS" -le 800 ]; then ok "分诊文案 ${CHARS} 字符 ≤800（每轮成本硬上限）"
 else bad "分诊文案应 ≤800 字符" "<=800" "$CHARS"; fi

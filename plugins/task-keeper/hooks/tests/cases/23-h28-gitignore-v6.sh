@@ -24,7 +24,7 @@ echo "== H28 · gitignore 判据（默认入库，只精确排除四类本机产
 PLUGIN_DIR="$(cd "$HOOK_DIR/.." && pwd)"
 
 echo "[121] 逐字同步：GITIGNORE_BLOCK 与冷启动 bash 的 printf 字节相同"
-SYNC="$(/usr/bin/python3 -c '
+SYNC="$(python3 -c '
 import io, re, sys
 sys.path.insert(0, sys.argv[1])
 from queue_snapshot import GITIGNORE_BLOCK
@@ -53,7 +53,7 @@ echo "      并核对条数措辞：BLOCK 首行注释里的「N 类」必须等
 # 【为什么单独测这个数】它是**最容易漂的一处**：加一条规则时改了 RULES 与 pattern 行，
 # 却忘了改注释里的中文数字——而那行注释会被逐字写进每个用户仓库的 .gitignore，
 # 说「三类」却排了四条，读的人无从判断是漏了一条还是注释旧了。
-CNTOK="$(/usr/bin/python3 -c '
+CNTOK="$(python3 -c '
 import re, sys
 sys.path.insert(0, sys.argv[1])
 from queue_snapshot import GITIGNORE_BLOCK, GITIGNORE_RULES
@@ -70,7 +70,7 @@ else bad "BLOCK 的条数措辞与实际规则条数不符" "OK" "$CNTOK"; fi
 
 echo "[122] 写入的各行内容正确：worktree / instance.json / merge.lock 用 \`**\`，"
 echo "      .keeper-active 是顶层单文件**不带** \`**\`（照抄 ** 写法会匹配不到它）"
-BLOCK="$(/usr/bin/python3 -c '
+BLOCK="$(python3 -c '
 import sys
 sys.path.insert(0, sys.argv[1])
 from queue_snapshot import GITIGNORE_BLOCK
@@ -93,7 +93,7 @@ esac
 
 # 探针：造一个临时仓，把给定内容写进 .gitignore，返回告警条数与全文
 probe_gi() {
-  /usr/bin/python3 -c '
+  python3 -c '
 import os, sys, tempfile
 sys.path.insert(0, sys.argv[1])
 from queue_snapshot import gitignore_findings, GITIGNORE_BLOCK, GITIGNORE_RULES

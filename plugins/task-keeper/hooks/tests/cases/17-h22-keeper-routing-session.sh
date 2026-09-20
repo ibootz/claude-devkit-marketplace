@@ -12,7 +12,7 @@ echo "== H22 · 三岔口分诊注入的会话隔离（keeper_routing.py：triag
 
 # 从注入体里取出 additionalContext 正文，与 14-h19-userprompt-triage.sh 的抽取方式一致。
 triage_text() {
-  printf '%s' "$1" | /usr/bin/python3 -c '
+  printf '%s' "$1" | python3 -c '
 import json, sys
 try:
     print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])
@@ -28,7 +28,7 @@ OUT="$(run_triage_sess "$T" "sess-A")"
 TEXT="$(triage_text "$OUT")"
 has "无登记时提示本会话还没有实例" "$TEXT" "本会话还没有实例"
 hasnt "无登记时不误报已失效" "$TEXT" "已失效"
-CHARS="$(/usr/bin/python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
+CHARS="$(python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
 if [ "$CHARS" -le 800 ]; then ok "无登记分支 ${CHARS} 字符 ≤800"
 else bad "无登记分支应 ≤800 字符" "<=800" "$CHARS"; fi
 rm -rf "$T"
@@ -49,7 +49,7 @@ hasnt "session 匹配时不得再劝「不要重派」（v6 措辞会把并行�
 # 【不测"不含首次"】"首次" 这个词本身也出现在 TRIAGE_HEAD 固定骨架里（第 2 条
 # 岔路"首次用 Agent 派出，之后 SendMessage 唤醒"），三个分支都恒定含有它，不是
 # 动态行专属词——最初写成 hasnt 断言是假阳性，已改为上面这条更精确的正向断言。
-CHARS="$(/usr/bin/python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
+CHARS="$(python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
 if [ "$CHARS" -le 800 ]; then ok "session 匹配分支 ${CHARS} 字符 ≤800"
 else bad "session 匹配分支应 ≤800 字符" "<=800" "$CHARS"; fi
 rm -rf "$T"
@@ -85,7 +85,7 @@ has "两档都匹配时 chore 的 name 出现" "$TEXT" "opus-chore-keeper-9f2a"
 has "两档都匹配时 debug 句在场" "$TEXT" "debug 在跑"
 has "两档都匹配时 chore 句在场" "$TEXT" "chore 在跑"
 has "chore 句给的是唤醒方向（攒批打包拍板）" "$TEXT" "新杂务一律 \`SendMessage\` 交给它"
-CHARS="$(/usr/bin/python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
+CHARS="$(python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
 if [ "$CHARS" -le 800 ]; then ok "两档都匹配分支 ${CHARS} 字符 ≤800（预算仍留有余量）"
 else bad "两档都匹配分支应 ≤800 字符" "<=800" "$CHARS"; fi
 rm -rf "$T"

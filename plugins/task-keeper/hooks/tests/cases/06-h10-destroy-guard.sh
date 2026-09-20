@@ -11,7 +11,7 @@
 echo "== H10 · debug worktree 强制删除守卫（fixer 未提交产物防误删，ask 而非 deny）=="
 DESTROYG="$HOOK_DIR/pre-tool-use-debug-worktree-destroy.sh"
 run_destroyg() {   # $1=command  $2=cwd（可省略）
-  /usr/bin/python3 -c '
+  python3 -c '
 import json,sys
 ev = {"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":sys.argv[1]}}
 if len(sys.argv) > 2 and sys.argv[2]:

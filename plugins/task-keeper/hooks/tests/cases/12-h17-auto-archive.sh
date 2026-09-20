@@ -14,8 +14,8 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
   mkissue "$T/.keeper/_main/debug" "DBG-$(printf '%03d' "$i")" done P2 "第 $i 条已完成"
 done
 before="$(py_nextid "$T/.keeper/_main/debug")"
-TODAY_STAMP="$(/usr/bin/python3 -c 'import datetime; print(datetime.date.today().strftime("%Y%m%d"))')"
-out="$(/usr/bin/python3 "$ARCH" --queue-dir "$T/.keeper/_main/debug" --auto --apply 2>&1)"
+TODAY_STAMP="$(python3 -c 'import datetime; print(datetime.date.today().strftime("%Y%m%d"))')"
+out="$(python3 "$ARCH" --queue-dir "$T/.keeper/_main/debug" --auto --apply 2>&1)"
 has "达到数量阈值触发" "$out" "触发自动归档"
 has "触发理由点明 done 10 条 ≥ 阈值 10" "$out" "done 10 条 ≥ 阈值 10"
 has "批次名固定 auto-<今日>" "$out" "auto-$TODAY_STAMP"
@@ -34,7 +34,7 @@ T="$(newtmpdir)"
 for i in 1 2 3 4 5 6 7 8 9; do
   mkissue "$T/.keeper/_main/debug" "DBG-$(printf '%03d' "$i")" done P2 "第 $i 条已完成"
 done
-out="$(/usr/bin/python3 "$ARCH" --queue-dir "$T/.keeper/_main/debug" --auto --apply 2>&1)"
+out="$(python3 "$ARCH" --queue-dir "$T/.keeper/_main/debug" --auto --apply 2>&1)"
 has "未达阈值时明确说明判据" "$out" "未达自动归档阈值"
 if [ ! -d "$T/.keeper/_main/debug/archive" ]; then ok "未触发时不创建 archive/ 目录"
 else bad "不应创建 archive/ 目录" "不存在" "已创建"; fi
@@ -42,10 +42,10 @@ rm -rf "$T"
 
 echo "[64] done 数量不足阈值，但存在 reported_at 超龄（>14 天）条目仍触发"
 T="$(newtmpdir)"
-OLD_DATE="$(/usr/bin/python3 -c 'import datetime; print((datetime.date.today()-datetime.timedelta(days=15)).isoformat())')"
+OLD_DATE="$(python3 -c 'import datetime; print((datetime.date.today()-datetime.timedelta(days=15)).isoformat())')"
 mkissue "$T/.keeper/_main/debug" DBG-001 done P2 "很久以前修完但一直没归档" "$OLD_DATE"
-TODAY_STAMP="$(/usr/bin/python3 -c 'import datetime; print(datetime.date.today().strftime("%Y%m%d"))')"
-out="$(/usr/bin/python3 "$ARCH" --queue-dir "$T/.keeper/_main/debug" --auto --apply 2>&1)"
+TODAY_STAMP="$(python3 -c 'import datetime; print(datetime.date.today().strftime("%Y%m%d"))')"
+out="$(python3 "$ARCH" --queue-dir "$T/.keeper/_main/debug" --auto --apply 2>&1)"
 has "超龄触发，报出实际天数与阈值对比" "$out" "距今 15 天 > 阈值 14 天"
 if [ -f "$T/.keeper/_main/debug/archive/auto-$TODAY_STAMP/DBG-001/issue.md" ]; then
   ok "超龄条目被归档进 auto-<今日> 批次（批次名不取该条目自己的日期）"

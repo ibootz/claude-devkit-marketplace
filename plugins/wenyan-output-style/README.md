@@ -28,7 +28,7 @@
 |---|---|
 | React 组件为何频繁重绘？ | 新参照则重绘。`useMemo` 包之。 |
 | 解释数据库连接池。 | 池蓄连，免逐请新开，省握手。 |
-| 这个 hook 为什么没触发？ | `matcher` 缺 `*`，故 compact 后不重注。改 `plugins/x/.claude-plugin/plugin.json:11`。 |
+| 这个 hook 为什么没触发？ | `matcher` 缺 `*`，故 compact 后不重注。改 [plugin.json:11](file:///abs/path/plugins/x/.claude-plugin/plugin.json#11)。 |
 
 不可逆操作不套文言：
 
@@ -64,13 +64,13 @@
 | `hooks/session-start.sh` | 拼上面两份 + 常驻声明，输出 `additionalContext` | 改拼接逻辑 |
 | `hooks/user-prompt-submit.sh` | 每轮一行短锚 | 慎改，每轮成本 |
 
-SessionStart 注入实测 **2785 字符**，每轮短锚实测 **169 字符**，均远低于 hook 输出上限
+SessionStart 注入实测 **4327 字符**，每轮短锚实测 **169 字符**，均远低于 hook 输出上限
 （10000 字符）。measured 方式：`echo '{"hook_event_name":"SessionStart"}' | bash
 hooks/session-start.sh` 与 `echo '{"hook_event_name":"UserPromptSubmit"}' | bash
 hooks/user-prompt-submit.sh`，各取输出 JSON 的 `hookSpecificOutput.additionalContext`
-字段用 Python `len()` 计数（字符不是字节）。此前本节写的「2912 / 102」已过期失真，
-本次核对时一并更正——过期数字与本次实测（改写前 3837 / 169）都对不上，说明这处记述
-早已漂移，不是本轮改写才产生的偏差。
+字段用 Python `len()` 计数（字符不是字节）。**这处数字历史上漂过两次**（写过 2912 / 102，
+后来写 2785 / 169，实测都对不上；1.7.0 之前实测 3862，补链接形态后 4327），改两份 style
+文件时记得一并复算。
 
 ## 2026-08-05 压缩改写
 
@@ -95,6 +95,24 @@ hooks/user-prompt-submit.sh`，各取输出 JSON 的 `hookSpecificOutput.additio
 **AskUserQuestion 四处用白话。** `question` / `header` / `label` / `description` 会渲染到 Human 手机上，只扫一眼，文言会让人误判。对话正文仍用文言。
 
 **「本次 md 受众判定」声明句照写。** 判定词原样，理由部分可文言。「禁自指」不覆盖 harness 要求的声明。
+
+## 1.7.0：链接形态改成裸链接（两处反引号示范下线）
+
+两份 style 文件里各有一条「文件路径写成链接」的规定，原文把模板用反引号包成 inline code。这与
+`clickable-paths` 要的形态正好相反：反引号一包，markdown 只生成 code span、**不生成 link
+节点**，Claude Code 拿不到 URL、不发 OSC 8，iTerm2 上点不动——而它看起来完全像一条链接。
+
+同批改掉三处反向示范：
+
+| 位置 | 改前 | 改后 |
+|---|---|---|
+| `wenyan-ultra-rules.md` 回复结构第 4 条 | 反引号包住整条链接模板 | [decisions.md:130](file:///abs/path/decisions.md#130) |
+| 同文件「例」一节 | 改 `plugins/x/.claude-plugin/plugin.json:11`（真实路径写成 inline code） | 改 [plugin.json:11](file:///abs/path/plugins/x/.claude-plugin/plugin.json#11) |
+| `project-overrides.md` 文件链接与提要 | 反引号包住整条链接模板 | 裸链接 + 「整条外面不套反引号」的硬要求与后果 |
+
+另在「原样不动」一节补了一句：那一节管「不译不压」，不管「写成什么形态」——正文里提到本机文件
+仍要套链接，裸 `path:行号` 只留给代码块、commit message、派给子代理的 prompt。不补这句，
+`path/to/file.ext:行号` 与 `path:行号` 列在「原样不动」清单里，读起来像是「正文里就这么写」。
 
 ## 1.6.0：自适应结构与 TUI 排版优化
 

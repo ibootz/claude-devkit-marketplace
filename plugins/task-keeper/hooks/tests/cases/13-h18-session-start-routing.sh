@@ -14,14 +14,14 @@ echo "[65] 项目未启用 .keeper/：只注入一句话介绍，长度 ≤300 �
 # <交付id>/debug 这一层已建出——所以「未启用」必须连 .keeper/ 都不存在。
 T="$(newtmpdir)"; : > "$T/.git"
 OUT="$(run_routing "$T")"
-TEXT="$(printf '%s' "$OUT" | /usr/bin/python3 -c '
+TEXT="$(printf '%s' "$OUT" | python3 -c '
 import json, sys
 try:
     print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])
 except Exception:
     print("")
 ')"
-CHARS="$(/usr/bin/python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
+CHARS="$(python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
 if [ "$CHARS" -le 300 ]; then ok "未启用文案 ${CHARS} 字符 ≤300"
 else bad "未启用文案应 ≤300 字符" "<=300" "$CHARS"; fi
 # 断言子串刻意避开 NOT_ENABLED 原文里的反引号——反引号在 bash 双引号字符串里仍是
@@ -32,14 +32,14 @@ has "未启用文案点出非交付 worktree 的兜底桶" "$TEXT" "代替 basen
 echo "[66] 项目已启用 .keeper/：只注入静态参考，长度 ≤2000 字符（硬上限）"
 mkissue "$T/.keeper/_main/debug" DBG-001 open P1 "占位问题，仅用于触发 routing 已启用分支"
 OUT="$(run_routing "$T")"
-TEXT="$(printf '%s' "$OUT" | /usr/bin/python3 -c '
+TEXT="$(printf '%s' "$OUT" | python3 -c '
 import json, sys
 try:
     print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])
 except Exception:
     print("")
 ')"
-CHARS="$(/usr/bin/python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
+CHARS="$(python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
 if [ "$CHARS" -le 2000 ]; then ok "已启用文案 ${CHARS} 字符 ≤2000（硬上限）"
 else bad "已启用文案应 ≤2000 字符" "<=2000" "$CHARS"; fi
 has "含决策打包主会话侧职责说明" "$TEXT" "决策打包"

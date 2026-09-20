@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 // clickable-paths 的回归用例（1.3.0 双挂之后加的）。
 //
-// 重点验两件事：
+// 守三组判据：
 //   1. 双挂回声——hookSpecificOutput.hookEventName 必须与入参 hook_event_name 一致，
 //      写死任一个都会让另一路**静默失效**（不报错、不告警，与「压根没挂」外观相同）。
 //      1.2.0 及之前只挂 UserPromptSubmit，子代理从来收不到注入，正是这类失效。
-//   2. 宿主自适应（1.8.0）——注入的链接形态跟着 detectHost() 的结果走。
+//   2. 示范本身必须是裸链接（1.8.0）——注入里的正例曾被反引号包成 inline code，模型
+//      照抄示范即产出被反引号包住的整条链接：markdown 只生成 code span，终端拿不到
+//      URL、不发 OSC 8，看着像链接却点不动。这类失效不报错，只能靠用例钉住。
+//   3. 形态跟宿主走（1.9.0）——四宿主实测两两无交集，写死一种就有宿主里点不动。
 //
 // **每次 run() 都先把四个探测变量从 env 里删掉**，否则跑测试那台机器自己的宿主会渗进
 // 子进程：在 VS Code 内置终端里跑，TERM_PROGRAM=vscode 会让「默认形态」那几条用例
@@ -28,11 +31,13 @@ const PROBE_VARS = ['CLAUDE_CODE_ENTRYPOINT', 'TERM_PROGRAM', 'VSCODE_INJECTION'
 
 // 非 webview 的三个宿主在同一平台上共用一种形态，所以用例只能分出「webview / 其余」
 // 两档——这不是测试偷懒，映射本身就是两态的，见 hook 里的 pickInlineForm()。
-const ABS_SCHEME = process.platform === 'win32' ? 'vscode://file/' : 'file:///'
-const ABS_PATTERN =
-  process.platform === 'win32'
-    ? 'vscode://file/<绝对路径>:<行号>'
-    : 'file:///<绝对路径>#<行号>'
+const IS_WIN = process.platform === 'win32'
+const ABS_SCHEME = IS_WIN ? 'vscode://file/' : 'file:///'
+const INLINE_SAMPLE = IS_WIN
+  ? '[decisions.md:130](vscode://file/C:/abs/path/decisions.md:130)'
+  : '[decisions.md:130](file:///abs/path/decisions.md#130)'
+const WEBVIEW_SAMPLE = '[decisions.md:130](docs/decisions.md#130)'
+const PERSISTED_SAMPLE = '[decisions.md:11](vscode://file/abs/path/decisions.md:11)'
 
 function run(payload, env = {}) {
   const base = { ...process.env }
@@ -93,10 +98,8 @@ const cases = [
     run: () => run({ hook_event_name: 'UserPromptSubmit', prompt: 'x' }),
     check: (r) => {
       const c = ctxOf(r)
-      if (!c.includes('vscode://file/')) return '缺落盘 md 那一轨（vscode://file/）'
-      if (!c.includes('不跟着宿主变') && !c.includes('固定如此、不跟宿主变')) {
-        return '未写明落盘那一轨不跟宿主变'
-      }
+      if (!c.includes(PERSISTED_SAMPLE)) return '缺落盘 md 那一轨的裸链接示范'
+      if (!c.includes('不跟宿主变')) return '未写明落盘那一轨不跟宿主变'
       return null
     },
   },
@@ -129,14 +132,64 @@ const cases = [
     check: (r) => (r.status === 0 && r.stdout === '' ? null : `exit=${r.status} stdout=${r.stdout}`),
   },
   {
-    name: '注入正文点名三种漏套形态（1.4.0 收紧的那段）',
+    name: '注入正文点名四种漏套形态（1.4.0 起三种，1.8.0 补第四种）',
     run: () => run({ hook_event_name: 'UserPromptSubmit' }),
     check: (r) => {
       const c = ctxOf(r)
-      // 实测的漏套形态就是这三种：只写文件名、裸 path:行号、inline code。
-      // 只留「套链接」的正面要求而不点名它们，模型会拿 inline code 当合法替代形态。
-      for (const kw of ['只写文件名', 'path/to/file.ext:130', 'inline code']) {
+      // 前三种管的是「路径被写成了 inline code」：只写文件名、裸 path:行号、inline code。
+      // 第四种不同——链接已经写对，只是外面多套一层反引号，整条一起失效。
+      for (const kw of ['只写文件名', 'path/to/file.ext:130', 'inline code', '把整条链接']) {
         if (!c.includes(kw)) return `注入正文缺「${kw}」这条判据`
+      }
+      return null
+    },
+  },
+  {
+    name: '第四种漏套写明后果：code span / 不产生 link 节点 / 不发 OSC 8（1.8.0）',
+    run: () => run({ hook_event_name: 'UserPromptSubmit' }),
+    check: (r) => {
+      const c = ctxOf(r)
+      // 后果必须一起写。只说禁令，模型不会把它当硬约束。
+      for (const kw of ['反引号', 'code span', 'link 节点', 'OSC 8']) {
+        if (!c.includes(kw)) return `注入正文缺「${kw}」`
+      }
+      return null
+    },
+  },
+  {
+    name: '注入正文的示范本身是裸链接，全文没有被反引号包起来的链接模板（1.8.0）',
+    run: () => ({
+      bare: run({ hook_event_name: 'UserPromptSubmit' }),
+      web: run({ hook_event_name: 'UserPromptSubmit' }, { CLAUDE_CODE_ENTRYPOINT: 'claude-vscode' }),
+    }),
+    check: (r) => {
+      for (const [who, res] of Object.entries(r)) {
+        const c = ctxOf(res)
+        // 1.7.0 及之前，正例自己就是被反引号包住的整条链接——模型照抄示范即产出坏形态，
+        // 而那种链接看着像链接、点不动、不报错。这条把「示范必须可逐字照抄」钉住。
+        if (c.includes('`[')) return `${who}：注入正文里仍有被反引号包起来的链接模板`
+      }
+      if (!ctxOf(r.bare).includes(INLINE_SAMPLE)) return '缺本平台对话正文那一轨的裸链接示范'
+      if (!ctxOf(r.web).includes(WEBVIEW_SAMPLE)) return '缺 webview 那一支的裸链接示范'
+      if (!ctxOf(r.bare).includes(PERSISTED_SAMPLE)) return '缺落盘 md 那一轨的裸链接示范'
+      return null
+    },
+  },
+  {
+    name: '注入正文不含尖括号占位符（尖括号是非法 URL 字符，照抄即坏链）（1.8.0）',
+    run: () => ({
+      bare: run({ hook_event_name: 'UserPromptSubmit', cwd: makeKeeperProject() }),
+      web: run(
+        { hook_event_name: 'UserPromptSubmit', cwd: makeKeeperProject() },
+        { CLAUDE_CODE_ENTRYPOINT: 'claude-vscode' }),
+    }),
+    check: (r) => {
+      // 判据是「注入里的每一个字符都可以被逐字抄进输出」：模板一旦留占位符，照抄它的人
+      // 得到的是含尖括号的非法 URL，iTerm2 识别失败、整条静默失效。
+      for (const [who, res] of Object.entries(r)) {
+        for (const line of ctxOf(res).split('\n')) {
+          if (line.includes('<') || line.includes('>')) return `${who} 残留尖括号占位符：${line}`
+        }
       }
       return null
     },
@@ -180,7 +233,7 @@ const cases = [
     },
   },
   {
-    name: '有 .keeper 的项目：注入现算的真实队列前缀，且不留尖括号占位符（1.5.0）',
+    name: '有 .keeper 的项目：注入现算的真实队列前缀（1.5.0）',
     run: () => run({ hook_event_name: 'UserPromptSubmit', cwd: makeKeeperProject() }),
     check: (r) => {
       const c = ctxOf(r)
@@ -188,9 +241,6 @@ const cases = [
       const links = queueLines(c)
       if (links.length !== 2) return `期望 debug/chore 各一行，实得 ${links.length} 行`
       for (const l of links) {
-        // 占位符是这条规则历史上的失效点：`<` `>` 是非法 URL 字符，iTerm2 识别失败
-        // 后整条不可点，而模板本身在示范这个坏形态。现算就是为了根除它。
-        if (l.includes('<') || l.includes('>')) return `队列前缀里残留尖括号占位符：${l}`
         if (!l.includes(ABS_SCHEME)) return `队列前缀不是当前宿主的绝对形态：${l}`
         if (!l.includes('D-001-feat-x')) return `队列前缀没算进实际交付 id：${l}`
       }
@@ -221,17 +271,17 @@ const cases = [
     },
   },
 
-  // —— 1.8.0 宿主自适应 ——
+  // —— 1.9.0 宿主自适应 ——
   {
     name: '宿主 webview：对话正文切相对 workspace 根路径（绝对路径在那里全点不开）',
     run: () =>
       run({ hook_event_name: 'UserPromptSubmit' }, { CLAUDE_CODE_ENTRYPOINT: 'claude-vscode' }),
     check: (r) => {
       const c = ctxOf(r)
-      if (!c.includes('相对 workspace 根的路径>#<行号>')) return '对话正文未切成相对路径形态'
+      if (!c.includes(WEBVIEW_SAMPLE)) return '对话正文未切成相对路径形态'
       if (!c.includes('这个宿主里绝对路径一条都点不开')) return '未写明绝对路径在这里失效'
       // 落盘那一轨仍是 vscode:，webview 下也不例外。
-      if (!c.includes('vscode://file/<绝对路径>:<行号>')) return 'webview 下落盘那一轨丢了'
+      if (!c.includes(PERSISTED_SAMPLE)) return 'webview 下落盘那一轨丢了'
       return null
     },
   },
@@ -260,10 +310,7 @@ const cases = [
         // 扩展启动的 CLI 会同时带上 VS Code 自己那套变量；先判 TERM_PROGRAM
         // 就会把 webview 错归成内置终端，注入一套在那里全点不开的绝对路径。
         { CLAUDE_CODE_ENTRYPOINT: 'claude-vscode', TERM_PROGRAM: 'vscode', VSCODE_INJECTION: '1' }),
-    check: (r) => {
-      const c = ctxOf(r)
-      return c.includes('相对 workspace 根的路径>#<行号>') ? null : '被错归成内置终端'
-    },
+    check: (r) => (ctxOf(r).includes(WEBVIEW_SAMPLE) ? null : '被错归成内置终端'),
   },
   {
     name: '三个终端宿主（内置终端 / Windows Terminal / 兜底）共用同一形态',
@@ -275,7 +322,7 @@ const cases = [
     check: (r) => {
       const [a, b, c] = [ctxOf(r.term), ctxOf(r.wt), ctxOf(r.bare)]
       if (a !== b || b !== c) return '三个终端宿主的注入正文本应逐字相同'
-      if (!a.includes(ABS_PATTERN)) return `未用本平台的绝对形态 ${ABS_PATTERN}`
+      if (!a.includes(INLINE_SAMPLE)) return `未用本平台的绝对形态 ${INLINE_SAMPLE}`
       return null
     },
   },
@@ -284,7 +331,7 @@ const cases = [
     run: () => run({ hook_event_name: 'SubagentStart' }),
     check: (r) => {
       const c = ctxOf(r)
-      if (!c.includes(ABS_PATTERN)) return `兜底未落到 ${ABS_PATTERN}`
+      if (!c.includes(INLINE_SAMPLE)) return `兜底未落到 ${INLINE_SAMPLE}`
       if (!c.includes('对话正文每提到一个本机文件')) return '兜底把主体规约也丢了'
       return null
     },

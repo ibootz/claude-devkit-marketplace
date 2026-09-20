@@ -18,7 +18,11 @@
 
 set -uo pipefail
 
+# 解释器解析：Windows 的 Git Bash 没有 /usr/bin/python3，写死会让本脚本静默零输出。
+# 按 python3 → python → 原绝对路径回落，PATH 缺失时行为不比写死更差。
+PY="$(command -v python3 || command -v python || echo /usr/bin/python3)"
+
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-/usr/bin/python3 "$DIR/lib/keeper_routing.py" 2>/dev/null || true
+"$PY" "$DIR/lib/keeper_routing.py" 2>/dev/null || true
 
 exit 0

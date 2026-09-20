@@ -27,7 +27,7 @@ echo "== H30 · v7 多实例（一 issue 一实例并行，认领/锁/归属/状
 # 直接调 hooks/lib 里的函数，不经 hook 外壳——本节大半判据是函数自己的行为。
 # 模式与 16-h21 的 py_kp() 一致。$1=worktree 根，$2=python 表达式（root 已绑好）。
 mi_py() {
-  /usr/bin/python3 -c '
+  python3 -c '
 import sys
 sys.path.insert(0, sys.argv[1])
 import keeper_paths as kp
@@ -41,7 +41,7 @@ print(eval(sys.argv[3]))
 
 # 从注入体里取 additionalContext 正文，与 17-h22 的 triage_text 同一手法。
 mi_text() {
-  printf '%s' "$1" | /usr/bin/python3 -c '
+  printf '%s' "$1" | python3 -c '
 import json, sys
 try:
     print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])
@@ -54,7 +54,7 @@ except Exception:
 # $1=根 $2=kind $3=name $4=session_id $5=issue（可省，省则不写这个键）
 # 走 argv 传参而不是往 mi_py 的表达式里拼字符串——拼字符串要嵌三层引号，改一次错一次。
 mi_bind() {
-  /usr/bin/python3 -c '
+  python3 -c '
 import sys
 sys.path.insert(0, sys.argv[1])
 import keeper_paths as kp
@@ -67,7 +67,7 @@ kp.write_keeper_instance(sys.argv[2], "_main", sys.argv[3], sys.argv[4],
 # SubagentStart 注入（带 session_id——`debug_keeper_inject.peers` 要靠它过滤同会话实例，
 # harness 的 run_subagent_start 不带这个字段，这里单独造）。$1=cwd $2=session_id
 mi_sub() {
-  /usr/bin/python3 -c '
+  python3 -c '
 import json,sys
 print(json.dumps({"hook_event_name": "SubagentStart", "cwd": sys.argv[1],
                   "agent_type": "task-keeper:debug-keeper", "session_id": sys.argv[2]}))
@@ -99,7 +99,7 @@ SUM="$(mi_py "$T" 'str(qf.parse_item_file("'"$Q"'/DBG-001/issue.md")[0].get("sum
 if [ "$SUM" = "登录页白屏" ]; then ok "传入的 summary 写进占位 frontmatter"
 else bad "summary 应写进占位 frontmatter" "登录页白屏" "$SUM"; fi
 # 日期一律现算，不写死字面量——写死日期正是 [63] 那条时间炸弹的成因。
-TODAY="$(/usr/bin/python3 -c 'import datetime;print(datetime.date.today().isoformat())')"
+TODAY="$(python3 -c 'import datetime;print(datetime.date.today().isoformat())')"
 RAT="$(mi_py "$T" 'str(qf.parse_item_file("'"$Q"'/DBG-001/issue.md")[0].get("reported_at"))')"
 if [ "$RAT" = "$TODAY" ]; then ok "reported_at 取当天（现算比对，非写死字面量）"
 else bad "reported_at 应为今天" "$TODAY" "$RAT"; fi
@@ -121,7 +121,7 @@ echo "[144] 并发认领不撞号：8 个真实进程同时 claim_id → 8 个�
 # `os.mkdir` 的内核级互斥，而不同步起跑的话竞态窗口根本打不开，用例会假绿。
 T="$(newtmpdir)"; mkrealrepo "$T"
 Q="$T/.keeper/_main/debug"
-RACE="$(/usr/bin/python3 "$TESTS_DIR/lib/claim_race.py" "$LIBDIR" "$Q" 8)"
+RACE="$(python3 "$TESTS_DIR/lib/claim_race.py" "$LIBDIR" "$Q" 8)"
 GOT_N="$(printf '%s\n' "$RACE" | grep -c '^DBG-')"
 UNIQ_N="$(printf '%s\n' "$RACE" | sort -u | grep -c '^DBG-')"
 DIR_N="$(ls -1 "$Q" | grep -c '^DBG-')"
@@ -201,7 +201,7 @@ echo "[150] 超时可抢占：owner.json 的 ts 改成 now-3600 秒（>TTL 900�
 # 会在若干天后变成永远超时（或永远不超时）的时间炸弹，[63] 就是这么坏掉的。
 T="$(newtmpdir)"; mkrealrepo "$T"
 mi_py "$T" 'kp.acquire_merge_lock(root, "_main", "dead-one", issue="DBG-009")[0]' >/dev/null
-/usr/bin/python3 -c '
+python3 -c '
 import sys, os, json, datetime
 sys.path.insert(0, sys.argv[1])
 import keeper_paths as kp
@@ -223,7 +223,7 @@ echo "[151] 未超时不抢占（误杀侧）：ts 改成 now-60 秒（<TTL）�
 # 抢一把别人正在用的锁 = 两个 git merge 同时动主仓，比多等一会儿严重得多。
 T="$(newtmpdir)"; mkrealrepo "$T"
 mi_py "$T" 'kp.acquire_merge_lock(root, "_main", "busy-one", issue="DBG-010")[0]' >/dev/null
-/usr/bin/python3 -c '
+python3 -c '
 import sys, os, json, datetime
 sys.path.insert(0, sys.argv[1])
 import keeper_paths as kp
@@ -244,7 +244,7 @@ rm -rf "$T"
 echo "[152] 时间戳解析不了 → 年龄不可知，按「仍然有效」处理，拿不到（不是当成已超时）"
 T="$(newtmpdir)"; mkrealrepo "$T"
 mi_py "$T" 'kp.acquire_merge_lock(root, "_main", "weird-ts")[0]' >/dev/null
-/usr/bin/python3 -c '
+python3 -c '
 import sys, os, json
 sys.path.insert(0, sys.argv[1])
 import keeper_paths as kp
@@ -425,19 +425,19 @@ has "debug 档单独成句" "$TEXT" "debug 在跑：DBG-"
 # 变量名 `DSEG` 加上全角右括号的字节，`set -u` 当场报 `DSEG?: unbound variable` 整个
 # 用例文件中断（实测撞过两次）。中文括号、书名号一类全角标点紧跟 `$NAME` 时一律写
 # `${NAME}` 把边界划出来。
-DSEG="$(/usr/bin/python3 -c 'import re,sys; m=re.search(r"debug 在跑：(.*?)。", sys.argv[1]); print(m.group(1) if m else "")' "$TEXT")"
+DSEG="$(python3 -c 'import re,sys; m=re.search(r"debug 在跑：(.*?)。", sys.argv[1]); print(m.group(1) if m else "")' "$TEXT")"
 case "$DSEG" in
   *CHR-*) bad "debug 句混入了 chore 条目" "只含 DBG-" "$DSEG" ;;
   "")     bad "取不到 debug 句" "非空片段" "(空)" ;;
   *)      ok "debug 句只装 debug 实例（${DSEG}）" ;;
 esac
-CSEG="$(/usr/bin/python3 -c 'import re,sys; m=re.search(r"chore 在跑：(.*?)。", sys.argv[1]); print(m.group(1) if m else "")' "$TEXT")"
+CSEG="$(python3 -c 'import re,sys; m=re.search(r"chore 在跑：(.*?)。", sys.argv[1]); print(m.group(1) if m else "")' "$TEXT")"
 case "$CSEG" in
   *DBG-*) bad "chore 句混入了 debug 条目" "只含 CHR-" "$CSEG" ;;
   "")     bad "取不到 chore 句" "非空片段" "(空)" ;;
   *)      ok "chore 句只装 chore 实例（${CSEG}）" ;;
 esac
-CHARS="$(/usr/bin/python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
+CHARS="$(python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
 if [ "$CHARS" -le 800 ]; then ok "三实例分支 ${CHARS} 字符 ≤800"
 else bad "三实例分支应 ≤800 字符" "<=800" "$CHARS"; fi
 rm -rf "$T"
@@ -452,7 +452,7 @@ has "超出部分收敛成「等 2 个」" "$TEXT" "等 2 个"
 LISTED="$(printf '%s' "$TEXT" | grep -o 'opus-debug-keeper-x[1-6]' | sort -u | wc -l | tr -d ' ')"
 if [ "$LISTED" -eq 4 ]; then ok "只逐条列出 4 个（MAX_LISTED），其余收敛"
 else bad "应只列出 4 个实例" "4" "$LISTED"; fi
-CHARS="$(/usr/bin/python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
+CHARS="$(python3 -c 'import sys; print(len(sys.argv[1]))' "$TEXT")"
 if [ "$CHARS" -le 800 ]; then ok "6 实例收敛后 ${CHARS} 字符 ≤800"
 else bad "6 实例分支应 ≤800 字符" "<=800" "$CHARS"; fi
 rm -rf "$T"
@@ -580,8 +580,8 @@ T="$(newtmpdir)"; mkrealrepo "$T"
 mkdir -p "$T/.keeper/_main"
 # ts 现算，不写死字面量——`_prune_instances` 按 14 天 TTL 剔旧记录，写死日期的 fixture
 # 会在某天之后静默变成「这条已过期」，表现成本用例莫名其妙变红（[63] 就是这么坏的）。
-NOW_TS="$(/usr/bin/python3 -c 'import datetime;print(datetime.datetime.now().astimezone().isoformat(timespec="seconds"))')"
-/usr/bin/python3 -c '
+NOW_TS="$(python3 -c 'import datetime;print(datetime.datetime.now().astimezone().isoformat(timespec="seconds"))')"
+python3 -c '
 import json, sys
 with open(sys.argv[1], "w") as f:
     json.dump({"debug": {"name": "opus-debug-keeper-v6", "ts": sys.argv[2],

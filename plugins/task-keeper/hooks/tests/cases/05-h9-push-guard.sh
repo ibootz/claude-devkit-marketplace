@@ -9,7 +9,7 @@ echo
 echo "== H9 · debug worktree 禁止 push 守卫（fixer 不许 push）=="
 PUSHG="$HOOK_DIR/pre-tool-use-debug-worktree-push.sh"
 run_pushg() {   # $1=command  $2=cwd（可省略）
-  /usr/bin/python3 -c '
+  python3 -c '
 import json,sys
 ev = {"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":sys.argv[1]}}
 if len(sys.argv) > 2 and sys.argv[2]:

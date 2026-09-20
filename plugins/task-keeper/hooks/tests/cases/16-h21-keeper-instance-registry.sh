@@ -108,7 +108,7 @@ else bad "缺 session_id 时 name 应仍登记" "opus-debug-keeper-4bb6" "$NAME_
 # `"session_id" in d.get("debug", {})`——它在 v7 下**恒为 False**，因为 v7 的
 # `d["debug"]` 只有 `instances` 一个键。也就是说这条断言即使 hook 真的错写了
 # session_id 也照样绿，是一条失去检测力的假绿。改成读第一条 record 本身。
-HAS_KEY="$(/usr/bin/python3 -c '
+HAS_KEY="$(python3 -c '
 import json
 try:
     d = json.load(open("'"$REG"'"))
@@ -128,7 +128,7 @@ rm -rf "$T"
 # py_nextid() 一致。
 
 py_kp() {   # $1=worktree_root，其余转给 python 表达式，import 好 keeper_paths 后 eval
-  /usr/bin/python3 -c '
+  python3 -c '
 import sys
 sys.path.insert(0, sys.argv[1])
 import keeper_paths as kp

@@ -114,7 +114,7 @@ def oneline(cwd):
         return ""
     try:
         proc = subprocess.run(
-            [sys.executable or "/usr/bin/python3", script, "--oneline"],
+            [sys.executable or "python3", script, "--oneline"],
             cwd=cwd,
             capture_output=True,
             text=True,
