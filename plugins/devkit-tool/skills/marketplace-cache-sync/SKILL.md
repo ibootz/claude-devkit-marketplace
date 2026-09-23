@@ -255,13 +255,13 @@ comm -23 /tmp/cache_whitelist.txt /tmp/cache_actual.txt
 
 **反向检查那一行必须输出为空**。若非空，说明有插件的配置指向了磁盘上不存在的缓存目录，缓存状态本身已异常——此时不要删任何东西，先回到第三步重新刷新把实体补齐，再重跑 dry-run。
 
-确认无误、并已把候选清单出示给用户获得同意后再删除：
+**默认全量清理，无需征询**：反向检查为空且存在差集候选时，直接执行删除，无需停下向用户提问。如实报告清理的目录数与释放的体积即可。
 
 ```bash
 xargs rm -rf < /tmp/cache_orphan.txt
 ```
 
-删除的代价要如实告知用户：被删版本在需要降级/回滚时要重新从市场源下载，属于可恢复但需要网络。如果用户明确有回滚预期，保守做法是从 `/tmp/cache_orphan.txt` 里手动剔除每个插件最近的 1-2 个版本再删。
+删除的代价：被删版本在需要降级/回滚时要重新从市场源下载，属于可恢复但需要网络。如果用户在当轮明确要求保留回滚版本，才从 `/tmp/cache_orphan.txt` 里手动剔除每个插件最近的 1-2 个版本。
 
 ## 已验证的坑
 
@@ -303,6 +303,6 @@ xargs rm -rf < /tmp/cache_orphan.txt
 - [ ] 所有循环 / 临时变量都**没有**取名 `path` / `fpath` / `cdpath` / `manpath` 等 zsh 绑定变量名（会静默覆写 `$PATH`，表象是"jq 没装"）
 - [ ] 每条 `claude plugin update` 的输出都在预期的三种正常结束态之一：`already at the latest version`、`updated from X to Y`、`refreshed from source`
 - [ ] 关键插件已走**写后回读**核实：`installed_plugins.json` 的 `installPath`、磁盘上该缓存目录、目录内 `.claude-plugin/plugin.json` 的 `version` 三处一致（只看 CLI 回执不足以证明落盘）
-- [ ] 若执行了第五步清理：确认在第三步刷新**之后**做的；`temp_git_*` 零引用已 grep 核实；历史版本走的是 `.plugins[][].installPath` 白名单差集；反向检查（配置引用但磁盘缺失）输出为空；删除清单已出示给用户并获得同意
+- [ ] 若执行了第五步清理：确认在第三步刷新**之后**做的；`temp_git_*` 零引用已 grep 核实；历史版本走的是 `.plugins[][].installPath` 白名单差集；反向检查（配置引用但磁盘缺失）输出为空；已自动执行全量清理并报告释放体积（用户明确要求保留回滚版本时除外）
 - [ ] 已明确告知用户让新版本生效的**最小动作**：默认建议 `/reload-plugins`；仅当新版本改动了 `SessionStart` / `SessionEnd` / `PreCompact` 挂载点时才说”必须重启”（判断依据是**同时查两处**：`plugin.json` 的 `hooks` 字段 + `hooks/` 目录下的脚本文件名约定，见第四步检测命令；只查 `plugin.json` 会漏掉目录式 hook，误判”无需重启”）
 - [ ] 生效后的核实看的是**行为**（下一轮 hook 注入文本 / skill 内容确实变了），不是 reload 回执里的插件数量
