@@ -1,0 +1,398 @@
+{
+  "9ea8486057": {
+    "arm": "baseline",
+    "scenarioId": "01-cross-file-root-cause",
+    "runIndex": 1,
+    "rawFile": "raw/baseline/01-cross-file-root-cause/run-1.json"
+  },
+  "c363e1b78f": {
+    "arm": "baseline",
+    "scenarioId": "01-cross-file-root-cause",
+    "runIndex": 2,
+    "rawFile": "raw/baseline/01-cross-file-root-cause/run-2.json"
+  },
+  "0758b5f0d6": {
+    "arm": "baseline",
+    "scenarioId": "01-cross-file-root-cause",
+    "runIndex": 3,
+    "rawFile": "raw/baseline/01-cross-file-root-cause/run-3.json"
+  },
+  "6e3d1eab74": {
+    "arm": "baseline",
+    "scenarioId": "02-unfamiliar-infra-component",
+    "runIndex": 1,
+    "rawFile": "raw/baseline/02-unfamiliar-infra-component/run-1.json"
+  },
+  "28291cabc7": {
+    "arm": "baseline",
+    "scenarioId": "02-unfamiliar-infra-component",
+    "runIndex": 2,
+    "rawFile": "raw/baseline/02-unfamiliar-infra-component/run-2.json"
+  },
+  "faac93fef9": {
+    "arm": "baseline",
+    "scenarioId": "02-unfamiliar-infra-component",
+    "runIndex": 3,
+    "rawFile": "raw/baseline/02-unfamiliar-infra-component/run-3.json"
+  },
+  "eb650cb3cc": {
+    "arm": "baseline",
+    "scenarioId": "03-compare-alternatives",
+    "runIndex": 1,
+    "rawFile": "raw/baseline/03-compare-alternatives/run-1.json"
+  },
+  "4c0d1123c0": {
+    "arm": "baseline",
+    "scenarioId": "03-compare-alternatives",
+    "runIndex": 2,
+    "rawFile": "raw/baseline/03-compare-alternatives/run-2.json"
+  },
+  "41eacebde4": {
+    "arm": "baseline",
+    "scenarioId": "03-compare-alternatives",
+    "runIndex": 3,
+    "rawFile": "raw/baseline/03-compare-alternatives/run-3.json"
+  },
+  "28faa61989": {
+    "arm": "baseline",
+    "scenarioId": "04-decision-package",
+    "runIndex": 1,
+    "rawFile": "raw/baseline/04-decision-package/run-1.json"
+  },
+  "9ebce644a0": {
+    "arm": "baseline",
+    "scenarioId": "04-decision-package",
+    "runIndex": 2,
+    "rawFile": "raw/baseline/04-decision-package/run-2.json"
+  },
+  "3ec1047beb": {
+    "arm": "baseline",
+    "scenarioId": "04-decision-package",
+    "runIndex": 3,
+    "rawFile": "raw/baseline/04-decision-package/run-3.json"
+  },
+  "565e043ab5": {
+    "arm": "baseline",
+    "scenarioId": "05-post-decision-closure",
+    "runIndex": 1,
+    "rawFile": "raw/baseline/05-post-decision-closure/run-1.json"
+  },
+  "2bf84042ef": {
+    "arm": "baseline",
+    "scenarioId": "05-post-decision-closure",
+    "runIndex": 2,
+    "rawFile": "raw/baseline/05-post-decision-closure/run-2.json"
+  },
+  "10d7f299be": {
+    "arm": "baseline",
+    "scenarioId": "05-post-decision-closure",
+    "runIndex": 3,
+    "rawFile": "raw/baseline/05-post-decision-closure/run-3.json"
+  },
+  "6d7c6debb6": {
+    "arm": "baseline",
+    "scenarioId": "06-irreversible-confirmation",
+    "runIndex": 1,
+    "rawFile": "raw/baseline/06-irreversible-confirmation/run-1.json"
+  },
+  "f685193af1": {
+    "arm": "baseline",
+    "scenarioId": "06-irreversible-confirmation",
+    "runIndex": 2,
+    "rawFile": "raw/baseline/06-irreversible-confirmation/run-2.json"
+  },
+  "b3a8311673": {
+    "arm": "baseline",
+    "scenarioId": "06-irreversible-confirmation",
+    "runIndex": 3,
+    "rawFile": "raw/baseline/06-irreversible-confirmation/run-3.json"
+  },
+  "4983579295": {
+    "arm": "baseline",
+    "scenarioId": "07-persisted-artifact",
+    "runIndex": 1,
+    "rawFile": "raw/baseline/07-persisted-artifact/run-1.json"
+  },
+  "a24d4a437d": {
+    "arm": "baseline",
+    "scenarioId": "08-long-conversation-compaction",
+    "runIndex": 1,
+    "rawFile": "raw/baseline/08-long-conversation-compaction/run-1.json"
+  },
+  "a70482f82e": {
+    "arm": "baseline",
+    "scenarioId": "09-concept-navigation",
+    "runIndex": 1,
+    "rawFile": "raw/baseline/09-concept-navigation/run-1.json"
+  },
+  "b0248e84e6": {
+    "arm": "baseline",
+    "scenarioId": "10-no-askuserquestion-lifecycle",
+    "runIndex": 1,
+    "rawFile": "raw/baseline/10-no-askuserquestion-lifecycle/run-1.json"
+  },
+  "6bf62b5d3a": {
+    "arm": "no-style",
+    "scenarioId": "01-cross-file-root-cause",
+    "runIndex": 1,
+    "rawFile": "raw/no-style/01-cross-file-root-cause/run-1.json"
+  },
+  "ddd82543b0": {
+    "arm": "no-style",
+    "scenarioId": "01-cross-file-root-cause",
+    "runIndex": 2,
+    "rawFile": "raw/no-style/01-cross-file-root-cause/run-2.json"
+  },
+  "c112a44d97": {
+    "arm": "no-style",
+    "scenarioId": "01-cross-file-root-cause",
+    "runIndex": 3,
+    "rawFile": "raw/no-style/01-cross-file-root-cause/run-3.json"
+  },
+  "4eaa0974ec": {
+    "arm": "no-style",
+    "scenarioId": "02-unfamiliar-infra-component",
+    "runIndex": 1,
+    "rawFile": "raw/no-style/02-unfamiliar-infra-component/run-1.json"
+  },
+  "0b10261899": {
+    "arm": "no-style",
+    "scenarioId": "02-unfamiliar-infra-component",
+    "runIndex": 2,
+    "rawFile": "raw/no-style/02-unfamiliar-infra-component/run-2.json"
+  },
+  "934bff1864": {
+    "arm": "no-style",
+    "scenarioId": "02-unfamiliar-infra-component",
+    "runIndex": 3,
+    "rawFile": "raw/no-style/02-unfamiliar-infra-component/run-3.json"
+  },
+  "74bc6d9f47": {
+    "arm": "no-style",
+    "scenarioId": "03-compare-alternatives",
+    "runIndex": 1,
+    "rawFile": "raw/no-style/03-compare-alternatives/run-1.json"
+  },
+  "abc70c9db8": {
+    "arm": "no-style",
+    "scenarioId": "03-compare-alternatives",
+    "runIndex": 2,
+    "rawFile": "raw/no-style/03-compare-alternatives/run-2.json"
+  },
+  "619574604a": {
+    "arm": "no-style",
+    "scenarioId": "03-compare-alternatives",
+    "runIndex": 3,
+    "rawFile": "raw/no-style/03-compare-alternatives/run-3.json"
+  },
+  "8b52f6778b": {
+    "arm": "no-style",
+    "scenarioId": "04-decision-package",
+    "runIndex": 1,
+    "rawFile": "raw/no-style/04-decision-package/run-1.json"
+  },
+  "507a1aba9d": {
+    "arm": "no-style",
+    "scenarioId": "04-decision-package",
+    "runIndex": 2,
+    "rawFile": "raw/no-style/04-decision-package/run-2.json"
+  },
+  "956cb025df": {
+    "arm": "no-style",
+    "scenarioId": "04-decision-package",
+    "runIndex": 3,
+    "rawFile": "raw/no-style/04-decision-package/run-3.json"
+  },
+  "25e8e6ee2a": {
+    "arm": "no-style",
+    "scenarioId": "05-post-decision-closure",
+    "runIndex": 1,
+    "rawFile": "raw/no-style/05-post-decision-closure/run-1.json"
+  },
+  "00b581399f": {
+    "arm": "no-style",
+    "scenarioId": "05-post-decision-closure",
+    "runIndex": 2,
+    "rawFile": "raw/no-style/05-post-decision-closure/run-2.json"
+  },
+  "ab861a9a7e": {
+    "arm": "no-style",
+    "scenarioId": "05-post-decision-closure",
+    "runIndex": 3,
+    "rawFile": "raw/no-style/05-post-decision-closure/run-3.json"
+  },
+  "506d0df8b1": {
+    "arm": "no-style",
+    "scenarioId": "06-irreversible-confirmation",
+    "runIndex": 1,
+    "rawFile": "raw/no-style/06-irreversible-confirmation/run-1.json"
+  },
+  "f3e368ba2d": {
+    "arm": "no-style",
+    "scenarioId": "06-irreversible-confirmation",
+    "runIndex": 2,
+    "rawFile": "raw/no-style/06-irreversible-confirmation/run-2.json"
+  },
+  "9c264e2f7c": {
+    "arm": "no-style",
+    "scenarioId": "06-irreversible-confirmation",
+    "runIndex": 3,
+    "rawFile": "raw/no-style/06-irreversible-confirmation/run-3.json"
+  },
+  "a3474f947a": {
+    "arm": "no-style",
+    "scenarioId": "07-persisted-artifact",
+    "runIndex": 1,
+    "rawFile": "raw/no-style/07-persisted-artifact/run-1.json"
+  },
+  "61dd820668": {
+    "arm": "no-style",
+    "scenarioId": "08-long-conversation-compaction",
+    "runIndex": 1,
+    "rawFile": "raw/no-style/08-long-conversation-compaction/run-1.json"
+  },
+  "791443b704": {
+    "arm": "no-style",
+    "scenarioId": "09-concept-navigation",
+    "runIndex": 1,
+    "rawFile": "raw/no-style/09-concept-navigation/run-1.json"
+  },
+  "28a98198f5": {
+    "arm": "no-style",
+    "scenarioId": "10-no-askuserquestion-lifecycle",
+    "runIndex": 1,
+    "rawFile": "raw/no-style/10-no-askuserquestion-lifecycle/run-1.json"
+  },
+  "eb56b8c3ff": {
+    "arm": "new",
+    "scenarioId": "01-cross-file-root-cause",
+    "runIndex": 1,
+    "rawFile": "raw/new/01-cross-file-root-cause/run-1.json"
+  },
+  "f2269da306": {
+    "arm": "new",
+    "scenarioId": "01-cross-file-root-cause",
+    "runIndex": 2,
+    "rawFile": "raw/new/01-cross-file-root-cause/run-2.json"
+  },
+  "6fff5fae1f": {
+    "arm": "new",
+    "scenarioId": "01-cross-file-root-cause",
+    "runIndex": 3,
+    "rawFile": "raw/new/01-cross-file-root-cause/run-3.json"
+  },
+  "b27aef6ebc": {
+    "arm": "new",
+    "scenarioId": "02-unfamiliar-infra-component",
+    "runIndex": 1,
+    "rawFile": "raw/new/02-unfamiliar-infra-component/run-1.json"
+  },
+  "300d05a59c": {
+    "arm": "new",
+    "scenarioId": "02-unfamiliar-infra-component",
+    "runIndex": 2,
+    "rawFile": "raw/new/02-unfamiliar-infra-component/run-2.json"
+  },
+  "97e5f73371": {
+    "arm": "new",
+    "scenarioId": "02-unfamiliar-infra-component",
+    "runIndex": 3,
+    "rawFile": "raw/new/02-unfamiliar-infra-component/run-3.json"
+  },
+  "4b595b8e18": {
+    "arm": "new",
+    "scenarioId": "03-compare-alternatives",
+    "runIndex": 1,
+    "rawFile": "raw/new/03-compare-alternatives/run-1.json"
+  },
+  "72275bef06": {
+    "arm": "new",
+    "scenarioId": "03-compare-alternatives",
+    "runIndex": 2,
+    "rawFile": "raw/new/03-compare-alternatives/run-2.json"
+  },
+  "541eb3f494": {
+    "arm": "new",
+    "scenarioId": "03-compare-alternatives",
+    "runIndex": 3,
+    "rawFile": "raw/new/03-compare-alternatives/run-3.json"
+  },
+  "0e0558a2c3": {
+    "arm": "new",
+    "scenarioId": "04-decision-package",
+    "runIndex": 1,
+    "rawFile": "raw/new/04-decision-package/run-1.json"
+  },
+  "8fc418bbe2": {
+    "arm": "new",
+    "scenarioId": "04-decision-package",
+    "runIndex": 2,
+    "rawFile": "raw/new/04-decision-package/run-2.json"
+  },
+  "174d4dcb74": {
+    "arm": "new",
+    "scenarioId": "04-decision-package",
+    "runIndex": 3,
+    "rawFile": "raw/new/04-decision-package/run-3.json"
+  },
+  "4f96069142": {
+    "arm": "new",
+    "scenarioId": "05-post-decision-closure",
+    "runIndex": 1,
+    "rawFile": "raw/new/05-post-decision-closure/run-1.json"
+  },
+  "06e82318ec": {
+    "arm": "new",
+    "scenarioId": "05-post-decision-closure",
+    "runIndex": 2,
+    "rawFile": "raw/new/05-post-decision-closure/run-2.json"
+  },
+  "122b505b8b": {
+    "arm": "new",
+    "scenarioId": "05-post-decision-closure",
+    "runIndex": 3,
+    "rawFile": "raw/new/05-post-decision-closure/run-3.json"
+  },
+  "bb0f5ad976": {
+    "arm": "new",
+    "scenarioId": "06-irreversible-confirmation",
+    "runIndex": 1,
+    "rawFile": "raw/new/06-irreversible-confirmation/run-1.json"
+  },
+  "5ca0ace19a": {
+    "arm": "new",
+    "scenarioId": "06-irreversible-confirmation",
+    "runIndex": 2,
+    "rawFile": "raw/new/06-irreversible-confirmation/run-2.json"
+  },
+  "6b0c72b6b7": {
+    "arm": "new",
+    "scenarioId": "06-irreversible-confirmation",
+    "runIndex": 3,
+    "rawFile": "raw/new/06-irreversible-confirmation/run-3.json"
+  },
+  "9316f08937": {
+    "arm": "new",
+    "scenarioId": "07-persisted-artifact",
+    "runIndex": 1,
+    "rawFile": "raw/new/07-persisted-artifact/run-1.json"
+  },
+  "bc38b3f519": {
+    "arm": "new",
+    "scenarioId": "08-long-conversation-compaction",
+    "runIndex": 1,
+    "rawFile": "raw/new/08-long-conversation-compaction/run-1.json"
+  },
+  "4d019f73ce": {
+    "arm": "new",
+    "scenarioId": "09-concept-navigation",
+    "runIndex": 1,
+    "rawFile": "raw/new/09-concept-navigation/run-1.json"
+  },
+  "c7dff740f7": {
+    "arm": "new",
+    "scenarioId": "10-no-askuserquestion-lifecycle",
+    "runIndex": 1,
+    "rawFile": "raw/new/10-no-askuserquestion-lifecycle/run-1.json"
+  }
+}

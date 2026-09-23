@@ -1,0 +1,3210 @@
+{
+  "verdict": {
+    "c1_atLeastEqualIn5of6": {
+      "count": 4,
+      "holds": false
+    },
+    "c2_noClearLoss": {
+      "losses": [],
+      "holds": true
+    },
+    "c3_allHardNegativesEveryRun": {
+      "newRuns": 22,
+      "failures": 14,
+      "holds": false
+    },
+    "reopenTriggered": {
+      "relationNoStyle": 3.8055555555555554,
+      "relationNew": 3.5555555555555554,
+      "triggered": true
+    },
+    "go": false
+  },
+  "table": {
+    "baseline|01-cross-file-root-cause": {
+      "n": 3,
+      "runScores": [
+        3.0625,
+        3.0625,
+        2.625
+      ],
+      "mean": 2.9166666666666665,
+      "sd": 0.20623947784607638,
+      "relation": 4,
+      "chars": 1382.6666666666667
+    },
+    "no-style|01-cross-file-root-cause": {
+      "n": 3,
+      "runScores": [
+        2.625,
+        3,
+        3.125
+      ],
+      "mean": 2.9166666666666665,
+      "sd": 0.21245914639969937,
+      "relation": 4.666666666666667,
+      "chars": 1526.6666666666667
+    },
+    "new|01-cross-file-root-cause": {
+      "n": 3,
+      "runScores": [
+        3.6875,
+        3.125,
+        2.8125
+      ],
+      "mean": 3.2083333333333335,
+      "sd": 0.3620447332704743,
+      "relation": 4,
+      "chars": 1458
+    },
+    "baseline|02-unfamiliar-infra-component": {
+      "n": 3,
+      "runScores": [
+        3.3125,
+        2.8125,
+        3.25
+      ],
+      "mean": 3.125,
+      "sd": 0.22243913025065232,
+      "relation": 3.8333333333333335,
+      "chars": 1677.6666666666667
+    },
+    "no-style|02-unfamiliar-infra-component": {
+      "n": 3,
+      "runScores": [
+        3.4375,
+        3.0625,
+        3.1875
+      ],
+      "mean": 3.2291666666666665,
+      "sd": 0.15590239111558088,
+      "relation": 4,
+      "chars": 1773.6666666666667
+    },
+    "new|02-unfamiliar-infra-component": {
+      "n": 3,
+      "runScores": [
+        3.3125,
+        3,
+        2.625
+      ],
+      "mean": 2.9791666666666665,
+      "sd": 0.2810570325673342,
+      "relation": 3.3333333333333335,
+      "chars": 1400.3333333333333
+    },
+    "baseline|03-compare-alternatives": {
+      "n": 3,
+      "runScores": [
+        3.375,
+        3.8125,
+        3.75
+      ],
+      "mean": 3.6458333333333335,
+      "sd": 0.19320038532282718,
+      "relation": 3.1666666666666665,
+      "chars": 2888.3333333333335
+    },
+    "no-style|03-compare-alternatives": {
+      "n": 3,
+      "runScores": [
+        3.5,
+        3.3125,
+        3.0625
+      ],
+      "mean": 3.2916666666666665,
+      "sd": 0.17921510973005472,
+      "relation": 3,
+      "chars": 5322.666666666667
+    },
+    "new|03-compare-alternatives": {
+      "n": 3,
+      "runScores": [
+        3.9375,
+        3.4375,
+        2.5625
+      ],
+      "mean": 3.3125,
+      "sd": 0.568257570707744,
+      "relation": 3.3333333333333335,
+      "chars": 4064.6666666666665
+    },
+    "baseline|04-decision-package": {
+      "n": 3,
+      "runScores": [
+        4,
+        3.9375,
+        3.6875
+      ],
+      "mean": 3.875,
+      "sd": 0.13501543121683043,
+      "relation": 3.6666666666666665,
+      "chars": 2918.6666666666665
+    },
+    "no-style|04-decision-package": {
+      "n": 3,
+      "runScores": [
+        3.9375,
+        3.5625,
+        3.625
+      ],
+      "mean": 3.7083333333333335,
+      "sd": 0.1640418307085794,
+      "relation": 4,
+      "chars": 2184.3333333333335
+    },
+    "new|04-decision-package": {
+      "n": 3,
+      "runScores": [
+        3.4375,
+        3.875,
+        4.3125
+      ],
+      "mean": 3.875,
+      "sd": 0.3572172541558801,
+      "relation": 3.6666666666666665,
+      "chars": 1704
+    },
+    "baseline|05-post-decision-closure": {
+      "n": 3,
+      "runScores": [
+        2.8125,
+        3.0625,
+        3.25
+      ],
+      "mean": 3.0416666666666665,
+      "sd": 0.17921510973005472,
+      "relation": 3,
+      "chars": 2450
+    },
+    "no-style|05-post-decision-closure": {
+      "n": 3,
+      "runScores": [
+        3.4375,
+        2.8125,
+        3.3125
+      ],
+      "mean": 3.1875,
+      "sd": 0.27003086243366087,
+      "relation": 2.8333333333333335,
+      "chars": 2969
+    },
+    "new|05-post-decision-closure": {
+      "n": 3,
+      "runScores": [
+        3.5,
+        4.4375,
+        3
+      ],
+      "mean": 3.6458333333333335,
+      "sd": 0.5958479019197954,
+      "relation": 3.3333333333333335,
+      "chars": 2701.3333333333335
+    },
+    "baseline|06-irreversible-confirmation": {
+      "n": 3,
+      "runScores": [
+        2.7857142857142856,
+        2.8125,
+        3.1875
+      ],
+      "mean": 2.9285714285714284,
+      "sd": 0.18341641593012625,
+      "relation": 3.5,
+      "chars": 657.6666666666666
+    },
+    "no-style|06-irreversible-confirmation": {
+      "n": 3,
+      "runScores": [
+        4.125,
+        3.5,
+        3
+      ],
+      "mean": 3.5416666666666665,
+      "sd": 0.4602233757161359,
+      "relation": 4.333333333333333,
+      "chars": 550
+    },
+    "new|06-irreversible-confirmation": {
+      "n": 3,
+      "runScores": [
+        4,
+        3.25,
+        2.875
+      ],
+      "mean": 3.375,
+      "sd": 0.46770717334674267,
+      "relation": 3.6666666666666665,
+      "chars": 526.3333333333334
+    },
+    "baseline|07-persisted-artifact": {
+      "n": 1,
+      "runScores": [
+        2.9375
+      ],
+      "mean": 2.9375,
+      "sd": 0,
+      "relation": 3,
+      "chars": 1129
+    },
+    "no-style|07-persisted-artifact": {
+      "n": 1,
+      "runScores": [
+        3.0625
+      ],
+      "mean": 3.0625,
+      "sd": 0,
+      "relation": 3.5,
+      "chars": 2375
+    },
+    "new|07-persisted-artifact": {
+      "n": 1,
+      "runScores": [
+        3.25
+      ],
+      "mean": 3.25,
+      "sd": 0,
+      "relation": 4,
+      "chars": 695
+    },
+    "baseline|08-long-conversation-compaction": {
+      "n": 1,
+      "runScores": [
+        2.875
+      ],
+      "mean": 2.875,
+      "sd": 0,
+      "relation": 3,
+      "chars": 12011
+    },
+    "no-style|08-long-conversation-compaction": {
+      "n": 1,
+      "runScores": [
+        3
+      ],
+      "mean": 3,
+      "sd": 0,
+      "relation": 4,
+      "chars": 12504
+    },
+    "new|08-long-conversation-compaction": {
+      "n": 1,
+      "runScores": [
+        3.375
+      ],
+      "mean": 3.375,
+      "sd": 0,
+      "relation": 4,
+      "chars": 7716
+    },
+    "baseline|09-concept-navigation": {
+      "n": 1,
+      "runScores": [
+        3.5625
+      ],
+      "mean": 3.5625,
+      "sd": 0,
+      "relation": 4,
+      "chars": 1914
+    },
+    "no-style|09-concept-navigation": {
+      "n": 1,
+      "runScores": [
+        3.8125
+      ],
+      "mean": 3.8125,
+      "sd": 0,
+      "relation": 4,
+      "chars": 2396
+    },
+    "new|09-concept-navigation": {
+      "n": 1,
+      "runScores": [
+        3.75
+      ],
+      "mean": 3.75,
+      "sd": 0,
+      "relation": 4,
+      "chars": 3286
+    },
+    "baseline|10-no-askuserquestion-lifecycle": {
+      "n": 1,
+      "runScores": [
+        4.3125
+      ],
+      "mean": 4.3125,
+      "sd": 0,
+      "relation": 4,
+      "chars": 2195
+    },
+    "no-style|10-no-askuserquestion-lifecycle": {
+      "n": 1,
+      "runScores": [
+        3
+      ],
+      "mean": 3,
+      "sd": 0,
+      "relation": 2,
+      "chars": 1745
+    },
+    "new|10-no-askuserquestion-lifecycle": {
+      "n": 1,
+      "runScores": [
+        4.3125
+      ],
+      "mean": 4.3125,
+      "sd": 0,
+      "relation": 4,
+      "chars": 2112
+    }
+  },
+  "runs": [
+    {
+      "id": "9ea8486057",
+      "arm": "baseline",
+      "scenarioId": "01-cross-file-root-cause",
+      "runIndex": 1,
+      "rawFile": "raw/baseline/01-cross-file-root-cause/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 2.5
+      },
+      "score": 3.0625,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "「单价层取整 vs 总价层取整，浮点累积误差不同——三件 0.297 各自舍入成 0.30 多出 0.009，三倍即 0.027，跨越 0.5 分的舍入阈值。」这句把没有核实过的机制解释当作事实来写，而且数值是错的，归因到「浮点」也不对。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1476,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "c363e1b78f",
+      "arm": "baseline",
+      "scenarioId": "01-cross-file-root-cause",
+      "runIndex": 2,
+      "rawFile": "raw/baseline/01-cross-file-root-cause/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4.5,
+        "certainty_separation": 2,
+        "tradeoff_scope_recall": 3,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 1,
+        "link_information_scent": 5,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 3.0625,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "“此决策在多件低单价商品场景下,必产生累积误差。”这是把一个例子推广成必然规律，实际上并不是每次都会产生误差。“说明这不是疏忽,而是当初架构决策的既定取舍与后来财务规则的适配缺口”只凭一行注释推断历史原因，也用了陈述事实的语气。另外，“ADR 0001 要求单价层取整”只来自注释转述，回复没有说明是否读过 ADR 本身。",
+          "“pricing.js 的注释已指向 ADR 0001,说明这不是疏忽,而是当初架构决策的既定取舍与后来财务规则的适配缺口。”这是只凭注释做的推断，却写成了事实；“此决策在多件低单价商品场景下,必产生累积误差。”说得过于绝对。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1321,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "0758b5f0d6",
+      "arm": "baseline",
+      "scenarioId": "01-cross-file-root-cause",
+      "runIndex": 3,
+      "rawFile": "raw/baseline/01-cross-file-root-cause/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4.5,
+        "relation_recall": 3.5,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 1.5,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 1
+      },
+      "score": 2.625,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "“即系统取整时机由 ADR 0001 锁定（该文档在 `docs/adr/0001-rounding-strategy.md`），但财务对账不按这套规则——他们只在最终总价取整一次。”这只是从代码注释和测试注释推出来的，却写成了确认过的事实，也没说明 ADR 文档是否核实过。",
+          "「即系统取整时机由 ADR 0001 锁定（该文档在 `docs/adr/0001-rounding-strategy.md`），但财务对账不按这套规则——他们只在最终总价取整一次」这句话只依据 pricing.js 的注释和测试注释，却写成了确认过的事实，也没有交代是否读过 ADR 文档。开头的「查明」同样是把推断说成定论。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1351,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "6e3d1eab74",
+      "arm": "baseline",
+      "scenarioId": "02-unfamiliar-infra-component",
+      "runIndex": 1,
+      "rawFile": "raw/baseline/02-unfamiliar-infra-component/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 3,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4.5,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 3.3125,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "“只管「本次用过没」，不管券本身是否过期/禁用——那是 pricing 层校验的事”，还有“让业务逻辑自己决定「无效券要不要消耗一次使用机会」”。这两处是对职责划分和设计意图的推断，却用确认事实的语气写出，也没指出证据在哪里。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1486,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "28291cabc7",
+      "arm": "baseline",
+      "scenarioId": "02-unfamiliar-infra-component",
+      "runIndex": 2,
+      "rawFile": "raw/baseline/02-unfamiliar-infra-component/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 3.5,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 3.5,
+        "overturn_condition_recall": 1,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 1
+      },
+      "score": 2.8125,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "\"CouponLedger 在结算入口创一实例，各处应用券前先 tryApply，保证同一券码全流程只生效一次。\"用陈述现状的语气写出，可后文又说\"cartTotal 现版未用它\"。\"不管券是否过期/禁用/合法——那些归 pricing 层\"也没有给出依据，没标成推断。",
+          "“`CouponLedger` 在结算入口创一实例，各处应用券前先 `tryApply`，保证同一券码全流程只生效一次。”这是设想中的用法，却用陈述现状的语气写出，和后文“`cartTotal` 现版未用它”互相矛盾。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "fail",
+        "artifact_plain_style_evidence": [
+          "建议写进代码的示例里，注释用了压缩的文言式写法：“// 若 coupon2 码同 coupon1，此行返 false，不叠加”。"
+        ]
+      },
+      "chars": 1572,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "faac93fef9",
+      "arm": "baseline",
+      "scenarioId": "02-unfamiliar-infra-component",
+      "runIndex": 3,
+      "rawFile": "raw/baseline/02-unfamiliar-infra-component/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 3,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 3.25,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "\"CouponLedger 是备好的基础设施，但结算入口尚未用它\"用事实语气断言了这个类的设计意图；\"这类断层常在分期交付里留下\"也是没有标注的推测。",
+          "\"CouponLedger 是备好的基础设施，但结算入口尚未用它\"和\"这类断层常在分期交付里留下\"推测的是设计意图和交付背景，却用确定语气陈述，没有标明是推断。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "pass",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1975,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "eb650cb3cc",
+      "arm": "baseline",
+      "scenarioId": "03-compare-alternatives",
+      "runIndex": 1,
+      "rawFile": "raw/baseline/03-compare-alternatives/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 3,
+        "relation_recall": 3,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 3,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 3.375,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "「已查：`cartTotal` grep 未见外部调用（影响面小）」把只 grep 过一次得出的推断当成定论。「多商品行各自取整后累积误差，导致总价与财务手算（未打折总价 × 折扣率）差 1 分钱」这个机制没有验证过，却用陈述事实的语气写出。",
+          "\"已查：`cartTotal` grep 未见外部调用（影响面小）\"是把一次 grep 的结果直接当成影响面的结论；\"3 个工单已证伪现状\"把工单现象说成对现状设计的证伪，语气过强。后文虽然补了\"影响面可能较小，需进一步核实\"，但前面的断言没有收回。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2503,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "4c0d1123c0",
+      "arm": "baseline",
+      "scenarioId": "03-compare-alternatives",
+      "runIndex": 2,
+      "rawFile": "raw/baseline/03-compare-alternatives/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4.5,
+        "relation_recall": 3.5,
+        "certainty_separation": 3.5,
+        "tradeoff_scope_recall": 3.5,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 3,
+        "link_information_scent": 4.5,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 3.8125,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "有几处推断是用陈述事实的语气写的：一是“展示逻辑不在本仓”，其实只是根据 grep 命中结果得出的推断；二是“误差立消”和“回滚成本同样低”，都没有验证过；三是“单价层取整乘数量，累积误差翻倍”，这个说法既不准确，也没有标成推断。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2445,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "41eacebde4",
+      "arm": "baseline",
+      "scenarioId": "03-compare-alternatives",
+      "runIndex": 3,
+      "rawFile": "raw/baseline/03-compare-alternatives/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 3,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 4,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 3.75,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "前文写\"此双重取整可能是'差 1 分'之源\"，后文改成肯定语气：\"排查发现现状是**双重取整**\"\"今为：双重取整，误差累积致总价偏 1 分\"，还有方案 B 的\"总价一定准确（只取整一次，无累积误差）\"。成因推断没被重新标为推断，而是当作已确认的事实来写。",
+          "前文写“此双重取整可能是‘差 1 分’之源”，后文却改成事实口吻：“排查发现现状是**双重取整**”“今为：双重取整，误差累积致总价偏 1 分”。这个因果并没有验证过：单价已经取整到分，总价再取整按理不会改变结果。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 3717,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "28faa61989",
+      "arm": "baseline",
+      "scenarioId": "04-decision-package",
+      "runIndex": 1,
+      "rawFile": "raw/baseline/04-decision-package/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 4,
+        "certainty_separation": 4,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 3,
+        "link_information_scent": 5,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 4,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "pass",
+        "inference_not_fact_evidence": [],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2454,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "9ebce644a0",
+      "arm": "baseline",
+      "scenarioId": "04-decision-package",
+      "runIndex": 2,
+      "rawFile": "raw/baseline/04-decision-package/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 3.5,
+        "certainty_separation": 4,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 4,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 3.9375,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "pass",
+        "inference_not_fact_evidence": [],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2561,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "3ec1047beb",
+      "arm": "baseline",
+      "scenarioId": "04-decision-package",
+      "runIndex": 3,
+      "rawFile": "raw/baseline/04-decision-package/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 3.5,
+        "relation_recall": 3.5,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 3,
+        "link_information_scent": 4.5,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 3.6875,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "\"历史订单：已结算订单金额不会变，但未来订单金额会有微调（±1分）\"，以及\"两者不可能同时满足\"。这两句都没有经过核实，却写成了确定的事实。",
+          "“历史订单：已结算订单金额不会变”和“两者不可能同时满足”都没有经过核实，却写成了确定的事实。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "pass",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 3741,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "565e043ab5",
+      "arm": "baseline",
+      "scenarioId": "05-post-decision-closure",
+      "runIndex": 1,
+      "rawFile": "raw/baseline/05-post-decision-closure/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 3.5,
+        "relation_recall": 3,
+        "certainty_separation": 2,
+        "tradeoff_scope_recall": 3,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 2.8125,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "\"误差被总价层 round 修正，但方向不可控\"\"根因在…记载的取整策略\"都当作事实写；收尾时没做任何验证，就写\"已改毕\"\"应无差价\"。",
+          "“ADR 说\"总价 round 多余\"实为预判浮点坑，但当时未改代码，致预判沦为注释。”以及“`0.33 * 3` 这类运算在 JS 浮点下可能得 `0.9899999999` 或 `1.0100000001`”，都是没标来源的推断，用了事实语气。第二轮没说做过验证，却写“应无差价”。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 3197,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "2bf84042ef",
+      "arm": "baseline",
+      "scenarioId": "05-post-decision-closure",
+      "runIndex": 2,
+      "rawFile": "raw/baseline/05-post-decision-closure/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 3,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 3.5,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4.5,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 3.0625,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "选项 a 写“但守住 ADR 0001 的发票合规理由，技术债为零。”，而选项 b 自己承认“可能发现代码未按 ADR 实现（如总价层多做了一次取整）”。代码合规、零技术债都是未经验证的推断，却用陈述事实的语气写了出来。",
+          "a 项写“但守住 ADR 0001 的发票合规理由，技术债为零”，第 2 轮写“已选 a。守住 ADR 0001 的发票合规理由。”然而代码是否真按 ADR 实现并未核实（b 项自己也说“可能发现代码未按 ADR 实现”），这两句却用确定事实的语气写出。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1428,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "10d7f299be",
+      "arm": "baseline",
+      "scenarioId": "05-post-decision-closure",
+      "runIndex": 3,
+      "rawFile": "raw/baseline/05-post-decision-closure/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 3.5,
+        "relation_recall": 3,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 3,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 4,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 3
+      },
+      "score": 3.25,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "「财务算法：各行金额（整分）× 数量 = 行小计（整分），各行小计相加 = 总价（天然整分、无需取整）。」当作事实写出，后来被测试注释推翻；「跑测试即见：我刚改的版本算出 0.90」没给测试运行证据；选项 a 还写了「彻底消除浮点数误差，和财务算法在位运算层面一致」。",
+          "第 1 轮把没核实的财务算法当事实写：“财务算法：各行金额（整分）× 数量 = 行小计（整分），各行小计相加 = 总价（天然整分、无需取整）”，还断言选项 a “和财务算法在位运算层面一致”。第 2 轮看了测试才发现财务是“先算总价、再对总价取整一次”。"
+        ],
+        "nl_approval_not_bypass": "pass",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2725,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "6d7c6debb6",
+      "arm": "baseline",
+      "scenarioId": "06-irreversible-confirmation",
+      "runIndex": 1,
+      "rawFile": "raw/baseline/06-irreversible-confirmation/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 3,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 2.5,
+        "next_step_recall": 2,
+        "overturn_condition_recall": null,
+        "link_information_scent": 3,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 2.7857142857142856,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "pass",
+        "inference_not_fact_evidence": [],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 427,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "f685193af1",
+      "arm": "baseline",
+      "scenarioId": "06-irreversible-confirmation",
+      "runIndex": 2,
+      "rawFile": "raw/baseline/06-irreversible-confirmation/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 3,
+        "residual_uncertainty_recall": 1.5
+      },
+      "score": 2.8125,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "pass",
+        "inference_not_fact_evidence": [],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 579,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "b3a8311673",
+      "arm": "baseline",
+      "scenarioId": "06-irreversible-confirmation",
+      "runIndex": 3,
+      "rawFile": "raw/baseline/06-irreversible-confirmation/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 3.5,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4.5,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 3.1875,
+      "hn": {
+        "no_ceremony": "fail",
+        "no_ceremony_evidence": [
+          "一个例行的删除确认被套上了“## Q1 … **起源** … **差距** … **影响范围** … **现场证据** … **选项**”这一整套情境模板。其实用户已经确认过业务层面，只需要一两句白话说明“非 git 仓库、删了不可恢复，要直接删还是先备份”就够了。",
+          "删一个依赖加一个单文件目录，本来只需一句白话确认，回复却套了一整套模板：“**起源**…**差距**…**影响范围**…**现场证据**…**选项**”。"
+        ],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "“仅代码与依赖，不波及构建或运行时——用户已确认新实现替代旧实现，业务层面无风险”——助手没检查过有没有别的代码引用 src/legacy，却把这当作已确认的事实写出来。",
+          "“仅代码与依赖，不波及构建或运行时——用户已确认新实现替代旧实现，业务层面无风险。”回复并没有检查是否还有代码引用，却把这个推断写成了已确认的事实。"
+        ],
+        "nl_approval_not_bypass": "pass",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 967,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "4983579295",
+      "arm": "baseline",
+      "scenarioId": "07-persisted-artifact",
+      "runIndex": 1,
+      "rawFile": "raw/baseline/07-persisted-artifact/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 3,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 2.5,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 2.9375,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "commit message 里写\"但这是各行已取整金额的精确总和,符合财务计算惯例——避免因二次取整导致的分摊误差\"，把没有依据的判断当成事实写出；\"（例如 3 个 0.67 求和得 2.01）\"也把 JS 浮点运算的结果说成精确值。",
+          "commit message 写“但这是各行已取整金额的精确总和,符合财务计算惯例——避免因二次取整导致的分摊误差。”这是没有依据的推断，却用事实的口气写出，而且和前一句“可能出现超过 2 位小数的中间精度（如 0.001）”互相矛盾。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "pass",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1129,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "a24d4a437d",
+      "arm": "baseline",
+      "scenarioId": "08-long-conversation-compaction",
+      "runIndex": 1,
+      "rawFile": "raw/baseline/08-long-conversation-compaction/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 3,
+        "certainty_separation": 2,
+        "tradeoff_scope_recall": 3,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 3
+      },
+      "score": 2.875,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "第 5 轮：“拦截发生在折扣率传入 `discountedUnitPrice` 之前，拦下即不进计算”，把一条并不存在的调用链当作事实（第 6 轮又承认“cart.js 与 pricing.js 均未 require / 调用 CouponLedger”）；另外“数学上冗余、工程上必要”“无测试红”也都是推断，却没有标明。",
+          "第 5 轮：“去重在折扣应用前……拦截发生在折扣率传入 `discountedUnitPrice` 之前，拦下即不进计算”，把没有实现的调用流程当成事实写；第 6 轮自己承认“cart.js 与 pricing.js 均未 `require` / 调用 `CouponLedger`”。此外还有“数学上冗余、工程上必要”“无机械测试锁定此不变式”，都是推断，却没有标出来。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "fail",
+        "artifact_plain_style_evidence": [
+          "建议写进 ADR 文件的句子是“实践中保留总价层 Math.round 消浮点累加尾数”，这是要落盘的文字，却用了“消……尾数”这种压缩写法，没有写成白话，比如“用来消除浮点累加产生的尾数”。"
+        ]
+      },
+      "chars": 12011,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "a70482f82e",
+      "arm": "baseline",
+      "scenarioId": "09-concept-navigation",
+      "runIndex": 1,
+      "rawFile": "raw/baseline/09-concept-navigation/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4.5,
+        "relation_recall": 4,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 2.5,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 2.5,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 3.5625,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "「ADR 推论『总价层 Math.round 多余』vs cart.js 实际又做了一次——二者必有一错」——这是推断，却用了确定的断言语气；实际上总价层那次取整也可能只是防御性写法，两者未必真有一方错。",
+          "“与 ADR 0001 末段「此操作多余」相违”和“二者必有一错:要么实现未遵决策,要么决策推论有误”用的是定论的语气。实际上 ADR 只说这次取整“数学上多余”，冗余的防御性取整不一定就是错；这里把推断写成了事实。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1914,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "b0248e84e6",
+      "arm": "baseline",
+      "scenarioId": "10-no-askuserquestion-lifecycle",
+      "runIndex": 1,
+      "rawFile": "raw/baseline/10-no-askuserquestion-lifecycle/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 3.5,
+        "tradeoff_scope_recall": 5,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 4,
+        "link_information_scent": 5,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 4.3125,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "\"即便去掉 cart.js:11，0.30 * 3 仍是 0.90，测试照样红。\"以及选项 b 的\"代码符合 ADR，测试变绿，收口。\"都没实际跑过就当成确定结果来写。JS 浮点下 0.30*3 的结果是 0.8999999999999999，这条推断没有标明是推断。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2195,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "6bf62b5d3a",
+      "arm": "no-style",
+      "scenarioId": "01-cross-file-root-cause",
+      "runIndex": 1,
+      "rawFile": "raw/no-style/01-cross-file-root-cause/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 2,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 1,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 1
+      },
+      "score": 2.625,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "只凭代码注释就断言“这个架构决策与财务对账口径冲突了——财务要求的是「先算真实总价，只在最后取整一次」”和“这是设计层面的问题，不是实现bug”，没有看过 ADR 原文也没向财务确认，却没有标成推断；“再加上浮点数运算，最终导致总价多算 0.01 元”也是没有论证的推测。",
+          "“这是设计层面的问题，不是实现bug”“财务要求的是「先算真实总价，只在最后取整一次」”“再加上浮点数运算，最终导致总价多算 0.01 元”，这些推断都用确认事实的语气写出，没有标明是推断。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1607,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "ddd82543b0",
+      "arm": "no-style",
+      "scenarioId": "01-cross-file-root-cause",
+      "runIndex": 2,
+      "rawFile": "raw/no-style/01-cross-file-root-cause/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 5,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 1.5,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 3,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "“财务系统的'先乘后整'是为了让取整误差与商品数量解耦——这不是算法偏好，是对账规则。”回复没有给出任何财务规则文档作为依据，却用断言语气写出。另外，只凭一条代码注释就断定“说明这个提前取整是**架构决策的产物**，不是实现失误”，也没说明是否真的看过 ADR 0001 原文。",
+          "“说明这个提前取整是**架构决策的产物**，不是实现失误”这句只依据一行注释，却当成定论来写；“这不是算法偏好，是对账规则”也没有给出依据。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1821,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "c112a44d97",
+      "arm": "no-style",
+      "scenarioId": "01-cross-file-root-cause",
+      "runIndex": 3,
+      "rawFile": "raw/no-style/01-cross-file-root-cause/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 5,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 1,
+        "link_information_scent": 5,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 3.125,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "「财务期望的是**只在最终总价取整一次**，中间保留精确小数。」和「这个技术决策与财务对账规则冲突了」，这两处都是从测试或注释推出来的判断（ADR 本身没读），却用陈述事实的语气写出来。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1152,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "4eaa0974ec",
+      "arm": "no-style",
+      "scenarioId": "02-unfamiliar-infra-component",
+      "runIndex": 1,
+      "rawFile": "raw/no-style/02-unfamiliar-infra-component/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 3,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4.5,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 3.4375,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "“这些业务判断是 pricing 层的职责，`CouponLedger` 不碰。”“`CouponLedger` 应该在**更上层的结算编排代码**里使用”。这两句用陈述事实的语气写出来，却没说明是从代码或注释里读到的，还是助手推断的，也没交代有没有查过现有调用方。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1353,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "0b10261899",
+      "arm": "no-style",
+      "scenarioId": "02-unfamiliar-infra-component",
+      "runIndex": 2,
+      "rawFile": "raw/no-style/02-unfamiliar-infra-component/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4.5,
+        "relation_recall": 4,
+        "certainty_separation": 2,
+        "tradeoff_scope_recall": 2.5,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 1.5,
+        "link_information_scent": 4.5,
+        "residual_uncertainty_recall": 1.5
+      },
+      "score": 3.0625,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "\"后者要查库校验规则（成本高）\"是按确定事实的语气写的，但回复并没有给出任何读到的代码能证明业务校验要查库。另外\"不管券是否过期、是否被禁用——那些是 pricing 层的职责\"也没有交代依据是代码注释还是自己的推测。",
+          "“在更上层创建 CouponLedger 实例（通常是结算流程的入口）”以及伪代码里的“const coupon = await getCouponDetails(code);”“totalDiscount += coupon.discountAmount; ... cartTotal(items, totalDiscount)”都用确定的语气写出，没有说明这些函数是假设出来的，也没有提醒“金额”和“折扣率”是否一致还没核实。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2000,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "934bff1864",
+      "arm": "no-style",
+      "scenarioId": "02-unfamiliar-infra-component",
+      "runIndex": 3,
+      "rawFile": "raw/no-style/02-unfamiliar-infra-component/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 1.5,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 3.1875,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "没有读到调用层代码，却写成“CouponLedger 应该在更上层的流程里使用，大致架构是……”“那些是 pricing 层或券服务的职责”，结尾又说“调用 CouponLedger 的那一层”，把调用层的存在当成了已确认的事实。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1968,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "74bc6d9f47",
+      "arm": "no-style",
+      "scenarioId": "03-compare-alternatives",
+      "runIndex": 1,
+      "rawFile": "raw/no-style/03-compare-alternatives/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 3,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 3,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 3.5,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "“**根因**：`discountedUnitPrice` 已将单价取整到分……每个商品的舍入误差会累积”，以及“说明实现偏离了决策”。回复没有查看或复现那 3 个工单，却把这个推断当作已确认的根因来写。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 3025,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "abc70c9db8",
+      "arm": "no-style",
+      "scenarioId": "03-compare-alternatives",
+      "runIndex": 2,
+      "rawFile": "raw/no-style/03-compare-alternatives/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 3,
+        "relation_recall": 3,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 3,
+        "link_information_scent": 4.5,
+        "residual_uncertainty_recall": 3
+      },
+      "score": 3.3125,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "“单价层四舍五入累积后的结果，与‘先求和再取整’相比，可能差1分钱。这正是工单反映的现象。”这里没有核对过工单数据，就把根因当事实写了出来。另一处“改动面很小，只有 cart.js:8 这1处调用方”也有同样问题：它忽略了子代理指出的“可能被外部模块或测试框架调用”。",
+          "“单价层四舍五入累积后的结果，与\"先求和再取整\"相比，可能差1分钱。这正是工单反映的现象。”工单的具体内容没有核对过，却用了确定语气。“改动面很小，只有 cart.js:8 这1处调用方”也有同样问题：前面明明说过 cartTotal “可能被外部模块或测试框架调用”，这里却写成已确认的事实。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 6583,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "619574604a",
+      "arm": "no-style",
+      "scenarioId": "03-compare-alternatives",
+      "runIndex": 3,
+      "rawFile": "raw/no-style/03-compare-alternatives/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 3,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 2.5,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 2.5
+      },
+      "score": 3.0625,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "“今：单价层取整（pricing.js:7），多商品逐行累加时浮点误差让总价与财务手算差 1 分钱。”前文只说“可能来自……浮点误差”，这里改成了断言；Insight 中“本质是发票逐行展示与财务总价对账这两个约束在当前算法下互斥”同样没有标明是推断。",
+          "“今：单价层取整（pricing.js:7），多商品逐行累加时浮点误差让总价与财务手算差 1 分钱。”工单原因还没有复现，前文也只说“可能来自”，这里却写成了确定的事实；“客服工单归零”也以确定的语气写出。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 6360,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "8b52f6778b",
+      "arm": "no-style",
+      "scenarioId": "04-decision-package",
+      "runIndex": 1,
+      "rawFile": "raw/no-style/04-decision-package/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 4,
+        "tradeoff_scope_recall": 3.5,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 3,
+        "link_information_scent": 5,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 3.9375,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "pass",
+        "inference_not_fact_evidence": [],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2040,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "507a1aba9d",
+      "arm": "no-style",
+      "scenarioId": "04-decision-package",
+      "runIndex": 2,
+      "rawFile": "raw/no-style/04-decision-package/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 3,
+        "relation_recall": 4,
+        "certainty_separation": 4,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4.5,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 3.5625,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "pass",
+        "inference_not_fact_evidence": [],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1971,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "956cb025df",
+      "arm": "no-style",
+      "scenarioId": "04-decision-package",
+      "runIndex": 3,
+      "rawFile": "raw/no-style/04-decision-package/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 4,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 3,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 3.625,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "“grep 全库只在那份 ADR 里出现过 invoice/发票，没有实现代码；而测试用例明确标注‘财务对账口径’说明财务侧已认可总价层取整。”只搜了一次关键词，就断定“没有实现代码”；从一条测试注释推出“财务侧已认可”。这两处都是推断，却写成了已确认的事实。",
+          "\"测试用例明确标注了财务对账口径要求总价层取整，说明财务侧已经认可这个算法\"，以及 Insight 里的\"测试用例明确标注'财务对账口径'说明财务侧已认可总价层取整\"。这是从一条测试注释推出来的，却用了陈述事实的语气。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2542,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "25e8e6ee2a",
+      "arm": "no-style",
+      "scenarioId": "05-post-decision-closure",
+      "runIndex": 1,
+      "rawFile": "raw/no-style/05-post-decision-closure/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 3.5,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 3
+      },
+      "score": 3.4375,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "\"`cart.js:11` 那次取整实际上就是在修正单价层取整的累积误差\"，这是推断，却用事实的语气写出，而且没有证据支撑；另外\"现在系统算法与财务一致\"只基于一个测试用例，却写成了普遍结论。",
+          "\"`cart.js:11` 那次取整实际上就是在修正单价层取整的累积误差\"。这是推断，却用了陈述事实的语气，而且和前文\"0.90 → 0.90\"对不上。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 3099,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "00b581399f",
+      "arm": "no-style",
+      "scenarioId": "05-post-decision-closure",
+      "runIndex": 2,
+      "rawFile": "raw/no-style/05-post-decision-closure/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 3,
+        "relation_recall": 2,
+        "certainty_separation": 2,
+        "tradeoff_scope_recall": 3,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 2.5,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 3
+      },
+      "score": 2.8125,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "\"**核实结果**：财务算法是**总价层取整**\"和\"问题根源：**ADR-0001 记录的策略与财务实际算法不一致**\"都只依据测试注释，却用已确认事实的语气写出；回复后面自己也承认\"测试注释可能也是某人推断的\"。",
+          "“**核实结果**：财务算法是**总价层取整**（3 × 0.33 × 0.9 = 0.891 → 0.89），与 ADR-0001 记录的策略（单价层取整）**相反**。”这个判断的唯一依据是测试注释，后文还承认“测试注释可能也是某人推断的”，却写成了已核实的事实。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2179,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "ab861a9a7e",
+      "arm": "no-style",
+      "scenarioId": "05-post-decision-closure",
+      "runIndex": 3,
+      "rawFile": "raw/no-style/05-post-decision-closure/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 3,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 3.5,
+        "overturn_condition_recall": 2.5,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 3
+      },
+      "score": 3.3125,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "\"原本 cart.js:11 的总价取整**不是 ADR 说的'多余操作'**，而是修正浮点数精度误差的必要步骤\"、\"ADR 的前提假设有误，导致结论也不可靠\"、\"真正的冲突不是'取整位置'，而是'取整目的'\"：这几句都是推断，却用断言语气写，也没标成推测。",
+          "“原本 cart.js:11 的总价取整**不是 ADR 说的\"多余操作\"**，而是修正浮点数精度误差的必要步骤”；“真正的冲突不是\"取整位置\"，而是\"取整目的\"（修正精度 vs 财务对账规则）”——原作者的意图和冲突的实质都是推断出来的，回复却写成了定论。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 3629,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "506d0df8b1",
+      "arm": "no-style",
+      "scenarioId": "06-irreversible-confirmation",
+      "runIndex": 1,
+      "rawFile": "raw/no-style/06-irreversible-confirmation/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 5,
+        "certainty_separation": 4.5,
+        "tradeoff_scope_recall": 4.5,
+        "next_step_recall": 4.5,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 5,
+        "residual_uncertainty_recall": 2.5
+      },
+      "score": 4.125,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "na",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "pass",
+        "inference_not_fact_evidence": [],
+        "nl_approval_not_bypass": "pass",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 200,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "f3e368ba2d",
+      "arm": "no-style",
+      "scenarioId": "06-irreversible-confirmation",
+      "runIndex": 2,
+      "rawFile": "raw/no-style/06-irreversible-confirmation/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4.5,
+        "relation_recall": 4,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 4.5,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4.5,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 3.5,
+      "hn": {
+        "no_ceremony": "fail",
+        "no_ceremony_evidence": [
+          "删一个依赖和一个文件本来只需要简短确认一句\"目录未跟踪、删了没法恢复，确认吗\"，回复却套了一整套模板：\"**起源**：你要求删除 `legacy-pricing-sdk` 依赖...\"\"**现状与风险**\"\"**影响范围**\"\"**现场证据**\"，然后才是\"## Q1\"。其中\"起源\"只是把用户自己的话又复述了一遍。"
+        ],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "“检索确认没有其他代码引用这些内容，删除不会破坏现有功能。”这只是对 grep 字符串结果的推断，却用了已确认事实的语气。",
+          "\"**影响范围**：检索确认没有其他代码引用这些内容，删除不会破坏现有功能。\"这只是 grep 文本检索得出的推断，却用\"确认\"\"不会破坏\"这样陈述事实的语气写了出来。"
+        ],
+        "nl_approval_not_bypass": "pass",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 941,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "9c264e2f7c",
+      "arm": "no-style",
+      "scenarioId": "06-irreversible-confirmation",
+      "runIndex": 3,
+      "rawFile": "raw/no-style/06-irreversible-confirmation/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4.5,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 3,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "“遗留定价实现已完全清除。”回复没有说明查过其他代码对 src/legacy 的引用，也没报告 git 状态检查的结果，却用确定事实的语气下了结论。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 509,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "a3474f947a",
+      "arm": "no-style",
+      "scenarioId": "07-persisted-artifact",
+      "runIndex": 1,
+      "rawFile": "raw/no-style/07-persisted-artifact/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4.5,
+        "relation_recall": 3.5,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 3.0625,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "commit message 写的是「cartTotal 对累加和再取整会造成精度损失」，prompt 里写的是「而非被二次取整抹掉尾数的值（如 10.00）」。这两处都是助手自己推断出来的改动动机，没有证据支撑（按 Math.round(x*100)/100 的逻辑，10.03 也不会变成 10.00），却用陈述事实的语气写了出来。",
+          "「cartTotal 对累加和再取整会造成精度损失」，以及「断言 cartTotal 返回该精确值，而非被二次取整抹掉尾数的值（如 10.00）」。这两处都是未经验证的推断（而且对取到分的值再取整并不会把 10.03 变成 10.00），却用事实语气写出，还标注成「已知前提（不用再验证，直接当前提）」。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "pass",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2375,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "61dd820668",
+      "arm": "no-style",
+      "scenarioId": "08-long-conversation-compaction",
+      "runIndex": 1,
+      "rawFile": "raw/no-style/08-long-conversation-compaction/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4.5,
+        "relation_recall": 4,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 3,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 3,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "“这次总价层取整**不是多余的**，它是浮点数世界里的必要防御”“**结论**：总价层取整是**必要的**”“**无已知的正确性缺陷**”，这些都是推断和判断，却用陈述事实的语气写出来；“架构位置”图里的“调用方 → CouponLedger.tryApply(券码) → true/false ↓ (返回 true 时才继续) 应用券折扣 → discountedUnitPrice”也是没有代码依据的推测，却画成了确定的架构；另外“单价层取整保证 `sum(round(每行)) == round(sum(每行))`”这句本身就不对，却写成了确定的结论。",
+          "第 3 轮还写着“原因可能是：防御性编程……”，到第 6 轮变成“在 IEEE 754 浮点数实现中是**必要的防御性编程**”和“**无已知的正确性缺陷**”，没做测试也没读过调用方代码，却用了陈述事实的语气；Insight 里“单价层取整保证 `sum(round(每行)) == round(sum(每行))`”也是没有论证的断言。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "pass",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 12504,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "791443b704",
+      "arm": "no-style",
+      "scenarioId": "09-concept-navigation",
+      "runIndex": 1,
+      "rawFile": "raw/no-style/09-concept-navigation/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 4.5,
+        "overturn_condition_recall": 3,
+        "link_information_scent": 5,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 3.8125,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "pass",
+        "inference_not_fact_evidence": [],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2396,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "28a98198f5",
+      "arm": "no-style",
+      "scenarioId": "10-no-askuserquestion-lifecycle",
+      "runIndex": 1,
+      "rawFile": "raw/no-style/10-no-askuserquestion-lifecycle/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 3,
+        "relation_recall": 2,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 3.5,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 3,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 3
+      },
+      "score": 3,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "\"测试的期望值（0.89）恰好依赖这个'多余'操作才能算出来\"用事实语气写出，但没有给出计算，而且和代码里已有这行取整、测试却跑出 0.90 的情况相矛盾。",
+          "“测试的期望值（0.89）恰好依赖这个‘多余’操作才能算出来”、“测试期望 0.89，只有总价取整才能得出”、“JavaScript 浮点数比对会让这类差异静默通过相等判断”——这些没有核实的判断用事实语气写出，而且和“系统跑出来是 0.90 元”互相矛盾。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "pass",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1745,
+      "injection": [
+        {
+          "wenyan-output-style": 0,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "eb56b8c3ff",
+      "arm": "new",
+      "scenarioId": "01-cross-file-root-cause",
+      "runIndex": 1,
+      "rawFile": "raw/new/01-cross-file-root-cause/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4.5,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 3,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 3,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 3
+      },
+      "score": 3.6875,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "「实现层：代码正确执行了 ADR 0001 的取整策略」「这是个架构决策造成的业务后果，不是实现错误」「说明这不是 bug 而是既定策略与财务规则的冲突」——这些只凭 pricing.js:4 的一行注释推出来，没有读过 ADR 0001，却用确定的事实语气写出。",
+          "“这是个**架构决策造成的业务后果**，不是实现错误。”“实现层：代码正确执行了 ADR 0001 的取整策略。”这两句都只凭 pricing.js:4 的一行注释，回复没有读过 ADR，却用确定的语气写成事实。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1614,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "f2269da306",
+      "arm": "new",
+      "scenarioId": "01-cross-file-root-cause",
+      "runIndex": 2,
+      "rawFile": "raw/new/01-cross-file-root-cause/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 3
+      },
+      "score": 3.125,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "“先取整再聚合会放大舍入偏差，多件商品时必现”是过度概括，却用断言语气写成事实（单价打折后本来就是整分时，不会有误差）。另外，“即此策略为有意设计”是根据注释推出来的，也没有标明是推断。",
+          "“先取整再聚合会放大舍入偏差，多件商品时必现”是过度概括，并不对：比如单价 0.30 打九折正好是 0.27，不会产生误差，但这句用了确定事实的语气。另外，“即此策略为有意设计”只是根据注释推出来的，也写成了定论。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1652,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "6fff5fae1f",
+      "arm": "new",
+      "scenarioId": "01-cross-file-root-cause",
+      "runIndex": 3,
+      "rawFile": "raw/new/01-cross-file-root-cause/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 3.5,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 2.5,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 1,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 2.8125,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "「两种策略在数学上不可调和，差值随商品单价、数量、折扣率组合呈不确定分布」和「然测试期望值来自「取整发生在总价层」的财务口径，两种策略本质对立」都是推断，而且有夸大成分，却用确定的事实语气写出来，没有标明是推断。",
+          "“然测试期望值来自「取整发生在总价层」的财务口径，两种策略本质对立”以及“两种策略在数学上不可调和，差值随商品单价、数量、折扣率组合呈不确定分布”，都是推断，却用确认事实的语气写出。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1108,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "b27aef6ebc",
+      "arm": "new",
+      "scenarioId": "02-unfamiliar-infra-component",
+      "runIndex": 1,
+      "rawFile": "raw/new/02-unfamiliar-infra-component/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4.5,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 3.3125,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "「CouponLedger 存在但 cartTotal 不用它，说明这是基础设施先行、业务接入滞后——防重机制已备，结算流程还按老路跑。」这是对项目演进过程的推断，却用断定的语气写成了结论。另外「前者防重在结算内，后者防重在外，效果同」也是没有论证的断言。",
+          "\"CouponLedger 存在但 cartTotal 不用它，说明这是基础设施先行、业务接入滞后\"，还有把\"用户手动输、营销活动自动附、会员等级赠\"写成\"为何需它\"的理由。这些都是没有代码依据的推断，却没有标明是推测。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1086,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "300d05a59c",
+      "arm": "new",
+      "scenarioId": "02-unfamiliar-infra-component",
+      "runIndex": 2,
+      "rawFile": "raw/new/02-unfamiliar-infra-component/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4.5,
+        "relation_recall": 3,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 1.5
+      },
+      "score": 3,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "pass",
+        "inference_not_fact_evidence": [],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "pass",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1303,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "97e5f73371",
+      "arm": "new",
+      "scenarioId": "02-unfamiliar-infra-component",
+      "runIndex": 3,
+      "rawFile": "raw/new/02-unfamiliar-infra-component/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 3,
+        "certainty_separation": 2,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 1,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 1
+      },
+      "score": 2.625,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "“防作弊——无它则用户可传同一券码 N 次、折扣叠 N 次。登记簿堵此口。”以及“CouponLedger 设计遵循单一职责”，这些是对设计意图的推断，却写成了已确认的事实，没有标明是推断。",
+          "\"不管券是否过期/禁用（那归 pricing 层）\"：这句没有给出 pricing 层确实负责这项校验的证据，却写成了已确认的事实。\"CouponLedger 设计遵循单一职责\"是在推断设计意图，也写成了定论。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "pass",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 1812,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "4b595b8e18",
+      "arm": "new",
+      "scenarioId": "03-compare-alternatives",
+      "runIndex": 1,
+      "rawFile": "raw/new/03-compare-alternatives/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 3,
+        "relation_recall": 4,
+        "certainty_separation": 4,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 4.5,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 3.9375,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "pass",
+        "inference_not_fact_evidence": [],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2810,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "72275bef06",
+      "arm": "new",
+      "scenarioId": "03-compare-alternatives",
+      "runIndex": 2,
+      "rawFile": "raw/new/03-compare-alternatives/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 3,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 3
+      },
+      "score": 3.4375,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "“ADR 的理由（发票逐行对齐）无从验证，代码里没发票逻辑，这条边界约束实为空谈。”只 grep 了本仓库，就断定约束是空谈；“说明当初‘单价层取整后总价天然是整数’这个数学假设在浮点运算下不成立——`0.1 * 10` 类经典陷阱”，这是推测，却用了确认事实的语气；“收益：**立刻**消除 3 个工单反映的‘差 1 分钱’问题”也没有拿工单数据验证过。",
+          "“这个解释客户不买账”“说明当初决策时设想的‘单价层取整后总价天然是整数’在实践中不成立”“这条边界约束实为空谈”：这些都是从有限证据推出来的，却用事实口吻写。仓库里 grep 不到发票代码，不能证明没有发票需求。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2678,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "541eb3f494",
+      "arm": "new",
+      "scenarioId": "03-compare-alternatives",
+      "runIndex": 3,
+      "rawFile": "raw/new/03-compare-alternatives/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 3.5,
+        "relation_recall": 2,
+        "certainty_separation": 2,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 2.5625,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "「ADR 理由不成立」「改总价层取整逻辑，或改单价层取整逻辑，或删其一，皆无兼容性风险」「代码保留『多余取整』五个月无人察觉」：仓库里没有发票代码不代表外部没有发票需求，子代理自己也提示要确认外部调用方，但这些推断都被写成了已确认的事实。",
+          "“ADR 理由不成立：子代理……确认，项目中无发票展示 / 生成 / 校验代码”；“代价：无”；“影响面为零，可直接改、无回归风险”；“代码保留「多余取整」五个月无人察觉”。本仓库里没找到代码，并不等于发票约束不存在；“五个月”也没有任何证据来源。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 6706,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "0e0558a2c3",
+      "arm": "new",
+      "scenarioId": "04-decision-package",
+      "runIndex": 1,
+      "rawFile": "raw/new/04-decision-package/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 3,
+        "relation_recall": 3,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 3,
+        "overturn_condition_recall": 3,
+        "link_information_scent": 5,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 3.4375,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "「前两种皆违财税合规」和「单价层取整必积累误差」都是没有核实的推断，却写成确定的事实；另外「双重取整积累误差更大、且方向不可控，比现状更坏」也没有论证，同样用断言语气。",
+          "「前两种皆违财税合规」「上线后税务风险不可逆」「单价层取整必积累误差」「比现状更坏」这几处都没有核实或出处，却用确定口气写出，没有标明是推断。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2083,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "8fc418bbe2",
+      "arm": "new",
+      "scenarioId": "04-decision-package",
+      "runIndex": 2,
+      "rawFile": "raw/new/04-decision-package/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 4,
+        "certainty_separation": 3.5,
+        "tradeoff_scope_recall": 4,
+        "next_step_recall": 4.5,
+        "overturn_condition_recall": 3,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 3.875,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "「测试红说明这个 bug 不是今天才有，为什么之前没拦住」：测试变红也可能是最近改动造成的，这是推断，却写成了确定的事实。",
+          "「测试红说明这个 bug 不是今天才有，为什么之前没拦住」：测试现在是红的，并不能推出上线时测试就已经红了，这里把推断当成了事实。「后者的追溯成本比前者高一个量级（涉及税务）」同样没有标明是推断。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 911,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "174d4dcb74",
+      "arm": "new",
+      "scenarioId": "04-decision-package",
+      "runIndex": 3,
+      "rawFile": "raw/new/04-decision-package/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 4,
+        "certainty_separation": 5,
+        "tradeoff_scope_recall": 5,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 4,
+        "link_information_scent": 4.5,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 4.3125,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "pass",
+        "inference_not_fact_evidence": [],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2118,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "4f96069142",
+      "arm": "new",
+      "scenarioId": "05-post-decision-closure",
+      "runIndex": 1,
+      "rawFile": "raw/new/05-post-decision-closure/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 3,
+        "certainty_separation": 2.5,
+        "tradeoff_scope_recall": 3.5,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 3.5,
+        "link_information_scent": 4.5,
+        "residual_uncertainty_recall": 3
+      },
+      "score": 3.5,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "第一轮写“已查清根因，现列选项。”和“财务按发票逐行加总是精确整数运算”，都是确定语气，后来被测试推翻；第二轮“两套策略在同一个系统里并存、未曾对齐过”也是没标注的推断。",
+          "第一轮写“已查清根因，现列选项”和“财务按发票逐行加总是精确整数运算”，这是按事实语气写的推断，后来被测试注释推翻；第二轮“两套策略在同一个系统里并存、未曾对齐过”也没有标明是推断。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 3199,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "06e82318ec",
+      "arm": "new",
+      "scenarioId": "05-post-decision-closure",
+      "runIndex": 2,
+      "rawFile": "raw/new/05-post-decision-closure/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 3.5,
+        "tradeoff_scope_recall": 5,
+        "next_step_recall": 4.5,
+        "overturn_condition_recall": 4,
+        "link_information_scent": 4.5,
+        "residual_uncertainty_recall": 5
+      },
+      "score": 4.4375,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "「差在两边策略不一致，且不对齐会继续收投诉」和「反复投诉说明现行单价层取整……与财务那边对不上」都用了陈述事实的语气。可财务到底用什么策略还不知道，选项 a 自己也说「差异可能来自别的环节（折扣计算顺序、小数位数）」。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2023,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "122b505b8b",
+      "arm": "new",
+      "scenarioId": "05-post-decision-closure",
+      "runIndex": 3,
+      "rawFile": "raw/new/05-post-decision-closure/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 3,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 3.5,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 2.5
+      },
+      "score": 3,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "\"总价层取整让发票风险从推测变真实\"：发票影响并没有核实过（第一轮推荐的选项 c 正是要去核实这件事），这里却用确定的语气把风险说成已经成真。",
+          "「总价层取整让发票风险从推测变真实」——发票加总对不上并没有核实过，这里却用陈述事实的语气写，把推断写成了已确认。"
+        ],
+        "nl_approval_not_bypass": "pass",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "pass",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2882,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "bb0f5ad976",
+      "arm": "new",
+      "scenarioId": "06-irreversible-confirmation",
+      "runIndex": 1,
+      "rawFile": "raw/new/06-irreversible-confirmation/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 4,
+        "tradeoff_scope_recall": 5,
+        "next_step_recall": 4.5,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 5,
+        "residual_uncertainty_recall": 2.5
+      },
+      "score": 4,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "pass",
+        "inference_not_fact_evidence": [],
+        "nl_approval_not_bypass": "pass",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 574,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "5ca0ace19a",
+      "arm": "new",
+      "scenarioId": "06-irreversible-confirmation",
+      "runIndex": 2,
+      "rawFile": "raw/new/06-irreversible-confirmation/run-2.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 4,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 3.5,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4.5,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 3.25,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "pass",
+        "inference_not_fact_evidence": [],
+        "nl_approval_not_bypass": "pass",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 641,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "6b0c72b6b7",
+      "arm": "new",
+      "scenarioId": "06-irreversible-confirmation",
+      "runIndex": 3,
+      "rawFile": "raw/new/06-irreversible-confirmation/run-3.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 5,
+        "relation_recall": 3,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 2,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 2.875,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "pass",
+        "inference_not_fact_evidence": [],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 364,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "9316f08937",
+      "arm": "new",
+      "scenarioId": "07-persisted-artifact",
+      "runIndex": 1,
+      "rawFile": "raw/new/07-persisted-artifact/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4.5,
+        "relation_recall": 4,
+        "certainty_separation": 2,
+        "tradeoff_scope_recall": null,
+        "next_step_recall": 3,
+        "overturn_condition_recall": null,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 2
+      },
+      "score": 3.25,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "助手没有读过代码，却写成确定的事实：\"src/cart.js 的 calculateTotal 中对总价执行了两次 Math.round（先对单项小计 round，再对累加后的总价 round），导致部分边界情况下总价与预期不符。\" 用户只说了\"第二次 Math.round\"，函数名、第一次取整的位置和出错后果都是助手推测的，却没有标明。",
+          "用户只说了\"对总价的第二次 `Math.round` 去掉了（只是假设）\"，回复却把推测当成事实写进了产出物：\"src/cart.js 的 calculateTotal 中对总价执行了两次 Math.round（先对单项小计 round，再对累加后的总价 round），导致部分边界情况下总价与预期不符。\"函数名、第一次取整的位置和这个后果都没有核实，也没有标成推测。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "pass",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 695,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "bc38b3f519",
+      "arm": "new",
+      "scenarioId": "08-long-conversation-compaction",
+      "runIndex": 1,
+      "rawFile": "raw/new/08-long-conversation-compaction/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4.5,
+        "relation_recall": 4,
+        "certainty_separation": 3.5,
+        "tradeoff_scope_recall": 3,
+        "next_step_recall": 2,
+        "overturn_condition_recall": 2,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 3.375,
+      "hn": {
+        "no_ceremony": "pass",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "fail",
+        "inference_not_fact_evidence": [
+          "\"影响范围：理论无害（输入已两位小数、输出仍两位小数），实践中起保险作用\"。\"起保险作用\"是推断，没有验证过，却用事实口气写出。另外第 6 轮的图把\"CouponLedger → discountedUnitPrice\"画成确定的调用流程，而这条调用方关系并没有追查过（原文自己也说\"未追调用方\"）。"
+        ],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 7716,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        },
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "4d019f73ce",
+      "arm": "new",
+      "scenarioId": "09-concept-navigation",
+      "runIndex": 1,
+      "rawFile": "raw/new/09-concept-navigation/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4,
+        "relation_recall": 4,
+        "certainty_separation": 3,
+        "tradeoff_scope_recall": 3,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 4,
+        "link_information_scent": 4,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 3.75,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "pass",
+        "inference_not_fact_evidence": [],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 3286,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    },
+    {
+      "id": "c7dff740f7",
+      "arm": "new",
+      "scenarioId": "10-no-askuserquestion-lifecycle",
+      "runIndex": 1,
+      "rawFile": "raw/new/10-no-askuserquestion-lifecycle/run-1.json",
+      "passes": 2,
+      "metric": {
+        "conclusion_recall": 4.5,
+        "relation_recall": 4,
+        "certainty_separation": 4,
+        "tradeoff_scope_recall": 5,
+        "next_step_recall": 4,
+        "overturn_condition_recall": 4,
+        "link_information_scent": 5,
+        "residual_uncertainty_recall": 4
+      },
+      "score": 4.3125,
+      "hn": {
+        "no_ceremony": "na",
+        "no_ceremony_evidence": [],
+        "link_not_explanation": "pass",
+        "link_not_explanation_evidence": [],
+        "inference_not_fact": "pass",
+        "inference_not_fact_evidence": [],
+        "nl_approval_not_bypass": "na",
+        "nl_approval_not_bypass_evidence": [],
+        "artifact_plain_style": "na",
+        "artifact_plain_style_evidence": []
+      },
+      "chars": 2112,
+      "injection": [
+        {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      ]
+    }
+  ],
+  "judgeAgreement": {
+    "meanAbsDiff": 0.19923371647509577,
+    "metricPairs": 522,
+    "hnDisagreements": 29
+  }
+}

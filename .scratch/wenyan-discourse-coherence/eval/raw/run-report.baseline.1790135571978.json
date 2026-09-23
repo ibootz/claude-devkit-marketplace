@@ -1,0 +1,186 @@
+{
+  "arm": "baseline",
+  "model": "claude-sonnet-4-5",
+  "cliVersion": "2.1.280 (Claude Code)",
+  "stopped": false,
+  "allSummaries": [
+    {
+      "scenarioId": "02-unfamiliar-infra-component",
+      "summaries": [
+        {
+          "runIndex": 1,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/02-unfamiliar-infra-component/run-1.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        },
+        {
+          "runIndex": 2,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/02-unfamiliar-infra-component/run-2.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        },
+        {
+          "runIndex": 3,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/02-unfamiliar-infra-component/run-3.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        }
+      ]
+    },
+    {
+      "scenarioId": "03-compare-alternatives",
+      "summaries": [
+        {
+          "runIndex": 1,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/03-compare-alternatives/run-1.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        },
+        {
+          "runIndex": 2,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/03-compare-alternatives/run-2.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        },
+        {
+          "runIndex": 3,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/03-compare-alternatives/run-3.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        }
+      ]
+    },
+    {
+      "scenarioId": "04-decision-package",
+      "summaries": [
+        {
+          "runIndex": 1,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/04-decision-package/run-1.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        },
+        {
+          "runIndex": 2,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/04-decision-package/run-2.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        },
+        {
+          "runIndex": 3,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/04-decision-package/run-3.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        }
+      ]
+    },
+    {
+      "scenarioId": "05-post-decision-closure",
+      "summaries": [
+        {
+          "runIndex": 1,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/05-post-decision-closure/run-1.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        },
+        {
+          "runIndex": 2,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/05-post-decision-closure/run-2.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        },
+        {
+          "runIndex": 3,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/05-post-decision-closure/run-3.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        }
+      ]
+    },
+    {
+      "scenarioId": "06-irreversible-confirmation",
+      "summaries": [
+        {
+          "runIndex": 1,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/06-irreversible-confirmation/run-1.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        },
+        {
+          "runIndex": 2,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/06-irreversible-confirmation/run-2.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        },
+        {
+          "runIndex": 3,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/06-irreversible-confirmation/run-3.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        }
+      ]
+    },
+    {
+      "scenarioId": "07-persisted-artifact",
+      "summaries": [
+        {
+          "runIndex": 1,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/07-persisted-artifact/run-1.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        }
+      ]
+    },
+    {
+      "scenarioId": "08-long-conversation-compaction",
+      "summaries": [
+        {
+          "runIndex": 1,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/08-long-conversation-compaction/run-1.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        }
+      ]
+    },
+    {
+      "scenarioId": "09-concept-navigation",
+      "summaries": [
+        {
+          "runIndex": 1,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/09-concept-navigation/run-1.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        }
+      ]
+    },
+    {
+      "scenarioId": "10-no-askuserquestion-lifecycle",
+      "summaries": [
+        {
+          "runIndex": 1,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/10-no-askuserquestion-lifecycle/run-1.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        }
+      ]
+    }
+  ]
+}

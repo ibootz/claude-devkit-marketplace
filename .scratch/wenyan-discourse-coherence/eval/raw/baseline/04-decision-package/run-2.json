@@ -1,0 +1,143 @@
+{
+  "scenarioId": "04-decision-package",
+  "scenarioTitle": "正文决策包（起源/差距/影响范围/证据）",
+  "arm": "baseline",
+  "runIndex": 2,
+  "model": "claude-sonnet-4-5",
+  "cliVersion": "2.1.280 (Claude Code)",
+  "pluginDir": "/Users/zhangq/.claude/jobs/6a4bd967/tmp/wenyan-1.7.0/plugins/wenyan-output-style",
+  "settingsFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/settings/disable-styles.settings.json",
+  "startedAt": "2026-09-23T03:24:48.258Z",
+  "runDir": "/Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-2",
+  "turns": [
+    {
+      "turnIndex": 0,
+      "prompt": "客服今天第 3 次收到用户投诉\"总价和自己手算的不一致，差 1 分钱\"，`tests/pricing.test.js`\n现在也是红的。\n\n要不要现在就把取整策略从\"单价层取整\"改成\"总价层统一取整\"，今天就上线？这个改动会不会\n影响发票展示，我们还没有把握。\n\n你怎么看，需要我拍板的地方是什么？\n",
+      "exitCode": 0,
+      "retries": 0,
+      "injectionProof": {
+        "hookEventCount": 16,
+        "occurrences": {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      },
+      "assistantText": "先查现状，再给研判。\n\n已读测试与单价取整逻辑，测试要 0.89、系统给 0.90。再查总价计算与历史决策。\n\n已查完。根因明确，拍板点有三。\n\n## 现状\n\n**单价层取整（现行）**：0.33 * 0.9 = 0.297 → 取整 0.30 → 0.30 * 3 = 0.90\n**总价层取整（财务要）**：0.33 * 3 * 0.9 = 0.891 → 取整 0.89\n\nADR 0001（[docs/adr/0001-rounding-strategy.md:1](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-2/docs/adr/0001-rounding-strategy.md#1)）定单价层取整，理由「发票逐行金额需分精度，总价层取整致逐行加总与显示总价对不上」。\n\n现系统按 ADR 实现（[src/pricing.js:5](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-2/src/pricing.js#5)），但测试要求财务口径（[tests/pricing.test.js:8](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-2/tests/pricing.test.js#8)），红。客服已收 3 次投诉。\n\n## 矛盾\n\nADR 的防护目标（发票行加总对齐）与财务对账要求（总价层取整）相撞。\n\n**缺的证据**：本仓无发票代码（glob 零命中），ADR 的「发票要求」未见实证——不知是真约束还是当时推断。\n\n---\n\n# Q1: 改不改，什么时候改？\n\n**起源**：客服今日第 3 次收到「总价差 1 分」投诉，测试已红，财务对账口径与系统不符。\n\n**差距**：今为单价层取整（系统给 0.90），期为总价层取整（财务要 0.89），每单最多差若干分（商品行数 * 取整误差）。\n\n**影响范围**：改动波及全部购物车计算（[src/pricing.js:5](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-2/src/pricing.js#5) 与 [src/cart.js:8](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-2/src/cart.js#8)）。ADR 0001 称「取整放总价层会导致发票逐行金额加总与显示总价对不上」，但本仓无发票代码、无法当场核实此论断真伪。\n\n**现场证据**（ADR 0001 原文，:12-13 行）：\n```\n选 (a)：取整发生在单价层。理由是发票要求逐行金额本身就是\"分\"精度，取整放到总价层会导致\n发票逐行金额加总与显示总价对不上。\n```\n\n**选项**：\n\na. 今日改，今日上线——财务对账立即对齐，测试变绿。代价：若发票逻辑真如 ADR 所述，发票行加总会与总价差若干分；投诉从「总价不对」换成「发票不对」，且发票出错通常更严重（涉及报销与税务）。\n\nb. 延后至核实发票逻辑后再改（推荐）——先找到发票代码（或联系写 ADR 的人）确认「发票逐行要分精度」这条约束真伪；确认后按实际情况改：若约束不成立则直接改总价层取整；若约束成立则需重新设计（可能要改发票展示，或改财务对账规则）。代价：财务对账继续不准，客服继续收投诉。\n\nc. 先本地构造发票场景验一次，能对齐就今日上——若本地或测试环境有发票功能，先手工跑一单、改完再跑一单，看发票行加总是否真会错位。能对齐就当日上线，对不齐就走 b。代价：若测试环境发票逻辑与产线不一致，验证结论不可信。\n\n---\n\n# Q2: ADR 0001 是留是废？\n\n改成总价层取整后，ADR 0001 的决策方向与实现相反。\n\na. 标注覆盖，写明何时何因改为总价层，现行依据是财务对账要求——ADR 文件留着作历史记录，加一段 \"2026-09-23 覆盖\" 说明。\n\nb. 整份作废，另写 ADR 0002 记录新决策——旧 ADR 状态改 `superseded by ADR 0002`。\n\nc. 直接删 ADR 0001——最干净，但抹掉了「为何当初选单价层」的上下文，日后若再撞类似问题无从追溯。\n\n---\n\n# Q3: 测试怎么办？\n\n[tests/pricing.test.js:8](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-2/tests/pricing.test.js#8) 现在要求财务口径（0.89），但系统给 0.90。\n\na. 改完代码，测试自然变绿——若选 Q1 的 a 或 c 且当日上线，测试同步修复。\n\nb. 先把测试期望改成 0.90 让它变绿，延后改代码——掩盖问题，不推荐。\n\nc. 加第二条测试覆盖发票场景——若 Q1 选 b 或 c，补一条「发票行加总 == 显示总价」的测试，两条并存、分别锁两个约束。\n\n★ Insight ─────────────────────────────────────\nADR 防的事（发票错位）现无实证，投诉的事（对账差 1 分）已发三次——优先级倒挂了\n测试红不只是「代码没过」，是「系统口径与财务口径分叉」的唯一可见信号\n「还没把握」的根源是发票代码不在仓里——核实它比猜它快\n─────────────────────────────────────────────────",
+      "resultEvent": {
+        "duration_api_ms": 104192,
+        "stop_reason": "end_turn",
+        "session_id": "bdd425f9-98c3-4e4a-8bad-d60c042d987d",
+        "total_cost_usd": 0.6336212999999999,
+        "usage": {
+          "input_tokens": 47,
+          "cache_creation_input_tokens": 75506,
+          "cache_read_input_tokens": 366231,
+          "output_tokens": 4705,
+          "output_tokens_details": {
+            "thinking_tokens": 1865
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 75506,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 10,
+              "output_tokens": 2456,
+              "cache_read_input_tokens": 90022,
+              "cache_creation_input_tokens": 765,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 765
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-sonnet-4-5": {
+            "inputTokens": 47,
+            "outputTokens": 4705,
+            "cacheReadInputTokens": 366231,
+            "cacheCreationInputTokens": 75506,
+            "webSearchRequests": 0,
+            "costUSD": 0.6336212999999999,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000,
+            "thinkingTokens": 1865,
+            "canonicalModel": "claude-sonnet-4-5",
+            "provider": "firstParty",
+            "costBasis": "list"
+          }
+        },
+        "permission_denials": [
+          {
+            "tool_name": "Grep",
+            "tool_use_id": "toolu_01K1AaNUR7w18gmmgj2WZKbn",
+            "tool_input": {
+              "pattern": "pricing|invoice",
+              "path": "/Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-2",
+              "output_mode": "files_with_matches",
+              "-i": true
+            }
+          }
+        ],
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "fast_mode_disabled_reason": "sdk_opt_in_required",
+        "subagent_stats": {
+          "spawned": 0,
+          "requested": {
+            "background": 0,
+            "foreground": 0,
+            "unset": 0
+          },
+          "started_in_background": 0,
+          "max_depth": 0,
+          "spawned_by_subagents": 0,
+          "completed": 0,
+          "failed": 0,
+          "killed": {
+            "parent": 0,
+            "user": 0,
+            "system": 0
+          },
+          "refused": {
+            "depth_limit": 0,
+            "concurrency_limit": 0,
+            "budget": 0
+          },
+          "by_type": {}
+        },
+        "is_error": false,
+        "num_turns": 12,
+        "subtype": "success",
+        "api_error_status": null,
+        "result": "已查完。根因明确，拍板点有三。\n\n## 现状\n\n**单价层取整（现行）**：0.33 * 0.9 = 0.297 → 取整 0.30 → 0.30 * 3 = 0.90\n**总价层取整（财务要）**：0.33 * 3 * 0.9 = 0.891 → 取整 0.89\n\nADR 0001（[docs/adr/0001-rounding-strategy.md:1](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-2/docs/adr/0001-rounding-strategy.md#1)）定单价层取整，理由「发票逐行金额需分精度，总价层取整致逐行加总与显示总价对不上」。\n\n现系统按 ADR 实现（[src/pricing.js:5](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-2/src/pricing.js#5)），但测试要求财务口径（[tests/pricing.test.js:8](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-2/tests/pricing.test.js#8)），红。客服已收 3 次投诉。\n\n## 矛盾\n\nADR 的防护目标（发票行加总对齐）与财务对账要求（总价层取整）相撞。\n\n**缺的证据**：本仓无发票代码（glob 零命中），ADR 的「发票要求」未见实证——不知是真约束还是当时推断。\n\n---\n\n# Q1: 改不改，什么时候改？\n\n**起源**：客服今日第 3 次收到「总价差 1 分」投诉，测试已红，财务对账口径与系统不符。\n\n**差距**：今为单价层取整（系统给 0.90），期为总价层取整（财务要 0.89），每单最多差若干分（商品行数 * 取整误差）。\n\n**影响范围**：改动波及全部购物车计算（[src/pricing.js:5](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-2/src/pricing.js#5) 与 [src/cart.js:8](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-2/src/cart.js#8)）。ADR 0001 称「取整放总价层会导致发票逐行金额加总与显示总价对不上」，但本仓无发票代码、无法当场核实此论断真伪。\n\n**现场证据**（ADR 0001 原文，:12-13 行）：\n```\n选 (a)：取整发生在单价层。理由是发票要求逐行金额本身就是\"分\"精度，取整放到总价层会导致\n发票逐行金额加总与显示总价对不上。\n```\n\n**选项**：\n\na. 今日改，今日上线——财务对账立即对齐，测试变绿。代价：若发票逻辑真如 ADR 所述，发票行加总会与总价差若干分；投诉从「总价不对」换成「发票不对」，且发票出错通常更严重（涉及报销与税务）。\n\nb. 延后至核实发票逻辑后再改（推荐）——先找到发票代码（或联系写 ADR 的人）确认「发票逐行要分精度」这条约束真伪；确认后按实际情况改：若约束不成立则直接改总价层取整；若约束成立则需重新设计（可能要改发票展示，或改财务对账规则）。代价：财务对账继续不准，客服继续收投诉。\n\nc. 先本地构造发票场景验一次，能对齐就今日上——若本地或测试环境有发票功能，先手工跑一单、改完再跑一单，看发票行加总是否真会错位。能对齐就当日上线，对不齐就走 b。代价：若测试环境发票逻辑与产线不一致，验证结论不可信。\n\n---\n\n# Q2: ADR 0001 是留是废？\n\n改成总价层取整后，ADR 0001 的决策方向与实现相反。\n\na. 标注覆盖，写明何时何因改为总价层，现行依据是财务对账要求——ADR 文件留着作历史记录，加一段 \"2026-09-23 覆盖\" 说明。\n\nb. 整份作废，另写 ADR 0002 记录新决策——旧 ADR 状态改 `superseded by ADR 0002`。\n\nc. 直接删 ADR 0001——最干净，但抹掉了「为何当初选单价层」的上下文，日后若再撞类似问题无从追溯。\n\n---\n\n# Q3: 测试怎么办？\n\n[tests/pricing.test.js:8](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-2/tests/pricing.test.js#8) 现在要求财务口径（0.89），但系统给 0.90。\n\na. 改完代码，测试自然变绿——若选 Q1 的 a 或 c 且当日上线，测试同步修复。\n\nb. 先把测试期望改成 0.90 让它变绿，延后改代码——掩盖问题，不推荐。\n\nc. 加第二条测试覆盖发票场景——若 Q1 选 b 或 c，补一条「发票行加总 == 显示总价」的测试，两条并存、分别锁两个约束。\n\n★ Insight ─────────────────────────────────────\nADR 防的事（发票错位）现无实证，投诉的事（对账差 1 分）已发三次——优先级倒挂了\n测试红不只是「代码没过」，是「系统口径与财务口径分叉」的唯一可见信号\n「还没把握」的根源是发票代码不在仓里——核实它比猜它快\n─────────────────────────────────────────────────",
+        "ttft_ms": 18316,
+        "type": "result",
+        "duration_ms": 105874,
+        "uuid": "3c20a765-e349-4c81-b91d-d83ad3398841",
+        "ttft_stream_ms": 5520,
+        "time_to_request_ms": 1069,
+        "first_content_frame_ms": 5520,
+        "queued_turn_count": 0,
+        "result_index": 0
+      },
+      "stderrTail": ""
+    }
+  ],
+  "sessionId": "bdd425f9-98c3-4e4a-8bad-d60c042d987d",
+  "failed": false,
+  "failureReason": null,
+  "totalRetries": 0,
+  "finishedAt": "2026-09-23T03:26:36.179Z"
+}

@@ -155,7 +155,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "3.31.0"
+      "version": "3.32.0"
     },
     {
       "author": {
@@ -281,7 +281,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "1.7.0"
+      "version": "1.8.0"
     },
     {
       "author": {

@@ -1,0 +1,19 @@
+{
+  "id": "08-long-conversation-compaction",
+  "title": "长对话中风格是否衰减",
+  "core": false,
+  "multiTurn": true,
+  "runs": {
+    "baseline": 1,
+    "no-style": 1,
+    "new": 1
+  },
+  "fixtures": [
+    "CONTEXT.md",
+    "src/pricing.js",
+    "src/cart.js",
+    "src/coupon-service.js",
+    "docs/adr/0001-rounding-strategy.md"
+  ],
+  "turnsFile": "turns.json"
+}

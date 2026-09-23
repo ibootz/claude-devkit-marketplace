@@ -1,0 +1,143 @@
+{
+  "scenarioId": "03-compare-alternatives",
+  "scenarioTitle": "方案比较（已知与未知证据并存）",
+  "arm": "baseline",
+  "runIndex": 3,
+  "model": "claude-sonnet-4-5",
+  "cliVersion": "2.1.280 (Claude Code)",
+  "pluginDir": "/Users/zhangq/.claude/jobs/6a4bd967/tmp/wenyan-1.7.0/plugins/wenyan-output-style",
+  "settingsFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/settings/disable-styles.settings.json",
+  "startedAt": "2026-09-23T03:21:05.043Z",
+  "runDir": "/Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3",
+  "turns": [
+    {
+      "turnIndex": 0,
+      "prompt": "我们在纠结要不要改取整策略（现状记在 `docs/adr/0001-rounding-strategy.md`）。\n\n已知的证据：现状（单价层取整）已经有 3 个客服工单反映\"总价和财务手算差 1 分钱\"。\n\n不确定的地方：如果换成\"先求整单原始总价、订单层统一取整一次\"，需要改动多少调用方我们\n还没摸底过，也不知道发票逐行展示会不会因此对不上。\n\n给我一份方案比较，帮我判断该怎么选。\n",
+      "exitCode": 0,
+      "retries": 0,
+      "injectionProof": {
+        "hookEventCount": 16,
+        "occurrences": {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      },
+      "assistantText": "先读现状记录，再查影响面。\n\n现已读到现状：单价层取整（pricing.js:7），但 cart.js:11 又对总价取整一次。此双重取整可能是\"差 1 分\"之源。\n\n查调用方数量与发票模块，一次并发：\n\n查得：`discountedUnitPrice` 只被 [cart.js:8](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/cart.js#8) 一处调用，`cartTotal` 无外部调用方；全仓无发票模块文件（glob 零命中）。\n\n## 方案比较\n\n**起源**\n\n3 个客服工单反映\"总价和财务手算差 1 分钱\"。排查发现现状是**双重取整**：[pricing.js:7](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/pricing.js#7) 单价层取整一次，[cart.js:11](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/cart.js#11) 总价层又取整一次——而 [ADR 0001:17](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/docs/adr/0001-rounding-strategy.md#17) consequence 明确写\"总价层再对结果做一次 Math.round 在数学上是多余操作\"，实现与决策已漂移。\n\n**差距与两个方向**\n\n- 今为：双重取整，误差累积致总价偏 1 分\n- 期为：单次取整，总价准确\n\n两条路：\n\n### 方案 A · 去掉总价层重复取整，遵守既有 ADR\n\n**改动**：[cart.js:11](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/cart.js#11) 把 `return Math.round(rawTotal * 100) / 100;` 改为 `return rawTotal;`，只此一处。\n\n**代价与风险**：\n- 符合 [ADR 0001](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/docs/adr/0001-rounding-strategy.md#1) 既定决策（\"取整发生在单价层\"）\n- 发票逐行金额仍是整分（ADR 原初理由\"发票要求逐行本身是分精度\"仍成立）\n- **浮点误差敞口**：单价层取整后，`perUnit * item.qty`（[cart.js:9](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/cart.js#9)）理论是整分，但浮点相乘可能得 `xx.9999999` 或 `xx.0000001`，去掉总价 round 后此误差会暴露——虽概率低，一旦撞上仍\"差 1 分\"，只是成因从\"双重取整\"换成\"浮点误差\"\n\n### 方案 B · 改成总价层统一取整\n\n**改动**：\n1. [pricing.js:7](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/pricing.js#7) 去掉取整，改为 `return discounted;`\n2. [cart.js:11](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/cart.js#11) 保持原样（已在做总价取整）\n\n**代价与风险**：\n- 总价一定准确（只取整一次，无累积误差）\n- **推翻 ADR 0001**，需重写决策记录\n- **发票逐行金额变小数**（如某商品折后单价 12.345 元 × 数量 1 = 12.345 元），不符合 ADR 原初理由\"发票要求逐行本身是分精度\"——**但本仓未见发票模块**（glob `**/*invoice*` 零命中），此理由当初是否经实测验证、现在是否仍成立，待核实\n- 改动两处（pricing.js 定义 + ADR 文档），但 `discountedUnitPrice` 只被 cart.js 一处调用，波及面可控\n\n**影响范围**\n\n全仓只 2 个 JS 文件（[pricing.js](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/pricing.js#1)、[cart.js](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/cart.js#1)），`discountedUnitPrice` 只被 [cart.js:8](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/cart.js#8) 一处调用，无外部调用方。两个方案改动量都极小（A 改 1 处，B 改 2 处代码 + 1 份 ADR）。\n\n**你说的\"不确定发票逐行展示会不会对不上\"——本仓当前无发票模块文件**，ADR 0001 里\"发票要求逐行本身是分精度\"这一理由无从在代码里验证。若发票在后端或别处，需另行核实此约束是否成立；若尚未实现发票功能，此理由实为空白（见 `~/.claude/rules/defect-vs-spec-gap.md` 判据）。\n\n**现场证据**\n\n```javascript\n// pricing.js:5-8 —— 单价层取整（ADR 0001 决策）\nfunction discountedUnitPrice(unitPrice, discountRate) {\n  const discounted = unitPrice * (1 - discountRate);\n  return Math.round(discounted * 100) / 100;  // ← 第一次取整\n}\n\n// cart.js:6-12 —— 总价层又取整（与 ADR consequence 矛盾）\nfunction cartTotal(items, discountRate) {\n  const rawTotal = items.reduce((sum, item) => {\n    const perUnit = discountedUnitPrice(item.unitPrice, discountRate);\n    return sum + perUnit * item.qty;\n  }, 0);\n  return Math.round(rawTotal * 100) / 100;  // ← 第二次取整，ADR 说\"多余\"\n}\n```\n\n---\n\n★ Insight ─────────────────────────────────────  \n方案 A 的浮点误差敞口可用整数运算彻底消掉（金额全用\"分\"存），但这超出\"改取整策略\"的字面范围。  \nADR 的\"发票逐行是分精度\"理由无代码验证，可能是当初推断而非实测约束——若确为推断，方案 B 的代价没实锤。  \n─────────────────────────────────────────────────\n\n**建议**：先核实发票约束是否真实存在。若无（尚未实现 / 后端无此要求），方案 B 彻底；若有，方案 A 加整数运算改造。",
+      "resultEvent": {
+        "duration_api_ms": 124630,
+        "stop_reason": "end_turn",
+        "session_id": "70e569c4-a03e-44e6-a578-291b2e990cd7",
+        "total_cost_usd": 0.6316647,
+        "usage": {
+          "input_tokens": 35,
+          "cache_creation_input_tokens": 75707,
+          "cache_read_input_tokens": 276259,
+          "output_tokens": 6296,
+          "output_tokens_details": {
+            "thinking_tokens": 3105
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 75707,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 8,
+              "output_tokens": 3614,
+              "cache_read_input_tokens": 88076,
+              "cache_creation_input_tokens": 2912,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 2912
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-sonnet-4-5": {
+            "inputTokens": 35,
+            "outputTokens": 6296,
+            "cacheReadInputTokens": 276259,
+            "cacheCreationInputTokens": 75707,
+            "webSearchRequests": 0,
+            "costUSD": 0.6316647,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000,
+            "thinkingTokens": 3105,
+            "canonicalModel": "claude-sonnet-4-5",
+            "provider": "firstParty",
+            "costBasis": "list"
+          }
+        },
+        "permission_denials": [
+          {
+            "tool_name": "Grep",
+            "tool_use_id": "toolu_01SfudF5cKUj14oPwKkrRprt",
+            "tool_input": {
+              "pattern": "cartTotal",
+              "path": "/Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3",
+              "output_mode": "content",
+              "-n": true
+            }
+          }
+        ],
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "fast_mode_disabled_reason": "sdk_opt_in_required",
+        "subagent_stats": {
+          "spawned": 0,
+          "requested": {
+            "background": 0,
+            "foreground": 0,
+            "unset": 0
+          },
+          "started_in_background": 0,
+          "max_depth": 0,
+          "spawned_by_subagents": 0,
+          "completed": 0,
+          "failed": 0,
+          "killed": {
+            "parent": 0,
+            "user": 0,
+            "system": 0
+          },
+          "refused": {
+            "depth_limit": 0,
+            "concurrency_limit": 0,
+            "budget": 0
+          },
+          "by_type": {}
+        },
+        "is_error": false,
+        "num_turns": 10,
+        "subtype": "success",
+        "api_error_status": null,
+        "result": "查得：`discountedUnitPrice` 只被 [cart.js:8](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/cart.js#8) 一处调用，`cartTotal` 无外部调用方；全仓无发票模块文件（glob 零命中）。\n\n## 方案比较\n\n**起源**\n\n3 个客服工单反映\"总价和财务手算差 1 分钱\"。排查发现现状是**双重取整**：[pricing.js:7](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/pricing.js#7) 单价层取整一次，[cart.js:11](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/cart.js#11) 总价层又取整一次——而 [ADR 0001:17](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/docs/adr/0001-rounding-strategy.md#17) consequence 明确写\"总价层再对结果做一次 Math.round 在数学上是多余操作\"，实现与决策已漂移。\n\n**差距与两个方向**\n\n- 今为：双重取整，误差累积致总价偏 1 分\n- 期为：单次取整，总价准确\n\n两条路：\n\n### 方案 A · 去掉总价层重复取整，遵守既有 ADR\n\n**改动**：[cart.js:11](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/cart.js#11) 把 `return Math.round(rawTotal * 100) / 100;` 改为 `return rawTotal;`，只此一处。\n\n**代价与风险**：\n- 符合 [ADR 0001](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/docs/adr/0001-rounding-strategy.md#1) 既定决策（\"取整发生在单价层\"）\n- 发票逐行金额仍是整分（ADR 原初理由\"发票要求逐行本身是分精度\"仍成立）\n- **浮点误差敞口**：单价层取整后，`perUnit * item.qty`（[cart.js:9](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/cart.js#9)）理论是整分，但浮点相乘可能得 `xx.9999999` 或 `xx.0000001`，去掉总价 round 后此误差会暴露——虽概率低，一旦撞上仍\"差 1 分\"，只是成因从\"双重取整\"换成\"浮点误差\"\n\n### 方案 B · 改成总价层统一取整\n\n**改动**：\n1. [pricing.js:7](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/pricing.js#7) 去掉取整，改为 `return discounted;`\n2. [cart.js:11](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/cart.js#11) 保持原样（已在做总价取整）\n\n**代价与风险**：\n- 总价一定准确（只取整一次，无累积误差）\n- **推翻 ADR 0001**，需重写决策记录\n- **发票逐行金额变小数**（如某商品折后单价 12.345 元 × 数量 1 = 12.345 元），不符合 ADR 原初理由\"发票要求逐行本身是分精度\"——**但本仓未见发票模块**（glob `**/*invoice*` 零命中），此理由当初是否经实测验证、现在是否仍成立，待核实\n- 改动两处（pricing.js 定义 + ADR 文档），但 `discountedUnitPrice` 只被 cart.js 一处调用，波及面可控\n\n**影响范围**\n\n全仓只 2 个 JS 文件（[pricing.js](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/pricing.js#1)、[cart.js](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/cart.js#1)），`discountedUnitPrice` 只被 [cart.js:8](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/03-compare-alternatives/run-3/src/cart.js#8) 一处调用，无外部调用方。两个方案改动量都极小（A 改 1 处，B 改 2 处代码 + 1 份 ADR）。\n\n**你说的\"不确定发票逐行展示会不会对不上\"——本仓当前无发票模块文件**，ADR 0001 里\"发票要求逐行本身是分精度\"这一理由无从在代码里验证。若发票在后端或别处，需另行核实此约束是否成立；若尚未实现发票功能，此理由实为空白（见 `~/.claude/rules/defect-vs-spec-gap.md` 判据）。\n\n**现场证据**\n\n```javascript\n// pricing.js:5-8 —— 单价层取整（ADR 0001 决策）\nfunction discountedUnitPrice(unitPrice, discountRate) {\n  const discounted = unitPrice * (1 - discountRate);\n  return Math.round(discounted * 100) / 100;  // ← 第一次取整\n}\n\n// cart.js:6-12 —— 总价层又取整（与 ADR consequence 矛盾）\nfunction cartTotal(items, discountRate) {\n  const rawTotal = items.reduce((sum, item) => {\n    const perUnit = discountedUnitPrice(item.unitPrice, discountRate);\n    return sum + perUnit * item.qty;\n  }, 0);\n  return Math.round(rawTotal * 100) / 100;  // ← 第二次取整，ADR 说\"多余\"\n}\n```\n\n---\n\n★ Insight ─────────────────────────────────────  \n方案 A 的浮点误差敞口可用整数运算彻底消掉（金额全用\"分\"存），但这超出\"改取整策略\"的字面范围。  \nADR 的\"发票逐行是分精度\"理由无代码验证，可能是当初推断而非实测约束——若确为推断，方案 B 的代价没实锤。  \n─────────────────────────────────────────────────\n\n**建议**：先核实发票约束是否真实存在。若无（尚未实现 / 后端无此要求），方案 B 彻底；若有，方案 A 加整数运算改造。",
+        "ttft_ms": 16208,
+        "type": "result",
+        "duration_ms": 125652,
+        "uuid": "ed88908f-65c7-4690-9716-a60064a1a0ac",
+        "ttft_stream_ms": 3260,
+        "time_to_request_ms": 361,
+        "first_content_frame_ms": 3261,
+        "queued_turn_count": 0,
+        "result_index": 0
+      },
+      "stderrTail": ""
+    }
+  ],
+  "sessionId": "70e569c4-a03e-44e6-a578-291b2e990cd7",
+  "failed": false,
+  "failureReason": null,
+  "totalRetries": 0,
+  "finishedAt": "2026-09-23T03:23:12.603Z"
+}

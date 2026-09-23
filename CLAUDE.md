@@ -46,6 +46,20 @@ hook 的 deny/hint 文案、reference 文档一律作用）；后者管**结构�
 读技能的动作必须是**真实的两次 `Skill` 工具调用**，不接受「我已了解这两个技能的内容」这类
 声明代替。同一会话内已经读过则不必重读。
 
+## Agent skills
+
+### Issue tracker
+
+Issues and specs are tracked as local Markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default five-role triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use the single-context layout: root `CONTEXT.md` plus `docs/adr/`. See `docs/agents/domain.md`.
+
 ## 其余仓库规约
 
 - 通用开发规范（可移植性、commands / skills / agents / hooks 各自的结构要求、MCP、敏感信息、

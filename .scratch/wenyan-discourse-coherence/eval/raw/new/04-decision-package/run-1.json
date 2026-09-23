@@ -1,0 +1,140 @@
+{
+  "scenarioId": "04-decision-package",
+  "scenarioTitle": "正文决策包（起源/差距/影响范围/证据）",
+  "arm": "new",
+  "runIndex": 1,
+  "model": "claude-sonnet-4-5",
+  "cliVersion": "2.1.280 (Claude Code)",
+  "pluginDir": "/Users/zhangq/.claude/jobs/f077ba4f/tmp/wenyan-new-snapshot",
+  "settingsFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/settings/disable-styles.settings.json",
+  "startedAt": "2026-09-23T04:39:25.772Z",
+  "runDir": "/Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/04-decision-package/run-1",
+  "turns": [
+    {
+      "turnIndex": 0,
+      "prompt": "客服今天第 3 次收到用户投诉\"总价和自己手算的不一致，差 1 分钱\"，`tests/pricing.test.js`\n现在也是红的。\n\n要不要现在就把取整策略从\"单价层取整\"改成\"总价层统一取整\"，今天就上线？这个改动会不会\n影响发票展示，我们还没有把握。\n\n你怎么看，需要我拍板的地方是什么？\n",
+      "exitCode": 0,
+      "retries": 0,
+      "injectionProof": {
+        "hookEventCount": 16,
+        "occurrences": {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      },
+      "assistantText": "先查明现状与代价，再给建议。\n\n已查明现状、影响面与代价上界。\n\n## 起源\n\n客服今日第 3 次收到\"总价差 1 分\"投诉，[tests/pricing.test.js:8](file:///Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/04-decision-package/run-1/tests/pricing.test.js#8) 亦红——期望 0.89（财务对账口径），系统算出 0.90。\n\n## 差距\n\n今为单价层取整（[src/pricing.js:6-7](file:///Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/04-decision-package/run-1/src/pricing.js#6)），期为总价层统一取整。\n\n算例：0.33 元单价，打 9 折，买 3 件——\n- 单价层取整：0.33 × 0.9 = 0.297 → 0.30，三件 0.90\n- 总价层取整：(0.33 × 3) × 0.9 = 0.891 → 0.89\n\n单价层取整必积累误差，商品行数越多、单价小数位越多，偏差越显。\n\n## 影响范围\n\n**技术改动极小**——[src/pricing.js:7](file:///Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/04-decision-package/run-1/src/pricing.js#7) 删取整，[src/cart.js:11](file:///Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/04-decision-package/run-1/src/cart.js#11) 留总价取整即可。\n\n**发票是唯一不确定项**——[docs/adr/0001-rounding-strategy.md:12-13](file:///Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/04-decision-package/run-1/docs/adr/0001-rounding-strategy.md#12) 原决策明写「发票要求逐行金额本身就是'分'精度，取整放到总价层会导致发票逐行金额加总与显示总价对不上」。\n\n改后发票逐行会出现三种情形之一：\n1. 逐行金额带小数（0.297 元）\n2. 逐行金额各自取整、加总与总价仍不符\n3. 发票系统另有取整逻辑、实际无碍\n\n**前两种皆违财税合规，第三种须实测验证**——ADR 当初选单价层取整正为规避此险。\n\n## 现场证据\n\n```javascript\n// tests/pricing.test.js:7-8\nconst total = cartTotal([{ unitPrice: 0.33, qty: 3 }], 0.10);\nassert.strictEqual(total, 0.89, `expected 0.89 (财务对账口径), got ${total}`);\n```\n\n```javascript\n// src/pricing.js:5-7（当前单价层取整）\nfunction discountedUnitPrice(unitPrice, discountRate) {\n  const discounted = unitPrice * (1 - discountRate);\n  return Math.round(discounted * 100) / 100;  // ← 此行取整\n}\n```\n\n```markdown\n// docs/adr/0001-rounding-strategy.md:12-13（原决策依据）\n选 (a)：取整发生在单价层。理由是发票要求逐行金额本身就是\"分\"精度，取整放到总价层会导致\n发票逐行金额加总与显示总价对不上。\n```\n\n---\n\n# Q1: 今天就改成总价层取整并上线？\n\na. **今天改今天上**（推荐）——客服已收 3 次投诉，测试已红，用户与财务对账已断。代价：**发票逐行可能不合规**（ADR 原决策正为规避此险）。改前须线下环境实测一张发票、确认逐行金额与加总无碍，否则上线后税务风险不可逆。\n\nb. **先线下实测发票、确认无碍后择期上** ——规避税务风险。代价：客服这几天仍收投诉、用户仍对不上账，且不知要测多久。\n\nc. **暂不改，回 ADR 原决策** ——维持发票合规。代价：**永久放弃财务对账一致性**，客服需备话术解释\"系统算法与手算必有 1 分偏差\"。\n\nd. **两层都取整**（混合方案）——单价层取整保发票、总价层再取整保对账。代价：双重取整积累误差更大、且方向不可控，比现状更坏。",
+      "resultEvent": {
+        "duration_api_ms": 78635,
+        "stop_reason": "end_turn",
+        "session_id": "9318ce9e-f5c4-434f-a20b-6ac47617f98d",
+        "total_cost_usd": 0.63225,
+        "usage": {
+          "input_tokens": 45,
+          "cache_creation_input_tokens": 75795,
+          "cache_read_input_tokens": 369400,
+          "output_tokens": 4435,
+          "output_tokens_details": {
+            "thinking_tokens": 2306
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 75795,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 10,
+              "output_tokens": 2663,
+              "cache_read_input_tokens": 90201,
+              "cache_creation_input_tokens": 875,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 875
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-sonnet-4-5": {
+            "inputTokens": 45,
+            "outputTokens": 4435,
+            "cacheReadInputTokens": 369400,
+            "cacheCreationInputTokens": 75795,
+            "webSearchRequests": 0,
+            "costUSD": 0.63225,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000,
+            "thinkingTokens": 2306,
+            "canonicalModel": "claude-sonnet-4-5",
+            "provider": "firstParty",
+            "costBasis": "list"
+          }
+        },
+        "permission_denials": [
+          {
+            "tool_name": "Read",
+            "tool_use_id": "toolu_01TZb5suUamtVb3QkJCdbDcF",
+            "tool_input": {
+              "file_path": "/Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/04-decision-package/run-1/docs/adr/0001-rounding-strategy.md"
+            }
+          }
+        ],
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "fast_mode_disabled_reason": "sdk_opt_in_required",
+        "subagent_stats": {
+          "spawned": 0,
+          "requested": {
+            "background": 0,
+            "foreground": 0,
+            "unset": 0
+          },
+          "started_in_background": 0,
+          "max_depth": 0,
+          "spawned_by_subagents": 0,
+          "completed": 0,
+          "failed": 0,
+          "killed": {
+            "parent": 0,
+            "user": 0,
+            "system": 0
+          },
+          "refused": {
+            "depth_limit": 0,
+            "concurrency_limit": 0,
+            "budget": 0
+          },
+          "by_type": {}
+        },
+        "is_error": false,
+        "num_turns": 10,
+        "subtype": "success",
+        "api_error_status": null,
+        "result": "已查明现状、影响面与代价上界。\n\n## 起源\n\n客服今日第 3 次收到\"总价差 1 分\"投诉，[tests/pricing.test.js:8](file:///Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/04-decision-package/run-1/tests/pricing.test.js#8) 亦红——期望 0.89（财务对账口径），系统算出 0.90。\n\n## 差距\n\n今为单价层取整（[src/pricing.js:6-7](file:///Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/04-decision-package/run-1/src/pricing.js#6)），期为总价层统一取整。\n\n算例：0.33 元单价，打 9 折，买 3 件——\n- 单价层取整：0.33 × 0.9 = 0.297 → 0.30，三件 0.90\n- 总价层取整：(0.33 × 3) × 0.9 = 0.891 → 0.89\n\n单价层取整必积累误差，商品行数越多、单价小数位越多，偏差越显。\n\n## 影响范围\n\n**技术改动极小**——[src/pricing.js:7](file:///Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/04-decision-package/run-1/src/pricing.js#7) 删取整，[src/cart.js:11](file:///Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/04-decision-package/run-1/src/cart.js#11) 留总价取整即可。\n\n**发票是唯一不确定项**——[docs/adr/0001-rounding-strategy.md:12-13](file:///Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/04-decision-package/run-1/docs/adr/0001-rounding-strategy.md#12) 原决策明写「发票要求逐行金额本身就是'分'精度，取整放到总价层会导致发票逐行金额加总与显示总价对不上」。\n\n改后发票逐行会出现三种情形之一：\n1. 逐行金额带小数（0.297 元）\n2. 逐行金额各自取整、加总与总价仍不符\n3. 发票系统另有取整逻辑、实际无碍\n\n**前两种皆违财税合规，第三种须实测验证**——ADR 当初选单价层取整正为规避此险。\n\n## 现场证据\n\n```javascript\n// tests/pricing.test.js:7-8\nconst total = cartTotal([{ unitPrice: 0.33, qty: 3 }], 0.10);\nassert.strictEqual(total, 0.89, `expected 0.89 (财务对账口径), got ${total}`);\n```\n\n```javascript\n// src/pricing.js:5-7（当前单价层取整）\nfunction discountedUnitPrice(unitPrice, discountRate) {\n  const discounted = unitPrice * (1 - discountRate);\n  return Math.round(discounted * 100) / 100;  // ← 此行取整\n}\n```\n\n```markdown\n// docs/adr/0001-rounding-strategy.md:12-13（原决策依据）\n选 (a)：取整发生在单价层。理由是发票要求逐行金额本身就是\"分\"精度，取整放到总价层会导致\n发票逐行金额加总与显示总价对不上。\n```\n\n---\n\n# Q1: 今天就改成总价层取整并上线？\n\na. **今天改今天上**（推荐）——客服已收 3 次投诉，测试已红，用户与财务对账已断。代价：**发票逐行可能不合规**（ADR 原决策正为规避此险）。改前须线下环境实测一张发票、确认逐行金额与加总无碍，否则上线后税务风险不可逆。\n\nb. **先线下实测发票、确认无碍后择期上** ——规避税务风险。代价：客服这几天仍收投诉、用户仍对不上账，且不知要测多久。\n\nc. **暂不改，回 ADR 原决策** ——维持发票合规。代价：**永久放弃财务对账一致性**，客服需备话术解释\"系统算法与手算必有 1 分偏差\"。\n\nd. **两层都取整**（混合方案）——单价层取整保发票、总价层再取整保对账。代价：双重取整积累误差更大、且方向不可控，比现状更坏。",
+        "ttft_ms": 9569,
+        "type": "result",
+        "duration_ms": 79484,
+        "uuid": "be3e930e-5150-4a38-930b-9638dd899924",
+        "ttft_stream_ms": 2499,
+        "time_to_request_ms": 144,
+        "first_content_frame_ms": 2500,
+        "queued_turn_count": 0,
+        "result_index": 0
+      },
+      "stderrTail": ""
+    }
+  ],
+  "sessionId": "9318ce9e-f5c4-434f-a20b-6ac47617f98d",
+  "failed": false,
+  "failureReason": null,
+  "totalRetries": 0,
+  "finishedAt": "2026-09-23T04:40:46.964Z"
+}

@@ -1,0 +1,17 @@
+{
+  "id": "02-unfamiliar-infra-component",
+  "title": "陌生基础设施组件介绍",
+  "core": true,
+  "multiTurn": false,
+  "runs": {
+    "baseline": 3,
+    "no-style": 3,
+    "new": 3
+  },
+  "fixtures": [
+    "CONTEXT.md",
+    "src/coupon-service.js",
+    "src/cart.js"
+  ],
+  "promptFile": "prompt.md"
+}

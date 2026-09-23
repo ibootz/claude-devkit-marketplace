@@ -1,0 +1,72 @@
+[
+  {
+    "pairId": "P01",
+    "scenarioId": "01-cross-file-root-cause",
+    "run": "run-3.json",
+    "A": "new",
+    "B": "baseline"
+  },
+  {
+    "pairId": "P02",
+    "scenarioId": "02-unfamiliar-infra-component",
+    "run": "run-2.json",
+    "A": "new",
+    "B": "baseline"
+  },
+  {
+    "pairId": "P03",
+    "scenarioId": "03-compare-alternatives",
+    "run": "run-1.json",
+    "A": "baseline",
+    "B": "new"
+  },
+  {
+    "pairId": "P04",
+    "scenarioId": "04-decision-package",
+    "run": "run-2.json",
+    "A": "new",
+    "B": "baseline"
+  },
+  {
+    "pairId": "P05",
+    "scenarioId": "05-post-decision-closure",
+    "run": "run-1.json",
+    "A": "baseline",
+    "B": "new"
+  },
+  {
+    "pairId": "P06",
+    "scenarioId": "06-irreversible-confirmation",
+    "run": "run-3.json",
+    "A": "new",
+    "B": "baseline"
+  },
+  {
+    "pairId": "P07",
+    "scenarioId": "07-persisted-artifact",
+    "run": "run-1.json",
+    "A": "new",
+    "B": "baseline"
+  },
+  {
+    "pairId": "P08",
+    "scenarioId": "08-long-conversation-compaction",
+    "run": "run-1.json",
+    "A": "baseline",
+    "B": "new"
+  },
+  {
+    "pairId": "P09",
+    "scenarioId": "09-concept-navigation",
+    "run": "run-1.json",
+    "A": "new",
+    "B": "baseline"
+  },
+  {
+    "pairId": "P10",
+    "scenarioId": "10-no-askuserquestion-lifecycle",
+    "run": "run-1.json",
+    "A": "new",
+    "B": "baseline"
+  }
+]

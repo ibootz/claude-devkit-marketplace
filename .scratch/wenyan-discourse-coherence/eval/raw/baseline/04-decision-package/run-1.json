@@ -1,0 +1,143 @@
+{
+  "scenarioId": "04-decision-package",
+  "scenarioTitle": "正文决策包（起源/差距/影响范围/证据）",
+  "arm": "baseline",
+  "runIndex": 1,
+  "model": "claude-sonnet-4-5",
+  "cliVersion": "2.1.280 (Claude Code)",
+  "pluginDir": "/Users/zhangq/.claude/jobs/6a4bd967/tmp/wenyan-1.7.0/plugins/wenyan-output-style",
+  "settingsFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/settings/disable-styles.settings.json",
+  "startedAt": "2026-09-23T03:23:12.608Z",
+  "runDir": "/Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-1",
+  "turns": [
+    {
+      "turnIndex": 0,
+      "prompt": "客服今天第 3 次收到用户投诉\"总价和自己手算的不一致，差 1 分钱\"，`tests/pricing.test.js`\n现在也是红的。\n\n要不要现在就把取整策略从\"单价层取整\"改成\"总价层统一取整\"，今天就上线？这个改动会不会\n影响发票展示，我们还没有把握。\n\n你怎么看，需要我拍板的地方是什么？\n",
+      "exitCode": 0,
+      "retries": 0,
+      "injectionProof": {
+        "hookEventCount": 16,
+        "occurrences": {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      },
+      "assistantText": "先查现场证据再判断。\n\n看出矛盾了。再查发票实现是否真依赖单价层取整：\n\n已有足够信息判断。ADR 0001 与财务对账口径矛盾，且未见发票实现佐证。\n\n---\n\n# Q1: 取整策略冲突——改还是不改？\n\n## 起源\n\n客服今日第 3 次收到\"总价差 1 分钱\"投诉，`tests/pricing.test.js` 红的，财务对账口径（先算总价再取整 → 0.89 元）与系统输出（单价层取整 → 0.90 元）不一致。\n\n## 差距\n\n**今为**：[src/pricing.js:5-7](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-1/src/pricing.js#5) 单价层取整（`discountedUnitPrice` 内部 `Math.round`），依据 [ADR 0001:12-13](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-1/docs/adr/0001-rounding-strategy.md#12)「发票要求逐行金额加总与显示总价对得上」。\n\n**期为**：[tests/pricing.test.js:5-6](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-1/tests/pricing.test.js#5) 财务对账口径，总价层统一取整。\n\n**矛盾**：ADR 0001 说的发票理由在全仓 grep 不到实现佐证——只在那份 ADR 出现过「发票」二字，`src/` 下无发票模块、无逐行金额导出、无开票接口调用。\n\n## 影响范围\n\n改成总价层取整：\n- ✅ 财务对账立刻对齐，投诉归零，测试变绿\n- ⚠️ **若发票确实依赖单价层取整**（ADR 说的场景），改完发票逐行加总会≠显示总价，财税合规风险\n- ⚠️ \"今天上线\"= 无充分回归时间，全量订单计价逻辑变更\n\n不改：\n- ❌ 财务对账持续对不上，客服投诉继续，测试持续红\n- ❌ 要么改财务对账规则（他们手算改成单价层取整），要么永久接受 ±1 分差异\n\n## 现场证据\n\n```js\n// pricing.js:5-7 现状\nfunction discountedUnitPrice(unitPrice, discountRate) {\n  const discounted = unitPrice * (1 - discountRate);\n  return Math.round(discounted * 100) / 100;  // 👈 单价层取整\n}\n```\n\n```js\n// tests/pricing.test.js:4-8 财务对账要求\n// 财务对账用的手工算法是：先算 3 件商品打折前后的真实总价，再对总价取整一次，结果是 0.89 元。\n// 系统跑出来是 0.90 元，和财务对不上账，差 1 分钱。\nconst total = cartTotal([{ unitPrice: 0.33, qty: 3 }], 0.10);\nassert.strictEqual(total, 0.89, `expected 0.89 (财务对账口径), got ${total}`);\n```\n\n[ADR 0001:12-13](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-1/docs/adr/0001-rounding-strategy.md#12) 说发票要单价层取整，但 `grep -r \"invoice\\|发票\\|逐行\\|lineItem\"` 全仓只命中这份 ADR，无实现。\n\n---\n\n## 选项\n\n**a. 立即改成总价层取整，删 `pricing.js:7` 那行 `Math.round`，今天上线**  \n代价：若发票场景确实存在（ADR 作者当时见过、现在找不到代码），改完发票逐行加总≠显示总价是财税合规风险；且无回归时间，全量订单计价变更当天上线。\n\n**b. 先找财务与开票系统确认发票依赖（推荐）**  \n问清两件事：① 发票逐行金额来源是单价×数量还是总价反算？② 对账规则能不能统一成总价层取整？确认「发票不依赖单价层取整」后再改，测试补齐再上。代价：确认周期内投诉继续、测试继续红。\n\n**c. 保持现状，改财务对账规则来适应系统**  \n说服财务把手算改成单价层取整。代价：财务通常不会为系统改自己的会计准则；若他们拒绝，±1 分差异永久存在。\n\n**d. 两层都取整，但发票与对账分别调不同函数**  \n拆成 `invoiceUnitPrice`（单价层取整）与 `accountingTotal`（总价层取整）两条路径。代价：引入两套计价逻辑，订单存哪个值、展示哪个值需再拍板；复杂度高于 a/b。\n\n---\n\n★ Insight ─────────────────────────────────────  \nADR 说的理由若无实现佐证，它可能记的是「当时设想」而非「现在约束」——grep 全仓只在 ADR 出现的那个词，往往意味着那条路从未走通。  \n财务对账与系统输出差 1 分且测试红，属「期望被违反」→ 这是缺陷不是规格空白，但修之前必须确认 ADR 那条理由今天还成不成立。  \n─────────────────────────────────────────────────",
+      "resultEvent": {
+        "duration_api_ms": 91818,
+        "stop_reason": "end_turn",
+        "session_id": "fac37311-1779-47c6-814d-0f6e1e353f5b",
+        "total_cost_usd": 0.5992662,
+        "usage": {
+          "input_tokens": 35,
+          "cache_creation_input_tokens": 74814,
+          "cache_read_input_tokens": 275874,
+          "output_tokens": 4501,
+          "output_tokens_details": {
+            "thinking_tokens": 1924
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 74814,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 8,
+              "output_tokens": 2373,
+              "cache_read_input_tokens": 88156,
+              "cache_creation_input_tokens": 1939,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 1939
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-sonnet-4-5": {
+            "inputTokens": 35,
+            "outputTokens": 4501,
+            "cacheReadInputTokens": 275874,
+            "cacheCreationInputTokens": 74814,
+            "webSearchRequests": 0,
+            "costUSD": 0.5992662,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000,
+            "thinkingTokens": 1924,
+            "canonicalModel": "claude-sonnet-4-5",
+            "provider": "firstParty",
+            "costBasis": "list"
+          }
+        },
+        "permission_denials": [
+          {
+            "tool_name": "Grep",
+            "tool_use_id": "toolu_01NrW45w9wN8xWhgdiWt3NYH",
+            "tool_input": {
+              "pattern": "invoice|发票|逐行|lineItem|行金额",
+              "path": "/Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-1",
+              "output_mode": "content",
+              "-n": true
+            }
+          }
+        ],
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "fast_mode_disabled_reason": "sdk_opt_in_required",
+        "subagent_stats": {
+          "spawned": 0,
+          "requested": {
+            "background": 0,
+            "foreground": 0,
+            "unset": 0
+          },
+          "started_in_background": 0,
+          "max_depth": 0,
+          "spawned_by_subagents": 0,
+          "completed": 0,
+          "failed": 0,
+          "killed": {
+            "parent": 0,
+            "user": 0,
+            "system": 0
+          },
+          "refused": {
+            "depth_limit": 0,
+            "concurrency_limit": 0,
+            "budget": 0
+          },
+          "by_type": {}
+        },
+        "is_error": false,
+        "num_turns": 9,
+        "subtype": "success",
+        "api_error_status": null,
+        "result": "已有足够信息判断。ADR 0001 与财务对账口径矛盾，且未见发票实现佐证。\n\n---\n\n# Q1: 取整策略冲突——改还是不改？\n\n## 起源\n\n客服今日第 3 次收到\"总价差 1 分钱\"投诉，`tests/pricing.test.js` 红的，财务对账口径（先算总价再取整 → 0.89 元）与系统输出（单价层取整 → 0.90 元）不一致。\n\n## 差距\n\n**今为**：[src/pricing.js:5-7](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-1/src/pricing.js#5) 单价层取整（`discountedUnitPrice` 内部 `Math.round`），依据 [ADR 0001:12-13](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-1/docs/adr/0001-rounding-strategy.md#12)「发票要求逐行金额加总与显示总价对得上」。\n\n**期为**：[tests/pricing.test.js:5-6](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-1/tests/pricing.test.js#5) 财务对账口径，总价层统一取整。\n\n**矛盾**：ADR 0001 说的发票理由在全仓 grep 不到实现佐证——只在那份 ADR 出现过「发票」二字，`src/` 下无发票模块、无逐行金额导出、无开票接口调用。\n\n## 影响范围\n\n改成总价层取整：\n- ✅ 财务对账立刻对齐，投诉归零，测试变绿\n- ⚠️ **若发票确实依赖单价层取整**（ADR 说的场景），改完发票逐行加总会≠显示总价，财税合规风险\n- ⚠️ \"今天上线\"= 无充分回归时间，全量订单计价逻辑变更\n\n不改：\n- ❌ 财务对账持续对不上，客服投诉继续，测试持续红\n- ❌ 要么改财务对账规则（他们手算改成单价层取整），要么永久接受 ±1 分差异\n\n## 现场证据\n\n```js\n// pricing.js:5-7 现状\nfunction discountedUnitPrice(unitPrice, discountRate) {\n  const discounted = unitPrice * (1 - discountRate);\n  return Math.round(discounted * 100) / 100;  // 👈 单价层取整\n}\n```\n\n```js\n// tests/pricing.test.js:4-8 财务对账要求\n// 财务对账用的手工算法是：先算 3 件商品打折前后的真实总价，再对总价取整一次，结果是 0.89 元。\n// 系统跑出来是 0.90 元，和财务对不上账，差 1 分钱。\nconst total = cartTotal([{ unitPrice: 0.33, qty: 3 }], 0.10);\nassert.strictEqual(total, 0.89, `expected 0.89 (财务对账口径), got ${total}`);\n```\n\n[ADR 0001:12-13](file:///Users/zhangq/.claude/jobs/6a4bd967/tmp/eval-runs/baseline/04-decision-package/run-1/docs/adr/0001-rounding-strategy.md#12) 说发票要单价层取整，但 `grep -r \"invoice\\|发票\\|逐行\\|lineItem\"` 全仓只命中这份 ADR，无实现。\n\n---\n\n## 选项\n\n**a. 立即改成总价层取整，删 `pricing.js:7` 那行 `Math.round`，今天上线**  \n代价：若发票场景确实存在（ADR 作者当时见过、现在找不到代码），改完发票逐行加总≠显示总价是财税合规风险；且无回归时间，全量订单计价变更当天上线。\n\n**b. 先找财务与开票系统确认发票依赖（推荐）**  \n问清两件事：① 发票逐行金额来源是单价×数量还是总价反算？② 对账规则能不能统一成总价层取整？确认「发票不依赖单价层取整」后再改，测试补齐再上。代价：确认周期内投诉继续、测试继续红。\n\n**c. 保持现状，改财务对账规则来适应系统**  \n说服财务把手算改成单价层取整。代价：财务通常不会为系统改自己的会计准则；若他们拒绝，±1 分差异永久存在。\n\n**d. 两层都取整，但发票与对账分别调不同函数**  \n拆成 `invoiceUnitPrice`（单价层取整）与 `accountingTotal`（总价层取整）两条路径。代价：引入两套计价逻辑，订单存哪个值、展示哪个值需再拍板；复杂度高于 a/b。\n\n---\n\n★ Insight ─────────────────────────────────────  \nADR 说的理由若无实现佐证，它可能记的是「当时设想」而非「现在约束」——grep 全仓只在 ADR 出现的那个词，往往意味着那条路从未走通。  \n财务对账与系统输出差 1 分且测试红，属「期望被违反」→ 这是缺陷不是规格空白，但修之前必须确认 ADR 那条理由今天还成不成立。  \n─────────────────────────────────────────────────",
+        "ttft_ms": 15281,
+        "type": "result",
+        "duration_ms": 93383,
+        "uuid": "3b2fa9c3-edce-4dcc-83b3-be81cf8d4d1e",
+        "ttft_stream_ms": 5059,
+        "time_to_request_ms": 583,
+        "first_content_frame_ms": 5060,
+        "queued_turn_count": 0,
+        "result_index": 0
+      },
+      "stderrTail": ""
+    }
+  ],
+  "sessionId": "fac37311-1779-47c6-814d-0f6e1e353f5b",
+  "failed": false,
+  "failureReason": null,
+  "totalRetries": 0,
+  "finishedAt": "2026-09-23T03:24:48.254Z"
+}

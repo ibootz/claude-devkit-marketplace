@@ -1,0 +1,132 @@
+{
+  "scenarioId": "02-unfamiliar-infra-component",
+  "scenarioTitle": "陌生基础设施组件介绍",
+  "arm": "new",
+  "runIndex": 1,
+  "model": "claude-sonnet-4-5",
+  "cliVersion": "2.1.280 (Claude Code)",
+  "pluginDir": "/Users/zhangq/.claude/jobs/f077ba4f/tmp/wenyan-new-snapshot",
+  "settingsFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/settings/disable-styles.settings.json",
+  "startedAt": "2026-09-23T04:30:42.501Z",
+  "runDir": "/Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/02-unfamiliar-infra-component/run-1",
+  "turns": [
+    {
+      "turnIndex": 0,
+      "prompt": "我是刚接手这个项目的新人，第一次见到 `src/coupon-service.js` 里的 `CouponLedger` 这个类，\n完全不知道它是干什么用的。\n\n麻烦跟我讲清楚：它是做什么的、为什么需要它、和购物车结算入口 `cartTotal`（`src/cart.js`）\n是什么关系。如果我要在结算流程里新增一种\"新客专属券\"类型，大致应该怎么接入它？\n",
+      "exitCode": 0,
+      "retries": 0,
+      "injectionProof": {
+        "hookEventCount": 16,
+        "occurrences": {
+          "wenyan-output-style": 1,
+          "plain-talk-output-style": 0,
+          "adhd-output-style": 0
+        }
+      },
+      "assistantText": "先读两份源码，再答。\n\n## 职责\n\n**`CouponLedger`** 防重——一次结算内，同一券码只许用一次。\n\n[coupon-service.js:3-4](file:///Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/02-unfamiliar-infra-component/run-1/src/coupon-service.js#3) 注释已明示：不管券过期与否、禁用与否（那归 pricing 层），只管「本次用过没」。内部一 `Set` 存码，`tryApply` 返 `false` 即重复、跳过此券折扣。\n\n## 与 `cartTotal` 关系\n\n**目前无关系**——[cart.js:6-11](file:///Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/02-unfamiliar-infra-component/run-1/src/cart.js#6) 只接一全局 `discountRate`，逐行调 `discountedUnitPrice` 打折求和，**未用任何券逻辑**。`CouponLedger` 存在，结算流程尚未接入。\n\n## 为何需它\n\n**券可能多源叠加**——用户手动输、营销活动自动附、会员等级赠，若无登记，同一码可能被循环多次应用，折扣虚高。\n\n## 接入新客专属券\n\n分两层：\n\n1. **校验层**（pricing 或券服务）——判 `isNewCustomer`，通过方可进下一步。  \n2. **防重层**（`CouponLedger`）——校验通过后，调 `ledger.tryApply(code)`；返 `true` 才应用折扣，`false` 跳过。\n\n**改动点**：`cartTotal` 需从「单一 `discountRate`」变「接收券列表 + ledger 实例」，逐券试用；或在调 `cartTotal` 之前，先用 ledger 过滤券列表，只传已去重的券。前者防重在结算内，后者防重在外，效果同。\n\n★ Insight ─────────────────────────────────────\n`CouponLedger` 存在但 `cartTotal` 不用它，说明这是基础设施先行、业务接入滞后——防重机制已备，结算流程还按老路跑。\n─────────────────────────────────────────────────",
+      "resultEvent": {
+        "duration_api_ms": 37212,
+        "stop_reason": "end_turn",
+        "session_id": "6980ff47-f468-4866-a1c7-e048792462cd",
+        "total_cost_usd": 0.49043309999999996,
+        "usage": {
+          "input_tokens": 17,
+          "cache_creation_input_tokens": 72473,
+          "cache_read_input_tokens": 101997,
+          "output_tokens": 1663,
+          "output_tokens_details": {
+            "thinking_tokens": 772
+          },
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 72473,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "not_available",
+          "iterations": [
+            {
+              "input_tokens": 8,
+              "output_tokens": 1246,
+              "cache_read_input_tokens": 86716,
+              "cache_creation_input_tokens": 1038,
+              "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 1038
+              },
+              "type": "message"
+            }
+          ],
+          "speed": "standard"
+        },
+        "modelUsage": {
+          "claude-sonnet-4-5": {
+            "inputTokens": 17,
+            "outputTokens": 1663,
+            "cacheReadInputTokens": 101997,
+            "cacheCreationInputTokens": 72473,
+            "webSearchRequests": 0,
+            "costUSD": 0.49043309999999996,
+            "contextWindow": 200000,
+            "maxOutputTokens": 32000,
+            "thinkingTokens": 772,
+            "canonicalModel": "claude-sonnet-4-5",
+            "provider": "firstParty",
+            "costBasis": "list"
+          }
+        },
+        "permission_denials": [],
+        "terminal_reason": "completed",
+        "fast_mode_state": "off",
+        "fast_mode_disabled_reason": "sdk_opt_in_required",
+        "subagent_stats": {
+          "spawned": 0,
+          "requested": {
+            "background": 0,
+            "foreground": 0,
+            "unset": 0
+          },
+          "started_in_background": 0,
+          "max_depth": 0,
+          "spawned_by_subagents": 0,
+          "completed": 0,
+          "failed": 0,
+          "killed": {
+            "parent": 0,
+            "user": 0,
+            "system": 0
+          },
+          "refused": {
+            "depth_limit": 0,
+            "concurrency_limit": 0,
+            "budget": 0
+          },
+          "by_type": {}
+        },
+        "is_error": false,
+        "num_turns": 3,
+        "subtype": "success",
+        "api_error_status": null,
+        "result": "## 职责\n\n**`CouponLedger`** 防重——一次结算内，同一券码只许用一次。\n\n[coupon-service.js:3-4](file:///Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/02-unfamiliar-infra-component/run-1/src/coupon-service.js#3) 注释已明示：不管券过期与否、禁用与否（那归 pricing 层），只管「本次用过没」。内部一 `Set` 存码，`tryApply` 返 `false` 即重复、跳过此券折扣。\n\n## 与 `cartTotal` 关系\n\n**目前无关系**——[cart.js:6-11](file:///Users/zhangq/.claude/jobs/f077ba4f/tmp/eval-runs-new/new/02-unfamiliar-infra-component/run-1/src/cart.js#6) 只接一全局 `discountRate`，逐行调 `discountedUnitPrice` 打折求和，**未用任何券逻辑**。`CouponLedger` 存在，结算流程尚未接入。\n\n## 为何需它\n\n**券可能多源叠加**——用户手动输、营销活动自动附、会员等级赠，若无登记，同一码可能被循环多次应用，折扣虚高。\n\n## 接入新客专属券\n\n分两层：\n\n1. **校验层**（pricing 或券服务）——判 `isNewCustomer`，通过方可进下一步。  \n2. **防重层**（`CouponLedger`）——校验通过后，调 `ledger.tryApply(code)`；返 `true` 才应用折扣，`false` 跳过。\n\n**改动点**：`cartTotal` 需从「单一 `discountRate`」变「接收券列表 + ledger 实例」，逐券试用；或在调 `cartTotal` 之前，先用 ledger 过滤券列表，只传已去重的券。前者防重在结算内，后者防重在外，效果同。\n\n★ Insight ─────────────────────────────────────\n`CouponLedger` 存在但 `cartTotal` 不用它，说明这是基础设施先行、业务接入滞后——防重机制已备，结算流程还按老路跑。\n─────────────────────────────────────────────────",
+        "ttft_ms": 6872,
+        "type": "result",
+        "duration_ms": 37618,
+        "uuid": "4bc0c09d-8186-4120-9aa4-9926c950d2b4",
+        "ttft_stream_ms": 2539,
+        "time_to_request_ms": 277,
+        "first_content_frame_ms": 2539,
+        "queued_turn_count": 0,
+        "result_index": 0
+      },
+      "stderrTail": ""
+    }
+  ],
+  "sessionId": "6980ff47-f468-4866-a1c7-e048792462cd",
+  "failed": false,
+  "failureReason": null,
+  "totalRetries": 0,
+  "finishedAt": "2026-09-23T04:31:21.783Z"
+}

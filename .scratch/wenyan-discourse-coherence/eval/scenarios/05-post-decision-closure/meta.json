@@ -1,0 +1,18 @@
+{
+  "id": "05-post-decision-closure",
+  "title": "答后闭环（用户选定选项之后的收口）",
+  "core": true,
+  "multiTurn": true,
+  "runs": {
+    "baseline": 3,
+    "no-style": 3,
+    "new": 3
+  },
+  "fixtures": [
+    "docs/adr/0001-rounding-strategy.md",
+    "src/pricing.js",
+    "src/cart.js",
+    "tests/pricing.test.js"
+  ],
+  "turnsFile": "turns.json"
+}

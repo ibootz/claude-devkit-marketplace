@@ -1,0 +1,17 @@
+{
+  "id": "03-compare-alternatives",
+  "title": "方案比较（已知与未知证据并存）",
+  "core": true,
+  "multiTurn": false,
+  "runs": {
+    "baseline": 3,
+    "no-style": 3,
+    "new": 3
+  },
+  "fixtures": [
+    "docs/adr/0001-rounding-strategy.md",
+    "src/pricing.js",
+    "src/cart.js"
+  ],
+  "promptFile": "prompt.md"
+}

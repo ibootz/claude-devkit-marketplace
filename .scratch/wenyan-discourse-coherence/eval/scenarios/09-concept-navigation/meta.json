@@ -1,0 +1,18 @@
+{
+  "id": "09-concept-navigation",
+  "title": "概念导航（跨文件与跨章节）",
+  "core": false,
+  "multiTurn": false,
+  "runs": {
+    "baseline": 1,
+    "no-style": 1,
+    "new": 1
+  },
+  "fixtures": [
+    "CONTEXT.md",
+    "src/coupon-service.js",
+    "src/cart.js",
+    "docs/adr/0001-rounding-strategy.md"
+  ],
+  "promptFile": "prompt.md"
+}

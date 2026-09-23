@@ -1,0 +1,18 @@
+{
+  "id": "10-no-askuserquestion-lifecycle",
+  "title": "无 AskUserQuestion 时的正文决策闭环",
+  "core": false,
+  "multiTurn": false,
+  "runs": {
+    "baseline": 1,
+    "no-style": 1,
+    "new": 1
+  },
+  "fixtures": [
+    "docs/adr/0001-rounding-strategy.md",
+    "src/pricing.js",
+    "src/cart.js",
+    "tests/pricing.test.js"
+  ],
+  "promptFile": "prompt.md"
+}

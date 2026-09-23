@@ -1,0 +1,34 @@
+{
+  "arm": "baseline",
+  "model": "claude-sonnet-4-5",
+  "cliVersion": "2.1.280 (Claude Code)",
+  "stopped": false,
+  "allSummaries": [
+    {
+      "scenarioId": "01-cross-file-root-cause",
+      "summaries": [
+        {
+          "runIndex": 1,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/01-cross-file-root-cause/run-1.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        },
+        {
+          "runIndex": 2,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/01-cross-file-root-cause/run-2.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        },
+        {
+          "runIndex": 3,
+          "outFile": "/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/wenyan-discourse-coherence/eval/raw/baseline/01-cross-file-root-cause/run-3.json",
+          "failed": false,
+          "failureReason": null,
+          "totalRetries": 0
+        }
+      ]
+    }
+  ]
+}

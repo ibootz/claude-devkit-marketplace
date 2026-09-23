@@ -1,0 +1,12 @@
+{
+  "name": "mini-project",
+  "version": "0.0.1",
+  "private": true,
+  "description": "wenyan-discourse-coherence 评测用固定小项目，不对外发布，仅供评测场景读取。",
+  "scripts": {
+    "test": "node tests/pricing.test.js"
+  },
+  "dependencies": {
+    "legacy-pricing-sdk": "^0.1.0"
+  }
+}

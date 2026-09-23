@@ -1,0 +1,18 @@
+{
+  "id": "04-decision-package",
+  "title": "正文决策包（起源/差距/影响范围/证据）",
+  "core": true,
+  "multiTurn": false,
+  "runs": {
+    "baseline": 3,
+    "no-style": 3,
+    "new": 3
+  },
+  "fixtures": [
+    "docs/adr/0001-rounding-strategy.md",
+    "src/pricing.js",
+    "src/cart.js",
+    "tests/pricing.test.js"
+  ],
+  "promptFile": "prompt.md"
+}

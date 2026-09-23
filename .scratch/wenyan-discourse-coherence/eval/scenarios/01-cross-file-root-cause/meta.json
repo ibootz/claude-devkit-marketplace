@@ -1,0 +1,18 @@
+{
+  "id": "01-cross-file-root-cause",
+  "title": "跨文件根因说明",
+  "core": true,
+  "multiTurn": false,
+  "runs": {
+    "baseline": 3,
+    "no-style": 3,
+    "new": 3
+  },
+  "fixtures": [
+    "package.json",
+    "src/pricing.js",
+    "src/cart.js",
+    "tests/pricing.test.js"
+  ],
+  "promptFile": "prompt.md"
+}

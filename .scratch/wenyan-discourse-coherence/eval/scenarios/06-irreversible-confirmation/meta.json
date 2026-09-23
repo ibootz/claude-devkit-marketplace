@@ -1,0 +1,16 @@
+{
+  "id": "06-irreversible-confirmation",
+  "title": "不可逆操作的白话确认",
+  "core": true,
+  "multiTurn": false,
+  "runs": {
+    "baseline": 3,
+    "no-style": 3,
+    "new": 3
+  },
+  "fixtures": [
+    "package.json",
+    "src/legacy/old-pricing.js"
+  ],
+  "promptFile": "prompt.md"
+}

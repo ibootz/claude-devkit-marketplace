@@ -1,0 +1,8 @@
+[
+  "读一下 `CONTEXT.md`，跟我概括一下这个项目的领域术语，越全越好，每个术语给出处文件。",
+  "现在讲讲 `src/pricing.js` 里 `discountedUnitPrice` 的取整逻辑，以及它为什么取整到分。",
+  "再讲讲 `src/cart.js` 的 `cartTotal` 是怎么复用 `discountedUnitPrice` 的，把两者的关系讲透。",
+  "`docs/adr/0001-rounding-strategy.md` 记的决策和 `cartTotal` 里那次总价层的 `Math.round` 是什么关系？这次取整是不是多余的？",
+  "`src/coupon-service.js` 里的 `CouponLedger` 和前面讲的定价流程是什么关系？它会不会影响取整结果？",
+  "把前面几轮我们理清楚的东西串起来，给我一份完整的现状说明：领域术语、取整链路、CouponLedger 的角色、当前已知的问题，一次性讲清楚。"
+]
