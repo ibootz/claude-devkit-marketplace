@@ -324,4 +324,53 @@ Original error: Cloning into '~/.claude/plugins/marketplaces/open-code-review..c
 - **这不是网络抖动，重试不抬超时没用**——实际耗时远超 120s，是仓库要重新 clone 的固有开销。报错原文自带这条提示，照做即可。
 - **120s 只对真正要 clone 的大仓不够。** 同一轮里另外 18 个市场在探测阶段就判为 `SAME` 跳过了，`claude-plugins-official` 走 `.gcs-sha` 内容哈希同步也是秒级——只有被判 `STALE` 的那几个才真付 clone 开销。
 
-未追的边界：失败那一次是否在 `marketplaces/` 下留了 `<name>..clone` 半成品目录，**没有在失败当场 `ls` 过**；成功重跑之后查过，当时无残留。
+未追的边界：失败那一次是否在 `marketplaces/` 下留了 `<name>..clone` 半成品目录，**没有在失败当场 `ls` 过**；成功重跑之后查过，当时无残留。（这条边界在下方「市场刷新还有一种非超时的失败」里被补上了。）
+
+### 市场刷新还有一种非超时的失败（2026-09-28 实测，claude 2.1.283）
+
+补完上面两条坑之后刷本机缓存时撞到，与上一节的超时**不是同一个成因**：
+
+```
+Updating marketplace: claude-devkit-marketplace...✘ Failed to update marketplace(s):
+Failed to refresh marketplace 'claude-devkit-marketplace':
+Failed to clone marketplace repository: Cloning into '…/claude-devkit-marketplace..clone'...
+fatal: could not open '…/claude-devkit-marketplace..clone/.git/objects/pack/tmp_pack_t6YHza' for reading: No such file or directory
+fatal: fetch-pack: invalid index-pack output
+```
+
+两者的判据相反，别混：
+
+| | 超时那条 | 本条 |
+|---|---|---|
+| 报错关键词 | `Git clone timed out after 120s` | `invalid index-pack output` / `could not open …tmp_pack_*` |
+| 失败前耗时 | 超 120s（成功那次 3m08s ~ 3m45s） | 1m48s，命令自行中断 |
+| 加超时变量有用吗 | 有用 | **没用**——重试那次耗时 1m43s，**低于** 120s 默认值，加不加都过 |
+| 处置 | 带 `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=300000` 重跑 | 直接重跑即可 |
+
+**成因未确认。** 一条间接现场证据：`pgrep -fl claude` 查到本机同时有 6 个 claude 进程在跑（其中另一个会话带 `--allow-dangerously-skip-permissions`）。若它同时在做会碰同一 `..clone` 路径的操作，就可能一个进程在读 pack、另一个在清理它。**没有构造复现，只观测到一次。**
+
+失败后 `ls -d marketplaces/*..clone` 为**空**——这种失败不留半成品目录。这一条是在**失败当场**查的，补上了上一节那条「未追的边界」。
+
+### 第五步清理会删掉本会话正在加载的版本目录（2026-09-28 实测）
+
+`devkit-tool` 升 6.21.0 → 6.21.1 后重跑差集，孤儿清单第一条是：
+
+```
+700K  ~/.claude/plugins/cache/claude-devkit-marketplace/devkit-tool/6.21.0
+ 32K  ~/.claude/plugins/cache/claude-plugins-official/code-review/fa59bc903774
+ …（共 8 条，合计 904K）
+```
+
+`devkit-tool/6.21.0` 正是**本会话启动时加载的那一份**，其 `hooks/` 下两个脚本（`codegraph-hint.js`、`worktree-cwd-recovery.js`）本轮还在每次工具调用时执行。判据来自同轮另一个插件的报错行——它把自己的运行路径打了出来，带版本号：
+
+```
+PreToolUse:Bash hook error: [node …/cd-blocker/1.0.0/hooks/guards/cd-guard.js]: [L1-BLOCKER] …
+```
+
+即 hook 命令在**会话启动时**就把 `${CLAUDE_PLUGIN_ROOT}` 展开成了带版本号的绝对路径。配置文件随后改成 6.21.1，但**正在跑的进程不会重新解析**。所以删掉 6.21.0 的后果不是「下次启动会重新下载」这种可恢复代价，而是**本会话此后每轮工具调用都撞 hook 报错**。
+
+**这是推断，没有做删除试验。** 但代价判据足够清楚：8 个孤儿合计 904K，删掉省不到 1M；赌错则打断当前会话的 hook。故本轮**一个都没删**。
+
+不累积：剔掉的目录下次 sync 时仍在差集里，那时会话已重启或已 reload，会被正常收走。
+
+机械判据（已写进正文第五步 (b)）：拿第三步存的 `/tmp/ip_before.json` 对照孤儿清单——某孤儿的 `<version>` 等于**刷新前**该插件的记录版本，它极可能就是本会话启动时加载的那份。

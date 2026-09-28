@@ -255,13 +255,19 @@ comm -23 /tmp/cache_whitelist.txt /tmp/cache_actual.txt
 
 **反向检查那一行必须输出为空**。若非空，说明有插件的配置指向了磁盘上不存在的缓存目录，缓存状态本身已异常——此时不要删任何东西，先回到第三步重新刷新把实体补齐，再重跑 dry-run。
 
-**默认全量清理，无需征询**：反向检查为空且存在差集候选时，直接执行删除，无需停下向用户提问。如实报告清理的目录数与释放的体积即可。
+**默认全量清理，无需征询**：反向检查为空且存在差集候选时，直接执行删除，无需停下向用户提问。如实报告清理的目录数与释放的体积即可。**唯一例外**见下方「必须剔除的那一项」。
 
 ```bash
 xargs rm -rf < /tmp/cache_orphan.txt
 ```
 
 删除的代价：被删版本在需要降级/回滚时要重新从市场源下载，属于可恢复但需要网络。如果用户在当轮明确要求保留回滚版本，才从 `/tmp/cache_orphan.txt` 里手动剔除每个插件最近的 1-2 个版本。
+
+**必须剔除的那一项：本会话正在加载的版本目录。** 上面那条「无需征询」有一条硬除外——孤儿里若有某个 `version` 就是**当前会话加载的那一份**，删掉它不会「下次启动再下载」，而是**本会话此后每轮工具调用都撞 hook 报错**，直到 `/reload-plugins` 把 hook 路径重指到新版。原因是 hook 命令在会话启动时就把 `${CLAUDE_PLUGIN_ROOT}` 展开成了带版本号的绝对路径（形如 `…/devkit-tool/6.21.0/hooks/codegraph-hint.js`），正在跑的进程不会因为配置文件改了而重新解析。
+
+机械判据：拿第三步存的 `/tmp/ip_before.json` 对照 `/tmp/cache_orphan.txt`——某孤儿的 `<version>` 等于**刷新前**该插件的记录版本，它极可能就是本会话启动时加载的那份，剔掉。
+
+剔掉不累积：那个目录下次 sync 时仍在差集里，那时会话已重启或已 reload，会被正常收走。收益也小（实测 8 个孤儿合计 904K），所以为这一条保守剔除不心疼。
 
 ## 已验证的坑
 
@@ -290,6 +296,8 @@ xargs rm -rf < /tmp/cache_orphan.txt
 | `plugin list --json` 一条命令等 23 秒 | 共享同一类固定开销。enabled 直读 `~/.claude/settings.json` 与 `<projectPath>/.claude/settings.json`，探测器已内置 |
 | `claude plugin marketplace remove <name>` 回执里夹着一行 `Also uninstalled N plugin from this marketplace` | 那不是提示而是**真删**：`installed_plugins.json` 里该插件的记录一并消失。迁移 directory 源到 git 源就是这个代价——remove → `marketplace add <git-url>` → 按**迁移前快照**逐条 `plugin install --scope` 重装。项目侧 `enabledPlugins` 声明不会被删，重装即复原，但**装到的是当前最新版**而非原版本，有意钉版的项目会被顶掉 |
 | `marketplace update` / `add` 报 `Git clone timed out after 120s` | 默认超时不够，与网络无关——重试不加变量没用。照报错提示带 `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=300000` 重跑（实测两仓各 3m45s / 3m08s） |
+| `marketplace update` 报 `could not open '…<name>..clone/.git/objects/pack/tmp_pack_*'` 或 `fetch-pack: invalid index-pack output` | **与超时无关**——重试即过，实测重试那次耗时低于 120s 默认值，加超时变量是碰巧。疑似多会话并发 clone 同一路径互踩，成因未确认。失败不留 `..clone` 残留，直接重跑 |
+| 第五步清理后本会话每次工具调用都报 hook 错 | 删掉了本会话**正在加载**的那个版本目录——hook 路径在会话启动时已固化成带版本号的绝对路径，进程不会因配置改动重解析。按第五步 (b)「必须剔除的那一项」从 `/tmp/cache_orphan.txt` 里剔掉，`/reload-plugins` 后下次 sync 自动收 |
 
 ## 验证清单
 
@@ -305,6 +313,6 @@ xargs rm -rf < /tmp/cache_orphan.txt
 - [ ] 所有循环 / 临时变量都**没有**取名 `path` / `fpath` / `cdpath` / `manpath` 等 zsh 绑定变量名（会静默覆写 `$PATH`，表象是"jq 没装"）
 - [ ] 每条 `claude plugin update` 的输出都在预期的三种正常结束态之一：`already at the latest version`、`updated from X to Y`、`refreshed from source`
 - [ ] 关键插件已走**写后回读**核实：`installed_plugins.json` 的 `installPath`、磁盘上该缓存目录、目录内 `.claude-plugin/plugin.json` 的 `version` 三处一致（只看 CLI 回执不足以证明落盘）
-- [ ] 若执行了第五步清理：确认在第三步刷新**之后**做的；`temp_git_*` 零引用已 grep 核实；历史版本走的是 `.plugins[][].installPath` 白名单差集；反向检查（配置引用但磁盘缺失）输出为空；已自动执行全量清理并报告释放体积（用户明确要求保留回滚版本时除外）
+- [ ] 若执行了第五步清理：确认在第三步刷新**之后**做的；`temp_git_*` 零引用已 grep 核实；历史版本走的是 `.plugins[][].installPath` 白名单差集；反向检查（配置引用但磁盘缺失）输出为空；已自动执行全量清理并报告释放体积（用户明确要求保留回滚版本时除外）；**且已按「必须剔除的那一项」剔掉本会话正在加载的版本目录**（判据：孤儿的 `<version>` 等于 `/tmp/ip_before.json` 里该插件的刷新前版本）
 - [ ] 已明确告知用户让新版本生效的**最小动作**：默认建议 `/reload-plugins`；仅当新版本改动了 `SessionStart` / `SessionEnd` / `PreCompact` 挂载点时才说”必须重启”（判断依据是**同时查两处**：`plugin.json` 的 `hooks` 字段 + `hooks/` 目录下的脚本文件名约定，见第四步检测命令；只查 `plugin.json` 会漏掉目录式 hook，误判”无需重启”）
 - [ ] 生效后的核实看的是**行为**（下一轮 hook 注入文本 / skill 内容确实变了），不是 reload 回执里的插件数量
