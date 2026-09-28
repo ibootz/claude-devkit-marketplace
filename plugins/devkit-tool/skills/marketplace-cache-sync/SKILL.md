@@ -288,6 +288,8 @@ xargs rm -rf < /tmp/cache_orphan.txt
 | 拿 `gitCommitSha` 判断插件要不要刷，几乎全判成"要刷"（实测 54/54 全错） | **`gitCommitSha` 从不参与 CLI 的 no-op 判断**，两类源都比版本号。url 源的版本号在远端仓根 manifest 里，取它不用 clone。见第四步 |
 | url 源的 `source` 钉了 `sha` 却去探 `ref` 的 HEAD | `sha` 优先于 `ref`（钉 sha 无 ref 的源如 `mattpocock-skills`），探 HEAD 拿到的必然不是钉住的那个提交，是结构性必然误判 |
 | `plugin list --json` 一条命令等 23 秒 | 共享同一类固定开销。enabled 直读 `~/.claude/settings.json` 与 `<projectPath>/.claude/settings.json`，探测器已内置 |
+| `claude plugin marketplace remove <name>` 回执里夹着一行 `Also uninstalled N plugin from this marketplace` | 那不是提示而是**真删**：`installed_plugins.json` 里该插件的记录一并消失。迁移 directory 源到 git 源就是这个代价——remove → `marketplace add <git-url>` → 按**迁移前快照**逐条 `plugin install --scope` 重装。项目侧 `enabledPlugins` 声明不会被删，重装即复原，但**装到的是当前最新版**而非原版本，有意钉版的项目会被顶掉 |
+| `marketplace update` / `add` 报 `Git clone timed out after 120s` | 默认超时不够，与网络无关——重试不加变量没用。照报错提示带 `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=300000` 重跑（实测两仓各 3m45s / 3m08s） |
 
 ## 验证清单
 

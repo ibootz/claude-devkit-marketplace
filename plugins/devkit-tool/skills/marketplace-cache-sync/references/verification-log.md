@@ -27,6 +27,7 @@
 - **一次 project/local scope 专项验证**（2026-07-30，8 个仅装在 project/local scope、从未装过 user scope 的插件 id）
 - **一次 hook 定义方式双检测验证**（2026-08-01，发现目录式 hook 会让"只读 `plugin.json` 判生命周期"漏判）
 - **一次性能专项实测**（2026-08-06，逐条计时定位固定开销、验证"跳过 no-op 等价"、验证两类插件源的探测判据）
+- **一次 directory 源迁移实测**（2026-09-28，`aisdlc-qa` 从 directory 源迁到 git 源：`marketplace remove` 连带卸载插件、市场名取自仓内 manifest、按原 (scope, projectPath) 逐条重装）
 
 下方「已验证的坑 · 完整证据表」列出各条已复现问题。
 
@@ -249,3 +250,78 @@ if(re&&!Q){ ... `${s} is already at the latest version (${J}).` }
 ### `claude plugin list --json` 一条命令等 23 秒
 
 该命令与 `plugin update` 共享同一类固定开销。enabled 状态可直读：user scope 看 `~/.claude/settings.json` 的 `enabledPlugins[<id>]`，project/local scope 看 `<projectPath>/.claude/settings.json` 或 `settings.local.json`（**2026-08-06 三条 project 记录实测与 `plugin list` 一致**）。探测器脚本已内置，key 缺失按未启用处理。
+
+### `marketplace remove` 连带卸载该市场的插件（2026-09-28 实测，claude 2.1.283）
+
+把 `aisdlc-qa` 从 directory 源迁到标准 git 源时撞到。`claude plugin marketplace remove aisdlc-qa` 的完整回执：
+
+```
+✔ Successfully removed marketplace: aisdlc-qa
+Also uninstalled 1 plugin from this marketplace:
+  qa@aisdlc-qa
+The removal also deletes their saved options, secrets and data where it can.
+To use a plugin again, add the marketplace back and reinstall the plugin.
+```
+
+第二行起是**实际发生的卸载**，不是告警：`~/.claude/plugins/installed_plugins.json` 里 `qa@aisdlc-qa` 的 9 条记录全部消失（8 条装在各自项目根，1 条装在某个 `.sdlc/worktrees/<id>` 下），`known_marketplaces.json` 与 `settings.json` 的 `extraKnownMarketplaces` 条目也一并移除。
+
+**未被删除的是各项目 `.claude/settings.json` 里的 `enabledPlugins["qa@aisdlc-qa"] = true`**——9 个项目逐条查过，全部保留。这是迁移能低代价完成的关键：启用状态不在 remove 的删除范围内。
+
+迁移的完整序列：
+
+```bash
+# 0. 迁移前先存快照——remove 之后就查不到原来装在哪些 (scope, projectPath) 了
+jq -r '.plugins["<id>"][] | "\(.scope)|\(.projectPath // "")"' \
+  ~/.claude/plugins/installed_plugins.json > /tmp/records_before.txt
+
+# 1. 移除旧市场（连带卸载）
+claude plugin marketplace remove <name>
+
+# 2. 以 git 源重注册
+claude plugin marketplace add <git-url>
+
+# 3. 按快照逐条重装
+while IFS='|' read -r pid pscope ppath; do
+  [ -z "$pid" ] && continue
+  if [ "$pscope" = "user" ]; then
+    claude plugin install "$pid" --scope user
+  else
+    (cd "$ppath" && claude plugin install "$pid" --scope "$pscope")
+  fi
+done < /tmp/records_before.txt
+```
+
+三条与之相关的实测事实：
+
+- **市场名不由 URL 决定，取自该仓 `.claude-plugin/marketplace.json` 的 `name` 字段。** 本机该字段写着 `aisdlc-qa`，所以 `add git@…:xxstar-ai/qa/xxstar-ai-qa-plugin.git` 之后市场仍叫 `aisdlc-qa`，插件 id 仍是 `qa@aisdlc-qa`，**各项目的 `enabledPlugins` 声明一个字都不用改**。重装完 9/9 三方核验一致（`installed_plugins.json` 的 `installPath` / 磁盘目录 / 目录内 `.claude-plugin/plugin.json` 的 `version` 全为 `0.7.7`）。
+- **重装装的是当前最新版，不是原版本。** 9 条原为 `0.6.15`×8 + `0.6.4`×1，重装后全部变 `0.7.7`。若原版本是有意钉的，迁移会把它顶掉——**迁移前必须先把这个后果告诉用户**（跨项目改版本，见第三步补充那条纪律）。
+- **重装逐条跑，同 `plugin update` 一样串行**，每条仍是 25s 起步量级；9 条实测在后台跑完一轮。
+
+#### 顺带查出的 directory 源根因（这条才是"为什么要迁"）
+
+`aisdlc-qa` 原先是 `{"source": "directory", "path": "/Users/zhangq/Workspace/xx/qa/xxstar-ai-qa-plugin"}`，指向一个本机 git 工作副本。`claude plugin marketplace update` 对 directory 源**不会 pull**，于是市场版本静默冻结在那个工作副本的当前 checkout 上。
+
+实测该副本落后 `origin/master` **57 个 commit**（local `85dfafb7752bbb74b7349aeef6421586f28d7431` / origin `7f0287a7b3163a6c3f71a9099205c63867f2df7d`），插件版本因此卡在 `0.6.15`，而上游已是 `0.7.7`——**全程无任何报错**，探测器也判不出（它读的是已安装记录的 `version`，而那个值本来就是从这份陈旧副本来的）。
+
+判据：`marketplaces/<name>/` 下有没有 `.git`。该目录不存在、或存在但无 `.git`，即为 directory 源或非 git 快照，`marketplace update` 对它无效。迁到 git 源之后 `marketplaces/aisdlc-qa/.git` 存在，且本地 HEAD 与 `git ls-remote origin HEAD` 一致——这才是"以后能正常 pull"的凭据。
+
+### 市场 clone 默认 120s 超时不够（2026-09-28 实测，claude 2.1.283）
+
+`claude plugin marketplace update` 对 `open-code-review` 与 `ui-ux-pro-max-skill` 双双失败：
+
+```
+Failed to refresh marketplace 'open-code-review': Failed to clone marketplace repository:
+Git clone timed out after 120s. The repository may be too large for the current timeout.
+Set CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS to increase it (e.g., 300000 for 5 minutes).
+
+Original error: Cloning into '~/.claude/plugins/marketplaces/open-code-review..clone'...
+```
+
+带 `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=300000` 重跑同一条命令，两个都成功，实测耗时 **3m45s**（open-code-review）与 **3m08s**（ui-ux-pro-max-skill）。回执里能看到这个变量确实生效：`Refreshing marketplace cache (timeout: 300s)…`。
+
+两条要点：
+
+- **这不是网络抖动，重试不抬超时没用**——实际耗时远超 120s，是仓库要重新 clone 的固有开销。报错原文自带这条提示，照做即可。
+- **120s 只对真正要 clone 的大仓不够。** 同一轮里另外 18 个市场在探测阶段就判为 `SAME` 跳过了，`claude-plugins-official` 走 `.gcs-sha` 内容哈希同步也是秒级——只有被判 `STALE` 的那几个才真付 clone 开销。
+
+未追的边界：失败那一次是否在 `marketplaces/` 下留了 `<name>..clone` 半成品目录，**没有在失败当场 `ls` 过**；成功重跑之后查过，当时无残留。
