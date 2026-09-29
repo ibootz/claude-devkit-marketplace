@@ -436,6 +436,17 @@ Claude Code 改了变量名，都会落到 `generic` 这一支。
 `vscode://file/` 有一个结构性劣势，选型时要算进去：**它硬依赖本机装了 VS Code 并注册了
 协议处理器**。没装 VS Code 的机器上这个形态必然失效，而 `file:` 至少还能把文件打开。
 
+### 1.10.0 看图用的 md 链接不带 `#`
+
+`working-discipline` 3.34.0 起，讲方案、跨服务调用这类内容时把 mermaid 图写进一个 md 文件，
+正文只给链接，让用户点开在 Typora 里看渲染后的图。这与本插件「没有具体行号写 `#1`」冲突：
+iTerm2 对带 `#` 片段的 `file:` 链接套用 Semantic History（本机配的是 `code --goto`），会打开
+VS Code 而不是 Typora；不带 `#` 才交给系统默认 md 应用。本机实查：`.md` 默认打开程序为
+`Typora.app`，Semantic History 命令为 `/opt/homebrew/bin/code --goto "\1:\2"`。
+
+所以 `file-absolute` 那一支的行号规则补了一句例外：给人看渲染效果的 md 整条不带 `#`。
+只改这一支——另两支（VS Code 集成终端、Windows 终端）点链接本来就进编辑器，不存在这个分叉。
+
 ## 与 readable-citations 的分工
 
 两个插件都在让引用可跳转，管的东西不重叠，同时装不冲突：

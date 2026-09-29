@@ -66,7 +66,7 @@
       "source": "./plugins/working-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒。零 skill，适合全局开启",
-      "version": "3.33.0"
+      "version": "3.34.0"
     },
     {
       "name": "agent-browser",
@@ -136,7 +136,7 @@
       "source": "./plugins/clickable-paths",
       "category": "Productivity",
       "description": "文件路径可点击 - 链接整条裸露不套反引号，对话正文按宿主自适应切形态，落盘 md 恒用 vscode: 可跳",
-      "version": "1.9.0"
+      "version": "1.10.0"
     },
     {
       "name": "worktree-flow",
