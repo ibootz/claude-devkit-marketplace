@@ -59,3 +59,9 @@ zcode-sync-checklist.md
 .keeper/.keeper-active
 # 合并互斥锁，被 git 看见则 merge-back 判脏树
 .keeper/**/.merge.lock*
+
+# .scratch/<主题>/ 下的评估产物：harness、测试题、评分脚本留着复用，
+# 只排除跑出来的原始会话记录与汇总结果（体积大、含本机路径、可重跑再生）
+.scratch/*/eval/runs/
+.scratch/*/eval/probe/
+.scratch/*/workspace/
