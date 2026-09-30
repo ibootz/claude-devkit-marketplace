@@ -1,0 +1,60 @@
+{
+  "skill_name": "working-discipline",
+  "fixture_spec": "fixtures/mini-shop/：一个极小的三服务电商项目，只做评测素材，不需要能运行。必须包含：(1) order-service/src/OrderStatus.java 枚举，带 javadoc 注释：1=待支付 2=已支付 3=已发货 4=已完成 9=已取消；(2) order-service/src/PayChannel.java 枚举位掩码：1=微信 2=支付宝 4=银行卡；(3) db/query-result.txt：一段 mysql 命令行风格的查询结果，表 t_order，列 id,order_no,member_name,status,pay_channel_mask,amount,created_at；5 行，其中 status 取 1,2,3,9,7（7 不在枚举里，用于测『含义未查到』），pay_channel_mask 取 1,2,3,4,6，amount 以分为单位（如 129900），created_at 是毫秒时间戳（如 1759132800000）；db/schema.sql 给 t_order 建表语句，amount 列注释『金额，单位分』，status 列注释『订单状态，见 OrderStatus』，created_at 列注释『创建时间，毫秒时间戳，UTC』；(4) 跨服务下单链路：order-service/src/OrderController.java 的 POST /orders → OrderService.create() → 通过 InventoryClient 调 inventory-service 的 POST /stock/deduct 先扣库存 → 再通过 PaymentClient 调 payment-service 的 POST /pay/prepay 预下单 → 预下单失败时调 InventoryClient.rollback() 回滚；inventory-service 与 payment-service 各有一个 Controller 与一个 README.md（写明其职责）；三个服务各有 application.yml，里面配超时：order-service `inventory.timeout: 3000`、`payment.timeout: 5`（后者单位是秒，yml 注释写明）、inventory-service `lock.ttl: 30000`（毫秒）；(5) 代码里散落 3 处 TODO 注释（不同服务）。领域名词用『履约单』『预占库存』这类不看代码就不懂的业务词各至少一处，并在代码注释里给出释义。",
+  "evals": [
+    {
+      "id": 1,
+      "name": "enum-sql-readout",
+      "prompt": "帮我看下 db/query-result.txt 里这几条订单现在分别是什么情况，有没有哪条不对劲",
+      "expected_output": "每条订单的 status / pay_channel_mask 写成 值(含义)，掩码逐位拆开；status=7 标『含义未查到』而不是猜；amount 带单位（分或换算成元并注明）；created_at 换成带时区的可读时刻；订单实体写成 名称(id) 或 order_no 全写。",
+      "files": [
+        "fixtures/mini-shop"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "cross-service-explain",
+      "prompt": "POST /orders 这个下单接口从请求进来到返回，中间都调了哪些服务、按什么顺序？我刚接手这块，给我讲清楚",
+      "expected_output": "时序图写进一份 md 文件的 ```mermaid 源码块（覆盖 order→inventory→payment 与失败回滚分支），正文给该 md 的 file:// 可点击链接（不带 #），并一句话说图里画了什么；正文不贴 mermaid 源码也不贴字符画；业务名词（履约单、预占库存）首次出现给白话定义；关键调用点给 file:行号。",
+      "files": [
+        "fixtures/mini-shop"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "design-proposal",
+      "prompt": "现在下单是先扣库存再预下单，失败了再回滚库存。我想改成支付成功回调之后再扣库存，你出个方案，有需要我拍板的地方直接问我",
+      "expected_output": "改前 / 改后两张图写进 md 文件的 ```mermaid 源码块，正文给该 md 的 file:// 链接（不带 #）；待拍板项在正文里问、带起源/差距/影响范围/现场证据四要素与编号选项；不调 AskUserQuestion。",
+      "files": [
+        "fixtures/mini-shop"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "parallel-config-audit",
+      "prompt": "把三个服务 application.yml 里所有超时 / TTL 类配置汇总成一张表给我",
+      "expected_output": "第一条带工具调用的 assistant 消息里并发发出 ≥2 个独立读取；表里每个数值带单位（3000 毫秒、5 秒、30000 毫秒），不把 5 误当毫秒。",
+      "files": [
+        "fixtures/mini-shop"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "write-flow-doc",
+      "prompt": "把下单链路整理成一份文档写到 docs/order-flow.md，给新同事看的",
+      "expected_output": "写 md 之前正文出现『本次 md 受众判定』；落盘文档里有 ```mermaid 源码块（落盘不贴 Unicode 渲染图）；业务名词给定义。",
+      "files": [
+        "fixtures/mini-shop"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "dispatch-todo-sweep",
+      "prompt": "派子代理分头去查三个服务里所有 TODO，每个服务一个子代理，汇总给我",
+      "expected_output": "Agent 调用带 name（<model>-<语义>）与 model 字段、description ≤60 字符、subagent_type=Explore；三个派发在同一条消息里并发；汇总在全部返回后一次给出。",
+      "files": [
+        "fixtures/mini-shop"
+      ]
+    }
+  ]
+}

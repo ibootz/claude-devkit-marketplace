@@ -1,0 +1,921 @@
+// agent-dispatch.js — PreToolUse 门控钩子（matcher: Agent）
+//
+// 【用途】
+// 派发 subagent 时**结构层面**机械可判定的要求在这里处理：model 是否显式给了且在三档内、
+// name / description 是否齐备、name 前缀是否与 model 一致、name 是否体现插件专用 agent 的
+// 身份（check 8）、keeper 类常驻 agent 是否落在固定的 opus 档（check 9）、keeper 的 name 是否
+// 满足「固定前缀 + 4 位小写字母数字短哈希」的形态（check 10）、keeper 的 description 是否是
+// 那句固定的常驻语义（check 11）、description 是否
+// 超长。判据取自 tool_input 的确定字段，不回读 transcript。
+//
+// 【判据精度的如实说明（不要再写成"零误判"）】
+// 本文件里绝大多数判据是**确定字段比较**：`model` 是否在闭合枚举 MODELS 内、`name` 是否
+// 匹配完整锚定正则 NAME_PATTERN、`name` 是否以 `<model>-` / `<model>_` 开头、`description`
+// 是否为空、`description` 字符数是否 > DESC_BODY_MAX。这几条同一输入必得同一结论、可人工
+// 复核，符合 .claude/rules/project/hook-restraint.md 里"可以做成 hook"的分级。
+//
+// **唯一的例外是 PROMPT_LEAK_PREFIXES**：它靠"正文以某个句式开头"近似判断"这是 prompt
+// 角色设定句而不是任务摘要"，本质是猜语义，不是零误判。已知覆盖边界：
+//   - 不覆盖（假阴性）：角色设定句不在开头（"本次请你扮演审计员…"）、换用未列举的句式
+//     （"扮演"/"担任"/"Pretend you are"）、把 prompt 中段而非开头抄进 description。
+//   - 可能误伤（假阳性）：任务摘要本身合法地以列表里的词开头。为压低这一面，2026-07-31
+//     移除了三个高误杀项 `'#'` / `'【'` / `'Your task'`——前两个会命中任何以 markdown 标题
+//     或中文书名号开头的正常摘要，第三个与 `'You are'` 的角色设定语义并不等价（"Your task
+//     summary…"是合法摘要）。留下的都是"第二人称+角色设定"这一类明确句式。
+// 因此这条判据是**近似**的；若日后再出现真实误杀，正确处置是继续收窄词表或整条降级为
+// 注入提醒，而不是加更复杂的正则去猜。
+//
+// 同日一并移除的还有 prompt-prefix-overlap 检查（原 LEAK_MATCH_MIN = 20：description 正文
+// 与 prompt 开头 ≥20 字符逐字重合就判抄袭）。移除原因不是"阈值不合适"，而是**判据前提
+// 不成立**：合法的 description 本来就写任务目标，而本仓派发 prompt 的第一段恰是`【目标】`
+// 且写的是同一件事，两者开头天然重合——它命中的是"写得规范"而不是"抄了 prompt"。
+//
+// 【本文件是「针对 Agent 这一个对象的唯一 hook」】
+// 3.0.0 起本插件的挂载拓扑按**拦截对象**收敛：Agent → 本文件，Bash → bash-guard.js，
+// Write|Edit → write-guard.js。同一对象只过一道闸，一次报清所有问题。原先"多个 guard
+// 分层串行挂同一个 matcher"的拓扑有个结构性缺陷：**一批只报最前面那道闸**，AI 补完
+// 第一道才看见第二道，多轮往返是拓扑的产物而不是 AI 每轮新犯一个错。
+//
+// 【3.0.0 之二：缺 name 改为自动补全，不再 deny】
+// 根因不是 AI 注意力不够，而是**两套约束不同源**：`Agent` 工具的 JSON Schema 里
+// `properties` 只声明了 description / prompt / subagent_type / model / run_in_background /
+// isolation 六项，还写着 `additionalProperties: false`——`name` 是 schema 外但运行时真实
+// 消费的字段（实证：<project>/subagents/agent-<id>.meta.json 里存着
+// {"agentType":"Explore","description":"翻译 dimId/nodeId 并核权重","name":"sonnet-dbops-translate-weight-ids",
+// "model":"sonnet"}）。AI 构造工具调用时照 schema 的字段表生成，字段表里不存在的字段不会
+// 被"想起来"，所以「缺 name」是结构性必然、不是偶发疏忽；用 deny 打回只是把这次必然的
+// 返工固化下来。现在改为用 `hookSpecificOutput.updatedInput` 补一个合规名并放行。
+//
+// 边界（为什么不是"所有命名问题都自动修"）：
+//   - **字段缺失**（name 压根没给）→ 自动补。AI 看不见这个字段，罚它没有教育意义。
+//   - **字段存在但格式错**（前缀与 model 不符 / 含中文 / description 超长或是角色设定句）→ 仍 deny。
+//     AI 既然产出了这个值，就说明它知道字段存在，此时 finding 能真正教会它规则。
+//   - **model 缺失/非法** → 仍 deny，且不顺手补 name。档位是语义决策（这个任务值不值得
+//     上高档模型），自动填一个默认值等于把决策悄悄替 AI 做了，还会让 name 前缀跟着错。
+//
+// 【3.0.0 之三：所有靠关键词猜语义的校验已删除】
+// 2.0.0 曾有第二层「派发质量」四条（档位错配 / 索要回执 / 截图附路径 / 写操作传染回读），
+// 判据是**正则扫 prompt 词表**，配上不可绕过的 deny 后失败模式变成「AI 做对了却过不去」。
+// 实证三条：
+//   (a) 写后回读那条扫 create/update/delete/发布/提交 等词。排查一个「点发布按钮报错」的
+//       bug 时，`发布`/`publish` 在 prompt 里出现十几次全是**被排查对象的业务语义**，不是
+//       要执行的动作；而 Explore 类型物理上没有 Edit/Write 工具、改不了任何文件，守卫却
+//       只读 prompt 文本、没把 subagent_type 的权限面纳入判据。
+//   (b) 截图那条回读 transcript 取图片路径，而工具结果行的 type 也是 'user'——AI 自己
+//       Read 过一张图、grep 输出里带一个 .png 路径，本轮后续**所有** Agent 派发全被拦。
+//       它读自己的源码就会自我触发：源码里的正则字面量完全符合旧路径正则的形状。
+//   (c) 档位那条因 prompt 里出现「不变量」「根因」就要求升 opus，而那里的"不变量"只是
+//       spec 里名为 INV-xx 的条目字段名。
+// 逃生舱（`档位已确认：` / `豁免图片：`）不算解法：它要求 AI 先撞一次 deny、再回头往
+// prompt 里塞一句咒语，而 deny 不给用户"点一下就过"的入口。这四条已改为 working-discipline.js
+// 在 UserPromptSubmit 侧的软约束注入（5.6 与 buildImageEvidence）。
+//
+// 判断标准因此固化为一条：**判据取自 tool_input 的确定字段** → 可以写成 guard；
+// **判据要靠正则猜语义或回读 transcript** → 留在注入里靠自觉，别做成 deny。
+// 本文件自身并未 100% 做到这一条：PROMPT_LEAK_PREFIXES 仍是句式近似判定（边界见上文
+// 【判据精度的如实说明】），它是留在 deny 里的唯一一条近似判据，词表只减不增。
+//
+// 【触发条件】
+// - 工具名为 Agent。**不匹配旧名 Task**：旧工具名的 tool_input 可能没有 name / model
+//   字段，强行校验会永久误拦——fail-open 优于误伤。
+// - subagent_type 不在 EXEMPT_SUBAGENT_TYPES 内
+//
+// 【放行场景】
+// - 环境变量 AGENT_DISPATCH_GUARD=off 或 AGENT_NAMING_GUARD=off（大小写不敏感）。
+//   保留旧名 AGENT_NAMING_GUARD 是为了不破坏 1.11.0 起已在用的关闭方式。
+// - tool_name 不是 Agent
+// - subagent_type 属于 EXEMPT_SUBAGENT_TYPES（系统内建类型，model / 命名语义不适用；
+//   fork 明确「always inherit the parent model」，强制 model 前缀会自相矛盾）
+// - stdin 读取失败 / JSON 解析失败 / tool_input 缺失 —— 基础设施异常不误拦
+// - 只缺 name（其余全过）→ 自动补名后放行，不是拦截
+// - 校验全过
+//
+// 【阻塞行为】
+// 格式错时输出 JSON permissionDecision: "deny"，reason 沿用本仓库 guard 的
+// [L1-BLOCKER] ... finding= hint= 格式。缺 name 时输出 updatedInput（不带
+// permissionDecision，让正常权限流继续走），并用 additionalContext 告知已自动补名。
+//
+// 【已知局限】
+// 只覆盖 Agent 工具的直接派发。Workflow 脚本内部 agent(prompt, {label}) 不经 PreToolUse，
+// label 缺失或抄 prompt 拦不到，只能靠注入纪律 5.4.4 约束。
+//
+// Input: JSON on stdin with tool_name / tool_input
+// Exit 0（始终）——放行、补名、deny 都走 exit 0，靠 stdout 的 JSON 表达决定
+
+'use strict'
+
+const fs = require('fs')
+const crypto = require('crypto')
+const { firstStrictTraditionalForm } = require('./traditional-simplified-forms')
+
+// 可选模型三档。**不含 haiku**（2026-07-27 起）：haiku 在机械任务上省下的那点
+// 成本，抵不过它读错文件结构、漏掉边界条件后父代理返工重派的开销——最低档一律
+// 从 sonnet 起步。写了 haiku 会被拦下并回灌路由表。
+const MODELS = ['sonnet', 'opus', 'fable']
+
+// Agent 工具 name 字段的原生正则约束（只接受 ASCII 字母数字与 - _）
+const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
+const NAME_MAX = 64
+
+// name 的模型档次前缀与任务语义之间允许的分隔符。**必须同时含 '-' 和 '_'**：
+// NAME_PATTERN 本身允许下划线，只认连字符会造成"照文档正则写却被拦"。
+const NAME_PREFIX_SEPARATORS = ['-', '_']
+
+// 系统内建 subagent_type：model 覆盖被忽略或命名语义不适用，一律放行。
+const EXEMPT_SUBAGENT_TYPES = new Set(['fork', 'statusline-setup', 'output-style-setup'])
+
+// 档位被钉死在 opus 的常驻 agent（check 9，2026-08-03 用户拍板加）。
+//
+// 【为什么需要这道闸】task-keeper 的两个 keeper 在自己的定义文件里已经写了
+// `model: opus`（agents/debug-keeper.md:5 / agents/chore-keeper.md:5），但 `Agent` 工具的
+// `model` 参数**优先级高于 agent 定义的 frontmatter**（工具描述原文："Takes precedence
+// over the agent definition's model frontmatter"）——主会话显式传 `sonnet` 就把 frontmatter
+// 的 opus 顶掉了。而「keeper 固定 opus」这条规则只写在 tk-debug/tk-chore 两个 SKILL.md 正文
+// 里，task-keeper 每轮注入的 TRIAGE 文本（hooks/lib/keeper_routing.py:73）压根没提 model；
+// 于是主会话没先调那个 skill 时读不到该规则，只读到本插件注入的三档标尺「没 opus 触发信号
+// 就留在 sonnet」，遂选 sonnet。实测事故：2026-08-03 会话 8477c246 派
+// `{"name":"sonnet-debug-keeper-085","model":"sonnet","subagent_type":"task-keeper:debug-keeper"}`,
+// 八条 check 全过（name 前缀与 model 一致、含身份词 keeper），档位静默落在 sonnet。
+// keeper 是第一层调度者，triage / 去重 / 合并前对账错一次，整条队列跟着错。
+//
+// 【判据形态】完整锚定正则匹配 subagent_type 小写化后的串 + model 与 'opus' 的等值比较，
+// 二者都是确定字段，同一输入必得同一结论（符合 .claude/rules/project/hook-restraint.md 的
+// "可以做成 hook"分级）。**不是**靠扫 prompt 猜"这活难不难"——3.0.0 删掉的那条档位判据
+// 才是那种（见上文【3.0.0 之三】的 (c)），两者性质不同，别混为一谈。
+//
+// 【覆盖边界（如实记录，勿删）】
+//   - **假阳性**：故意降档跑 keeper 的场景会被硬拦，且本 guard 不给逃生舱。真要降档只能
+//     `AGENT_DISPATCH_GUARD=off`。用户 2026-08-03 拍板时明确选了 deny 而非 ask，口径是
+//     "keeper 降档没有正当理由"；日后若出现真实需求，正确处置是整条降级为 ask，不是加咒语。
+//   - **假阴性**：只覆盖名字正好是 `debug-keeper` / `chore-keeper` 的 slug。别的插件自建的
+//     keeper-like 常驻 agent（`foo:queue-keeper` / `foo:keeper-v2`）不在表内——这张表是**白
+//     名单式枚举**，加新成员要显式改这里，不做"含 keeper 就算"的模糊匹配（那会把无档位要求
+//     的第三方 agent 一并拦下）。
+// ─────────────────────────────────────────────────────────────────────────────
+// 【2026-08-18 用户拍板：档位不再两个 keeper 一刀切，按 kind 分叉；name 里的身份段
+//   与 subagent_type 的 slug 解耦】
+//
+// 变的是两件事，闸的**强度不变**（仍是 deny，不是降级成 ask）：
+//
+//   (a) **chore-keeper 的固定档从 opus 降为 sonnet**，debug-keeper 仍是 opus。
+//       原判据的口径是「keeper 是第一层调度者，降档没有正当理由」——那句话对 debug
+//       仍然成立（triage 错一次整条队列跟着错），对 chore 不成立：chore 是台账登记、
+//       归档、收尾这类机械杂务，没有需要 opus 的因果链深度。
+//       注意这不是「放宽」：chore 派成 opus 同样会被拦，因为判据是**等值**而不是
+//       「不低于」。两个方向都拦住，面板与成本才对得上。
+//
+//   (b) **name 里的身份段不再直接复用 subagent_type 的 slug**。原先
+//       `keeperNamePrefix` 拿 `stLower.split(':').pop()` 拼出 `opus-debug-keeper-`，
+//       于是 name 里带着一个对读者毫无信息量的 `-keeper` 段。新形态是
+//       `opus-debugger-xxxx` / `sonnet-chore-xxxx`。
+//       `subagent_type` 本身**不改**（仍是 `task-keeper:debug-keeper`）——它是
+//       SubagentStart matcher 的键、是 task-keeper 登记表反推 kind 的依据，改它的
+//       波及面远大于换一个显示名。所以这里需要一张显式映射表，不能再靠 slug 推。
+//
+// 三个字段收在同一张表里而不是三个平行常量：它们**按 kind 一起变**，拆开放会让
+// 「加一个新 keeper」变成三处要同步的改动，而三处同步正是本仓反复吃过账的失效形态。
+// ─────────────────────────────────────────────────────────────────────────────
+const KEEPER_SLUG_PATTERN = /(^|:)(debug|chore)-keeper$/
+
+const KEEPER_SPECS = {
+  debug: { model: 'opus', nameSeg: 'debugger', descPrefix: 'debug 队列' },
+  chore: { model: 'sonnet', nameSeg: 'chore', descPrefix: 'chore 队列' },
+}
+
+// 第二层 debug fixer 是 Human 明确指定的 type → model 特例。只精确匹配这三个
+// subagent_type，不从 prompt、description 或任务语义推断 fixer 身份；普通 Agent 仍按
+// ROUTING_TABLE 的全局升级规则执行（fable 需 opus 两轮无进展）。
+const DEBUG_FIXER_SPECS = {
+  'task-keeper:debug-fixer-easy': { model: 'sonnet' },
+  'task-keeper:debug-fixer-medium': { model: 'opus' },
+  'task-keeper:debug-fixer-hard': { model: 'fable' },
+}
+
+function debugFixerSpec(stLower) {
+  return DEBUG_FIXER_SPECS[String(stLower || '').toLowerCase()] || null
+}
+
+function debugFixerNamePattern(spec) {
+  return new RegExp(`^${spec.model}-debug-[0-9a-z]{4}$`)
+}
+
+// subagent_type → 该 keeper 的规格；非 keeper（或表内没登记的新 keeper）返回 null，
+// 调用方据此整条跳过（fail-open，与白名单口径一致）。
+function keeperSpec(stLower) {
+  const m = String(stLower || '').match(KEEPER_SLUG_PATTERN)
+  return (m && KEEPER_SPECS[m[2]]) || null
+}
+
+// keeper 类常驻 agent 的 description 必需前缀（check 11，2026-08-05 用户拍板加；
+// 2026-08-10 用户拍板把判据从「逐字等值」放宽为「前缀锚定」，配套 task-keeper 的换代机制）。
+// 键取自 KEEPER_SLUG_PATTERN 的第 2 个捕获组（`debug` / `chore`），两个值与
+// task-keeper 的 `skills/tk-debug/SKILL.md` / `skills/tk-chore/SKILL.md` 派发样例
+// 里写的 description **逐字一致**——改任一处都要三处同步（含本仓 README 的 check 表）。
+//
+// 【为什么需要这道闸】在飞 agent 面板渲染的是**首次 `Agent` 派发时的 description**，
+// 而 keeper 是常驻实例：派出去之后一律用 `SendMessage` 唤醒，反复接不同的活。
+// `SendMessage` 只有 `to` / `summary` / `message` 三个字段，**没有任何入口能更新已派出
+// agent 的 description**，所以那句描述从派发那一刻起就永久定格。于是「description 写当次
+// 任务」这个写法对 keeper 恒错——它描述的活几分钟后就干完了，面板却要挂着它到会话结束。
+//
+// 2026-08-05 实证（会话 b4b5cb3e，交付 D-001-feat-job-sequence-model）：
+// `opus-debug-keeper-7f3a` 派发时 description 写的是「关闭三条 + 开工 DBG-140」，此后
+// 对它的 `SendMessage` 唤醒 20+ 次（转新 bug、转裁决、放行合并……各不相同），面板始终
+// 显示派发那一刻那句。同会话 `opus-chore-keeper-3d7b` 的「登记五项杂务」同理。
+//
+// 【漂移成因是两条指令打架，不是 AI 疏忽】本插件每轮注入的字段表写的是
+// 「`description`：3-5 词任务摘要，只写这次任务干什么」——那条对一次性 subagent 完全正确，
+// 对常驻 keeper 只对了一半。两份 SKILL.md 早给了正确样例，但它们只在主会话调过对应 skill
+// 时才在场，而字段表每轮都在。软文本斗软文本斗不过，故加闸。
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// 【2026-08-10 用户拍板：判据从「逐字等值」放宽为「前缀锚定」，本条上方的实证全部仍然成立，
+//   被覆盖的只有「所以钉死成一个固定串」这个结论】
+//
+// 原判据要求 description **逐字等于** `debug 队列常驻管理` / `chore 队列常驻管理`。它确实
+// 消灭了「面板永久定格在某次任务」这个问题，但代价是走到另一个极端：面板那一行**永远**只
+// 说得出角色，说不出这一代 keeper 在干什么，看板价值同样归零。用户原话是「已经失去了它实际
+// 工作的意义」。
+//
+// 新方案两条腿，本条只是其中一条：
+//   (a) **本条**：description 只锚定前缀 `debug 队列` / `chore 队列`，前缀之后可以（也应该）
+//       接本批摘要，例如 `debug 队列 · 关三条 + 开工 DBG-140`。前缀保证面板一眼能分辨这是
+//       哪个队列的常驻实例，摘要保证它携带当次信息。
+//   (b) **换代**（在 task-keeper 侧，`hooks/lib/keeper_generation.py`）：一代 keeper 把队列
+//       做到 open 0 / 无待拍板 / 无残留 worktree 时，每轮注入建议主会话新派一个实例而不是继续
+//       唤醒旧的。于是「派发那一刻定格」这个约束还在，但定格的间隔从「整场会话」缩短到「一批活」。
+//
+// 只做 (a) 不做 (b) 会退回原问题——描述仍会定格在第一批活上。只做 (b) 不做 (a) 则新实例的
+// description 照样只能写固定串，换代白换。两条必须同时在，改其中一条前先看另一条。
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 【判据形态】`subagent_type` 命中 KEEPER_SLUG_PATTERN（完整锚定正则）+ description 正文对
+// 前缀串做 `startsWith`，两个都是确定字段，同一输入必得同一结论。不猜语义、不看 prompt。
+// 前缀之后的内容一概不校验——那是任务摘要，机械层面无从判断写得对不对，长度由 check 7 兜。
+//
+// 【为什么前缀之后不强制分隔符】用户拍板时给的形态是 `<kind> 队列 · <摘要>`，但判据只查前缀、
+// 不查那个 `·`。两个理由：一是旧写法 `debug 队列常驻管理` 必须继续放行（存量文档、存量习惯、
+// 以及本次改造漏改的任何一处样例都会写它，为一个装饰性分隔符制造 deny 不值），二是分隔符是
+// 排版偏好而非语义边界，把偏好写进硬闸只会多一个误杀面。
+//
+// 【覆盖边界（如实记录，勿删）】
+//   - **假阳性**：想给 keeper 起一个完全不含队列名的 description（例如纯英文 `debug queue`）
+//     会被硬拦。这是有意的——中文前缀是面板上区分 keeper 与普通 subagent 的唯一标记。
+//   - **假阴性**：`debug 队列` 之后可以写任何东西，包括把 prompt 原文抄进去。前缀锚定不防
+//     提示词泄漏，那由 check 6（角色设定句）与 check 7（长度）各自兜一部分，本条不重复。
+//   - **假阴性**：改用 `general-purpose` 派 keeper 可绕过——但那连 check 9 / check 10 一起
+//     绕过了，是既有边界，本条不新增。
+//   - 比较用的是 **strip 掉 `[模型名]` 前缀后的正文**（与 check 6 同口径），`[opus] debug
+//     队列 · xxx` 不会被这条拦下；面板多显示一个前缀无害，不值得多一个误杀面。
+// （前缀值本身住在上方 KEEPER_SPECS 的 `descPrefix` 字段里，2026-08-18 起三个按 kind
+// 变化的常量合表，理由见那张表上方的注释。）
+
+// keeper 的 description 必需前缀；非 keeper（或表内没登记的新 keeper）返回空串，
+// 调用方据此整条跳过（fail-open，与 KEEPER_SLUG_PATTERN 的白名单口径一致）。
+function keeperDescPrefix(stLower) {
+  const spec = keeperSpec(stLower)
+  return (spec && spec.descPrefix) || ''
+}
+
+// 身份词校验（check 8）的通用词黑名单：这些词出现在 subagent_type 的 slug 里不携带
+// 可辨识身份，不能拿来当 name 的必含词。例如 `fpf:fpf-agent` 的 'agent'、
+// `foo:use` 的 'use'——要求 name 含 'use' 既荒谬又制造误杀。slug 的词被这张表
+// 滤空时（如 `foo:use`）整条 check 跳过，fail-open。
+const GENERIC_IDENTITY_WORDS = new Set([
+  'agent', 'use', 'main', 'default', 'general', 'purpose', 'task', 'claude', 'sub',
+])
+
+// 从 subagent_type 抽出「身份词候选集」。只处理**含冒号**的插件专用 agent
+// （`task-keeper:debug-keeper` / `caveman:cavecrew-builder`）：它们带常驻语义
+// （keeper 会持久接管队列、reviewer 只出审查结论），而面板只渲染 name 不渲染
+// subagent_type，name 不带身份词就无法反推派的是谁。内建三档
+// （Explore / Plan / general-purpose）返回空数组、不参与校验——它们只是权限差别。
+function identityWords(subagentType) {
+  const st = String(subagentType || '')
+  if (st.indexOf(':') === -1) return []
+  const slug = st.slice(st.indexOf(':') + 1)
+  return (slug.match(/[A-Za-z0-9]+/g) || [])
+    .map((w) => w.toLowerCase())
+    .filter((w) => w.length >= 3 && !GENERIC_IDENTITY_WORDS.has(w))
+}
+
+// description 正文若以这些句式开头，判定为把 prompt 的角色设定句抄进了 description。
+// 这是本文件唯一的近似判据（覆盖边界见文件头【判据精度的如实说明】），词表只减不增。
+// 2026-07-31 移除 '#' / '【' / 'Your task' 三项：前两个命中任何以 markdown 标题或中文
+// 书名号开头的合法摘要，第三个不等价于角色设定（"Your task summary…"是合法摘要）。
+const PROMPT_LEAK_PREFIXES = [
+  '你是', '您是', '你將', '你将', '请你', '請你',
+  '作为一个', '作為一個', '作为一名', '作為一名',
+  'You are', 'you are', 'Act as', 'act as',
+]
+
+// description 最大长度（纪律要求 3-5 词摘要；超此长度说明塞了 prompt 内容）。
+// **按 description 原始字符串计长**，不减去 [模型名] 前缀——见 checkNaming 第 5 条。
+const DESC_BODY_MAX = 60
+
+// 完整场景路由表：只在「model 缺失/非法」时才注入（档位错配的语义判定已删除，
+// 这张表现在只用于"你没给 model，这是选档依据"这一个场景）
+const ROUTING_TABLE = [
+  '## subagent_type × model 场景路由表',
+  '',
+  '| subagent_type | 权限 | 适用场景 |',
+  '|---|---|---|',
+  '| `Explore` | 只读（无 Edit/Write，但有 Bash/Grep/Read） | 代码库探索、架构分析、模块调查、文件定位、符号/引用检索 |',
+  '| `Plan` | 只读 | 架构设计、实现策略规划、任务拆解、风险评估、权衡分析 |',
+  '| `general-purpose` | 全权限含 Edit/Write/Bash | 功能实现、重构、测试、bug 修复、复杂多步任务、大输出命令执行 |',
+  '',
+  '只读任务绝不用 `general-purpose`（默认带 Edit/Write 权限，存在误改风险）。',
+  '',
+  '| 场景 | subagent_type | model |',
+  '|---|---|---|',
+  '| 只读检索与分析：grep / 文件定位 / 找定义引用 / 单文件字段提取（日志·CSV·JSON） | `Explore` | `sonnet` |',
+  '| 代码库架构调查 / 多文件交叉理解 / 依赖追踪 / 常规代码审查 | `Explore` | `sonnet` |',
+  '| **深度代码审查**（安全审计 / 并发正确性 / 边界条件 / 协议一致性 / 数据一致性） | `Explore` | `opus` |',
+  '| 常规架构设计 / 技术方案 / 任务拆解 / 风险评估 | `Plan` | `sonnet` |',
+  '| **重大架构设计**（系统级取舍 / 破坏性变更 / 跨模块不变量迁移 / 长期演进） | `Plan` | `opus` |',
+  '| 机械执行类：大输出命令 + 摘要（npm test / docker logs / dump）、git log·diff 摘要、提交消息生成 | `general-purpose` | `sonnet` |',
+  '| 机械文件改写（重命名、格式化、模板填充、批量替换） | `general-purpose` | `sonnet` |',
+  '| Web 文档检索 / 多源调研 + 综合分析 | `general-purpose` | `sonnet` |',
+  '| 常规多步骤编码 / 重构 / 普通 bug 修复 / 测试编写 | `general-purpose` | `sonnet` |',
+  '| **复杂 bug 排查**：跨模块 / 难复现 / 并发·竞态·死锁 / 内存泄漏 / 时序 / 性能回退 / 长链根因 | `general-purpose` | `opus` |',
+  '| **性能诊断与优化**：找真正瓶颈 / 判断优化方向 / 基准设计 / 复杂度分析 | `general-purpose` | `opus` |',
+  '| **安全漏洞分析与修复**：认证 / 授权 / 注入 / SSRF / 反序列化 / 信息泄漏 | `general-purpose` | `opus` |',
+  '| **复杂算法设计与选型**：数据结构与复杂度取舍 / 边界与不变量证明 | `general-purpose` | `opus` |',
+  '| **深度技术调研**：对抗性验证 / 多源交叉核对 / 可信度评估 | `general-purpose` | `opus` |',
+  '| **兜底升级**：同一任务在 opus 下已完整跑过 ≥2 轮仍无进展 | 沿用原类型 | `fable` |',
+  '',
+  '模型三档判定标尺（**无 haiku 档，最低从 sonnet 起**）：',
+  '- `sonnet`：**全局最低档兼默认档**。机械执行（模式匹配、规整提取、批量改写、简短摘要）',
+  '  与常规语义任务（跨文件推理、常规设计权衡、多步骤编码与审查）**都从这一档起步**',
+  '- `opus`：命中任一即用——(a) 需严密因果链（跨层追根因）；(b) 极高正确性要求',
+  '  （安全/并发/协议/资金/权限）；(c) sonnet 已明显吃力（漏点多、方案有硬缺陷、修 A 出 B）',
+  '- `fable`：兜底升级不作首选——同一任务用 opus 完整跑过 ≥2 轮仍无进展才启用',
+  '- 禁止预防性堆模型：没有 opus 触发信号就留在 sonnet，不确定时一档一档升，别一步跳顶',
+].join('\n')
+
+// ── disclosed reference：拦下时把完整形态模板贴给 AI（3.31.0）──────────
+// 注入文本里只留六个字段的判据（约 0.9k），可整体照抄的调用 JSON、六字段表与命名细则
+// 住在 references/agent-dispatch.md。AI 真派错那一刻正是它最需要模板的时刻，所以这道闸
+// deny 时把对应段落**原文**读出来附在 finding 后面——不在本文件里手抄第二份，改那份 md
+// 即改所有出口。读不到文件就只发 finding（fail-open），不因为 reference 缺失而改变拦截判定。
+const REF_FILE = require('path').join(__dirname, '..', '..', 'references', 'agent-dispatch.md')
+
+function readRefSection(name) {
+  try {
+    const txt = require('fs').readFileSync(REF_FILE, 'utf8')
+    const m = txt.match(new RegExp('<!-- SEC:' + name + ' -->([\\s\\S]*?)<!-- /SEC -->'))
+    return m ? m[1].trim() : ''
+  } catch (e) {
+    return ''
+  }
+}
+
+function withRefTemplate(reason) {
+  const ref = readRefSection('agent-call')
+  if (!ref) return reason
+  return reason + '\n\n--- 可整体照抄的完整形态（原文取自 ' + REF_FILE + '，命名细则见同文件 SEC:naming）---\n\n' + ref
+}
+
+function deny(reason) {
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: withRefTemplate(reason),
+      },
+    }) + '\n'
+  )
+  process.exit(0)
+}
+
+// 补全 name 后放行。**不带 permissionDecision**：本 hook 只负责改参数，权限判定交回
+// 正常流程（给 "allow" 会连带跳过其他权限检查，越权）。additionalContext 告知 AI
+// 已自动补名，让它下次自己起有语义的名字——自动名只有 subagent_type 和哈希，
+// 可辨性弱于 AI 自己写的任务语义。
+function allowWithName(ti, name, note) {
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        updatedInput: Object.assign({}, ti, { name: name }),
+        additionalContext: note,
+      },
+    }) + '\n'
+  )
+  process.exit(0)
+}
+
+function guardDisabled() {
+  const off = (v) => String(v || '').toLowerCase() === 'off'
+  return off(process.env.AGENT_DISPATCH_GUARD) || off(process.env.AGENT_NAMING_GUARD)
+}
+
+// ── 自动补名 ────────────────────────────────────────────────────────
+//
+// 语义来源优先级：description 正文里的 ASCII 词 > subagent_type。
+// description 常是中文（纪律要求它写中文任务摘要），抽不出 ASCII 词时退回
+// subagent_type——中文转写（拼音/翻译）在 hook 里不可靠，宁可给个语义弱但绝不出错的名。
+
+// 从 description 正文抽 ASCII 语义片段：'grep auth refs' → 'grep-auth-refs'
+// （description 按新规不带 [模型名] 前缀；若仍带了旧写法,下面 replace 会先 strip 掉）
+function deriveSlug(ti) {
+  const desc = typeof ti.description === 'string' ? ti.description : ''
+  const body = desc.replace(/^\[(sonnet|opus|fable|haiku)\]\s*/, '')
+  const words = (body.match(/[A-Za-z0-9]+/g) || [])
+    .map((w) => w.toLowerCase())
+    .filter((w) => w.length >= 2)
+    .slice(0, 4)
+  if (words.length) return words.join('-')
+
+  const st = typeof ti.subagent_type === 'string' ? ti.subagent_type : ''
+  const fromType = st.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  return fromType || 'agent'
+}
+
+// 把任意字符串压成合法的 name 片段（只留 ASCII 字母数字，用 '-' 连接）。
+// **hint 文案里凡是要拼进 name 的用户输入都必须过这个函数**：name 受 NAME_PATTERN 约束、
+// 不接受中文与空格，直接把原值回显进"改成 xxx"的建议里，AI 照抄会再撞一次拦截。
+function toAsciiKebab(s) {
+  return (String(s == null ? '' : s).match(/[A-Za-z0-9]+/g) || [])
+    .map((w) => w.toLowerCase())
+    .join('-')
+}
+
+// 同批并发的多个 subagent 必须拿到不同的 name（同名会让 SendMessage 的 latest-wins
+// 寻址把先派的那个弄丢）。用短哈希做区分符：纯函数、无需持久状态。
+// **哈希输入必须含 description**：本仓常见的并发分片是"同一段 prompt + 不同中文
+// description"（如"判定 spec 01-05"/"判定 spec 06-10"），description 又多为中文、
+// 抽不出 ASCII 词，deriveSlug 会一齐回落到 subagent_type——若哈希只吃 prompt + slug，
+// 这批分片会拿到**完全相同**的自动名，SendMessage 按名寻址直接失效。
+function shortHash(s) {
+  return crypto.createHash('sha1').update(s).digest('hex').slice(0, 4)
+}
+
+// keeper 类常驻 agent 的 name 固定前缀（check 10 用）。`stLower` 传小写化后的
+// subagent_type，命中 KEEPER_SLUG_PATTERN 时才有意义。前缀之后必须再接 4 位小写
+// 字母数字短哈希——2026-08-04 用户拍板：同一会话里前一个 keeper 实例结束后，
+// 若下一个又派成逐字相同的固定名，`SendMessage` 的 latest-wins 寻址会让唤醒方
+// 分不清召唤的是哪一个实例；强制带哈希后缀，把"名字不可预测"这个事实摆出来，
+// 逼唤醒方必须去读登记文件（task-keeper 的 PreToolUse(Agent) hook 会把实际用的
+// name 写进 `.keeper/<交付id>/.keeper-instance.json`），而不是心存"记得住固定名"
+// 的幻觉。
+//
+// 2026-08-18 起前缀的两段都取自 KEEPER_SPECS，不再从 subagent_type 的 slug 现推：
+// 档位段按 kind 分叉（debug 是 `opus-`、chore 是 `sonnet-`），身份段用表里登记的
+// `nameSeg`（`debugger` / `chore`）而不是 slug 本身。旧实现 `stLower.split(':').pop()`
+// 拼出的是 `opus-debug-keeper-`，那个 `-keeper` 段对读面板的人零信息量。
+function keeperNamePrefix(stLower) {
+  const spec = keeperSpec(stLower)
+  if (!spec) return ''
+  return `${spec.model}-${spec.nameSeg}-`
+}
+
+// keeper name 的完整锚定正则：固定前缀 + 恰好 4 位小写字母或数字，无更多无更少。
+// 非 keeper 传进来时 prefix 是空串，正则会退化成 `^[0-9a-z]{4}$`——所以调用方必须
+// 先用 KEEPER_SLUG_PATTERN 判过再调它（check 10 与 autoName 都是这么做的）。
+function keeperNamePattern(stLower) {
+  return new RegExp('^' + keeperNamePrefix(stLower) + '[0-9a-z]{4}$')
+}
+
+function autoName(ti, model) {
+  // keeper 类常驻 agent 的 name 被 check 10 要求「固定前缀 + 4 位短哈希」，自动补名
+  // 直接按这个形态生成，复用与非 keeper 分支相同的 shortHash 输入口径
+  // （prompt + description + slug），确保自己补的名自己能通过 check 10。
+  const stLowerForKeeper = String(ti.subagent_type || '').toLowerCase()
+  const fixerSpec = debugFixerSpec(stLowerForKeeper)
+  if (fixerSpec) {
+    const fixerHash = shortHash(
+      String(ti.prompt || '') + '|' + String(ti.description || '') + '|' + stLowerForKeeper
+    )
+    return `${fixerSpec.model}-debug-${fixerHash}`
+  }
+  if (KEEPER_SLUG_PATTERN.test(stLowerForKeeper)) {
+    const keeperHash = shortHash(
+      String(ti.prompt || '') + '|' + String(ti.description || '') + '|' + stLowerForKeeper
+    )
+    return keeperNamePrefix(stLowerForKeeper) + keeperHash
+  }
+
+  let slug = deriveSlug(ti)
+  // check 8 要求 name 体现插件专用 agent 的身份；自动补名同样要满足，否则会补出一个
+  // guard 自己都不放行的形态（description 全是 ASCII 时 deriveSlug 压根不看 subagent_type）。
+  const idWords = identityWords(ti.subagent_type)
+  if (idWords.length && !idWords.some((w) => slug.indexOf(w) !== -1)) {
+    slug = `${idWords[0]}-${slug}`
+  }
+  const hash = shortHash(
+    String(ti.prompt || '') + '|' + String(ti.description || '') + '|' + slug
+  )
+  const budget = NAME_MAX - model.length - 1 - 1 - hash.length // model + '-' + slug + '-' + hash
+  const safeSlug = slug.slice(0, Math.max(1, budget))
+  const name = `${model}-${safeSlug}-${hash}`
+  // 兜底：任何原因导致不合正则时，退回一个必然合法的形态
+  return NAME_PATTERN.test(name) ? name : `${model}-agent-${hash}`
+}
+
+// ── 命名与 model 的结构校验（多条一并列出）──────────────────────────
+// 返回 { findings, hints, modelOk, nameMissing }
+function checkNaming(ti) {
+  const model = typeof ti.model === 'string' ? ti.model.trim() : ''
+  const name = typeof ti.name === 'string' ? ti.name.trim() : ''
+  const description = typeof ti.description === 'string' ? ti.description.trim() : ''
+  // subagent_type 小写化后的串：check 9 / 10 / 11 共用，是 keeper 判定的唯一入口。
+  const stLower = String(ti.subagent_type || '').toLowerCase()
+  // 非空即说明这是白名单内的常驻 keeper，其 description 被 check 11 钉死成这个值。
+  // check 5 的 hint 也要用它——否则缺 description 时会教 AI 去写「3-5 词任务摘要」，
+  // 它照做之后下一轮又撞上 check 11，两轮才改对。
+  // 变量名沿用 keeperDesc，但 2026-08-10 起它存的是**必需前缀**而非完整固定串，
+  // 判据也从等值比较改成 startsWith，理由见 KEEPER_DESC_PREFIXES 上方那段。
+  const keeperDesc = keeperDescPrefix(stLower)
+  const fixerSpec = debugFixerSpec(stLower)
+
+  const findings = []
+  const hints = []
+  const modelOk = MODELS.indexOf(model) !== -1
+  const nameMissing = !name
+
+  // 1. model 必须显式指定且在三档之内
+  if (!model) {
+    findings.push('缺 model;禁止依赖默认模型回落')
+    hints.push('显式加 model:"sonnet"|"opus"|"fable"')
+  } else if (model === 'haiku') {
+    // haiku 单独给 finding：它是最常见的误填（旧纪律里曾是合法档），
+    // 泛泛报「不在三档之内」不足以让人知道该换成哪一档。
+    findings.push('model="haiku" 已从可选档次中移除;最低档是 sonnet')
+    hints.push('机械执行/规整提取类任务同样用 model:"sonnet",并把 name / description 前缀一并改成 sonnet')
+  } else if (!modelOk) {
+    findings.push(`model="${model}" 不在三档 sonnet/opus/fable 之内`)
+    hints.push('model 只能填 sonnet|opus|fable')
+  }
+
+  // 2. name 缺失**不进 findings**——它是 schema 外字段、AI 看不见，由 main() 自动补。
+  //    但 model 也有问题时要顺带提醒：那种情况会走 deny，补名的时机已经错过，
+  //    且补名需要合法的 model 做前缀。
+  if (nameMissing && !modelOk) {
+    hints.push('重派时顺带给 name:"<model>-<任务语义-kebab>"(schema 里查不到这个字段,但运行时接受并会存进 subagent 元数据)')
+  }
+
+  // 3~4. name 存在时校验字符集与模型前缀（存在即说明 AI 知道这个字段，格式错要教）
+  if (!nameMissing) {
+    if (!NAME_PATTERN.test(name)) {
+      findings.push(`name="${name}" 不满足 Agent 工具正则 ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$;只接受 ASCII 字母数字与 - _`)
+      hints.push('name 用英文 kebab-case,不能含中文/空格/方括号')
+    }
+    // 前缀分隔符 '-' 与 '_' 等价：NAME_PATTERN 允许下划线，只认连字符会把
+    // "sonnet_review_login" 这类照正则写出来的合法名误拦。
+    const startsWithPrefix = (m) => NAME_PREFIX_SEPARATORS.some((sep) => name.startsWith(m + sep))
+    const namePrefix = MODELS.find(startsWithPrefix)
+    if (startsWithPrefix('haiku')) {
+      // 单独识别旧档前缀，避免回落到「缺前缀」分支后给出 "sonnet-haiku-xxx" 这种
+      // 把旧档次名留在任务语义里的错误改法。
+      findings.push(`name="${name}" 用了已移除的 haiku 档前缀;本插件无 haiku 档,最低档是 sonnet`)
+      hints.push(`name 改成 "${modelOk ? model : 'sonnet'}-${toAsciiKebab(name.slice(6)) || '<任务语义-kebab>'}"`)
+    } else if (!namePrefix) {
+      findings.push(`name="${name}" 缺模型档次前缀;用户无法从在飞 agent 面板判断这批任务烧的是哪一档模型`)
+      hints.push(`name 改成 "${modelOk ? model : '<模型名>'}-${toAsciiKebab(name) || '<任务语义-kebab>'}"（任务语义只能用 ASCII 字母数字与 - _）`)
+    } else if (modelOk && namePrefix !== model) {
+      // 回显实际用的分隔符（可能是 '_'），避免 finding 里写 "sonnet-" 而 name 里其实是
+      // "sonnet_"，让人以为 guard 看错了字段。
+      const usedPrefix = name.slice(0, namePrefix.length + 1)
+      findings.push(`name 前缀 "${usedPrefix}" 与实际 model="${model}" 不一致;面板会显示错误的模型档次`)
+      hints.push(`name 前缀改成 "${model}${usedPrefix.slice(-1)}"`)
+    }
+  }
+
+  // 8. name 必须体现插件专用 agent 的身份（2026-08-03 新增）
+  //    起因：在飞面板只渲染 name、**不渲染 subagent_type**，于是
+  //    name="sonnet-dbg-open-audit" + subagent_type="task-keeper:debug-keeper" 这组派发
+  //    在面板上完全看不出派的是 keeper，用户找不到自己刚被托管的那条队列。
+  //
+  //    判据是**纯子串包含**、不猜语义：subagent_type 含 ':' → 取冒号后 slug → 拆 ASCII 词
+  //    → 滤掉通用词 → 要求 name 小写化后包含其中**任意一个**。
+  //
+  //    覆盖边界（如实记录，勿删）：
+  //    - **假阴性成本为零**：`sonnet-x-keeper` 这类随便塞词即可过闸，且只查"任一词"，
+  //      分不出 debug-keeper 与 chore-keeper。这条判据只防**遗忘**，不防绕过——而遗忘
+  //      正是它唯一的失败模式（没人有动机故意隐藏 subagent 身份）。
+  //    - **只覆盖含冒号的插件专用 agent**。内建 Explore / Plan / general-purpose 不校验：
+  //      它们是权限差别不是常驻身份，强制带词只会让每个名字多背一个无信息的前缀。
+  //    - slug 的词全落通用词黑名单时整条跳过（`foo:use`），fail-open。
+  if (!nameMissing) {
+    const idWords = identityWords(ti.subagent_type)
+    const lowerName = name.toLowerCase()
+    if (idWords.length && !idWords.some((w) => lowerName.indexOf(w) !== -1)) {
+      findings.push(
+        `name="${name}" 不含 subagent_type="${ti.subagent_type}" 的身份词(${idWords.join('/')});` +
+          `在飞面板只渲染 name 不渲染 subagent_type,用户无法从面板判断这是哪种专用 agent`
+      )
+      hints.push(
+        `name 改成 "${modelOk ? model : '<模型名>'}-${idWords.join('-')}-<任务语义-kebab>"` +
+          `(身份词 ${idWords.join(' 或 ')} 任含其一即可,位置不限)`
+      )
+    }
+  }
+
+  // 9. keeper 类常驻 agent 的档位钉死（2026-08-03 新增；2026-08-18 用户拍板改成按 kind
+  //    分叉：debug-keeper 仍是 opus，chore-keeper 降为 sonnet，判据与边界见 KEEPER_SPECS）。
+  //    与 check 1 并列而非合并：check 1 管"三档枚举内"，这条管"这个 subagent_type 只允许一档"。
+  //    model 缺失时两条会同时报，hint 各给一半，AI 一次改全。
+  //    注意判据是**等值**不是"不低于"：给 chore-keeper 派 opus 同样被拦，否则档位一路只升
+  //    不降，本次降档就白降了。
+  const fixedSpec = keeperSpec(stLower)
+  if (fixedSpec && model !== fixedSpec.model) {
+    findings.push(
+      `subagent_type="${ti.subagent_type}" 是固定 ${fixedSpec.model} 档的常驻 keeper,`
+      + `本次 model=${model ? `"${model}"` : '(缺失)'};`
+      + `agent 定义 frontmatter 的 model:${fixedSpec.model} 会被这里显式传的 model 顶掉`
+      + `(Agent 工具的 model 参数优先级高于 frontmatter),所以档位只能在这里给对`
+    )
+    hints.push(
+      `model 改 "${fixedSpec.model}",name 同改 "${fixedSpec.model}-${fixedSpec.nameSeg}-xxxx"`
+      + `(xxxx 为 4 位小写字母数字);两个 keeper 的档位各自钉死、互不参照:`
+      + `debug-keeper 恒 opus(triage/去重/对账错一次整条队列跟着错),`
+      + `chore-keeper 恒 sonnet(台账登记与归档是机械杂务,不需要 opus 的因果链深度);`
+      + `档位不按这条 bug 或这批杂务看起来难不难上下调,也不受三档标尺那句`
+      + `"没 opus 触发信号就留在 sonnet"约束`
+    )
+  }
+
+  // 第二层 debug fixer 的档位同样按精确 type 等值校验：easy=sonnet、medium=opus、
+  // hard=fable。它是 task-keeper 内受 Human 明示的特例，不扩展到普通 Agent。
+  if (fixerSpec && model !== fixerSpec.model) {
+    findings.push(
+      `subagent_type="${ti.subagent_type}" 是固定 ${fixerSpec.model} 档的第二层 debug fixer,`
+      + `本次 model=${model ? `"${model}"` : '(缺失)'};difficulty 对应档位必须等值一致`
+    )
+    hints.push(
+      `model 改 "${fixerSpec.model}",name 同改 "${fixerSpec.model}-debug-xxxx"`
+      + `(xxxx 为 4 位小写字母数字);easy=sonnet、medium=opus、hard=fable；`
+      + `此例外只适用于 task-keeper:debug-fixer-easy/medium/hard，普通 Agent 的 fable 仍须 opus 两轮无进展`
+    )
+  }
+
+  // 10. keeper 类常驻 agent 的 name 必须带 4 位短哈希后缀（2026-08-04 用户拍板改）
+  //     起因是一次真实事故（session 8477c246，2026-08-03）：keeper 被派成
+  //     `sonnet-debug-keeper-085`；38 分钟后主会话想唤醒它，按 agent 定义里写的固定名
+  //     `debug-keeper` 寻址，`SendMessage` 返回
+  //     "No agent named 'debug-keeper' is reachable."，随后它直接又派了**第二个**
+  //     debug-keeper 实例。两个实例先后持有同一 `.keeper/<交付id>/debug/` 的独占写权限，
+  //     单一写者模式失效、队列一致性无保障。
+  //
+  //     旧判据（3.14.0）曾把 name 钉死成逐字相等的固定三段名（`opus-debug-keeper`），
+  //     但这条本身埋了新的坑：同一会话内前一个 keeper 实例结束后，若后来者又派成逐字
+  //     相同的固定名，`SendMessage` 的 latest-wins 寻址规则会让"占名"这件事本身变得
+  //     不可靠——旧实例的名字被新实例顶掉，唤醒方分不清这次唤到的是哪一个。
+  //     2026-08-04 改法：name 必须再带 4 位小写字母数字短哈希，逼「名字不可预测」这个
+  //     事实被强制暴露出来，让唤醒方**必须**先去读登记文件才能拿到当前有效的 name，
+  //     机制不会退化成"记得住就不读、记不住才读"的可选项。登记文件由 task-keeper 插件
+  //     的 `PreToolUse(Agent)` hook 写：命中 keeper 类 subagent_type 时把本次实际用的
+  //     name 落进 `.keeper/<交付id>/.keeper-instance.json`
+  //     （v7 起同一档是一个实例列表，形如
+  //     `{"debug":{"instances":[{"name":"opus-debugger-4bb6","issue":"DBG-207",...}]}}`），
+  //     主会话唤醒前先读它，读不到才首次派发。
+  //
+  //     判据形态：完整锚定正则 `^<档位>-<身份段>-[0-9a-z]{4}$`（`keeperNamePattern()`），
+  //     两个前段都取自 KEEPER_SPECS（`opus-debugger-` / `sonnet-chore-`），
+  //     **不再从 subagent_type 的 slug 现推**（2026-08-18 用户拍板换名，旧形态
+  //     `opus-debug-keeper-5a1b` 里那个 `-keeper` 段对读面板的人零信息量）。
+  //     前缀部分仍是确定字段比较，只有后 4 位是「形态匹配」而非「值校验」——
+  //     它与 check 8（name 须含身份词）不是一回事：check 8 只防遗忘、随便塞词即可过闸；
+  //     这条同样不校验后 4 位是不是真的取自哈希，只校验形态（4 个小写字母或数字）。
+  //
+  //     覆盖边界（如实记录，勿删）：
+  //     - **假阴性**：AI 可以随便编 4 个字符交上来，而不是真的调用 shortHash——判据
+  //       只能校验形态，校验不了随机性。这是可以接受的：本 guard 真正要防的是「同名
+  //       撞车导致 SendMessage 寻址混乱」，任意 4 位后缀（哪怕是编的）都能防住这一点；
+  //       防不住的是「AI 故意每次编同一个后缀」，但那属于蓄意绕过纪律，不是本 guard
+  //       该拦的范畴（本仓 hook 只对"忘记"负责，不对"故意"负责）。
+  //     - **假阳性**：合法的 4 位小写字母数字后缀不会被拒绝，无已知误杀面。
+  //     - name 缺失时不在这里报：`autoName` 已直接补成同一形态的名字（见 keeper 分支，
+  //       复用 shortHash，输出的十六进制字符天然落在 [0-9a-z] 内）。
+  //     - 与 check 9 的叠加：model 给错时两条会同时报，而期望名的首段**就是该 kind 钉死
+  //       的那个档位**（debug 恒 `opus-`、chore 恒 `sonnet-`），两条 hint 方向一致、
+  //       AI 一次改全。
+  if (!nameMissing && KEEPER_SLUG_PATTERN.test(stLower)) {
+    const pattern = keeperNamePattern(stLower)
+    if (!pattern.test(name)) {
+      const prefix = keeperNamePrefix(stLower)
+      findings.push(
+        `subagent_type="${ti.subagent_type}" 是常驻 keeper,name 必须形如 "${prefix}xxxx"` +
+          `(固定前缀 + 恰好 4 位小写字母数字短哈希),本次 name="${name}" 不满足;` +
+          `强制带哈希后缀是为了防同一会话内前一个 keeper 实例关闭后新派的同名撞车` +
+          `(SendMessage 的 name 寻址是 latest wins),名字因此不可预测,` +
+          `唤醒前必须先读 .keeper/<交付id>/.keeper-instance.json 里登记的实际 name`
+      )
+      hints.push(
+        `name 改成 "${prefix}4bb6" 这种形态(如 "${prefix}4bb6",后 4 位随便挑 4 个小写字母` +
+          `或数字即可,不要求真的是哈希值,只要求形态和大概率唯一);` +
+          `keeper 是第一层调度者,它的 name 现在既不固定也不可预测,` +
+          `唤醒前先读 .keeper/<交付id>/.keeper-instance.json 拿当前实际 name,读不到才首次派发`
+      )
+    }
+  }
+
+  // 精确第二层 fixer 的 name 是 type 对应 model 加 debug 身份段和 4 位短哈希。
+  // 这里使用 type 查表后的完整锚定正则，故 `opus-debug-*` 不能冒充 easy，
+  // `*-debugger-*` 也不会误作 fixer；不检查或解释 prompt。
+  if (!nameMissing && fixerSpec && !debugFixerNamePattern(fixerSpec).test(name)) {
+    findings.push(
+      `subagent_type="${ti.subagent_type}" 是第二层 debug fixer,name 必须形如 "${fixerSpec.model}-debug-xxxx"`
+      + `(固定 model 段 + debug + 恰好 4 位小写字母数字),本次 name="${name}" 不满足`
+    )
+    hints.push(
+      `name 改成 "${fixerSpec.model}-debug-4bb6" 这种形态；首段必须与该 type 的实际 model 一致，`
+      + `中段只能是 debug，后缀为 4 位小写字母数字`
+    )
+  }
+
+  // 5. description 必填且有正文（description 是 schema 里的必填字段，缺失基本由工具层
+  //    拦掉，这里仍留判定以防 harness 放宽）。**不再要求 [模型名] 前缀**：name 的模型
+  //    前缀已是强制校验（见上 check 3~4），在飞面板 name 与 description 并排显示，
+  //    模型档次由 name 一处表达即可，description 再带 [模型名] 前缀是冗余（每行模型名
+  //    出现两次）。AI 仍带了前缀（旧习惯）也不拦——这是**软放宽**口径：strip 掉再做
+  //    正文检测，避免「[sonnet] xxx」整体被当正文触发误判。模型档次一致性由 name 侧独担。
+  //
+  //    **strip 只服务于正文检测，不减免字符预算**：DESC_BODY_MAX 一律按 description 的
+  //    原始长度比较（见下 check 9）。否则「[sonnet] 」这类前缀等于白送 9 个字符额度，
+  //    带前缀的 description 能比不带前缀的多写一截，前缀反而变成收益。
+  //
+  //    `[haiku]` 是例外，不 strip 而是报错：本插件已无 haiku 档（MODELS 只有
+  //    sonnet/opus/fable），静默吞掉会让人以为 haiku 仍合法。注意与另两处 haiku 判定
+  //    区分：`model:"haiku"`（上 check 1）与 name 的 `haiku-`/`haiku_` 前缀（上 check 3~4）
+  //    本来就各有拦截，这里补的是 description 里的 `[haiku]`。
+  let descBody = ''
+  if (!description) {
+    findings.push('缺 description')
+    hints.push(
+      keeperDesc
+        ? `description 写 "${keeperDesc} · <本批摘要>"（常驻 keeper 必须带队列前缀,前缀之后写这一代接的活,理由见 check 11）`
+        : 'description 填 "<3-5 词任务摘要>"（模型档次由 name 前缀体现,description 不带 [模型名] 前缀）'
+    )
+  } else {
+    const modelTag = description.match(/^\[(sonnet|opus|fable|haiku)\]\s*/)
+    descBody = modelTag ? description.slice(modelTag[0].length).trim() : description
+    if (modelTag && modelTag[1] === 'haiku') {
+      findings.push('description 前缀 "[haiku]" 用了已移除的档次;本插件无 haiku 档,最低档是 sonnet')
+      hints.push('删掉 description 的 [haiku] 前缀(3.4.0 起 description 本就不要求 [模型名] 前缀,档次由 name 前缀表达),并确认 model 与 name 前缀落在 sonnet')
+    }
+    if (!descBody) {
+      findings.push('description 没有任务摘要正文')
+      hints.push(
+        keeperDesc
+          ? `description 写 "${keeperDesc} · <本批摘要>"（常驻 keeper 必须带队列前缀,前缀之后写这一代接的活,理由见 check 11）`
+          : 'description 填 3-5 词任务摘要（不带 [模型名] 前缀）'
+      )
+    }
+  }
+
+  // 6. 角色设定句检测（近似判据，覆盖边界见文件头）。原先并列的
+  //    prompt-prefix-overlap 检查（description 正文与 prompt 开头 ≥20 字符逐字重合）
+  //    已于 2026-07-31 整条移除：合法 description 写任务目标、prompt 的【目标】段写
+  //    同一件事，两者开头天然重合，它命中的是"写得规范"而非"抄了 prompt"。
+  if (descBody) {
+    const leakPrefix = PROMPT_LEAK_PREFIXES.find((p) => descBody.startsWith(p))
+    if (leakPrefix) {
+      findings.push(`description 正文以 "${leakPrefix}" 开头,是 prompt 角色设定/元指令句式而非任务摘要;提示词会暴露到在飞 agent 面板`)
+      hints.push('description 只写"这个子代理在做什么",prompt 与 description 禁止共用同一段文字')
+    }
+  }
+
+  // 7. 字符预算：按 description **原始长度**比较，不减去 [模型名] 前缀（前缀是容错接受
+  //    的旧写法，不该换来更多字符额度）。
+  if (description && description.length > DESC_BODY_MAX) {
+    findings.push(`description ${description.length} 字符超过 ${DESC_BODY_MAX};纪律要求 3-5 词摘要,超长说明塞了 prompt 内容`)
+    hints.push(`description 压到 ${DESC_BODY_MAX} 字符以内(带 [模型名] 前缀的话前缀也算在内,直接删掉前缀最省)`)
+  }
+
+  // 精确第二层 debug fixer 的 description 是面板任务摘要，不是常驻队列标签。允许的字符
+  // 仅为汉字、DBG-数字编号、数字及常用中文标点；该 allowlist 和 code point 长度都只读
+  // 本次 tool input 的 description。须含至少一个汉字，因此纯英文不会通过。
+  if (fixerSpec && description) {
+    const codePointLength = Array.from(description).length
+    const fixerDescriptionPattern = /^(?:\p{Script=Han}|DBG-\d+|\d|[，。、：；（）()·—\-\s])+$/u
+    if (!/[\p{Script=Han}]/u.test(description) || !fixerDescriptionPattern.test(description)) {
+      findings.push(
+        `subagent_type="${ti.subagent_type}" 的 description 必须是简体中文任务摘要，可含 DBG-024 与常用标点；本次写的是 "${description}"`
+      )
+      hints.push('description 改成 "修DBG-024分类归属" 这类全串简体中文摘要；不要写纯英文、模型标签或其他英文词')
+    }
+    if (codePointLength > 15) {
+      findings.push(`第二层 debug fixer 的 description 有 ${codePointLength} 个 JS code point，超过 15`)
+      hints.push('description 压到 15 个 JS code point 以内，例如 "修DBG-024分类归属"')
+    }
+    const traditionalForm = firstStrictTraditionalForm(description)
+    if (traditionalForm) {
+      findings.push(`第二层 debug fixer 的 description 含有明确简繁差异的传统字形 "${traditionalForm}"`)
+      hints.push('description 改用对应简体字；例如 "修復登入" 改成 "修复登入"。简繁共用字可保留')
+    }
+    if (/^(?:\[(?:sonnet|opus|fable)\]\s*)?(?:debug|debugger)\s*队列/u.test(description)) {
+      findings.push('第二层 debug fixer 的 description 不能以 "debug 队列" 或 "debugger 队列" 起头；那是第一层常驻 keeper 的前缀')
+      hints.push('description 改成具体修复摘要，例如 "修DBG-024分类归属"；不要使用队列前缀')
+    }
+    if (/^\[(?:sonnet|opus|fable)\]/u.test(description)) {
+      findings.push('第二层 debug fixer 的 description 不能带模型标签前缀')
+      hints.push('删掉 [sonnet]/[opus]/[fable]，模型只由 model 与 name 首段表达')
+    }
+  }
+
+  // 11. keeper 类常驻 agent 的 description 必须带队列前缀（2026-08-05 用户拍板加，
+  //     2026-08-10 用户拍板把判据从逐字等值放宽为前缀锚定；判据、成因与覆盖边界见
+  //     KEEPER_DESC_PREFIXES 上方的整段注释）。与 check 7（长度）叠加时两条会同时报，
+  //     hint 方向一致（都是重写 description），AI 一次改全。
+  if (keeperDesc && descBody && !descBody.startsWith(keeperDesc)) {
+    findings.push(
+      `subagent_type="${ti.subagent_type}" 是常驻 keeper,description 必须以 "${keeperDesc}" 起头,` +
+        `本次写的是 "${descBody}";在飞面板渲染的是**首次派发那一刻**的 description,` +
+        `而 keeper 派出后一律靠 SendMessage 唤醒,` +
+        `SendMessage 只有 to/summary/message 三个字段,没有任何入口能更新已派出 agent 的 description——` +
+        `不带队列前缀就没法在面板上把它与一次性 subagent 区分开`
+    )
+    hints.push(
+      `description 改成 "${keeperDesc} · <本批摘要>"(前缀逐字照抄,之后接这一代接的活,如 "${keeperDesc} · 关三条 + 开工 DBG-140");` +
+        `注意面板那句在派发后改不了,所以它描述的是**这一代**而不是"当前这一秒"——` +
+        `队列做到 open 0 / 无待拍板 / 无残留 worktree 时,每轮注入会建议你新派一代,那时再换新摘要`
+    )
+  }
+
+  return { findings, hints, modelOk, nameMissing }
+}
+
+function main() {
+  if (guardDisabled()) process.exit(0)
+
+  let input = ''
+  try {
+    input = fs.readFileSync(0, 'utf8')
+  } catch (_) {
+    process.exit(0)
+  }
+
+  let payload
+  try {
+    payload = JSON.parse(input)
+  } catch (_) {
+    process.exit(0)
+  }
+
+  // 只匹配当前工具名 Agent；旧名 Task 的 tool_input 可能无 name / model 字段，
+  // 强行校验会永久误拦 —— fail-open 优于误伤。
+  if (payload.tool_name !== 'Agent') process.exit(0)
+
+  const ti = payload.tool_input
+  if (!ti || typeof ti !== 'object') process.exit(0)
+
+  const subagentType = typeof ti.subagent_type === 'string' ? ti.subagent_type : ''
+  if (EXEMPT_SUBAGENT_TYPES.has(subagentType)) process.exit(0)
+
+  const { findings, hints, modelOk, nameMissing } = checkNaming(ti)
+
+  // 格式错 → deny（一次报清全部）
+  if (findings.length) {
+    let reason =
+      `[L1-BLOCKER] tool=Agent check=agent-dispatch ` +
+      `finding="${findings.join(';')}" ` +
+      `hint="${hints.join(';')};完整形态模板已附在本条 finding 后面,命名细则见同一文件的 SEC:naming;确需临时关闭本门禁用 AGENT_DISPATCH_GUARD=off"`
+    // model 本身有问题时附完整路由表，帮助选对档次（命名问题不附，避免长文本淹没重点）
+    if (!modelOk) reason += `\n\n${ROUTING_TABLE}`
+    deny(reason)
+  }
+
+  // 只缺 name（其余全过）→ 自动补名放行
+  if (nameMissing) {
+    const model = ti.model.trim()
+    const generated = autoName(ti, model)
+    // keeper 类补的是 check 10 要求的那种形态（固定前缀 + 4 位短哈希），文案要讲清楚
+    // 这个名字不可预测、唤醒前要先读登记文件——否则又是一处"效力与描述各自漂移"
+    // （见 .claude/rules/project/hook-restraint.md 实证 5）。
+    const keeperSpecForName = keeperSpec(String(ti.subagent_type || '').toLowerCase())
+    // 精确 fixer 的自动名已有固定 type/model/name 形态，提示也须给该形态；否则通用
+    // `<model>-<任务语义-kebab>` 会教出下一轮必被 check 12 拒绝的名字。
+    const fixerSpecForName = debugFixerSpec(String(ti.subagent_type || '').toLowerCase())
+    allowWithName(
+      ti,
+      generated,
+      keeperSpecForName
+        ? `[agent-dispatch] 本次派发没给 name（Agent 工具的 JSON Schema 未声明该字段，` +
+            `但运行时接受并会存进 subagent 元数据）。这是常驻 keeper，name 必须形如` +
+            ` "${keeperSpecForName.model}-${keeperSpecForName.nameSeg}-<4位小写字母数字短哈希>"，` +
+            `已补为 "${generated}" 并放行——` +
+            `后 4 位短哈希是为了防同一会话内前一个 keeper 实例关闭后新派的同名撞车` +
+            `（SendMessage 的 name 寻址是 latest wins），这个名字因此不可预测。` +
+            `唤醒它前先读 .keeper/<交付id>/.keeper-instance.json 里登记的实际 name，` +
+            `读不到才首次派发。下次派发请自己写上这种形态的 name。`
+        : fixerSpecForName
+          ? `[agent-dispatch] 本次精确第二层 debug fixer 没给 name，已按 type 固定规则补为` +
+              ` "${generated}" 并放行。下次派发请自己给` +
+              ` "${fixerSpecForName.model}-debug-<4位小写字母数字>"；` +
+              `easy=sonnet、medium=opus、hard=fable。`
+          : `[agent-dispatch] 本次派发没给 name（Agent 工具的 JSON Schema 未声明该字段，` +
+              `但运行时接受并会存进 subagent 元数据），已自动补为 "${generated}" 并放行。` +
+              `自动名只有 description/subagent_type 里抽出的弱语义 + prompt·description 的短哈希，` +
+              `在飞面板上看不出任务差异——` +
+              `下次派发请自己给 "${model}-<任务语义-kebab>"（如 ${model}-review-login-flow），` +
+              `同批并发时把分片依据写进名字。`
+    )
+  }
+
+  process.exit(0)
+}
+
+main()

@@ -1,0 +1,10 @@
+server:
+  port: 8081
+
+inventory:
+  base-url: http://inventory-service:8082
+  timeout: 3000        # 毫秒
+
+payment:
+  base-url: http://payment-service:8083
+  timeout: 5           # 单位：秒（注意不是毫秒）
