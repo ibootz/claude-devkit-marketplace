@@ -24,7 +24,7 @@
       "source": "./plugins/devkit-spec",
       "category": "Development",
       "description": "规范驱动开发 - Spec 分析、任务拆解、实施、审查与缺陷修复（5 技能）",
-      "version": "2.1.1"
+      "version": "2.2.0"
     },
     {
       "name": "heal",
@@ -65,8 +65,8 @@
       "name": "working-discipline",
       "source": "./plugins/working-discipline",
       "category": "Productivity",
-      "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒。零 skill，适合全局开启",
-      "version": "3.34.0"
+      "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒，附中文消歧 skill",
+      "version": "3.35.0"
     },
     {
       "name": "agent-browser",
@@ -94,7 +94,7 @@
       "source": "./plugins/task-keeper",
       "category": "Productivity",
       "description": "多实例 keeper 并行托管 debug/杂务两队列：一 bug 一实例，原子认领 + 合并锁 + 登记前查重、转出互链",
-      "version": "4.6.0"
+      "version": "4.7.0"
     },
     {
       "name": "plain-talk-output-style",
@@ -115,7 +115,7 @@
       "source": "./plugins/wenyan-output-style",
       "category": "Productivity",
       "description": "文言极简输出风格 - 文言语法压缩、字形简体，代码与告警原样，启停即切换",
-      "version": "1.8.0"
+      "version": "1.9.0"
     },
     {
       "name": "insight-addon",
@@ -171,6 +171,13 @@
       "source": "./plugins/complexity-first",
       "category": "Productivity",
       "description": "复杂度优先 - 动手新增前先证明必要性：搜已有代码/标准库/平台原生，再写最小实现（1 技能）",
+      "version": "1.0.0"
+    },
+    {
+      "name": "ruanyf-document-style-guide",
+      "source": "./plugins/ruanyf-document-style-guide",
+      "category": "Productivity",
+      "description": "中文技术文档写作规范 - 阮一峰规范七部分：标题/文本/段落/数值/标点/文档体系，写中文文档时套用",
       "version": "1.0.0"
     }
   ]

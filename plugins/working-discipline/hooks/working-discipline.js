@@ -31,8 +31,8 @@
 //     已改为解析 JSON 后取 `.length`，不要退回用 `wc -c` 估。
 //
 // 【自律线：5000 字符（3.31.0 起）】硬上限仍是 10000，但四档注入自 3.31.0 起一律压到 5000
-// 以内，3.34.0 实测 SessionStart 4572 / UserPromptSubmit 2101 / SubagentStart 4504（可派发的
-// agent 类型）/ 3672（Explore·Plan）——在仓库路径下测。含 reference 绝对路径的每处，装进本机
+// 以内，3.35.0 实测 SessionStart 4782 / UserPromptSubmit 2106 / SubagentStart 4714（可派发的
+// agent 类型）/ 3877（Explore·Plan）——在仓库路径下测。含 reference 绝对路径的每处，装进本机
 // 插件缓存目录后各长约 6 字符。UserPromptSubmit 每轮注入、在历史里逐轮累积，是最该省的一层。留一倍余量不是洁癖：3.30.0 那轮往 SubagentStart 加
 // 一段两句话的条款就把它顶到 10268、直接越限，说明贴着硬线走时任何一次正常增补都可能静默
 // 失效。腾出空间的办法是**改投放时机**而不是删条款——形态模板类内容（可照抄的调用 JSON、
@@ -584,6 +584,14 @@ const SECTION_37_SHARED = [
   '**什么时候不触发**：表无名称字段时只给 id 并说明；SQL、命令参数、代码与配置内部的值照原样写。',
 ].join('\n')
 
+// 【3.35.0】3.11 中文消歧，两层共用：主会话管对话回复，子代理管它写的 spec / issue 等落盘文档。
+// 两层都贴着 5000 自律线，只放一句总则；四类歧义的判据、三类内容分治、原意检查放进
+// skills/zh-disambiguate/references/rules.md，由 skill 按需读。「保留不确定性」已由 3.4 管，这里不重复。
+// 「原文没写的标待确认」是这条的护栏：没有它，AI 消歧时会把自己猜的执行者写成事实。
+const SECTION_311_SHARED = [
+  '**3.11 中文消歧**：关键句（含动作、权限、条件、结论的句子）的执行者、对象、作用范围（全部 / 任一 / 特定一组，否定与条件管到哪）、动作状态（指令 / 已完成 / 进行中 / 条件触发）都要能从字面读出；同一概念不换词，不同概念不并成一个词，项目有 `CONTEXT.md` 以它为准。原文没写的标「待确认」，不补造。逐句审计或改写走 `zh-disambiguate` skill。',
+].join('\n')
+
 const SECTION_310_SUB = [
   '**3.10 先上图**：写方案、问题成因、跨服务 / 跨模块调用、状态流转类内容时，放一个 ```mermaid 源码块——调用与交互用 `sequenceDiagram`，流程与分支用 `flowchart`，状态用 `stateDiagram-v2`，方案给改前、改后各一张。写进 md 的放进文档里；回执里的附在回执中，由父代理落成 md 文件给用户链接。单函数小改动、纯清单不画。',
 ].join('\n')
@@ -606,6 +614,8 @@ const SECTION_EXPRESSION = [
   SECTION_37_SHARED,
   '',
   SECTION_310_SUB,
+  '',
+  SECTION_311_SHARED,
 ].join('\n')
 
 // 主会话版表达约束（3.9.0 拆分 + 3.10.0 重构）：只保留纪律与正确性条款。3.1 / 3.2
@@ -641,6 +651,8 @@ const SECTION_EXPRESSION_MAIN = [
   SECTION_37_SHARED,
   '',
   SECTION_38_39_MAIN,
+  '',
+  SECTION_311_SHARED,
 ].join('\n')
 
 const SECTION_THINKING = [

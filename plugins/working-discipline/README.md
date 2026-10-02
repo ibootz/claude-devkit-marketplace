@@ -6,7 +6,7 @@
 2. **硬拦截**：派发 subagent 时 `name` / `description` / `model` 等**结构字段**不合规（`PreToolUse` deny）、缺鉴权或实例超限的 `agent-browser` 启动（`PreToolUse` exit 2）、自上次派发以来**逐个**发起的只读检索满 6 次时中断一次（`PreToolUse` deny，可自解除，见第六章）。**「以裸 `cd` 开头污染 cwd 的独立命令」3.26.0 已从本插件拆出**，现由独立插件 `cd-blocker` 承担，理由见第三章末
 3. **事后提醒**：写入完成后，超 1000 行的源码文件、当前项目内超 200 行的 `CLAUDE.md` 会拿到一条 stderr 提示（`PostToolUse` exit 2）。**它不是拦截**——触发时文件已经落盘，既不回滚也不停住本轮，见第四章
 
-零 skill、零命令、零子代理，装了就生效。不修改用户文件：两道 `PreToolUse` 闸只阻断工具调用本身，`PostToolUse` 的 `write-guard` 连"继续往下走"都不阻断。唯一一处会改动工具调用的地方是**缺 `name` 时自动补名**，见第二章。
+一个按需 skill（`zh-disambiguate`，中文消歧审计，3.35.0 起）、零命令、零子代理，装了就生效。不修改用户文件：两道 `PreToolUse` 闸只阻断工具调用本身，`PostToolUse` 的 `write-guard` 连"继续往下走"都不阻断。唯一一处会改动工具调用的地方是**缺 `name` 时自动补名**，见第二章。
 
 ### 核心设计原则：判据必须真的机械，否则别做成 deny
 
@@ -88,7 +88,9 @@
 >
 > **2026-08-05（同批 3.22.0，用户拍板删除「判为可删但未删」清单里的三条）实测（当前值）**：`SessionStart` **7795**（−362，来自 `SECTION_THINKING` 原 1-6 条 + `SECTION_SUBAGENT` 的「回执复述」两处删除）、`UserPromptSubmit` **3476**（未变——被删的三条都不在这一层）、`SubagentStart` **8438**（可派发的 agent 类型，−107）**/ 4722**（`agent_type` 为 `Explore` 或 `Plan`，−107——两档同降 107，因为影响 `SubagentStart` 的只有「回执复述」与「3.6 有序列表编号」这两条，`SECTION_THINKING` 从不进子代理版）。三个事件仍均在 10000 硬上限内。**这三条是本轮唯一被删除的纪律**，删除依据见下方「判为可删」小节的「已删」记录；三层重写那一轮的其余改动（形态重写、跨层引用修复等）逐字保留未变。
 
-> **2026-09-29（3.34.0，三层去重 + 每轮层派发细则改按需读 + 新增 3.10）实测——这是当前值**：`SessionStart` **4572**、`UserPromptSubmit` **2101**（无图轮，−1251）、`SubagentStart` **4504**（可派发的 agent 类型）**/ 3672**（`agent_type` 为 `Explore` 或 `Plan`）。四档都比 3.33.0 短，且新增了 3.10 一条。理由与 A/B 评测结果见下方「3.34.0」。
+> **2026-10-03（3.35.0，新增 3.11 中文消歧 + `zh-disambiguate` skill）实测——这是当前值**：`SessionStart` **4782**、`UserPromptSubmit` **2106**（未变——每轮层不含表达约束）、`SubagentStart` **4714**（可派发的 agent 类型）**/ 3877**（`agent_type` 为 `Explore` 或 `Plan`）。3.11 两层都注入（子代理写 spec / issue 等落盘文档），只放一句总则约 205 字；四类歧义判据、三类内容分治、原意检查放在 `skills/zh-disambiguate/references/rules.md` 按需读。决策记录见仓根 `.scratch/zh-disambiguate/spec.md`。
+>
+> **2026-09-29（3.34.0，三层去重 + 每轮层派发细则改按需读 + 新增 3.10）实测——3.34.0 当时值**：`SessionStart` **4572**、`UserPromptSubmit` **2101**（无图轮，−1251）、`SubagentStart` **4504**（可派发的 agent 类型）**/ 3672**（`agent_type` 为 `Explore` 或 `Plan`）。四档都比 3.33.0 短，且新增了 3.10 一条。理由与 A/B 评测结果见下方「3.34.0」。
 >
 > **2026-09-29（3.33.0，3.7 推广为「裸值带含义」）实测——3.33.0 当时值**：`SessionStart` **4973**、`UserPromptSubmit` **3352**（无图轮，未变）、`SubagentStart` **4940**（可派发的 agent 类型）**/ 4024**（`agent_type` 为 `Explore` 或 `Plan`）。四档各比 3.32.0 少 3 字符：新增的枚举、时间戳、单位三类覆盖，靠删掉 3.7 里的实体举例清单与多租户解释句腾出位置。
 >

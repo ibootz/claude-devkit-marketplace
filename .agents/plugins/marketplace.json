@@ -46,7 +46,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.1.1"
+      "version": "2.2.0"
     },
     {
       "author": {
@@ -144,7 +144,7 @@
         "name": "zhangq"
       },
       "category": "Productivity",
-      "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒。零 skill，适合全局开启",
+      "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒，附中文消歧 skill",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "working-discipline",
       "source": {
@@ -155,7 +155,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "3.34.0"
+      "version": "3.35.0"
     },
     {
       "author": {
@@ -227,7 +227,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "4.6.0"
+      "version": "4.7.0"
     },
     {
       "author": {
@@ -281,7 +281,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "1.8.0"
+      "version": "1.9.0"
     },
     {
       "author": {
@@ -420,6 +420,24 @@
       "source": {
         "source": "local",
         "path": "./plugins/complexity-first"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "version": "1.0.0"
+    },
+    {
+      "author": {
+        "name": "zhangq"
+      },
+      "category": "Productivity",
+      "description": "中文技术文档写作规范 - 阮一峰规范七部分：标题/文本/段落/数值/标点/文档体系，写中文文档时套用",
+      "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
+      "name": "ruanyf-document-style-guide",
+      "source": {
+        "source": "local",
+        "path": "./plugins/ruanyf-document-style-guide"
       },
       "policy": {
         "installation": "AVAILABLE",

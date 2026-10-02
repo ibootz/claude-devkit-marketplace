@@ -83,6 +83,10 @@ node plugins/wenyan-output-style/hooks/user-prompt-submit.js < /dev/null > plugi
 
 （Windows 的 cmd 把 `< /dev/null` 换成 `< NUL`。）commit message 里写明 golden 为什么变。
 
+## 1.9.0：省主语加多主体例外
+
+压缩法第 1 条「省主语」原来只说「承前可推即省」，能不能推由作者自己判断——作者知道是网关在验令牌，读者不一定知道。1.9.0 加一条机械判定线：上下文里可能执行该动作的主体有两个及以上（如客户端、网关、后端）时，每个动作都写出主语。配合 `working-discipline` 3.11「中文消歧」（执行者、作用范围、动作状态要能从字面读出）。golden 的 `session-start.json` 随之刷新。
+
 ## 1.8.0：篇章连贯、正文拍板、hook 由 bash 迁 JS
 
 **篇章连贯。** 症状是「每句都懂、整段难懂」——压缩把句间的因果、条件、转折删掉，读者只能

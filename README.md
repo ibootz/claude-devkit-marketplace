@@ -85,7 +85,7 @@ CLI 工具集成，在 Claude Code/Codex 中调用 omp 实现编码、审查、�
 
 ### 8. working-discipline
 
-AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`SubagentStart` 注入子代理、`PreToolUse` 硬拦截缺鉴权或实例超限的 `agent-browser` 启动、派发 `Agent` 的结构字段不合规、串行只读检索过线。零 skill、零命令，适合作为全局基线长期开启。（3.26.0 起「污染 cwd 的独立 `cd`」拆给下面第 19 个插件 `cd-blocker`。）
+AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`SubagentStart` 注入子代理、`PreToolUse` 硬拦截缺鉴权或实例超限的 `agent-browser` 启动、派发 `Agent` 的结构字段不合规、串行只读检索过线。附一个按需 skill `zh-disambiguate`（中文消歧审计，3.35.0 起），零命令，适合作为全局基线长期开启。（3.26.0 起「污染 cwd 的独立 `cd`」拆给下面第 19 个插件 `cd-blocker`。）
 
 - 上下文纪律：精确读取、子代理优先、bash 输出限流、macOS 中文路径防漏检（NFC/NFD）
 - 子代理协作：在飞≤16 动态上限、嵌套≤2 软约束、team 模式下 teammate 不能派下级、共享骨架文件
