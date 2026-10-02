@@ -1,0 +1,14 @@
+{
+  "name": "ruanyf-document-style-guide",
+  "version": "1.0.0",
+  "description": "中文技术文档写作规范 - 阮一峰规范的标题/文本/段落/数值/标点/文档体系/参考链接七部分，写或改中文技术文档时套用（1 技能，见 README）",
+  "author": {
+    "name": "zhangq"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "中文技术文档写作规范 (ruanyf-document-style-guide)",
+    "shortDescription": "阮一峰中文技术文档写作规范，按需套用",
+    "category": "Productivity"
+  }
+}
