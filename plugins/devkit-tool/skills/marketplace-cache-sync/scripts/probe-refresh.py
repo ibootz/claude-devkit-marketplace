@@ -298,7 +298,7 @@ def url_verdict(rec, remote_version, remote_sha12):
 # ---------------------------------------------------------------- stage: market
 
 
-def stage_market(out_path, only_enabled=True):
+def stage_market(out_path):
     rows = []
     for name in sorted(os.listdir(MARKETPLACES)):
         d = os.path.join(MARKETPLACES, name)
@@ -359,7 +359,7 @@ def stage_market(out_path, only_enabled=True):
 # ---------------------------------------------------------------- stage: plugin
 
 
-def stage_plugin(out_path, only_enabled=True):
+def stage_plugin(out_path, only_enabled=False):
     data = load_json(INSTALLED, {}) or {}
     plugins = data.get("plugins", {})
 
@@ -486,9 +486,14 @@ def main():
     ap.add_argument("--stage", choices=("market", "plugin"), required=True)
     ap.add_argument("--out", help="清单输出路径（默认按阶段取 /tmp 下固定名）")
     ap.add_argument(
+        "--enabled-only",
+        action="store_true",
+        help="只刷 enabled 的安装记录（默认连未启用的一起刷）",
+    )
+    ap.add_argument(
         "--include-disabled",
         action="store_true",
-        help="连未 enabled 的安装记录也一起刷（默认只刷 enabled 的）",
+        help="已是默认行为，保留仅为兼容旧调用",
     )
     args = ap.parse_args()
 
@@ -501,7 +506,7 @@ def main():
         stage_market(out)
     else:
         out = args.out or "/tmp/plugins_to_refresh.txt"
-        stage_plugin(out, only_enabled=not args.include_disabled)
+        stage_plugin(out, only_enabled=args.enabled_only)
     return 0
 
 

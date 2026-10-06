@@ -20,7 +20,7 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 - `key-module-analysis` - 关键模块分析
 - `codegraph-index` - codegraph 代码知识图谱建图决策与使用
 - `orphan-process-cleaner` - 孤儿进程清理
-- `marketplace-cache-sync` - 插件市场拉取 + 已启用插件缓存刷新
+- `marketplace-cache-sync` - 插件市场拉取 + 全部已安装插件缓存刷新（含未启用）
 - `cascade-pull` - 带 submodule 的仓库同步拉取（只处理直接声明的一层，不递归）
 - `cascade-push` - 嵌套 submodule 由内向外逐层提交推送（递归全嵌套树）
 

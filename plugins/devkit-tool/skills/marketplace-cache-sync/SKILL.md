@@ -1,6 +1,6 @@
 ---
 name: marketplace-cache-sync
-description: 拉取 Claude Code 已配置的插件市场(marketplace)最新代码，刷新已启用插件(enabled plugin)的本地缓存版本(含 user scope 与 project/local scope 两种安装范围)，并在刷新后回收缓存磁盘占用。先探测再刷新，只动真有变化的那几个。
+description: 拉取 Claude Code 已配置的插件市场(marketplace)最新代码，刷新全部已安装插件(installed plugin，启用与未启用都刷)的本地缓存版本(含 user scope 与 project/local scope 两种安装范围)，并在刷新后回收缓存磁盘占用。先探测再刷新，只动真有变化的那几个。
 when_to_use: |
   用户说"更新一下插件市场"、"拉取 marketplace 最新代码"、"刷新插件缓存"、"plugin 装的新版本怎么不生效"、"skill 改了但没同步过来"、"刷新插件太慢了"、"marketplace update 要跑十几分钟"、"市场 lastUpdated 变了/没变是不是真的更新了"、"marketplace update 之后要不要重启"、"插件缓存占了多少空间"、"清理插件缓存"、"cache 目录太大"、"temp_git_ 开头的目录能删吗"、"历史版本缓存能不能删"、"reload-plugins 够不够还是必须重启"、"reload 完 hook 还是旧的"、"某个项目里装的插件版本没跟着更新"、"project scope 的插件怎么刷新"、"这个插件只在某个项目里装了，全局刷新覆盖不到"。
   **另一类触发是主动的，不要漏**——上面那些措辞全是「发现没生效之后」的补救语气，但更常见的场景是**改完当场就该刷**：
@@ -12,18 +12,18 @@ when_to_use: |
 
 把"更新插件市场"这件事拆成两层动作依次执行，**先用本地/并发探测算出「哪几个真的需要动」，再只对那几个调 CLI**，并在核实每一层是否真的生效时避开已知的误判坑。
 
-**验证基础**：本 skill 经过多次真实全量执行，覆盖两层模型（marketplace 源 vs 已启用插件缓存）、探测优先的执行顺序、project/local scope 按 (id, projectPath) 逐条刷新、缓存清理白名单差集算法。各结论数字与坑的完整复现证据（日期 / CLI 版本 / 秒数 / 复现过程）见 `references/verification-log.md`。
+**验证基础**：本 skill 经过多次真实全量执行，覆盖两层模型（marketplace 源 vs 已安装插件缓存）、探测优先的执行顺序、project/local scope 按 (id, projectPath) 逐条刷新、缓存清理白名单差集算法。各结论数字与坑的完整复现证据（日期 / CLI 版本 / 秒数 / 复现过程）见 `references/verification-log.md`。
 
 ## 背景：两层状态，容易只做一半
 
 Claude Code 的插件系统有两层独立状态，都在 `~/.claude/plugins/` 下：
 
 1. **Marketplace（插件市场，"源"）**：`known_marketplaces.json` 登记每个市场的 git/github 源地址与 `installLocation`，实际内容克隆在 `marketplaces/<name>/`。`claude plugin marketplace update [name]` 拉取的是这一层——市场仓库本身的最新代码，相当于所有插件定义的"上游"。
-2. **Installed/enabled plugin（已启用插件，"缓存"）**：`installed_plugins.json` 登记每个 `<plugin>@<marketplace>` 具体钉住的版本号/commit sha，实际内容缓存在 `cache/<marketplace>/<plugin>/<version>/`。`claude plugin update <plugin>@<marketplace>` 刷新的才是这一层——把某个已启用插件的缓存副本，从（已经更新过的）市场源里重新拉一份下来。
+2. **Installed plugin（已安装插件，"缓存"）**：`installed_plugins.json` 登记每个 `<plugin>@<marketplace>` 具体钉住的版本号/commit sha，实际内容缓存在 `cache/<marketplace>/<plugin>/<version>/`。`claude plugin update <plugin>@<marketplace>` 刷新的才是这一层——把某个已安装插件的缓存副本，从（已经更新过的）市场源里重新拉一份下来。
 
 第 2 层内部还分**两种互相独立的安装范围（scope）**，`installed_plugins.json` 里同一个 `<plugin>@<marketplace>` id 下的 `plugins[id]` 是一个**数组**，每个元素各带一个 `scope` 字段（`user` / `project` / `local`）：`user` scope 是当前用户全局共用的一份钉版，跨项目共享；`project` / `local` scope 是**某一个具体项目目录**（`projectPath` 字段）单独钉住的版本，同一个 id 在不同项目目录下可以各自钉着不同版本号——例如 `sdlc@ai-sdlc` 在 12 个不同项目目录下横跨 `3.3.0`/`3.3.3`/`3.8.0`/`3.9.0`/`3.3.18` 五个版本互不影响。**enabled 状态也是按 (id, projectPath) 各自独立的**——同一个 id 在 A 项目可能启用、在 B 项目未启用，不是插件级的单一开关。所以**待刷清单必须按 (id, scope, projectPath) 逐条算**，按 id 去重会漏掉其余项目目录下那些各自钉版的记录。
 
-**第 1 层更新了不代表第 2 层跟着更新**：市场仓库拉到最新 commit 后，已启用插件的缓存副本仍然钉在旧版本号/旧 commit，除非显式对每个启用中的插件跑一次 `claude plugin update`。两层都做才算一次完整同步，只做第 1 层是最常见的"以为更新了其实没生效"的原因。
+**第 1 层更新了不代表第 2 层跟着更新**：市场仓库拉到最新 commit 后，已安装插件的缓存副本仍然钉在旧版本号/旧 commit，除非显式对每个已安装插件跑一次 `claude plugin update`。两层都做才算一次完整同步，只做第 1 层是最常见的"以为更新了其实没生效"的原因。
 
 ## 慢在哪：先读这段，否则会照旧全量刷一遍
 
@@ -106,7 +106,7 @@ python3 "$PROBE" --stage plugin      # 本机实测 1.5s（含 110 条 url 源�
 输出写进 `/tmp/plugins_to_refresh.txt`，每行形如 `<id>|<scope>|<projectPath>`（user scope 的 projectPath 为空）。它做四件事：
 
 1. 遍历 `installed_plugins.json` 的**全部** `plugins[id][]` 数组元素——每个元素是一条独立的 (id, scope, projectPath) 记录，同一个 id 在不同项目目录可以各自钉着不同版本。
-2. 按 enabled 过滤。**不调 `claude plugin list --json`**（那条命令本机 23.2s），改为直读 `~/.claude/settings.json` 的 `enabledPlugins[<id>]`（user scope）与 `<projectPath>/.claude/settings.json` / `settings.local.json`（project/local scope）——直读值与 `plugin list` 的 `enabled` 字段一致（验证见 `references/verification-log.md`「`claude plugin list --json` 一条命令等 23 秒」）。要连未启用的一起刷时加 `--include-disabled`。
+2. **默认不按 enabled 过滤**——未启用的安装记录也一起刷。禁用只是暂时关掉，缓存仍在；不刷的话，下次重新启用时加载的就是旧版。只想刷已启用的记录时加 `--enabled-only`（旧参数 `--include-disabled` 已是默认行为，仍可传，无副作用）。`--enabled-only` 判 enabled 时**不调 `claude plugin list --json`**（那条命令本机 23.2s），改为直读 `~/.claude/settings.json` 的 `enabledPlugins[<id>]`（user scope）与 `<projectPath>/.claude/settings.json` / `settings.local.json`（project/local scope）——直读值与 `plugin list` 的 `enabled` 字段一致（验证见 `references/verification-log.md`「`claude plugin list --json` 一条命令等 23 秒」）。
 3. 按上面「两类插件源」的判据剪枝——两类都比版本号：(a) 市场仓内源读该插件目录自己的 `.claude-plugin/plugin.json`（纯本地，条目 `version` 仅兜底），(b) url 独立仓源按 `(url, revision)` 去重后并发取远端仓根 manifest 的 `version`（不 clone）。`source` 上钉了 `sha` 时 **sha 优先于 `ref`**——钉死在某个提交的源去探 `ref` 的 HEAD 是结构性必然误判。
 4. 下列情况一律**列入待刷**，不做剪枝：`installPath` 指向的缓存目录不存在、市场源没声明版本号（判不了）、记录 `version` 是字面量 `unknown`（CLI 恒重装）、远端 manifest 取不到（超时 / 401 / DNS / 不是合法 JSON）。剪枝只在能确证"必然 no-op"时才生效。
    **只有一种「取不到」不算失败**：候选端点全部 404，即远端仓里压根没有 manifest。404 是个确定答案，此时 CLI 自己也会回落到 `gitCommitSha` 前 12 位，探测器跟着回落去比 sha（此时才轮到 `git ls-remote`）。本机 `cctx-dev-fecenter` / `cctx-dev-agent-cli` 正是这一类，它们的记录 `version` 就是 sha 前 12 位。
@@ -163,14 +163,13 @@ diff <(jq -S . /tmp/ip_before.json) <(jq -S . ~/.claude/plugins/installed_plugin
 
 每条真被刷新的记录应能看到 `version` / `gitCommitSha` / `lastUpdated` 的变化。清单里某条记录在 diff 中完全没出现，说明它那次 update 是假成功（最常见成因是 project scope 的 cwd 没进对，见下），要单独复查。
 
-### 第三步补充：project scope 版本落后很多时先问用户，别默认拉平
+### 第三步补充：project scope 版本落后很多时也直接刷，事后逐条报告
 
-探测输出里若出现同一个 id 在多个项目目录下**版本号落后好几个大版本**，不要当成"欠账"直接全刷。典型实例：`sdlc@ai-sdlc` 在 12 个项目目录下横跨多个大版本（`3.3.x` 到 `3.7.x`），而市场源已到 `3.12.2`。这有两种完全不同的成因，处置相反：
+探测输出里若出现同一个 id 在多个项目目录下**版本号落后好几个大版本**（典型实例：`sdlc@ai-sdlc` 在 12 个项目目录下横跨 `3.3.x` 到 `3.7.x`，市场源已到 `3.12.2`），**照常全部刷新，不停下来询问**。
 
-- **有意钉版**——某个项目正依赖旧版行为，升级会改掉它的 skill / hook 行为。此时应保持不动。
-- **确实漏刷**——那些项目只是很久没打开过。此时该刷。
+这类落后有两种成因：**确实漏刷**（项目很久没打开过）与**有意钉版**（项目依赖旧版行为）。从配置里区分不出这两者；按用户约定，默认当漏刷处理、一律拉平。代价是有意钉版的项目下次启动时加载的 skill / hook 行为会变，所以刷完必须在报告里**逐条列出跨大版本升级的记录**（id、`projectPath`、旧版本 -> 新版本），让用户能事后发现被顶掉的钉版并自行回退。
 
-**从配置里区分不出这两者**，所以把清单出示给用户、由用户拍板刷哪些。别用"版本号落后"当作可以自主升级的理由——升级 project scope 插件会改变**别的项目**下一次启动时加载的代码。
+**唯一例外**：用户在当轮明确指定某些项目保持旧版时，先从 `/tmp/plugins_to_refresh.txt` 里删掉对应行再跑循环。
 
 ### 第四步：告知如何让新版本生效（`/reload-plugins` 通常够用，但有一类注入不会追补）
 
@@ -285,7 +284,7 @@ xargs rm -rf < /tmp/cache_orphan.txt
 | `for p in $plugins` 整体失败，报 `Plugin "<第一个>" not found` | zsh 默认不做单词分割。改成 `while IFS= read -r p`；无副作用，改好重跑即可 |
 | 只在 project 装过的插件静默 `exit=1` 滚屏而过 | `--scope` 默认 `user`，无 user scope 记录的 id 会 exit=1 但循环不检查退出码。见第三步判定式 |
 | `--scope project` 回执 `already at the latest version` 但前后 0 行 diff | cwd 隐式定位、不接受路径参数，cwd 不匹配时打印假成功。必须 `cd` 进该记录**自己的** `projectPath`，见第三步 |
-| `cache/` 体积远大于已启用插件之和 | `temp_git_*` 残留。两份配置 grep 计数都为 0 即可整批删，见第五步 (a) |
+| `cache/` 体积远大于已安装插件之和 | `temp_git_*` 残留。两份配置 grep 计数都为 0 即可整批删，见第五步 (a) |
 | 清理历史版本缓存后某项目插件失效或被迫重新下载 | 按"只保留最新版本"删了。必须用 `.plugins[][].installPath` 全集做白名单差集，见第五步 (b) |
 | 一次完整刷新要跑 30~50 分钟 | 没做探测剪枝，把两类固定开销全付了一遍。先跑 `probe-refresh.py` 两阶段（合计约 8.5s），只对真有变化的调 CLI |
 | 并发跑多个 `plugin update` 想加速 | 它们读改写同一 `installed_plugins.json` 且 CLI 内部无文件锁；flock 包住则退化成串行、零加速。加速只能靠减少调用次数 |
@@ -301,7 +300,7 @@ xargs rm -rf < /tmp/cache_orphan.txt
 
 ## 验证清单
 
-- [ ] **没有**跑不带参数的 `claude plugin marketplace update`，也**没有**对每个已启用插件都调一次 `plugin update`；两层都先跑过探测（`--stage market` / `--stage plugin`），只对判定需要动的目标调 CLI
+- [ ] **没有**跑不带参数的 `claude plugin marketplace update`，也**没有**对每个已安装插件都调一次 `plugin update`；两层都先跑过探测（`--stage market` / `--stage plugin`），只对判定需要动的目标调 CLI
 - [ ] 两个探测阶段的**顺序**是 market 在前、plugin 在后（插件层的版本比对必须读到已更新的市场清单）
 - [ ] 探测结果里的 `PROBE_FAIL` / `NO_GIT` / 「判不了」项都被**列入了待刷**，没有被当成"已是最新"跳过
 - [ ] 判断市场是否真的拉到新代码时用的是 HEAD 对比，**没有**拿 `lastUpdated` 当判据（它变了 / 没变都不能证明任何一个方向）
@@ -309,7 +308,8 @@ xargs rm -rf < /tmp/cache_orphan.txt
 - [ ] 第三步用的是 `while IFS= read -r` 逐行读，不是 `for p in $plugins`（zsh 下后者必坏）
 - [ ] 每条 `claude plugin update` 都**显式传了 `--scope`**（默认值是 `user`，只在项目里装过的 id 会静默 `exit=1` 滚屏而过）
 - [ ] project/local scope 的刷新里，每条命令执行前都真的 `cd` 进了该记录**自己的** `projectPath`（不是随手挑的当前目录），且刷新后用快照 diff 核实了该记录的 `version`/`gitCommitSha`/`lastUpdated` 确实变化，而不是只信"already at the latest version"这句回执文字
-- [ ] project scope 出现跨大版本落后（如 `3.3.0` vs 市场 `3.12.2`）时，清单已出示给用户并由用户拍板刷哪些，**没有**自主拉平（可能是有意钉版，升级会改掉别的项目的行为）
+- [ ] 第二步按默认行为**连未启用的安装记录一起**算进了待刷清单（没有带 `--enabled-only`，除非用户当轮明确要求只刷已启用的）
+- [ ] project scope 出现跨大版本落后（如 `3.3.0` vs 市场 `3.12.2`）时已直接刷新、没有停下询问，且报告里逐条列出了这些记录（id、`projectPath`、旧版本 -> 新版本）
 - [ ] 所有循环 / 临时变量都**没有**取名 `path` / `fpath` / `cdpath` / `manpath` 等 zsh 绑定变量名（会静默覆写 `$PATH`，表象是"jq 没装"）
 - [ ] 每条 `claude plugin update` 的输出都在预期的三种正常结束态之一：`already at the latest version`、`updated from X to Y`、`refreshed from source`
 - [ ] 关键插件已走**写后回读**核实：`installed_plugins.json` 的 `installPath`、磁盘上该缓存目录、目录内 `.claude-plugin/plugin.json` 的 `version` 三处一致（只看 CLI 回执不足以证明落盘）
