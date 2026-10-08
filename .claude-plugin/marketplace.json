@@ -17,7 +17,7 @@
       "source": "./plugins/devkit-tool",
       "category": "Development",
       "description": "工具技能集：代码库分析、依赖排查、耗时/ROI 报告、submodule 同步推送、提交推送、话题可视化等 14 技能",
-      "version": "6.22.0"
+      "version": "6.23.0"
     },
     {
       "name": "devkit-spec",
@@ -66,7 +66,7 @@
       "source": "./plugins/working-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒，附中文消歧 skill",
-      "version": "3.35.0"
+      "version": "3.36.0"
     },
     {
       "name": "agent-browser",
