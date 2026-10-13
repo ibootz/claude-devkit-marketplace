@@ -1,0 +1,22 @@
+{
+  "name": "devkit-session-auto-title",
+  "version": "2.0.0",
+  "description": "会话标题自动跟随话题 - hook 数轮数与 assistant 行数，任一到阈值就后台调 Haiku 生成、下一轮回填 sessionTitle，补内建 ai-title 只命名一次的缺口。细节见 README",
+  "author": {
+    "name": "zhangq"
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit.js",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

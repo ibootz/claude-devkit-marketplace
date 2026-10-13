@@ -4,7 +4,7 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 
 ## 概述
 
-本市场包含 **23 个插件**（以两份市场清单为准），覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论、输出风格等场景。下面的编号清单只有 21 节——`clickable-paths` 与 `token-saver` 至今只登记在市场清单与目录树里，没有单独的介绍段落，属于既有遗漏。
+本市场包含 **20 个插件**（以两份市场清单为准），覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论、输出风格等场景。下面的编号清单只有 17 节——`devkit-clickable-paths`、`devkit-token-saver` 与 `devkit-ruanyf-style` 至今只登记在市场清单与目录树里，没有单独的介绍段落，属于既有遗漏。
 
 原 `devkit-git`、`devkit-dev`、`devkit-issue` 已从市场移除，不再作为独立插件提供。
 
@@ -35,36 +35,7 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 - `spec-impl` - 按任务清单实施
 - `spec-review` - 审查 spec 与实现一致性
 
-### 3. heal
-
-技能修复工具，在技能执行过程中发现问题时更新 SKILL.md 及相关文件。
-
-- 自动检测正在运行的技能
-- 反思出错原因并提出修复方案
-- 审批工作流，获得用户批准后应用更改
-- 支持可选的 Git 提交
-
-### 4. prompt-engineering
-
-提示词工程专家，优化 LLM 提示词、设计命令/钩子/技能。
-
-- Few-Shot Learning（少样本学习）
-- Chain-of-Thought（思维链推理）
-- 提示词优化与模板系统
-- 系统提示设计
-- 基于 Anthropic 官方最佳实践
-
-### 5. content-research-writer
-
-内容研究写作助手，协助研究、写作和内容创作。
-
-- 协作大纲与研究协助
-- 钩子改进与分节反馈
-- 声音保留与引用管理
-- 支持 Web 搜索与内容获取
-- 多种写作工作流程（博客、新闻通讯、教程等）
-
-### 6. omp (Oh My Pi)
+### 3. devkit-omp (Oh My Pi)
 
 CLI 工具集成，在 Claude Code/Codex 中调用 omp 实现编码、审查、搜索等任务。
 
@@ -74,18 +45,9 @@ CLI 工具集成，在 Claude Code/Codex 中调用 omp 实现编码、审查、�
 - `omp-review` - 代码审查
 - `omp-subagent` - 子代理任务
 
-### 7. find-skills
+### 4. devkit-discipline
 
-帮助发现和安装 agent 技能 - 基于 skills.sh 生态系统，使用 npx skills CLI 搜索和安装技能。
-
-- 搜索技能库
-- 安装指定技能
-- 列出已安装技能
-- 基于 vercel-labs/skills 生态
-
-### 8. working-discipline
-
-AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`SubagentStart` 注入子代理、`PreToolUse` 硬拦截缺鉴权或实例超限的 `agent-browser` 启动、派发 `Agent` 的结构字段不合规、串行只读检索过线。附一个按需 skill `zh-disambiguate`（中文消歧审计，3.35.0 起），零命令，适合作为全局基线长期开启。（3.26.0 起「污染 cwd 的独立 `cd`」拆给下面第 19 个插件 `cd-blocker`。）
+AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`SubagentStart` 注入子代理、`PreToolUse` 硬拦截缺鉴权或实例超限的 `agent-browser` 启动、派发 `Agent` 的结构字段不合规、串行只读检索过线。附一个按需 skill `zh-disambiguate`（中文消歧审计，3.35.0 起），零命令，适合作为全局基线长期开启。（3.26.0 起「污染 cwd 的独立 `cd`」拆给下面第 15 个插件 `devkit-cd-blocker`。）
 
 - 上下文纪律：精确读取、子代理优先、bash 输出限流、macOS 中文路径防漏检（NFC/NFD）
 - 子代理协作：在飞≤16 动态上限、嵌套≤2 软约束、team 模式下 teammate 不能派下级、共享骨架文件
@@ -94,7 +56,7 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - Agent 工具派发：subagent_type × model 三档路由表（sonnet/opus/fable，**无 haiku 档**）、显式 model 指定、`Explore`/`Plan` 按 `agent_type` 跳过派发规范
 - 外部写操作授权：dws 钉钉 CLI 默认只读，写操作须逐批出示清单获用户当次许可
 
-### 9. discover-unknowns（发现你的未知）
+### 5. devkit-discover-unknowns（发现你的未知）
 
 与 Claude 协作挖掘未知的方法论：把提示词/上下文当"地图"、真实代码库/约束当"疆域"，两者差距即"未知"，动手前暴露未知、合并前确认理解。源自 Anthropic 官方博客 [*A field guide to Claude Fable 5: Finding your unknowns*](https://claude.com/blog/a-field-guide-to-claude-fable-finding-your-unknowns)（Thariq Shihipar）。
 
@@ -106,7 +68,7 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 > ※ `brainstorm` 在本地已安装 superpowers 插件时优先委派 `superpowers:brainstorming`，未安装时用内置指令。实施规划与执行不属于本插件，交给 devkit-spec。Claude Code 与 Codex 两侧能力一致。
 
-### 10. portable-shell（跨平台 shell lint）
+### 6. devkit-portable-shell（跨平台 shell lint）
 
 强制 AI 生成的 shell 脚本同时兼容 Linux 与 macOS。一个 `PostToolUse` hook（matcher `Write|Edit|MultiEdit`），零 skill、零命令。
 
@@ -116,9 +78,9 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - 关闭：`PORTABLE_SHELL_LINT=off`
 - Hook 为 Claude Code 专有机制，Codex 侧不生效
 
-### 11. agent-browser（浏览器自动化最佳实践）
+### 7. devkit-agent-browser（浏览器自动化最佳实践）
 
-基于 [Vercel agent-browser](https://github.com/vercel-labs/agent-browser)（headless 浏览器自动化 CLI，Rust + CDP 直连 Chrome-for-Testing）的使用指令。**默认 headless 运行**，用四道机制替代"看到浏览器窗口"的监督。1 个 Skill（`agent-browser`），零 hook——硬护栏由 `working-discipline` 的 `bash-guard` 承担（避免两插件抢同一道 Bash 闸）。
+基于 [Vercel agent-browser](https://github.com/vercel-labs/agent-browser)（headless 浏览器自动化 CLI，Rust + CDP 直连 Chrome-for-Testing）的使用指令。**默认 headless 运行**，用四道机制替代"看到浏览器窗口"的监督。1 个 Skill（`agent-browser`），零 hook——硬护栏由 `devkit-discipline` 的 `bash-guard` 承担（避免两插件抢同一道 Bash 闸）。
 
 - **鉴权前置**：首次 open 目标站点前必须先向用户索取账密/token/cookie 并注入（`--headers` / `--profile` / `--state` / `auth save`）；headless 下人类无法中途登录授权
 - **实例上限 4**：全局最多 4 个并发实例（agent-browser 无内置并发上限，guard 查 `session list` 强制）
@@ -126,7 +88,7 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - **snapshot + 标注截图**：headless 下靠 `snapshot -i`（拿 `@eN` refs）+ `screenshot --annotate` 回看每步，不靠肉眼盯窗口
 - **安全边界**：headless 必带 `--allowed-domains`（限域 + 禁 WebRTC）、`--content-boundaries`（防 prompt 注入）、`--max-output`（防上下文洪泛）
 
-### 12. task-keeper（常驻 keeper 托管任务队列）
+### 8. devkit-task-keeper（常驻 keeper 托管任务队列）
 
 主会话只做「分类分派 + 需要人拍板时集中问一次」，debug 队列与杂务队列由常驻 keeper 子代理在独立上下文跑全流程。4 个 Skill（`tk-debug` / `tk-chore` / `tk-decisions` / `tk-worktree`）+ 2 个 Agent（debug-keeper / chore-keeper）+ 6 个 hook。
 
@@ -136,38 +98,38 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - **外部工单适配器**：三层发现（项目配置 → skill 探测 → 如实报未回写），公司系统能力接线不进插件本体
 - 源自 radnove-core（云学堂内部插件）debug-triage 体系的通用化搬迁，与 radnove-core ≤4.5.1 不可同装，详见插件 README
 
-### 13. plain-talk-output-style（说人话输出风格）
+### 9. devkit-style-plain-talk（说人话输出风格）
 
 可切换的输出风格插件：一个 SessionStart 注入 hook，要求 AI 一语中的、几句话讲明白、能表格就表格、不专业化/不掉书袋/不自造词（新词一律取自权威来源）。零 skill、零命令。
 
-- 与 working-discipline（≥3.10.0）分工：纪律条款（拍板四要素 / 求真 / 简体中文）留在 working-discipline，行文风格归本插件
+- 与 devkit-discipline（≥3.10.0）分工：纪律条款（拍板四要素 / 求真 / 简体中文）留在 devkit-discipline，行文风格归本插件
 - 第 10 条承接拍板材料：四要素（起源 / 差距 / 影响范围 / 带行号的现场证据）在本风格下用完整段落承载，详尽优先于简短
 - 切换方式：`/plugin` 里启停本插件即可换风格（原生 output style 机制已废弃，官方 explanatory 风格同为插件实现）
 
-### 14. adhd-output-style（ADHD 友好输出风格）
+### 10. devkit-style-adhd（ADHD 友好输出风格）
 
 复刻自 [ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd)（MIT）的可切换风格插件：首行给可执行动作、多步骤编号、每轮重述进度、给具体时间估算、错误用陈述句。规则原文逐字保留在 `style/upstream-rules.md`。
 
 - 与上游差异一：拉平成纯 SessionStart 注入，不保留「skill 手动触发 + `~/.claude/.i-have-adhd-always` 标记文件」双通道，开关只有 `/plugin` 一处
-- 与上游差异二：追加 `style/project-overrides.md`，解决上游 Rule 9（列表封顶 5 条）与 working-discipline 拍板四要素的冲突——四要素约束的是信息不是形状，本风格用「推荐项在前 + 选项排序 + 每项一行代价」承载
+- 与上游差异二：追加 `style/project-overrides.md`，解决上游 Rule 9（列表封顶 5 条）与 devkit-discipline 拍板四要素的冲突——四要素约束的是信息不是形状，本风格用「推荐项在前 + 选项排序 + 每项一行代价」承载
 - 注入约 8500 字符，低于 hook 输出上限（10000）
 
-### 15. wenyan-output-style（文言极简输出风格）
+### 11. devkit-style-wenyan（文言极简输出风格）
 
 取自 caveman 插件 `wenyan-ultra` 档位的可切换风格插件：以文言语法压缩对话回复，**字形一律简体**；代码、命令、报错、行号原样不动；安全告警与不可逆操作确认逐段退回白话。
 
-- 与上游差异一：繁体改简体——上游例句 `新參照則重繪` 全繁，与 working-discipline 3.5「禁止繁体中文」正面冲突，本插件保留文言语法与虚词、字形逐句改简
+- 与上游差异一：繁体改简体——上游例句 `新參照則重繪` 全繁，与 devkit-discipline 3.5「禁止繁体中文」正面冲突，本插件保留文言语法与虚词、字形逐句改简
 - 与上游差异二：上游 `wenyan-ultra` 只有 1 行档位定义 + 2 个例句，这里补齐成 8 条压缩法 + 4 条禁忌（含**禁伪古**，防「回调」写成「反召之术」）+ 产出物边界（commit message、md 文档、子代理 prompt 一律白话）
 - 唯一结构差异：**两层注入**——SessionStart 注规则全文（2912 字符），UserPromptSubmit 每轮注 102 字符短锚。文言与模型默认语体正面对抗，只放 SessionStart 会在长对话里漂回白话
 
-### 16. insight-addon（教学洞察附加件）
+### 12. devkit-insight（教学洞察附加件）
 
 **不是风格，是附加件**：只加一条「何时给 ★ Insight 框」的规则，不规定句子长短和段落形态，因此可与 plain-talk / adhd 等任意风格插件**同时开启**。
 
 - 与官方 explanatory-output-style 的区别：后者是一整套风格（含「可超出通常长度限制」的授权），跟简短类风格互斥；本插件把「给洞察」单独摘出来
 - 触发条件比官方更严：要求本轮真做了非平凡技术判断，且门道是**本代码库特有**的。官方原文写的是 `always provide`，在问答轮次会塞出无意义的洞察框
 
-### 17. session-auto-title（会话标题跟随话题）
+### 13. devkit-session-auto-title（会话标题跟随话题）
 
 补 Claude Code 内建自动命名的缺口：内建的 `ai-title` **只在第一条真人 prompt 时生成一次**，之后有两道短路挡着（已有标题就跳过 + resume 进程的闸门初值为 true），话题漂移后永不更新，且没有任何 settings key 能打开重算。本插件用 `UserPromptSubmit` hook 接管，第 2 轮起后台生成、之后每 10 轮重算。
 
@@ -177,7 +139,7 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - 三个约束：会永久接管标题（内建从此不工作）、必须挂 `UserPromptSubmit`（挂 `SessionStart` 只改内存不落盘）、agent-team 模式下不生效
 - 成本约 1e-4 美元/次，50 轮会话约 5-6 次
 
-### 18. worktree-flow（主分支保护）
+### 14. devkit-worktree-flow（主分支保护）
 
 `main` / `master` 默认不直接落笔：`Write` / `Edit` / `MultiEdit` / `NotebookEdit` 与 `git commit`
 无 Human 本轮授权时由 `PreToolUse` 拒绝。默认走「`EnterWorktree` 开临时分支 → 在里面改并提交 →
@@ -194,7 +156,7 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - **既有豁免不变**：非 git 目录、detached HEAD、配置的目录、合流进行中
 - 两组回归覆盖守卫与授权状态：`main-branch-guard.test.js`、`round-approval.test.js`
 
-### 19. cd-blocker（独立 cd 拦截）
+### 15. devkit-cd-blocker（独立 cd 拦截）
 
 顶层片段以裸 `cd` 开头、目标不是 no-op 时 `PreToolUse` **硬拦**，finding 里回灌可照抄的两个
 改法（`(cd /abs/path && cmd)` 子 shell、`git -C <path> <cmd>`）。Bash 工具的 cwd 在多次调用
@@ -209,9 +171,9 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - **判据是文本形态匹配，不是"cwd 是否被污染"这个语义**：只拦得住裸 `cd` 开头一族，`pushd` /
   `source` / `eval 'cd'` 等 19 类真污染写法实测放行，按用户拍板不补，清单在插件 README
 - 逃生阀 `CD_GUARD=off`（单次）；35 条回归用例两侧都覆盖：
-  `node plugins/cd-blocker/tests/cd-guard.test.js`
+  `node plugins/devkit-cd-blocker/tests/cd-guard.test.js`
 
-### 20. readable-citations（自足引用）
+### 16. devkit-readable-citations（自足引用）
 
 把「见 X 文档 §5.2」这类引用改造成读者不点也读得懂的形态：编号后带**标题原文**（编号会漂、
 标题可搜）、括注 **20 字提要**（当场判断值不值得点）、**写明引用关系**（前置条件 / 反例 /
@@ -222,12 +184,12 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
   在那里是死链且不报错）
 - **双挂 `UserPromptSubmit` + `SubagentStart`**：落盘文档大量由子代理写，而
   `UserPromptSubmit` 只触达主会话，只挂它会漏掉产出文档的主力且毫无报错
-- **与 `clickable-paths` 互补不重叠**：那个管「提到文件时的路径」且明文排除落盘 md，
+- **与 `devkit-clickable-paths` 互补不重叠**：那个管「提到文件时的路径」且明文排除落盘 md，
   这个管「引用 md 文档的章节」
 - 逃生阀 `READABLE_CITATIONS=off`；7 条回归用例：
-  `node plugins/readable-citations/hooks/tests/readable-citations.test.js`
+  `node plugins/devkit-readable-citations/hooks/tests/readable-citations.test.js`
 
-### 21. complexity-first（复杂度优先）
+### 17. devkit-complexity-first（复杂度优先）
 
 动手新增之前先证明必要性的按需决策 skill：按「必要性 → 仓库已有代码/抽象/配置 → 标准库 → 平台原生 → 已有依赖 → 最小新增实现」的顺序穷尽复用路径，命中即停；全不成立才写最小新增，且安全、权限、错误处理、数据完整性、无障碍五类边界逐次保留。需求存在规格空白时要求澄清，不替用户定义业务行为。每次建议输出五项决策记录（方案比较、选择、放弃理由、不可删边界、验证）。1 个 Skill，零 hook、零命令——纯按需，不开就完全不在场。
 
@@ -252,53 +214,41 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 # 规范驱动开发
 /plugin install devkit-spec@claude-devkit-marketplace
 
-# 技能自修复
-/plugin install heal@claude-devkit-marketplace
-
-# 提示词工程
-/plugin install prompt-engineering@claude-devkit-marketplace
-
-# 内容研究写作
-/plugin install content-research-writer@claude-devkit-marketplace
-
 # OMP 工具集成
-/plugin install omp@claude-devkit-marketplace
-
-# 技能发现与安装
-/plugin install find-skills@claude-devkit-marketplace
+/plugin install devkit-omp@claude-devkit-marketplace
 
 # AI 工作纪律（推荐全局开启）
-/plugin install working-discipline@claude-devkit-marketplace
+/plugin install devkit-discipline@claude-devkit-marketplace
 
 # 发现你的未知（协作方法论）
-/plugin install discover-unknowns@claude-devkit-marketplace
+/plugin install devkit-discover-unknowns@claude-devkit-marketplace
 
 # 跨平台 shell lint（生成脚本兼容 Linux 与 macOS）
-/plugin install portable-shell@claude-devkit-marketplace
+/plugin install devkit-portable-shell@claude-devkit-marketplace
 
 # 常驻 keeper 托管 debug/杂务队列
-/plugin install task-keeper@claude-devkit-marketplace
+/plugin install devkit-task-keeper@claude-devkit-marketplace
 
 # 说人话输出风格（可切换）
-/plugin install plain-talk-output-style@claude-devkit-marketplace
+/plugin install devkit-style-plain-talk@claude-devkit-marketplace
 
 # ADHD 友好输出风格（可切换，三个风格插件只开一个）
-/plugin install adhd-output-style@claude-devkit-marketplace
+/plugin install devkit-style-adhd@claude-devkit-marketplace
 
 # 文言极简输出风格（可切换，三个风格插件只开一个）
-/plugin install wenyan-output-style@claude-devkit-marketplace
+/plugin install devkit-style-wenyan@claude-devkit-marketplace
 
 # 教学洞察附加件（可与任意风格叠加）
-/plugin install insight-addon@claude-devkit-marketplace
+/plugin install devkit-insight@claude-devkit-marketplace
 
 # 会话标题自动跟随话题
-/plugin install session-auto-title@claude-devkit-marketplace
+/plugin install devkit-session-auto-title@claude-devkit-marketplace
 
 # 主分支保护（默认走 worktree，Human 可批准本轮直写）
-/plugin install worktree-flow@claude-devkit-marketplace
+/plugin install devkit-worktree-flow@claude-devkit-marketplace
 
 # 复杂度优先（按需决策：先复用再新增）
-/plugin install complexity-first@claude-devkit-marketplace
+/plugin install devkit-complexity-first@claude-devkit-marketplace
 ```
 
 ### Codex CLI
@@ -344,7 +294,7 @@ node scripts/install-codex.js --all --scope=user
 node scripts/install-codex.js
 
 # 只安装指定插件
-node scripts/install-codex.js --plugins=devkit-tool,omp
+node scripts/install-codex.js --plugins=devkit-tool,devkit-omp
 
 # 预览模式（不实际修改文件）
 node scripts/install-codex.js --all --dry-run
@@ -356,8 +306,8 @@ node scripts/install-codex.js --all --dry-run
 
 **安装内容**：
 - **Skills**：所有 9 个插件的技能目录
-- **Hooks**：omp 的 SessionStart/UserPromptSubmit 钩子、working-discipline 与 discover-unknowns 的 UserPromptSubmit 注入钩子（portable-shell 的 PostToolUse lint 钩子为 Claude Code 专有，Codex 侧不生效；devkit-tool 自 5.1.0 起不再内置任何 hook）
-- **Agents**：omp 的 3 个子代理（omp-explore、omp-plan、omp-task）
+- **Hooks**：devkit-omp 的 SessionStart/UserPromptSubmit 钩子、devkit-discipline 与 devkit-discover-unknowns 的 UserPromptSubmit 注入钩子（devkit-portable-shell 的 PostToolUse lint 钩子为 Claude Code 专有，Codex 侧不生效；devkit-tool 自 5.1.0 起不再内置任何 hook）
+- **Agents**：devkit-omp 的 3 个子代理（omp-explore、omp-plan、omp-task）
 
 #### 卸载
 
@@ -366,7 +316,7 @@ node scripts/install-codex.js --all --dry-run
 node scripts/uninstall-codex.js --all
 
 # 卸载指定插件
-node scripts/uninstall-codex.js --plugins=omp
+node scripts/uninstall-codex.js --plugins=devkit-omp
 
 # 预览卸载内容
 node scripts/uninstall-codex.js --all --dry-run
@@ -427,26 +377,24 @@ claude-devkit-marketplace/
 ├── plugins/
 │   ├── devkit-tool/
 │   ├── devkit-spec/
-│   ├── heal/
-│   ├── prompt-engineering/
-│   ├── content-research-writer/
-│   ├── omp/
-│   ├── find-skills/
-│   ├── working-discipline/
-│   ├── discover-unknowns/
-│   ├── portable-shell/
-│   ├── agent-browser/
-│   ├── task-keeper/
-│   ├── plain-talk-output-style/
-│   ├── adhd-output-style/
-│   ├── wenyan-output-style/
-│   ├── insight-addon/
-│   ├── session-auto-title/
-│   ├── clickable-paths/
-│   ├── worktree-flow/
-│   ├── cd-blocker/
-│   ├── readable-citations/
-│   └── complexity-first/
+│   ├── devkit-omp/
+│   ├── devkit-discipline/
+│   ├── devkit-discover-unknowns/
+│   ├── devkit-portable-shell/
+│   ├── devkit-agent-browser/
+│   ├── devkit-task-keeper/
+│   ├── devkit-style-plain-talk/
+│   ├── devkit-style-adhd/
+│   ├── devkit-style-wenyan/
+│   ├── devkit-insight/
+│   ├── devkit-session-auto-title/
+│   ├── devkit-clickable-paths/
+│   ├── devkit-worktree-flow/
+│   ├── devkit-cd-blocker/
+│   ├── devkit-readable-citations/
+│   ├── devkit-token-saver/
+│   ├── devkit-ruanyf-style/
+│   └── devkit-complexity-first/
 ├── .githooks/
 │   └── pre-commit             # 提交前强制跑版本四方校验（需 git config core.hooksPath .githooks）
 ├── scripts/

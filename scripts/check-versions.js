@@ -35,6 +35,14 @@
 //
 // --fix 只改 version 字段，不动 description —— description 的内容需要人工判断该写什么，
 // 机器对齐会把陈旧描述固化下来。修完仍需自行检查 description 是否同步。
+//
+// 【顺带校验插件命名】（规则见 .claude/rules/project/plugin-naming.md，仿 radnove 市场的
+// scripts/check_versions.py）
+// 插件名必须形如 devkit-<xxx>（xxx 为小写 kebab-case），且五处同名：目录名、
+// .claude-plugin/plugin.json.name、.codex-plugin/plugin.json.name（有则查）、两份市场清单的
+// name；本地源条目的 source 路径也必须指向 ./plugins/<name>（install-codex.js 用 name 拼
+// 目录，名与目录不一致时 Codex 安装静默装空）。命名问题 --fix 不修：改名牵涉 renames 表、
+// skill 命名空间引用、缓存路径，必须人工处理。
 
 'use strict'
 
@@ -45,6 +53,8 @@ const ROOT = path.resolve(__dirname, '..')
 const PLUGINS_DIR = path.join(ROOT, 'plugins')
 const CC_MARKET = path.join(ROOT, '.claude-plugin', 'marketplace.json')
 const CODEX_MARKET = path.join(ROOT, '.agents', 'plugins', 'marketplace.json')
+const NAME_RE = /^devkit-[a-z0-9]+(-[a-z0-9]+)*$/
+const NAMING_RULE = '.claude/rules/project/plugin-naming.md'
 
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'))
@@ -80,9 +90,12 @@ function collectLocalPlugins() {
 
     const codexManifest = path.join(PLUGINS_DIR, entry.name, '.codex-plugin', 'plugin.json')
     let codexVersion = null
+    let codexName = null
     if (fs.existsSync(codexManifest)) {
       try {
-        codexVersion = readJson(codexManifest).version
+        const cj = readJson(codexManifest)
+        codexVersion = cj.version
+        codexName = cj.name
       } catch (e) {
         out['__parse_error__codex_' + entry.name] = { error: `${codexManifest} 解析失败: ${e.message}` }
         continue
@@ -95,6 +108,7 @@ function collectLocalPlugins() {
       manifest,
       codexManifest: fs.existsSync(codexManifest) ? codexManifest : null,
       codexVersion,
+      codexName,
     }
   }
   return out
@@ -143,6 +157,24 @@ function main() {
 
     const truth = lp ? lp.version : (ccEntry ? ccEntry.version : null)
     const rowIssues = []
+
+    if (!NAME_RE.test(name)) {
+      rowIssues.push(`插件名 ${name} 不符合 devkit-<xxx>（小写 kebab-case）命名规则，见 ${NAMING_RULE}`)
+    }
+    if (lp && lp.dir !== name) {
+      rowIssues.push(`目录 plugins/${lp.dir} 与 plugin.json.name=${name} 不同名`)
+    }
+    if (lp && lp.codexManifest && lp.codexName !== name) {
+      rowIssues.push(`plugins/${lp.dir}/.codex-plugin/plugin.json 的 name=${lp.codexName}，应为 ${name}`)
+    }
+    const ccPath = ccEntry && typeof ccEntry.source === 'string' ? ccEntry.source : null
+    if (ccPath && isLocalSource(ccPath) && ccPath.replace(/\/+$/, '') !== `./plugins/${name}`) {
+      rowIssues.push(`.claude-plugin/marketplace.json 的 source=${ccPath}，应为 ./plugins/${name}`)
+    }
+    const codexPath = codexEntry && codexEntry.source && typeof codexEntry.source === 'object' ? codexEntry.source.path : null
+    if (codexPath && codexPath.replace(/\/+$/, '') !== `./plugins/${name}`) {
+      rowIssues.push(`.agents/plugins/marketplace.json 的 source.path=${codexPath}，应为 ./plugins/${name}`)
+    }
 
     if (!lp && !remote) {
       rowIssues.push(`市场清单登记了 ${name}，但 plugins/ 下没有对应的 plugin.json（幽灵条目或目录被删）`)
@@ -222,13 +254,14 @@ function main() {
   }
 
   if (problems.length) {
-    console.error(`发现 ${problems.length} 处版本登记问题：`)
+    console.error(`发现 ${problems.length} 处版本或命名登记问题：`)
     for (const p of problems) console.error('  - ' + p)
-    console.error('\n修法：改 plugin.json 后同步两份市场清单的 version 与 description，或先跑 node scripts/check-versions.js --fix 对齐 version')
+    console.error('\n修法：版本问题改 plugin.json 后同步两份市场清单的 version 与 description，或先跑 node scripts/check-versions.js --fix 对齐 version')
+    console.error(`命名问题 --fix 不修，按 ${NAMING_RULE} 的「改名」一节人工处理`)
     process.exit(1)
   }
 
-  console.log(`✓ ${rows.length} 个插件的版本登记四方一致`)
+  console.log(`✓ ${rows.length} 个插件的版本登记四方一致，命名均符合 devkit-<xxx>`)
   process.exit(0)
 }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pre-commit：提交前校验插件版本四方一致（plugins/<dir>/.claude-plugin/plugin.json、
+# pre-commit：提交前校验插件版本四方一致、命名符合 devkit-<xxx>（plugins/<dir>/.claude-plugin/plugin.json、
 # plugins/<dir>/.codex-plugin/plugin.json、.claude-plugin/marketplace.json、
 # .agents/plugins/marketplace.json），不一致就拦下本次提交。
 #
@@ -41,8 +41,9 @@ fi
 
 if ! node "$ROOT/scripts/check-versions.js" --quiet; then
   echo "" >&2
-  echo "[pre-commit] 版本登记不一致，本次提交已拦下。" >&2
-  echo "  修复：node scripts/check-versions.js --fix && git add -u" >&2
+  echo "[pre-commit] 版本或命名登记不一致，本次提交已拦下。" >&2
+  echo "  版本问题：node scripts/check-versions.js --fix && git add -u" >&2
+  echo "  命名问题：--fix 不修，按 .claude/rules/project/plugin-naming.md 人工改名" >&2
   echo "  确需带着不一致提交：git commit --no-verify" >&2
   exit 1
 fi

@@ -1,0 +1,33 @@
+{
+  "name": "devkit-agent-browser",
+  "version": "2.0.0",
+  "description": "浏览器自动化 - agent-browser 网页操作/抓取/表单/截图；SessionStart 注入选型与独立实例规则，默认 headless，鉴权前置+实例上限4+SessionEnd 清理",
+  "author": {
+    "name": "zhangq"
+  },
+  "homepage": "https://github.com/vercel-labs/agent-browser",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.js"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.js"
+          }
+        ]
+      }
+    ]
+  }
+}

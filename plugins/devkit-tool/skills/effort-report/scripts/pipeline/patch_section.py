@@ -41,7 +41,7 @@ def build(ctx):
           reach="大半", reach_cls="mid",
           how="把三层仓库拓扑与四类决策（拉最新／提子仓代码／真相流合入受保护 master／worktree 内干活）"
               "的结论固化成决策树，遇到对应场景直接照做，不每次现场重新推演。",
-          gate="个别动作有硬闸（裸 <code>cd</code> 被 cd-blocker 拦），但<b>推演成本本身没有闸</b>",
+          gate="个别动作有硬闸（裸 <code>cd</code> 被 devkit-cd-blocker 拦），但<b>推演成本本身没有闸</b>",
           note="耗时主因不是命令慢，是每次都重新推演「此刻该动哪个仓、gitlink 提不提、"
                "worktree 里的子模块要不要恢复」。推演结论是可缓存的，冲突处置与分支决策不可缓存。"),
      dict(no="A4", name="在自己写的账本与规格里定位与复核",

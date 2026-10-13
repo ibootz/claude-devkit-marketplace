@@ -1,0 +1,92 @@
+// worktree-flow-inject.js — 纯注入钩子（SessionStart / UserPromptSubmit / SubagentStart）
+//
+// 把「main/master 默认走 worktree；确需直写则由主会话 AskUserQuestion 取 Human 本轮授权」
+// 注入上下文。它不阻止操作；实际门控由 guards/main-branch-guard.js 与本轮授权状态机完成。
+//
+// UserPromptSubmit 只触达主会话，SubagentStart 单独触达子代理，SessionStart 覆盖启动与 compact。
+// 输出的 hookEventName 必须回声白名单内的入参事件，否则其中一路会静默失效。
+
+'use strict'
+
+const fs = require('fs')
+const { approvalToolInput } = require('./lib/round-approval')
+
+const ALLOWED_EVENTS = new Set(['SessionStart', 'UserPromptSubmit', 'SubagentStart'])
+const APPROVAL_TEMPLATE = JSON.stringify(
+  approvalToolInput({
+    repository: '<finding 中的仓绝对路径>',
+    branch: 'main',
+    target: '<finding 中的目标>',
+  })
+)
+
+const CONTEXT = `# 主分支保护（devkit-worktree-flow）
+
+**main / master 默认不落笔**：这两个分支上的 \`Write\` / \`Edit\` / \`MultiEdit\` / \`NotebookEdit\`
+与 \`git commit\` 若无 Human 本轮授权，会被 PreToolUse 拒绝。
+
+默认走四步：
+
+1. 调 \`EnterWorktree\` 工具，参数名遵循 \`<仓名短名>-<功能词1>-<功能词2>-<功能词3>\`；功能最多 3 个词，不足不补，建临时分支并切入 worktree。
+   仓名取仓根目录名并转为 lowercase \`kebab-case\`；删除 \`fix\`、\`feat\`、\`task\`、\`worktree\` 等无辨识度前缀；同名冲突时仅追加 4 位短 hash。
+2. 在 worktree 内改与提交。
+3. \`ExitWorktree\` 传 \`{"action":"keep"}\` 回主目录，再
+   \`git -C <仓根> merge --no-ff <临时分支>\`。
+4. \`git -C <仓根> worktree remove <worktree 路径>\`，再
+   \`git -C <仓根> branch -d <临时分支>\`。临时分支不 push remote。
+
+**确需本轮直接写 main/master**：主会话按刚才 finding 给出的仓、分支、目标，原样调用其
+\`AskUserQuestion {...}\`。结构模板如下（若实际为 master，branch 必须取 finding 的 master）：
+
+\`AskUserQuestion ${APPROVAL_TEMPLATE}\`
+
+不得传 \`answers\` 或 \`annotations\`；须由 Human 在 UI 中亲自选择。Human 选“批准本轮”后，
+重试原操作。本授权覆盖当前主会话本轮所有 main/master 写入与 \`git commit\`；下一次用户消息、
+本轮结束或会话结束即自动失效。Human 选 worktree 或未明确批准则不得直写。子代理不能调用
+\`AskUserQuestion\`，撞闸后须把仓、分支、目标与原因回主会话，由主会话申请。
+
+本机制不使用 \`permissionDecision: "ask"\`，因本机 \`bypassPermissions\` 下该档实测失效。
+\`WORKTREE_GUARD=off\` 仍是独立的全局关闭开关，不是 Human 本轮授权；AI 不得自行启用。
+
+**撞闸不是把命令交给 Human 敲的理由。** 三道闸各自的解都在你手上：会话隔离
+（\`isolated in the worktree\` / \`worktree-isolated session\`）用 \`ExitWorktree {"action":"keep"}\`
+纯自解，改完再 \`EnterWorktree {"path": 原路径}\` 回去接着干；主分支保护用上面那份
+\`AskUserQuestion\` 就地申请——**他点一下选项，不是替你敲命令**。用户级 \`CLAUDE.md\` 第 4 条
+闭集第 1 项「已经真撞上守卫」**不覆盖自带自救路的闸**：先走那条路，被 Human 亲口否了才算
+到头。展开与三次实测反例见 \`worktree-boundary\` skill 的「撞闸不是终点」一节。
+
+**既有自动豁免**：非 git 目录；detached HEAD；merge / rebase / cherry-pick 进行中；目标落在
+\`.claude/\`、\`.keeper/\`、\`.git/\` 或显式配置的豁免目录。\`git commit\` 亦按此豁免——前提是
+暂存区非空且**每一条**都落在豁免目录下、显式 pathspec 也逐条豁免、且不带 \`-a\` / \`-A\` /
+\`--all\` / \`-i\` / \`--include\` / \`--amend\`（这些在提交那一刻才扩大范围，索引不再是权威）。
+写法不在白名单内就仍然拦：改法是先窄 \`git add\` 再不带 \`-a\` 提交。
+
+**Bash 已知漏报**：守卫只机械识别 \`git commit\`；\`sed -i\`、重定向、\`tee\`、heredoc、
+解释器内部写文件虽可能过闸，未经本轮授权仍不得在 main/master 使用。`
+
+function main() {
+  if (process.env.WORKTREE_GUARD === 'off') process.exit(0)
+
+  let payload = {}
+  try {
+    payload = JSON.parse(fs.readFileSync(0, 'utf8'))
+  } catch (_) {
+    /* 入参不可解析时按 SessionStart 处理，注入总比静默好 */
+  }
+
+  const event = ALLOWED_EVENTS.has(payload.hook_event_name)
+    ? payload.hook_event_name
+    : 'SessionStart'
+
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: event,
+        additionalContext: CONTEXT,
+      },
+    })
+  )
+  process.exit(0)
+}
+
+main()

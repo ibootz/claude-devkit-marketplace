@@ -74,7 +74,7 @@ color: blue
     - Files: `routes/auth.ts`
 ```
 
-Goal 按 working-discipline 3.11「中文消歧」写：写明由谁（哪个模块 / 服务）对什么做什么、做到什么状态算完成；spec 里标「待确认」的内容原样带入，不在拆任务时补定。
+Goal 按 devkit-discipline 3.11「中文消歧」写：写明由谁（哪个模块 / 服务）对什么做什么、做到什么状态算完成；spec 里标「待确认」的内容原样带入，不在拆任务时补定。
 
 ## 并行开发说明
 

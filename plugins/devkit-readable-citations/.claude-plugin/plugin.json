@@ -1,0 +1,32 @@
+{
+  "name": "devkit-readable-citations",
+  "version": "2.0.0",
+  "description": "引用别处章节要免跳可读 - 注入自足引用规约：带标题原文与提要，对话正文按宿主切形态、落盘走相对路径。双挂生效",
+  "author": {
+    "name": "zhangq"
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/readable-citations.js"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/readable-citations.js"
+          }
+        ]
+      }
+    ]
+  }
+}

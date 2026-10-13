@@ -47,7 +47,7 @@
 | 并发 `git ls-remote` 探测全部 53 条 url 源插件记录 | **2.9s** | 已废弃的手段（判据错，见下）；替代逐个 `plugin update` |
 | 并发取远端 manifest 探测全部 110 条 url 源记录（去重成 15 个远端仓） | **0.8s** | 现行手段；6 个内网 GitLab 仓并发实测 0.282s，单个 GitHub 仓 1.354s |
 
-**"跳过 no-op 等价"的实测**：`claude plugin update insight-addon@claude-devkit-marketplace` 回执 `already at the latest version (1.1.0)`，前后 `diff <(jq -S . 快照) <(jq -S . installed_plugins.json)` 是 **0 行**。零改动意味着跳过它不丢任何东西——这是正文全部剪枝的合法性基础。
+**"跳过 no-op 等价"的实测**：`claude plugin update devkit-insight@claude-devkit-marketplace` 回执 `already at the latest version (1.1.0)`，前后 `diff <(jq -S . 快照) <(jq -S . installed_plugins.json)` 是 **0 行**。零改动意味着跳过它不丢任何东西——这是正文全部剪枝的合法性基础。
 
 ## 探测剪枝率
 

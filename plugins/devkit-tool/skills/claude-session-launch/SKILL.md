@@ -38,7 +38,7 @@ claude --bg -n "<会话显示名>" --model sonnet --permission-mode acceptEdits 
    `SendMessage` 派活。
 2. **会话在当前工作目录下启动**，cwd 与执行命令时一致。要它在别的仓干活，用
    `(cd /abs/path && claude --bg ...)` 起——**不要发裸 `cd`**（会污染本会话 cwd，且本机
-   cd-blocker 插件硬拦）。
+   devkit-cd-blocker 插件硬拦）。
 3. **`-n` 是显示名，同时是 `SendMessage` 的寻址键**。接受中文（已实测）。**同名 latest wins**
    ——后建的同名会话会顶掉先建那个的可寻址性，所以同一批并行起多个时名字必须互相可辨（把分片
    依据写进名字，别都叫 `probe-x`）。

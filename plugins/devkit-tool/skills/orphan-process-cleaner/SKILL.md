@@ -138,7 +138,7 @@ agent-browser doctor
 
 **仍需 `ps` 的场景**：`agent-browser` CLI 本身已不在（卸载了/换机器了），但之前残留的 CFT 进程还在跑。这时按上面的 GNU `ps` 流程定位，但**只 kill 明确属于 CFT 的进程**（看 cmd 含 `chrome-for-testing` 或 `agent-browser` 路径），绝不碰用户日常 Chrome。macOS 上 BSD `ps` 不支持 `--ppid`，改用 `pgrep -fl "chrome-for-testing\|agent-browser"` 定位。
 
-> 本市场的 `agent-browser` 插件已挂 SessionEnd 钩子（`hooks/session-end-cleanup.js`），会话正常退出时会自动 `close --all` + `doctor`。本场景处理的是钩子没覆盖到的：CLI 被卸载、会话被 `kill -9` 强杀、或压缩后长时间不用导致 daemon 1h idle 自停前用户就想清理。
+> 本市场的 `devkit-agent-browser` 插件已挂 SessionEnd 钩子（`hooks/session-end-cleanup.js`），会话正常退出时会自动 `close --all` + `doctor`。本场景处理的是钩子没覆盖到的：CLI 被卸载、会话被 `kill -9` 强杀、或压缩后长时间不用导致 daemon 1h idle 自停前用户就想清理。
 
 ## 操作约束（必须遵守）
 

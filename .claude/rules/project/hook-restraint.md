@@ -87,7 +87,7 @@ hook 制造的典型场景是——**AI 做对了却过不去**，而用户看�
 
 ### 实证 1：整行正则不解析字符串上下文，产生假阳性
 
-`plugins/portable-shell/hooks/portable-shell-lint.js` 的 `RULES` 数组有 13 条判据，实现方式是
+`plugins/devkit-portable-shell/hooks/portable-shell-lint.js` 的 `RULES` 数组有 13 条判据，实现方式是
 去掉整行注释后对整行做 `test()`。2026-07-31 实测：
 
 ```sh
@@ -97,17 +97,17 @@ echo "grep -P test in a string..."     # 只是输出一段说明文字
 这一行被 `grep-P` 规则命中并报为不可移植调用。它**根本没有调用** `grep -P`。同一次实测里
 真实调用（`grep -P 'foo' realfile.txt`）也被命中——也就是说这条判据无法区分两者。
 
-该缺陷已如实记录在 `plugins/portable-shell/hooks/portable-shell-lint.js` 的文件头注释里。
+该缺陷已如实记录在 `plugins/devkit-portable-shell/hooks/portable-shell-lint.js` 的文件头注释里。
 注意这个 hook 走的是 `process.exit(2)`（把 stderr 喂回给 AI 的一次性提醒，文件已写入、
 不回滚），**不是** `deny`——所以假阳性的代价只是一条噪音。若同样的判据被做成 `deny`，
 每次写这种说明性 `echo` 都会被硬拦。
 
 ### 实证 2：判据抓形态不抓风险，同时误报和漏报
 
-`plugins/working-discipline/hooks/guards/bash-guard.js` 禁止"污染 cwd 的独立 `cd`"。
-（**坐标更新**：这段判据 2026-08-11 整体搬去了独立插件 `plugins/cd-blocker/hooks/guards/cd-guard.js`，
+`plugins/devkit-discipline/hooks/guards/bash-guard.js` 禁止"污染 cwd 的独立 `cd`"。
+（**坐标更新**：这段判据 2026-08-11 整体搬去了独立插件 `plugins/devkit-cd-blocker/hooks/guards/cd-guard.js`，
 下面的实测结论逐条仍成立，只是要去那个文件里看代码；`bash-guard.js` 现在只剩 `agent-browser`
-那半。搬迁动因是它与写侧约束顶死时需要一个可单独停用的开关，见 `cd-blocker` 的 README。）
+那半。搬迁动因是它与写侧约束顶死时需要一个可单独停用的开关，见 `devkit-cd-blocker` 的 README。）
 2026-07-31 同一会话内的两次真实调用：
 
 ```sh
@@ -182,7 +182,7 @@ create/update/delete/发布 等词）、`nonascii-path.js`（把命令行里任�
 
 ### 实证 5：hook 的实际效力与文案会各自漂移，没有任何环节自动核对
 
-`plugins/working-discipline/hooks/guards/write-guard.js` 挂 `PostToolUse(Write|Edit)`，
+`plugins/devkit-discipline/hooks/guards/write-guard.js` 挂 `PostToolUse(Write|Edit)`，
 检查源码文件 >1000 行与 `CLAUDE.md` >200 行。同插件注入给 AI 的纪律第六章写的是这两条
 **「会被拦」**。2026-07-31 审计用三条独立证据证明它拦不住任何东西：
 
@@ -282,7 +282,7 @@ agent-browser open https://y --profile /p --json "{--headed}"      # PASS
 
 - **纯注入类 hook**（`SessionStart` / `UserPromptSubmit` / `SubagentStart` 只输出
   `additionalContext`）：它不阻止任何操作，失败模式只是"多占了上下文预算"，判据是不是
-  近似无关紧要。本仓 `working-discipline` 的三层注入就属于这类。
+  近似无关紧要。本仓 `devkit-discipline` 的三层注入就属于这类。
 - **`permissionDecision: "ask"`**：它把决定权交回给用户，判据宽一点的代价是多弹一次
   确认框，而不是"做对了却过不去"。判据只有七八成把握时，`ask` 是比不做更好的选择。
 - **既有 hook 的实现 bug 修复**：见上一节第 4 条的区分。

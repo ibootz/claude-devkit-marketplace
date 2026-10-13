@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+#
+# devkit-task-keeper · UserPromptSubmit hook（Debug 队列实时快照注入）
+#
+# 【作用】每轮把 `.keeper/<交付id>/debug/` 的**实时快照**注入本轮上下文——open
+#   各条的 id + 优先级 + 是否在飞、done 计数、reopen 告警、.gitignore 缺行提醒。
+#   顺带重算 `.keeper/debug/index.md`（只在 fixer 的 `DBG-*` worktree 里跳过重算,
+#   避免几份并行副本互相冒充真身；交付级 worktree 照常重算——那里的队列若是唯一
+#   真身，不刷会让索引永久过期）。
+#
+# 【为什么是 hook 而不是一段 CLAUDE.md 纪律】
+#   CLAUDE.md 是静态文本，hook 是**可执行程序**——它能读文件、算状态。
+#   一步之差，注入内容从「规则」变成「规则 + 当前状态」，并且解决了纯纪律型
+#   约束的固有缺陷：「队列文件是恢复锚点，但恢复动作依赖主会话记得 Read」。
+#   现在由 harness 每轮强制注入，与 AI 是否记得、上下文有没有被压缩无关。
+#   ——**监督者与被监督者由此分离**。
+#
+# 【为什么独立成脚本，不与 chore 快照合并】
+#   同目录 user-prompt-submit-chore-queue.sh 伺候的是另一个队列（CHR），两者
+#   启用状态、失败影响面、可测试性彼此独立；且两个 hook 各自独立 stdout，
+#   一个故障不拖累另一个。核心逻辑都有回归测试（hooks/tests/run-tests.sh）。
+#
+# 【零成本保证（重要）】
+#   本 hook 随插件装到**所有**项目、**每轮**触发。当前 worktree 根下没有 `.keeper/`
+#   目录时（= 项目未启用 devkit-task-keeper），python 侧直接 return，stdout 全空，等价于
+#   本 hook 不存在。唯一例外是检测到旧版 `.debug/issues/`（radnove-core 布局）时
+#   注入一句迁移提示——否则升级用户会看到「队列消失」且无从归因。
+#
+# 【启用方式】只要 `.keeper/` 顶层存在（哪怕只建过 chore/），`.keeper/<交付id>/debug/`
+#   由 `find_queue` 每轮**自动补建**，不需要手工 mkdir——判据见
+#   `lib/queue_snapshot.py` 的 `find_queue` docstring「为什么自动补建」。整个项目
+#   要启用 devkit-task-keeper 仍需先手工建一次 `.keeper/<交付id>/`（交付 id = worktree 根
+#   basename，非交付用 `_main`；文件格式见 skills/tk-debug/references/queue.md §2）。
+#   fixer worktree 内不补建（与 write_index 同一条「fixer 侧只读不写」原则）。
+#   **停用方式不再是「删掉 debug 目录」**——下一轮就会被补建回来；要停用整个插件请
+#   在设置里禁用它，或删掉整个 `.keeper/`。
+#
+# 【失败策略】注入类 hook 一律静默降级，绝不阻断用户提交：脚本不带 set -e，
+#   python 异常在其 main 外层被吞。唯一例外是 issue 文件读不懂（frontmatter
+#   损坏、status 不是 open/done）——那会在注入体里列出来，因为静默跳过会让
+#   这几条从队列视图消失、被误读成「已经修完了」，比报错更危险。
+#
+# 【改完要重启】cc hook 在会话启动时加载。
+
+set -uo pipefail
+
+# 解释器解析：Windows 的 Git Bash 没有 /usr/bin/python3，写死会让本脚本静默零输出。
+# 按 python3 → python → 原绝对路径回落，PATH 缺失时行为不比写死更差。
+PY="$(command -v python3 || command -v python || echo /usr/bin/python3)"
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+"$PY" "$DIR/lib/queue_snapshot.py" 2>/dev/null || true
+
+exit 0

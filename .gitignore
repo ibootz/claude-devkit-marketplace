@@ -40,10 +40,10 @@ node_modules/
 .zcode/
 zcode-sync-checklist.md
 
-# task-keeper 队列（v4 布局：文本入库、二进制与工作区不入库）
+# devkit-task-keeper 队列（v4 布局：文本入库、二进制与工作区不入库）
 # 刻意**不写整树忽略** `.keeper/`——issue.md / receipts.md / index.md 要能被 git 跟踪、
 # 能搜到、误删能恢复。v3 曾整树忽略，代价是被 ignore 的文件搜不到、误删无法恢复
-# （见 plugins/task-keeper/README.md 的版本对照表）。所以只精确排除五类：
+# （见 plugins/devkit-task-keeper/README.md 的版本对照表）。所以只精确排除五类：
 #   注意：gitignore 的 `#` 只在**行首**才是注释，没有行尾注释这回事。规则后面跟
 #   `# 说明` 会让整行（含空格与 #）被当成一个 pattern，匹配不到任何路径且不报错——
 #   本文件 2026-08-06 就这么错过一次，四条里三条静默失效，靠 `git check-ignore -v`
