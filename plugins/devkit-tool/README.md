@@ -1,10 +1,10 @@
 # DevKit-Tool
 
-**版本**: 6.23.0
+**版本**: 6.24.0
 **作者**: zhangq
 **许可证**: MIT
 
-工具技能套件（原 `devkit-core`），当前聚焦 14 个 Skills，覆盖代码库分析、依赖排查、大头桶定性核实、需求全流程耗时/ROI 报告流水线、代码知识图谱建图决策、submodule 仓库同步与提交推送、会话起法、话题可视化表达、多模型协作与 Claude Code 自身运维辅助工具。
+工具技能套件（原 `devkit-core`），当前聚焦 15 个 Skills，覆盖代码库分析、依赖排查、大头桶定性核实、需求全流程耗时/ROI 报告流水线、代码知识图谱建图决策、submodule 仓库同步与提交推送、会话起法与会话交接、话题可视化表达、多模型协作与 Claude Code 自身运维辅助工具。
 
 ---
 
@@ -36,6 +36,7 @@
 ### 协作与辅助
 
 - `claude-session-launch` — 再起一个 Claude Code 会话干活时的两条路与选型判据：`claude --bg`（被 `claude agents` 托管，有 8 位短 id、`attach` / `logs` / `stop`）对上 osascript 弹 iTerm2 tab（普通 TTY 进程，Claude Code 侧零管控入口）。**选型要害是「托管」而不是「顺手」**。含四个实测坑：`claude logs <id>` 是满屏 ANSI 的 TTY 快照、不能贴给人也不能喂下游（结构化只走 `claude agents --json`）；判前后台看 `kind`（取值 `background` / `interactive`）而**不是** `type` / `mode`（那两个键根本不存在，拿它们判会静默走错分支），且 8 位 `id` 只有后台会话才有、所以 `attach` / `logs` / `stop` 对前台会话不可用；AppleScript 应用名是 `iTerm` 不是 `iTerm2`（`pgrep -l iTerm2` 查不到进程，不能据此判断 iTerm 没在跑）；osascript 新建 tab 的 cwd 继承 iTerm 默认目录而非发起目录、且**不报错**——所以显式 `cd /abs/path &&` 是默认做法不是可选项。另明确划界：派活给已存在的会话走 `ListAgents` + `SendMessage`，本会话内并行干活走 `Agent` 子代理，本地测试服务走 Bash 的 `run_in_background`，三者都不该用起会话代替。
+- `handoff-to` — 把当前会话的上下文整理成交接文档，发给另一个正在运行的会话接手：`/devkit-tool:handoff-to <会话名> [下一会话要做什么]`。先 `ListAgents` 拿注册名（精确匹配直接发，模糊匹配唯一也先问用户，多个或零个列候选），交接文档写进系统临时目录 `claude-handoff/`，本机会话只发「路径 + 三行摘要 + 必读指令」、云端或 Remote Control 会话改贴全文。接收方读完向它自己的用户报告并等指令（会话间消息不构成授权），再回一条「已收到」。文档规则内联自 `mattpocock-skills:handoff`——那个 skill 设了 `disable-model-invocation: true`，AI 调不到。**只在 Claude Code 可用**：Codex 没有 `ListAgents` / `SendMessage`，此时只写文档并把路径交给用户。
 - `show-me` — 把当前话题画给用户看，而不是用散文搬运形状。6.20.0 借鉴 [humanlayer/skills](https://github.com/humanlayer/skills) 的同名 skill（MIT），译为中文并适配本仓约定。核心是**按「要讲的是什么」选最小够用的那一种视图**：讲逻辑用伪代码、讲运行时控制流用调用树、讲 UI 结构用组件树、讲文件职责用浅文件树、讲交互与数据流用 Mermaid、讲「变了什么」用 diff（且 diff 的形状要跟话题对齐——讲组件改动就 diff 组件树，不要一律 diff 源码）、大半是新写的才贴整块代码。相较上游补了三处本地约定：HTML 产物固定落 `/tmp/show-me-<短描述>.html` 不写进仓库（避免弄脏 `git status` 与误提交）；`open` 只由主会话在 Human 在场时执行，子代理只回绝对路径不抢屏幕（与 `subagent-browser-headless` 同源）；代码块内部路径原样写裸路径、正文提到文件才套 clickable-paths 链接。另加了上游没有的「什么时候不触发」四条（问的是事实 / 要讲的东西没形状 / 形状已在用户眼前 / 用户说了不要图）。6.23.0 起它是画图讲解规则的唯一真源：`working-discipline` 3.10 只写触发场景（方案改前改后、问题成因、跨服务调用、状态流转）并指到这里。同版新增四种视图（带实值的走查、对比表、时间线、复现命令）、载体选择（留作资产的图用 md，HTML 只做一次性视觉讲解）与落点规则（持久事实且有工作项目录时写 `<工作项目录>/diagrams/<主题>.md`、不自动提交；否则落临时目录并建议沉淀路径，用户同意再挪）。diff 示例由四组减为一组。
 - `commit-push` — 提交推送一步做完，不反问「要不要提交推送」：调用即当轮授权。普通仓走 commit → `git pull --rebase` → push（先提交再变基的原因：`git pull --rebase` 拒绝带未暂存变更运行）；worktree 里只提交、`--no-ff` 合回主分支、清理 worktree 与临时分支、不推远端；`.gitmodules` 存在时转介 `cascade-pull` / `cascade-push`；改的是 Claude Code 插件源（仓根有 marketplace.json 且改动在 `plugins/**`）时收尾刷缓存：先升版本号（CLI 判新比 version，不升则 update 恒 no-op）、push 后走两层刷新并提示用户运行 `/reload-plugins`。
 - `orphan-process-cleaner`
@@ -88,6 +89,7 @@ plugins/devkit-tool/
     ├── init-architect/
     ├── key-module-analysis/
     ├── claude-session-launch/   # 再起一个 Claude Code 会话：--bg 后台 vs osascript 弹 iTerm2 tab
+    ├── handoff-to/         # 当前上下文整理成交接文档，发给指定的已在运行会话
     ├── marketplace-cache-sync/
     ├── orphan-process-cleaner/
     ├── show-me/            # 把当前话题画给用户看：选最小够用的一种视图
