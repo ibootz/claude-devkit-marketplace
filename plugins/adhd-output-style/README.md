@@ -35,18 +35,18 @@ ADHD 友好输出风格：首行给可执行动作、多步骤编号、每轮重
 |---|---|---|
 | `style/upstream-rules.md` | 上游 SKILL.md 剥掉 YAML frontmatter 的正文，131 行，逐字未改 | **不要改**，改了就没法与上游比对 |
 | `style/project-overrides.md` | 本仓补充：拍板材料呈现、名词来源指针、harness 冲突、语言边界 | 要调整行为改这里 |
-| `hooks/session-start.sh` | 把上面两份拼起来，加一句常驻声明，输出 `additionalContext` | 改拼接逻辑 |
+| `hooks/session-start.js` | 把上面两份拼起来，加一句常驻声明，输出 `additionalContext` | 改拼接逻辑 |
 
 ## 2026-08-05 压缩改写
 
 `project-overrides.md` 四节（拍板材料四要素 / 命名来源 / harness note / language）逐句
-压缩，不删除任何一条规则的信息；`hooks/session-start.sh` 的 `HEADER` 常驻声明句同步收紧。
+压缩，不删除任何一条规则的信息；hook 脚本的 `HEADER` 常驻声明句同步收紧。
 `style/upstream-rules.md` **未改动**——它是上游 SKILL.md 逐字保留，改行为要经 project-overrides.md，
 本轮压缩尊重这条既有约定，未去动它。
 
 压缩结果：注入总长从实测 9844 字符降到 **8892 字符**，距 hook 输出上限（10000 字符）
 余量从约 156 字符扩到约 1108 字符。measured 方式：`echo '{"hook_event_name":"SessionStart"}' |
-bash hooks/session-start.sh`，取输出 JSON 的 `hookSpecificOutput.additionalContext` 字段
+node hooks/session-start.js`，取输出 JSON 的 `hookSpecificOutput.additionalContext` 字段
 用 Python `len()` 计数（字符不是字节）。
 
 **未达成的压缩目标**：本轮口径给的目标是 ≤7000 字符，未能达到。原因是 `upstream-rules.md`
@@ -64,6 +64,10 @@ bash hooks/session-start.sh`，取输出 JSON 的 `hookSpecificOutput.additional
 ## 1.3.0：名词来源改成指针
 
 `project-overrides.md` 的「Naming sources」节原为完整的八类来源与叫法冲突处理，与 `working-discipline` 3.37.0 的 3.1 重复。现改为三行指针，真源只留在 `working-discipline`（完整版在其 `references/expression.md` 的 `SEC:naming`）。注入长度 8892→8093 字符（测法同上节）。停用 `working-discipline` 时本风格不再携带完整清单。
+
+## 1.3.1：钩子由 bash + 内联 Python 改为 JS
+
+`hooks/session-start.sh` 换成 `hooks/session-start.js`（`node` 调起），`style/` 下两份规则文件不变。旧版要先在 bash 里找 `python3`，Windows 上会被 Microsoft Store 的零字节桩骗过，报错又被吞掉，风格静默不生效。迁移前后注入文本逐字一致（`cmp` 比对）。
 
 ## 出处与许可
 

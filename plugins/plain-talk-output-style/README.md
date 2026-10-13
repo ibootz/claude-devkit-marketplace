@@ -34,13 +34,13 @@
 
 ## 2026-08-05 压缩改写
 
-风格正文（`hooks/session-start.sh` 的 `STYLE` 字符串）从 1003 字符压到 **717 字符**，压缩
+风格正文（当时是 `hooks/session-start.sh` 的 `STYLE` 字符串，1.6.1 起是 `style/plain-talk.md`）从 1003 字符压到 **717 字符**，压缩
 手法是合并「不过于专业化」与「不掉书袋」为一条、收紧各条例句，未删除任何一条规则的
 信息——四要素、8 类命名权威来源等清单原样保留。条款从 10 条降为 9 条，本文件里所有
 「第 N 条」引用已同步更新。8 类命名权威来源的枚举措辞与 `wenyan-output-style` /
 `adhd-output-style` 两份对齐一致（「类名/方法名/字段名/枚举值/常量/路由」「需求与设计
 产物（PRD/spec/原型/view spec）」），三份此前各写各的，现在统一。measured 方式：
-`echo '{"hook_event_name":"SessionStart"}' | bash hooks/session-start.sh`，取输出 JSON
+`echo '{"hook_event_name":"SessionStart"}' | node hooks/session-start.js`，取输出 JSON
 的 `hookSpecificOutput.additionalContext` 字段用 Python `len()` 计数（字符不是字节）。
 
 子代理不受本插件影响（SessionStart 注入不进子代理），它们仍从 working-discipline 的 SubagentStart 注入拿到完整表达约束——子代理是产出 md 文档的主力，文档质量条款对它们保持全量。
@@ -55,8 +55,12 @@
 
 `working-discipline` 3.37.0 把名词来源规则收拢到 3.1（完整版在其 `references/expression.md` 的 `SEC:naming`），`wenyan-output-style` 1.10.0 已删掉自己那份。本插件第 5 条随之从完整的八类来源与注释通道改成一句指针，注入长度 867→560 字符。名词来源规则此后只在 `working-discipline` 一处维护；停用 `working-discipline` 时本风格不再携带完整清单。
 
+## 1.6.1：钩子由 bash + 内联 Python 改为 JS
+
+`hooks/session-start.sh` 换成 `hooks/session-start.js`（`node` 调起），风格正文从脚本里的字符串挪到 `style/plain-talk.md`。旧版要先在 bash 里找 `python3`，Windows 上会被 Microsoft Store 的零字节桩骗过，报错又被吞掉，风格静默不生效。迁移前后注入文本逐字一致（`cmp` 比对）。
+
 ## 维护约定
 
-- 风格文本在 `hooks/session-start.sh` 的 `STYLE` 字符串里，改完直接生效于新会话，无需改版本外的其他文件。
+- 风格文本在 `style/plain-talk.md`，`hooks/session-start.js` 只负责读出并注入；改完新会话生效。
 - 注入走 `additionalContext`，纯注入零拦截，不受 hook 克制原则的判据要求约束（见仓库 `.claude/rules/project/hook-restraint.md` 的适用边界节）。
 - 版本登记三处：本目录 `plugin.json` + 仓库两份 marketplace 清单，改版本跑 `node scripts/check-versions.js`。
