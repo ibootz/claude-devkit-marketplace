@@ -124,7 +124,7 @@ fixer 在自己的 worktree 里改 issue 文件还会造成合并冲突。**任�
 
 **正文入库，只精确排除四类本机产物**（`worktree/` / `.keeper-instance.json` / `.keeper-active` / `.merge.lock*`，末尾 `*` 不能省——它还要盖住抢占超时锁留下的 `.merge.lock.stale-<旧持有者>`；完整入库/排除清单与目录形态见 `references/cold-start.md`，演变史见 `references/history.md` §1）。入库后三点行动：
 
-1. 队列改动按路径 `git add .keeper/<交付id>/` 正常提交，**不要 `git add -A`**（会连带别人的暂存区）。`git checkout` / `git stash` 会改写或带走队列文件，切分支前先确认已提交。
+1. 队列改动只按本条目目录提交，`git add` 与 `git commit` 都带同一个 pathspec：`git add .keeper/<交付id>/debug/<编号>/` 后 `git commit -m "<message>" -- .keeper/<交付id>/debug/<编号>/`（`-m` 必须在 `--` 之前，否则会被当成 pathspec）。索引是全仓共享的：只收窄 `add` 挡不住别的实例在你 add 与 commit 之间提交、卷走你的暂存，commit 不带 pathspec 也会卷走别人的。一次处置多个条目时并列多个条目路径。**不要 `git add -A`**。`git checkout` / `git stash` 会改写或带走队列文件，切分支前先确认已提交。
 2. **`check_staged_gitlink.py` 每次提交队列前都跑**，`exit 2` 时按它打印的命令撤出 gitlink。
 3. **`receipts.md` 随 `merge-back` 正常带回来**，不要手工 `cp`。但 `worktree/` 仍不入库，**销毁 delivery worktree 时 git 不会警告里面有未提交修复**——那条风险与入库策略无关，仍然成立。
 
