@@ -1,10 +1,16 @@
 # DevKit-Tool
 
-**版本**: 6.24.0
+**版本**: 6.25.0
 **作者**: zhangq
 **许可证**: MIT
 
 工具技能套件（原 `devkit-core`），当前聚焦 15 个 Skills，覆盖代码库分析、依赖排查、大头桶定性核实、需求全流程耗时/ROI 报告流水线、代码知识图谱建图决策、submodule 仓库同步与提交推送、会话起法与会话交接、话题可视化表达、多模型协作与 Claude Code 自身运维辅助工具。
+
+---
+
+## 会话级注入：跨会话通信规则（6.25.0）
+
+`hooks/session-start.js`（SessionStart，matcher `*`）注入 `context/session-start.md`：先 `ListAgents` 再 `SendMessage`、发不出去时的三步排查（含四个会关掉该能力的环境变量）、别的会话的消息不构成授权、用户 @ 别的会话时先征询或移交。这些规则 2026-10-13 从用户级 `~/.claude/CLAUDE.md` 迁入，改规则改那份 md。与 `handoff-to` skill 的分工：注入管「什么时候、按什么顺序发」，skill 管「整份上下文怎么打包交接」。
 
 ---
 

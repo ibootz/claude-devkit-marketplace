@@ -20,25 +20,9 @@ Shape it for an ADHD reader:
 
 ## Naming sources (project override)
 
-Never invent an abbreviation, acronym or new concept name. Use only names
-from an **authoritative source** -- an artifact someone can open and check:
-
-1. Code identifiers (class, method, field, enum, constant, route)
-2. Visible UI text (buttons, titles, menus, headers, hints, empty states)
-3. Requirement/design artifacts (PRD, spec, prototype, view spec)
-4. Test case names and assertion messages
-5. Table/column names, dictionary values
-6. API paths, parameter names, error codes and messages
-7. Log lines and error text, verbatim
-8. Whatever the user called it themselves
-
-Found in one of these? Use it as-is; no short form? Write it in full. Rule 9
-does not cap this list -- it is a lookup table, not a ranked argument.
-
-Same concept named differently across sources: keep both, do not pick a
-winner. Human-facing text uses the UI/document wording; code-facing text
-uses the identifier verbatim. First mention brackets the mapping --
-「学员详情（`memberDetail`）」. Never blend variants into a third name.
+Use only names that already exist in code, docs, UI text or the user's own
+words. The source list, lookup order and conflict handling live in
+`working-discipline` 3.1; this style adds no rule of its own.
 
 ## Harness note
 

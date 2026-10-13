@@ -34,7 +34,7 @@ ADHD 友好输出风格：首行给可执行动作、多步骤编号、每轮重
 | 文件 | 内容 | 能不能改 |
 |---|---|---|
 | `style/upstream-rules.md` | 上游 SKILL.md 剥掉 YAML frontmatter 的正文，131 行，逐字未改 | **不要改**，改了就没法与上游比对 |
-| `style/project-overrides.md` | 本仓补充：拍板材料呈现、harness 冲突、语言边界 | 要调整行为改这里 |
+| `style/project-overrides.md` | 本仓补充：拍板材料呈现、名词来源指针、harness 冲突、语言边界 | 要调整行为改这里 |
 | `hooks/session-start.sh` | 把上面两份拼起来，加一句常驻声明，输出 `additionalContext` | 改拼接逻辑 |
 
 ## 2026-08-05 压缩改写
@@ -60,6 +60,10 @@ bash hooks/session-start.sh`，取输出 JSON 的 `hookSpecificOutput.additional
 
 往 `project-overrides.md` 加内容前必须先用上面的 hook 实跑测量实际字符数再加——8892 距
 10000 上限还有约 1108 字符余量，但也不能靠估算，要用命令实测。
+
+## 1.3.0：名词来源改成指针
+
+`project-overrides.md` 的「Naming sources」节原为完整的八类来源与叫法冲突处理，与 `working-discipline` 3.37.0 的 3.1 重复。现改为三行指针，真源只留在 `working-discipline`（完整版在其 `references/expression.md` 的 `SEC:naming`）。注入长度 8892→8093 字符（测法同上节）。停用 `working-discipline` 时本风格不再携带完整清单。
 
 ## 出处与许可
 

@@ -21,9 +21,11 @@ headless 浏览器下人类看不到画面、无法中途授权或纠错，盲�
 | 登录态复用 | 持久化 `--profile`，跨会话不重登 | guard 硬拦 |
 | snapshot + 标注截图 | headless 下靠结构化快照与 `--annotate` 截图回看每步 | 指令约束 |
 
-## 组成：1 个 Skill
+## 组成：1 个 Skill + 2 个 hook
 
 - `skills/agent-browser/SKILL.md` — 完整工作流、鉴权注入四法、实例管理、安全边界、命令速查、操作约束
+- `hooks/session-start.js`（SessionStart，1.4.0 起）— 注入 `context/session-start.md`：浏览器交互只用 agent-browser、不用 `browser-harness` 与 playwright 系 MCP、每次新起 Chrome for Testing 实例、不连用户的 Chrome 主实例、登录态复用二选一。这几条 2026-10-13 从用户级 `~/.claude/CLAUDE.md` 迁入，改规则改那份 md
+- `hooks/session-end-cleanup.js`（SessionEnd）— 会话结束清理本会话起的实例
 
 > 硬护栏（鉴权检查 / 实例计数）不在本插件，在 `working-discipline` 的 `bash-guard`，避免两个插件抢同一道 Bash 闸。
 

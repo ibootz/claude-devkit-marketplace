@@ -1,6 +1,9 @@
 # portable-shell
 
-跨平台 shell 脚本强制 lint 插件。目标：**当 AI 生成 shell 脚本时，确保脚本同时兼容 Linux 与 macOS**。
+跨平台交付插件，两件事：
+
+1. **会话开头注入交付脚本规则**（SessionStart，1.2.0 起）：`hooks/session-start.js` 注入 `context/session-start.md`——交付给别人运行的脚本不写 `.sh`、配置调起用 JS、Python 解释器按 `python3` → `python` → `py -3` 真跑 `--version` 判定、`sys.executable`、外部 CLI 先解析路径、stdout 设 UTF-8、命令示例用单引号。这些规则 2026-10-13 从用户级 `~/.claude/CLAUDE.md` 迁入，改规则改那份 md。
+2. **shell 脚本 lint**（PostToolUse，下文）：仍要写 shell 时，确保脚本同时兼容 Linux 与 macOS。`PORTABLE_SHELL_LINT=off` 只关 lint，不关注入。
 
 ## 为什么需要
 
