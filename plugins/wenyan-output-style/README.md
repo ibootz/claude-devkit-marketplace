@@ -38,9 +38,9 @@
 
 **一、繁体改简体。** 上游 wenyan 例句全是繁体（`新參照則重繪。useMemo 包之。`），与本仓 `working-discipline` 3.5「禁止繁体中文」正面冲突。本插件保留文言语法与虚词，字形逐句改简，并把「禁繁体」写成硬约束——遇到繁体素材照样输出简体。
 
-**二、上游只有 1 行档位定义 + 2 个例句，这里补齐成可执行规则集。** 上游 `wenyan-ultra` 的全部定义是「Extreme abbreviation while keeping classical Chinese feel」，落到实操没有判准。本插件补了 8 条压缩法（省主语、去系词、单字动词、虚词白名单……）、5 条禁忌（禁繁体、禁日韩、禁自指、**禁伪古**、**禁生造名词**）、原样不动清单、降级条款、产出物边界。
+**二、上游只有 1 行档位定义 + 2 个例句，这里补齐成可执行规则集。** 上游 `wenyan-ultra` 的全部定义是「Extreme abbreviation while keeping classical Chinese feel」，落到实操没有判准。本插件补了 8 条压缩法（省主语、去系词、单字动词、虚词白名单……）、禁忌（禁繁体、禁日韩、禁自指、**禁伪古**）、原样不动清单、降级条款、产出物边界。
 
-其中**禁伪古**、**禁生造名词**与**产出物边界**是上游没有的：**禁伪古**防「回调 → 反召之术」这类为古而古的术语替换；**禁生造名词**规定名词只能取自权威来源——代码标识符（类名/方法名/字段名/枚举值/常量/路由）、前端页面上的可见文案、需求文档与设计产物、测试用例名与断言文案、数据库表名列名与字典值、API 接口路径与参数名与错误码文案、日志报错原文、用户自己的说法这 8 类，同一概念多处叫法不一致时按场景分——对人描述用页面或文档的叫法，指代实现用代码标识符原文，不挑赢家、不折中出第四个名字；后者（产出物边界）划死「会落盘或发出去的用白话，只在终端里给用户看的用文言」，避免文言污染 commit message、md 文档和子代理 prompt。
+其中**禁伪古**与**产出物边界**是上游没有的：**禁伪古**防「回调 → 反召之术」这类为古而古的术语替换；**产出物边界**划死「会落盘或发出去的用白话，只在终端里给用户看的用文言」，避免文言污染 commit message、md 文档和子代理 prompt。（原有的「禁生造名词」八类来源 1.10.0 起归 `working-discipline` 3.1，见下文。）
 
 **三、触发方式拉平成纯注入。** 上游靠 `/caveman wenyan-ultra` 在对话里切档，档位状态由 `caveman-mode-tracker.js` 跟踪。本仓改成 `/plugin` 单一开关，与其余风格插件同构。
 
@@ -59,8 +59,8 @@
 
 | 文件 | 内容 | 能不能改 |
 |---|---|---|
-| `style/wenyan-ultra-rules.md` | 压缩法、禁忌、原样清单、例句、降级、产出物边界 | 调整风格行为改这里 |
-| `style/project-overrides.md` | 与 `working-discipline` 的接缝：正文拍板与答后闭环、md 受众判定声明、并存说明 | 调整与本仓纪律的关系改这里 |
+| `style/wenyan-ultra-rules.md` | 压缩法、篇章连贯（压缩相关两条）、禁忌、原样清单、例句、降级、产出物边界、模板并存 | 调整风格行为改这里 |
+| `style/project-overrides.md` | 与 `working-discipline` 的分工（只补语体要求）、并存说明 | 调整与本仓纪律的关系改这里 |
 | `hooks/session-start.js` | 拼上面两份 + 常驻声明，输出 `additionalContext` | 改拼接逻辑 |
 | `hooks/user-prompt-submit.js` | 每轮一行短锚 | 慎改，每轮成本 |
 | `hooks/tests/wenyan-output-style.test.js` | 协议、注入预算、golden 回归 | 改规则后刷新 golden |
@@ -82,6 +82,19 @@ node plugins/wenyan-output-style/hooks/user-prompt-submit.js < /dev/null > plugi
 ```
 
 （Windows 的 cmd 把 `< /dev/null` 换成 `< NUL`。）commit message 里写明 golden 为什么变。
+
+## 1.10.0：只留语体，纪律条款迁入 working-discipline
+
+用户要求：停用 output-style 类插件后，AI 的通用表现不受影响。按「换一种语体，这条还成立吗」逐条判，成立的迁到 `working-discipline` 3.37.0，本插件只留指针：
+
+| 原位置 | 迁到 |
+|---|---|
+| `project-overrides.md`「正文拍板与答后闭环」：不调 `AskUserQuestion`、四要素具名小标题、`Q1:` 标题、小写字母选项、状态断言当轮读真源、要信息与要授权分开问 | 3.3 问法（骨架与范例在 `references/expression.md` 的 `SEC:ask`） |
+| `wenyan-ultra-rules.md`「回复结构与 TUI 排版」、`project-overrides.md`「TUI 查看体验与改动文件清单」 | 3.12 回复骨架（`SEC:reply`） |
+| `wenyan-ultra-rules.md` 禁忌「禁生造名词」（八类来源与注释通道） | 3.1（`SEC:naming`） |
+| `wenyan-ultra-rules.md`「篇章连贯」的先立情境、结论前置与渐进披露 | `SEC:coherence` |
+
+留下的是语体本身：压缩法、压缩会伤到的两处连贯（关系可读、断言标记词不省）、禁繁体 / 日韩 / 自指 / 伪古、原样不动、例、降级、产出物边界、模板并存，以及「问句、选项、确认段用白话」这条语体要求。SessionStart 注入从 5304 字符降到 3244。golden 的 `session-start.json` 随之刷新；测试改为断言迁出的条款**不在**本插件出现（同一条规则两处各写一份，停用一处另一处就漂移）。
 
 ## 1.9.0：省主语加多主体例外
 
@@ -124,13 +137,7 @@ heredoc 占了 stdin，hook 读不到入参；`command -v python3` 会被 Window
 
 ## 与 working-discipline 的接缝
 
-**拍板四要素不豁免。** 起源、现状与期望之差、影响范围、带行号的现场证据——四条约束的是**信息**，文言约束的是**形状**。定义只在 `working-discipline` 3.3 一处，本插件不复制，只给形状：四个具名小标题依序排，证据代码块贴在论断正下方。
-
-**拍板在正文里问，不调 `AskUserQuestion`。** 弹框会盖住前文的研判上下文，用户看不见证据就答不准。问句用白话、只圈一个决策边界，选项用小写字母编号并写代价。答后闭环（回收选定项、范围、未选项、下一步、残余不确定与重开条件，决定当轮落盘）的判据在 `working-discipline` 3.8，本插件只留指针。
-
-**正文回答不是机械授权。** 判据同在 `working-discipline` 3.8：`worktree-flow` 的直写授权只认 `AskUserQuestion` 界面的回答，正文答复解不开，撞到它时默认引导进 worktree。本插件只补形状：要不要走弹框按用户自己的规则办，仍用弹框时四个字段用白话。
-
-**「本次 md 受众判定」声明句照写。** 判定词原样，理由部分可文言。「禁自指」不覆盖 harness 要求的声明。
+1.10.0 起本插件只管语体。拍板四要素、正文提问骨架、答后闭环、正文回答不是机械授权、回复骨架、名词来源都在 `working-discipline`，停用本插件照常生效。本插件只补三条语体要求：问句、选项、不可逆动作的确认段用白话；「本次 md 受众判定」判定词原样、理由可文言；骨架照 `working-discipline` 3.12 排，骨架内叙述用文言。
 
 ## 1.7.0：链接形态改成裸链接（两处反引号示范下线）
 

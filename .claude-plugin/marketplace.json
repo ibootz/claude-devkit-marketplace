@@ -66,7 +66,7 @@
       "source": "./plugins/working-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒，附中文消歧 skill",
-      "version": "3.36.1"
+      "version": "3.37.0"
     },
     {
       "name": "agent-browser",
@@ -115,7 +115,7 @@
       "source": "./plugins/wenyan-output-style",
       "category": "Productivity",
       "description": "文言极简输出风格 - 文言语法压缩、字形简体，代码与告警原样，启停即切换",
-      "version": "1.9.0"
+      "version": "1.10.0"
     },
     {
       "name": "insight-addon",

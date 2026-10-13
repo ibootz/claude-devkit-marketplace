@@ -145,13 +145,14 @@ const cases = [
     },
   },
   {
-    name: '篇章连贯一节在场；断言分层、承重概念与信息气味指向 working-discipline（1.8.0 迁出）',
+    name: '篇章连贯只留压缩会伤到的两条，通用写法指向 working-discipline（1.10.0 迁出）',
     run: () => sessionBody(),
     check: (c) => {
-      for (const kw of ['## 篇章连贯', '先立情境', '关系可读', '断言分层', '渐进披露', '信息气味',
-        '归 `working-discipline` 3.4', '归 `working-discipline` 3.9']) {
+      for (const kw of ['## 篇章连贯', '关系可读', '断言分层的标记词不省', '归 `working-discipline` 3.4',
+        '`SEC:coherence`']) {
         if (!c.includes(kw)) return `缺「${kw}」`
       }
+      if (c.includes('**先立情境**')) return '先立情境的完整条款应在 working-discipline，不在这里'
       return null
     },
   },
@@ -177,33 +178,28 @@ const cases = [
     },
   },
   {
-    name: '不再指示调用 AskUserQuestion：每处提及都是否定或限定语境（1.8.0 正文拍板）',
+    name: '不指示调用 AskUserQuestion：每处提及都是否定语境',
     run: () => sessionBody(),
     check: (c) => {
-      // 允许出现的只有三种语境：不调它、worktree-flow 的授权只认它、仍用弹框时的白话要求。
-      const allowed = /不调 `AskUserQuestion`|只认\n?\s*`AskUserQuestion`|`AskUserQuestion` 界面/
       const hits = c.split('\n').filter((l) => l.includes('AskUserQuestion'))
       for (const l of hits) {
-        if (!allowed.test(l)) return `可疑提及：${l.trim()}`
+        if (!/不调 `AskUserQuestion`/.test(l)) return `可疑提及：${l.trim()}`
       }
-      return hits.length > 0 ? null : '连「不调 AskUserQuestion」都没写'
+      return null
     },
   },
   {
-    name: '正文拍板流程：四要素归属、小写字母选项、答后闭环落盘、非机械授权',
+    name: '纪律条款只留指针，不在风格插件重复（1.10.0 迁入 working-discipline）',
     run: () => sessionBody(),
     check: (c) => {
-      for (const kw of [
-        '归 `working-discipline` 3.3',
-        '小写字母',
-        '答后闭环',
-        '`## Comments`',
-        '`docs/adr/`',
-        '正文回答不是机械授权',
-        '默认引导进 worktree',
-        '归 `working-discipline` 3.8',
-        '要信息与要授权分开问',
-      ]) {
+      // 这些是 working-discipline 3.1 / 3.3 / 3.8 / 3.12 与其 references/expression.md 的内容。
+      // 再出现在这里，就是同一条规则两处各写一份——停用本插件时那一份跟着消失，另一份漂移。
+      for (const gone of ['`## Comments`', '`docs/adr/`', 'entity 字段注释', '改动文件清单', '`/diff`',
+        '起源 / 差距']) {
+        if (c.includes(gone)) return `仍含已迁出的「${gone}」`
+      }
+      for (const kw of ['归 `working-discipline` 3.12', '归 `working-discipline` 3.1', '问句、选项、确认段用白话',
+        '`Q1:` 标题']) {
         if (!c.includes(kw)) return `缺「${kw}」`
       }
       return null

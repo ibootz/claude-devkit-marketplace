@@ -566,6 +566,29 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 3.37.0 用户级 rules 与 wenyan 的纪律条款迁入：新增 3.1 主会话版、3.3 问法、3.12、七章
+
+**起因**：2026-10-13 用户两条要求。一是 `~/.claude/rules/` 此后不放规则——通用的进 devkit 插件、公司业务的进 radnove 插件，原有规则提取高价值的进插件、其余删掉。二是 `wenyan-output-style` 只留文言语体，其余搬进本插件，使停用 output-style 类插件后 AI 的通用表现不受影响。
+
+**分层依据**（用户要求每条都说明放哪一层）：
+
+| 层 | 放什么 | 本轮放进去的 |
+|---|---|---|
+| SessionStart（会话常驻，compact 后重注） | 每个会话都得知道、一句话判据就能执行的 | 3.1 名词来源短版、3.3「问法」、3.12 回复骨架、七章五条（命令自己跑 / 不向范围外提单 / 缺陷还是规格空白 / 静默失效 / 子代理与并发）、一章「零命中先验检索手段」（由原 NFC/NFD 一条推广） |
+| UserPromptSubmit（每轮） | 无 hook 兜底**且**实测被忘过的 | 自查第 2 条补「正文问、不调 `AskUserQuestion`、选项断言当轮读真源」（2026-09-10 凭印象写错门禁状态、用户据此授权了不该做的合入）；新增第 5 条「命令自己跑」（2026-08-26 预判会撞守卫把命令抄给用户，用户问「你为啥不自己执行呢」） |
+| SubagentStart | 子代理自己会撞的 | 浏览器一律 headless；共用 git 索引时窄 pathspec；找不到被违反的期望就不算缺陷（debug-fixer 正是会「凭直觉补行为」的那一方） |
+| references（按需读） | 骨架、范例、实证、不触发情形 | 新增 `expression.md`（`SEC:ask` 问法骨架与范例、`SEC:reply`、`SEC:naming`、`SEC:coherence`）与 `conduct.md`（`SEC:act`、`SEC:truth`、`SEC:subagent`，含原主会话 team 模式长条） |
+
+**删掉的**：`git` fsmonitor 的 `could not read IPC response` 噪音判读——那是一台机器的环境事实，不是纪律。发布分支与鉴权两条属于公司业务，已在前一轮迁进 radnove 插件。
+
+**为什么 3.1 回到主会话**：3.9.0 把它判成行文风格移交 plain-talk，但它防的是「自造名词」，换一种语体仍成立；只开 wenyan 或什么风格都不开时，主会话一直缺这条。判据见 `hooks/working-discipline.js` 文件头「纪律与风格的分界」。plain-talk、adhd 两个风格插件里各自的名词来源段本轮未动，与 3.1 重复，后续可收成指针。
+
+**腾预算**：SessionStart 若直接加会到 5703。压回自律线的手段：team 模式长条移入 `conduct.md`；3.7 / 3.9 / 3.10 / 3.11 / 5.5 / 5.6 / 5.7、六章引言与两条闸的措辞收紧；删掉「任务组合」一条（默认行为，无实测违反）；五章指向 `agent-dispatch.md` 的绝对路径改成「每轮注入指路的那份 reference」（每轮层已给全路径）。没有删任何一条有实测依据的判据。
+
+**注入长度**（基线 3.36.0）：`SessionStart` 4650 → **4940**、`UserPromptSubmit` 2125 → **2222**、`SubagentStart` 4633 → **4614** / 3801 → **3782**（子代理层加了三条仍略降，因为 3.7 / 3.11 等共用条款收紧了）。这是当前值，均在仓库路径下测，装进插件缓存后每处 reference 绝对路径各长约 6 字符。
+
+**同批**：`wenyan-output-style` 1.10.0 删掉迁出的条款，只留指针；`hooks/working-discipline.js` 删掉文件头里已失效的历史段落与 verify 段过期基线（降到 1000 行以内），历史值以本 README 为准。
+
 ## 二、拦截：`agent-dispatch` 守 `Agent` 派发的结构字段
 
 **触发条件**：`tool_name` 是 `Agent`。注意**不匹配旧工具名 `Task`**——旧名环境下的 `tool_input` 可能压根没有 `name` / `model` 字段，强制校验会造成永久性误拦，fail-open 优于误伤。
@@ -960,12 +983,12 @@ SessionStart（会话开始 + 每次 auto-compact 后） / UserPromptSubmit（�
    ↓
 node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js
    ↓  读 stdin 的 hook_event_name 分流（3.2.0 起三层）：
-   ↓    SessionStart     → 一、二、三、四、五（含 5.4 索引、5.6 四项、5.7）、六        实测 8205 字符
-   ↓    UserPromptSubmit → 零（并行优先）+ 完整调用形态 + 每轮自查 4 条            实测 4431 字符
+   ↓    SessionStart     → 一～七章（五章 5.5–5.7，七章动手与求真边界）           实测 4940 字符
+   ↓    UserPromptSubmit → 零（并行优先）+ 派发字段判据 + 每轮自查 5 条           实测 2222 字符
    ↓                       + 经 lib/prompt-images.js 扫 payload：有图才追加路径清单
-   ↓    SubagentStart    → 零(精简)、一、二、三、5.4 命名规范完整版、六（缺四，
-   ↓                       且六里剔除 probe-throttle 那条——它对子代理不生效）    实测 9330 字符
-   ↓                       （Explore / Plan 再缺 5.4 与完整调用形态             实测 4731 字符）
+   ↓    SubagentStart    → 零(精简)、一、二（含子代理专用三条）、三、五（字段判据）、六
+   ↓                       （缺四、七，且六里剔除 probe-throttle 那条）           实测 4614 字符
+   ↓                       （Explore / Plan 再缺五与六里的 Agent 那条             实测 3782 字符）
    ↓                       + 开头的执行侧要求：结构化回执 + 核实类任务交代追踪深度
    ↓    未识别事件        → 回退 UserPromptSubmit（三者中最小的一份，回退错了只多注入 1.1k）
    ↓
@@ -1076,6 +1099,7 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/write-guard.js
 - cd 检查的完整迁移链路：原本在 `devkit-core`（现已更名 `devkit-tool`）的 `block-cd.js` → 本插件 1.3.0 迁入并在 3.0.0 并进 `bash-guard.js` → 3.26.0 迁出到 `cd-blocker`。`devkit-tool` 自 5.1.0 起不再内置任何 hook。1.3.0 同批删除的 `guard-full-read.js`（大文件全文读取拦截）因与「精确读文件」注入纪律重复，未一并迁入。
 - `write-guard.js` 与另一个插件 `quality-lint` 的 md 200 行检查是同类思路（`PostToolUse` 上挂 Write/Edit、`[L1-BLOCKER]` 输出格式）但各自独立实现——两个插件归属不同、不互相依赖。**关于两者效力等级是否相同，本仓无法核实**：2026-07-31 全盘检索时本机未安装 `quality-lint` 插件本体（只在若干项目里留下 `.quality-lint-state.json` 状态文件），既读不到它的源码也读不到它的 README。若那边的文案写的是"拦截"而实现同样挂在 `PostToolUse`，就与本插件 3.6.0 修掉的是同一类效力虚高，值得那边自己核一次——但这句只是推断，不是本仓验证过的结论。
 - `bash-guard.js` 的 agent-browser 检查管四道护栏（①鉴权 ②实例上限 ④安全边界提醒），不涉及浏览器自动化能力本身；怎么用对见独立插件 `agent-browser` 的 SKILL.md。本插件只在缺鉴权 / 实例超限时硬拦，不管值本身是否合法（如 `--profile` 指向哪个目录走各会话 memory / CLAUDE.md 约定）。
+- 与 output style 类插件（`wenyan-output-style` / `plain-talk-output-style` / `adhd-output-style`）：判据是「换一种语体，这条还成立吗」，成立的归本插件、风格插件只留指针。3.37.0 起问法、回复骨架、名词来源、七章都在本插件，停用任何风格插件不影响它们；风格插件只定语体与四要素用段落还是清单。
 - 钉钉 dws CLI 写授权由 `radnove-core` 插件的 `pre-tool-use-dws-write.sh` 承担（`permissionDecision: "ask"`），本插件不再重复注入。
 
 ---
@@ -1115,7 +1139,10 @@ plugins/working-discipline/
 │   ├── agent-dispatch.md               #   SEC:agent-call（可整体照抄的调用 JSON + 六字段表 +
 │   │                                   #   prompt 四段式）/ SEC:naming（命名规范全文）/
 │   │                                   #   SEC:dispatch（五章展开：类型、档位、5.6 六项实证）
-│   └── guard-boundaries.md             #   SEC:guards（四道闸各自的判据与误杀面全文）
+│   ├── guard-boundaries.md             #   SEC:guards（四道闸各自的判据与误杀面全文）
+│   ├── expression.md                   #   3.37.0：SEC:ask（正文提问骨架与范例）/ SEC:reply /
+│   │                                   #   SEC:naming / SEC:coherence；不被 guard 读，靠指路
+│   └── conduct.md                      #   3.37.0：七章完整版 SEC:act / SEC:truth / SEC:subagent
 ├── test/
 │   ├── guard-verify.js                 # bash-guard / write-guard / agent-dispatch 回归 157 条
 │   │                                   #   （3.26.0 起 cd 用例在 cd-blocker 插件，这里只留一条
