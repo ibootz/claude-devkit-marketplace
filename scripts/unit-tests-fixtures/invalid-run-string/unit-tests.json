@@ -1,0 +1,7 @@
+{
+  "tests": [
+    {
+      "run": "node ok.js"
+    }
+  ]
+}

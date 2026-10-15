@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# pre-commit：提交前校验插件版本四方一致、命名符合 devkit-<xxx>（plugins/<dir>/.claude-plugin/plugin.json、
-# plugins/<dir>/.codex-plugin/plugin.json、.claude-plugin/marketplace.json、
-# .agents/plugins/marketplace.json），不一致就拦下本次提交。
+# pre-commit：提交前做两道校验，任一道不过就拦下本次提交。
+#   1. 插件版本四方一致、命名符合 devkit-<xxx>（plugins/<dir>/.claude-plugin/plugin.json、
+#      plugins/<dir>/.codex-plugin/plugin.json、.claude-plugin/marketplace.json、
+#      .agents/plugins/marketplace.json）——scripts/check-versions.js
+#   2. 被改插件的确定性单测——scripts/run-unit-tests.js --staged。暂存路径命中 plugins/<name>/**
+#      的插件，按其插件根的单测声明 unit-tests.json 逐条跑；未声明的插件静默放行。声明格式与
+#      判据写在该脚本头部。改 devkit-task-keeper 时这一道约 40 秒，其余插件 0～8 秒。
 #
 # 【为什么要挂成 hook，而不是只写进 README】
 # scripts/check-versions.js 早就存在，README 里也写了「改完跑一下」，但 2026-08-04 审计
@@ -18,7 +22,7 @@
 # scripts/ 自身、改根目录文档都不需要跑这道校验。
 #
 # 【怎么绕过】
-# 确有正当理由要提交一次不一致的状态（例如分两次提交、先落插件后落清单）：
+# 确有正当理由要提交一次不一致的状态（例如分两次提交、先落插件后落清单），或带着失败的单测提交：
 #   git commit --no-verify
 #
 # 【启用方式】
@@ -35,7 +39,7 @@ if ! git diff --cached --name-only |
 fi
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "[pre-commit] 未找到 node，跳过版本一致性校验" >&2
+  echo "[pre-commit] 未找到 node，跳过版本一致性校验与插件单测" >&2
   exit 0
 fi
 
@@ -46,4 +50,11 @@ if ! node "$ROOT/scripts/check-versions.js" --quiet; then
   echo "  命名问题：--fix 不修，按 .claude/rules/project/plugin-naming.md 人工改名" >&2
   echo "  确需带着不一致提交：git commit --no-verify" >&2
   exit 1
+fi
+
+# 单测脚本自己按暂存路径选插件，逐条输出结果与拦截原因。
+# core.hooksPath 常设成主检出的绝对路径，比本脚本更早切出的 worktree 也会跑到这里，
+# 而那边还没有这个脚本——缺文件时跳过，不能因此把它的每次提交都拦下。
+if [ -f "$ROOT/scripts/run-unit-tests.js" ]; then
+  node "$ROOT/scripts/run-unit-tests.js" --staged
 fi

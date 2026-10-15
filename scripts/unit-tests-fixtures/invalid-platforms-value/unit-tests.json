@@ -1,0 +1,13 @@
+{
+  "tests": [
+    {
+      "run": [
+        "node",
+        "ok.js"
+      ],
+      "platforms": [
+        "macos"
+      ]
+    }
+  ]
+}

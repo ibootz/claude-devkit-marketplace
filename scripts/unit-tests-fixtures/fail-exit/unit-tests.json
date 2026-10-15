@@ -1,0 +1,16 @@
+{
+  "tests": [
+    {
+      "run": [
+        "node",
+        "ok.js"
+      ]
+    },
+    {
+      "run": [
+        "node",
+        "fail.js"
+      ]
+    }
+  ]
+}

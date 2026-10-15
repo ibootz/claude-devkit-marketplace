@@ -1,0 +1,11 @@
+{
+  "tests": [
+    {
+      "run": [
+        "node",
+        "ok.js"
+      ],
+      "timeout_sec": 0
+    }
+  ]
+}

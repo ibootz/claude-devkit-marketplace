@@ -1,0 +1,22 @@
+{
+  "tests": [
+    {
+      "run": [
+        "node",
+        "ok.js"
+      ],
+      "platforms": [
+        "win32"
+      ]
+    },
+    {
+      "run": [
+        "node",
+        "ok.js"
+      ],
+      "platforms": [
+        "linux"
+      ]
+    }
+  ]
+}

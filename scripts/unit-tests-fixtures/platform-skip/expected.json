@@ -1,0 +1,16 @@
+{
+  "platform": "linux",
+  "declaration": "ok",
+  "errors": [],
+  "tests": [
+    {
+      "index": 0,
+      "status": "skipped-platform"
+    },
+    {
+      "index": 1,
+      "status": "passed"
+    }
+  ],
+  "precommit": "pass"
+}

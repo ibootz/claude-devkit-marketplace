@@ -1,0 +1,6 @@
+{
+  "tests": [
+    { "run": ["node", "test/guard-verify.js"] },
+    { "run": ["node", "test/probe-throttle-verify.js"] }
+  ]
+}
