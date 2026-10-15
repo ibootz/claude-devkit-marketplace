@@ -5,7 +5,8 @@
 - 上一版 / 环境插件臂（票 05）由 armplan.plan_arms 定，臂清单在 plan.specs；
 - 注入到达核验（票 06）：静态画像在 eval 开跑前按臂算好；_run_arm 把逐 run 搬出的转录目录写进汇总
   （devkitTraceDir），finalize_run 据此重建清单交 injection_check.build；
-- AI 评委（票 09）在所有臂跑完、写 run.json 之前。
+- AI 评委（票 09，judge.py）在 finalize_run 里、规则判分之前（要读汇总里的 rule grader 结果），写 judge.json；
+  待审页的分歧样本与抽检两类项在 judgepending.py，import 即注册。
 不完整与续跑（票 07）：每跑完一臂写一次检查点 run.json（complete=false），中途退出也留得下；
 收尾在 finalize_run，续跑（resume.py）复用它与 _run_arm，所以这两处的扩展续跑自动带上。
 """
@@ -19,8 +20,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import (armplan, arms, envplugins, evalrun, fingerprint, injection, injection_check, preflight, record,
-               registry, resume, sandbox_sweep, scoring, traces)
+from . import (armplan, arms, envplugins, evalrun, fingerprint, injection, injection_check, judge, judgepending,  # noqa: F401
+               preflight, record, registry, resume, sandbox_sweep, scoring, traces)
 
 
 # eval 正常跑完的退出码：0 全过、1 有用例低于 --threshold（判分我们自己重算，不看它）。其余（如 2）是中途中止。
@@ -214,11 +215,17 @@ def plan_for(plugin_dir, name, manifest, cases, evals_src, extra_exclude, *, bas
 
 def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=1.0, claude=None,
                 runner=evalrun.run_eval, env=None, tmp_parent=None, sandbox_roots=None,
-                keep_assembly=False, log=None, now=None, base=None, env_plugins=(), preflight_check=None):
+                keep_assembly=False, log=None, now=None, base=None, env_plugins=(), preflight_check=None,
+                judge_model=None, use_judge=True, judge_runner=None):
     log = log or (lambda msg: print(msg, file=sys.stderr))
     data_dir = Path(data_dir)
     entry, plugin_dir, manifest, evals_src, cases, extra_exclude = load_target(data_dir, name)  # 未登记即抛 NotRegistered
     repo = Path(entry['repo'])
+    try:   # 评委配置写错要在开跑前报，免得各臂白跑
+        judge_opts = {'enabled': use_judge, 'model': judge_model, 'runner': judge_runner,
+                      'config': judge.load_config(repo / 'plugin-evals' / name)}
+    except judge.JudgeConfigError as e:
+        raise CompareError(str(e))
     version = manifest.get('version') or 'noversion'
     # 臂计划先定：前置检查要拿快照与环境插件去冒烟、validate。
     plan = plan_for(plugin_dir, name, manifest, cases, evals_src, extra_exclude, base=base, env_plugins=env_plugins,
@@ -250,7 +257,7 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
         meta = dict(log=log, run_id=run_id, name=name, version=version, plugin_fp=plugin_fp, evals_fp=evals_fp,
                     extra_exclude=extra_exclude, entry=entry, cases=cases, threshold=threshold, started=started,
                     claude=claude, child_env=child_env, runs=runs, concurrency=concurrency, model=model,
-                    run_dir=run_dir, data_dir=data_dir, plan=plan, pre=pre)
+                    run_dir=run_dir, data_dir=data_dir, plan=plan, pre=pre, judge_opts=judge_opts)
         arm_records = {}
         lock = resume.RunLock(data_dir, run_id)
         lock.acquire()
@@ -281,13 +288,19 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
 
 def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp, evals_fp, extra_exclude, entry,
                  cases, threshold, started, claude, child_env, runs, concurrency, model, run_dir, data_dir,
-                 plan, pre, statics, prior_preflight=None, decorate=None):
+                 plan, pre, statics, prior_preflight=None, decorate=None, judge_opts=None):
     """判分、注入核验、汇总不完整原因、写 injection-check.json、run.json 与 report.md。
     arm_records 里带 _agg 的臂才判分、才有逐 run 的注入核验。pre 是本次的前置检查报告（Report）；
     prior_preflight 是续跑时首跑记下的那份（dict），软项提示并进本次。decorate(rec) 在落盘前改记录。"""
     for key, rec in arm_records.items():
         rec['_static'] = statics.get(key)
         rec['_runs'] = _runs_from_agg(rec.get('_agg'), data_dir)
+    # AI 评委（票 09）：要读汇总里的 rule grader 结果，排在 _score_arms 摘掉 _agg 之前。续跑时 judge_opts 为 None
+    judge_doc, judge_reasons = judge.run(
+        arm_records=arm_records, labels={s.key: s.label for s in plan.specs},
+        evals_src=registry.plugin_dir(entry) / 'evals', run_dir=run_dir, run_id=run_id,
+        opts=judge.resolve_options(judge_opts, run_dir), claude=claude, env=child_env, trace_key=TRACE_DIR_KEY,
+        data_dir=data_dir, concurrency=concurrency, log=log)
     _score_arms(arm_records, log)
     inj_check, resident = injection_check.build(arm_records)
     for problem in inj_check['problems']:
@@ -304,6 +317,7 @@ def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp,
         if len(rec.get('main_models') or []) > 1:
             reasons.append('%s臂：续跑时主力模型与首跑不同（%s），前后两段结果不可比，续跑合不成完整；请重新对照'
                            % (spec.label, ' → '.join(rec['main_models'])))
+    reasons += judge_reasons
 
     rec = record.build_run_record(
         run_id=run_id,
@@ -322,10 +336,14 @@ def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp,
                                           rec['claude_code_version'], rec['main_model']))
     rec['preflight'] = _merge_preflight(pre.to_dict(), prior_preflight)
     rec.update(injection_check=injection_check.summary(inj_check), resident_tokens=resident)
+    if judge_doc:
+        rec.update(judge_model=judge_doc['model'], judge=judge.summarize(judge_doc))
     if decorate:
         rec = decorate(rec)
     rec = record.scrub_home(rec)   # 产物会入库：本机家目录前缀换成 ~
     resume.write_json_atomic(Path(run_dir) / 'injection-check.json', record.scrub_home(inj_check))
+    if judge_doc:
+        resume.write_json_atomic(Path(run_dir) / judge.JUDGE_FILE, judge.scrub(judge_doc))
     resume.write_json_atomic(Path(run_dir) / 'run.json', rec)
     (Path(run_dir) / 'report.md').write_text(record.render_report(rec) + resume.report_section(rec), encoding='utf-8')
     return CompareResult(Path(run_dir), rec, 0 if rec['complete'] else 3)

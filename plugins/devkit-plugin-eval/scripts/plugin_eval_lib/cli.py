@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 
-from . import armplan, compare, datadir, evalrun, pending, preflight, registry, resume
+from . import armplan, compare, datadir, evalrun, judge, pending, preflight, registry, resume
 
 
 def _utf8_stdio():
@@ -48,6 +48,9 @@ def _parser():
     c.add_argument('--env-plugin', action='append', default=[], metavar='插件名@市场|路径',
                    help='加一个「当前版+环境插件」臂；可重复，多个环境插件同装在这一个臂里')
     c.add_argument('--eval-timeout', type=float, default=0, help='每次调 eval 的超时（分钟），超时终止并记为不完整、可续跑；默认 0 不限时')
+    c.add_argument('--judge-model', help='AI 评委模型；缺省取 plugin-evals/<插件>/judge-config.json 的 model，再缺省 %s'
+                   % judge.DEFAULT_MODEL)
+    c.add_argument('--no-judge', action='store_true', help='本次不调 AI 评委（用例里的 judge/ 判定标准不判）')
 
     rs = sub.add_parser('resume', help='续跑一次不完整的对照：已完成的 run 不重跑，只补跑判无效与未跑的 run')
     rs.add_argument('run_dir', help='运行目录：<仓>/plugin-evals/<插件>/runs/<run_id>')
@@ -128,9 +131,10 @@ def main(argv=None):
         else:
             res = compare.run_compare(data_dir, args.name, runs=args.runs, concurrency=args.concurrency,
                                       model=args.model, threshold=args.threshold, keep_assembly=args.keep_assembly,
-                                      base=args.base, env_plugins=args.env_plugin, runner=runner)
+                                      base=args.base, env_plugins=args.env_plugin, runner=runner,
+                                      judge_model=args.judge_model, use_judge=not args.no_judge)
     except (registry.RegistryError, datadir.DataDirError, evalrun.ClaudeNotFound, compare.CompareError,
-            armplan.ArmSourceError, preflight.PreflightFailed, resume.ResumeError) as e:
+            armplan.ArmSourceError, preflight.PreflightFailed, resume.ResumeError, judge.JudgeConfigError) as e:
         print('错误：%s' % e, file=sys.stderr)
         return 2
 
@@ -142,6 +146,12 @@ def main(argv=None):
     _print_extra_arms(rec, fmt)
     print('完整：%s；状态：%s；花费（标价估算）：$%.4f' % ('是' if rec['complete'] else '否', rec['review']['status'],
                                                 rec['usage']['cost_usd']))
+    j = rec.get('judge')
+    if j:
+        g = j.get('gold') or {}
+        print('AI 评委 %s：样本 %d、分歧 %d、抽检 %d、出错 %d；金标一致率 %s；%s' % (
+            j['model'], j['samples'], j['disagreements'], j['spot_checks'], j['errors'],
+            fmt(g.get('agreement_rate')), '采信' if j.get('trusted') else 'AI 判分不采信：%s' % j.get('untrusted_reason')))
     for r in rec['incomplete_reasons']:
         print('  不完整原因：%s' % r)
     if not rec['complete']:

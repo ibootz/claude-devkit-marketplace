@@ -1,7 +1,7 @@
 """run.json（唯一真源）的组装与 report.md（给人读）的渲染。
 
 run.json 字段按 spec「四、目录布局与状态文件」列：本版能填的照填，后续票才填的留键位、值为 null：
-clause_list_fingerprint（条款清单，票 10）、judge_model / judge（AI 评委，票 09）。
+clause_list_fingerprint（条款清单，票 10）；judge_model / judge（AI 评委，票 09）由 compare 补，段落渲染在 judgereport.py。
 由 compare 在本函数之后补进的：injection_check / resident_tokens（票 06，段落渲染在 injection_check.py）、
 preflight（票 04）、上一版与环境插件臂（票 05）的 previous_arm / env_plugins / delta_vs_previous /
 delta_env_vs_current（armplan.Plan.record_fields，段落渲染在 armreport.py）。
@@ -10,7 +10,7 @@ import os
 import re
 from collections import Counter
 
-from . import armreport, injection_check
+from . import armreport, injection_check, judgereport
 from .registry import TRUST_SCOPE
 
 SCHEMA_VERSION = 1
@@ -145,6 +145,7 @@ def render_report(rec):
         lines += ['', '> **前置检查软项**（照跑；审阅时据此判断结果能否采信）：', '>']
         lines += ['> - %s' % w for w in pre['warnings']]
     lines += injection_check.report_banner(rec)   # 注入未到达的醒目提示（票 06），排在前置检查软项之后
+    lines += judgereport.report_banner(rec)       # AI 判分不采信、判分出错（票 09）
     if rec['incomplete_reasons']:
         lines += ['', '## 不完整的原因', '']
         lines += ['- %s' % r for r in rec['incomplete_reasons']]
@@ -200,6 +201,5 @@ def render_report(rec):
         lines += ['', '## 前置检查提示', '', 'hook 冒烟里退出码非 0（126 / 127 以外）或超时的命令，只作提示、未中止：', '']
         lines += ['- [%s] `%s`：%s' % (h['plugin'], h['command'], h['note']) for h in notes]
 
-    lines += ['', '## 本报告未覆盖', '',
-              'AI 评委尚未接入，run.json 里对应字段为 null。', '']
-    return '\n'.join(lines)
+    lines += judgereport.report_sections(rec)
+    return '\n'.join(lines) + '\n'
