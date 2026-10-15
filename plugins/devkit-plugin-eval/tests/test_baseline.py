@@ -124,14 +124,14 @@ class RunBaselineTest(unittest.TestCase):
         rec = res.record
         self.assertIsNone(rec['delta']['cases']['easy'])
         self.assertEqual(rec['delta']['excluded_baseline_satisfied'], ['easy'])
-        self.assertEqual(rec['baseline']['cases']['easy']['status'], 'regressed')      # 装上后反而做不到
+        self.assertEqual(rec['baseline']['cases']['easy']['status'], 'below-baseline')  # 无上一版臂，装上后反而做不到
         self.assertEqual(rec['baseline']['cases']['easy']['raw_delta'], -1.0)
         self.assertAlmostEqual(rec['delta']['overall'], 0.5)                          # 只剩 hard（+1）与 old（0）
         report = (res.run_dir / 'report.md').read_text(encoding='utf-8')
         self.assertIn('| easy | 1.00 | 0.00 | 回归守护 |', report)
         self.assertIn('回归守护', report)
         self.assertIn('## 回归守护（基线已满足的用例）', report)
-        self.assertIn('**退化**', report)
+        self.assertIn('**低于基线**', report)
         self.assertIn('不含 1 个回归守护用例', report)
 
     def test_cli_baseline_subcommand_registered(self):
@@ -140,16 +140,20 @@ class RunBaselineTest(unittest.TestCase):
 
 
 class ApplyToRecordTest(unittest.TestCase):
-    def test_held_and_no_score(self):
-        rec = {'threshold': 1.0, 'delta': {'cases': {'a': 0.0, 'b': None, 'c': 0.5}, 'overall': 0.25},
+    def test_compares_with_previous_then_falls_back(self):
+        rec = {'threshold': 1.0, 'delta': {'cases': {'a': 0.0, 'b': None, 'c': 0.5, 'd': 0.0, 'e': -1.0}, 'overall': 0},
                'arms': {'current': {'cases': {'a': {'score': 1.0, 'run_scores': [1.0, 1.0, 0.0]},
-                                              'b': {'score': None, 'run_scores': [None]}}},
+                                              'b': {'score': None, 'run_scores': [None]},
+                                              'd': {'score': 0.5, 'run_scores': [1.0, 0.0]},
+                                              'e': {'score': 0.0, 'run_scores': [0.0]}}},
+                        'previous': {'cases': {'a': {'score': 0.67}, 'd': {'score': 1.0}}},
                         'none': {'cases': {'a': {'score': 1.0}}}}}
-        baseline.apply_to_record(rec, {'a', 'b', 'zzz'})
-        self.assertEqual(rec['baseline']['cases']['a']['status'], 'held')
-        self.assertEqual(rec['baseline']['cases']['b']['status'], 'no-score')
+        baseline.apply_to_record(rec, {'a', 'b', 'd', 'e', 'zzz'})
+        st = {c: v['status'] for c, v in rec['baseline']['cases'].items()}
+        self.assertEqual(st, {'a': 'held', 'b': 'no-score', 'd': 'regressed', 'e': 'below-baseline'})
         self.assertEqual(rec['delta']['overall'], 0.5)
-        self.assertEqual(rec['baseline']['regressed'], [])
+        self.assertEqual(rec['baseline']['regressed'], ['d', 'e'])
+        self.assertIn('**退化**', '\n'.join(baseline.report_sections(rec)))
         untouched = {'delta': {'cases': {'a': 0.0}, 'overall': 0.0}}
         baseline.apply_to_record(untouched, set())
         self.assertNotIn('baseline', untouched)

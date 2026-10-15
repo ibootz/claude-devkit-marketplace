@@ -10,8 +10,9 @@
    留不装臂的汇总作证据。判据只看规则判分层（scoring.score_case），不改 with-only grader 的剔除逻辑。
 
 二、报告（compare.finalize_run 调 apply_to_record）：带 TAG 的用例不进「当前版 − 不装」的逐例差与总体差，
-   改出回归结论：当前版臂通过次数 ≥ ⌈有效 run × 2/3⌉ 即守住，否则退化；没有分为无分。
-   上一版臂跑了的，一并列上一版的分作参照。
+   改出回归结论（票 11：只比上一版不退化）：上一版臂有分时，当前版分 ≥ 上一版分记守住，否则记退化；
+   没有上一版臂（退化或首版）时，当前版臂通过次数 ≥ ⌈有效 run × 2/3⌉ 记「无上一版」，不足记「低于基线」；
+   当前版没有分记无分。
 """
 import json
 import math
@@ -30,7 +31,9 @@ RUNS = 3
 PASS_RATIO = (2, 3)
 VERDICTS = {'satisfied': '基线已满足', 'not-satisfied': '基线未满足', 'undecided': '未定（有 run 出错或没跑出结果）',
             'no-rule-graders': '判不了（没有计分的规则 grader）'}
-REGRESSION_TEXT = {'held': '守住', 'regressed': '退化', 'no-score': '无分'}
+REGRESSION_TEXT = {'held': '守住', 'regressed': '退化', 'no-previous': '无上一版', 'below-baseline': '低于基线',
+                   'no-score': '无分'}
+FLAGGED = ('regressed', 'below-baseline')
 
 
 class BaselineError(Exception):
@@ -254,19 +257,23 @@ def apply_to_record(rec, satisfied):
     for c in satisfied:
         cc = (cur.get('cases') or {}).get(c)
         passes, valid = _pass_count(cc, thr)
-        if not valid:
-            status = 'no-score'
-        else:
-            status = 'held' if passes >= needed(valid) else 'regressed'
         pc = (prev.get('cases') or {}).get(c)
+        cur_s, prev_s = (cc or {}).get('score'), (pc or {}).get('score')
+        if cur_s is None or not valid:
+            status = 'no-score'
+        elif prev_s is not None:
+            status = 'held' if cur_s >= prev_s else 'regressed'
+        else:
+            status = 'no-previous' if passes >= needed(valid) else 'below-baseline'
         out[c] = {'status': status, 'current_score': (cc or {}).get('score'), 'current_passes': passes,
                   'current_valid_runs': valid, 'previous_score': (pc or {}).get('score') if pc else None,
                   'none_score': (((rec.get('arms') or {}).get('none') or {}).get('cases') or {}).get(c, {}).get('score'),
                   'raw_delta': raw[c]}
     rec['baseline'] = {
         'tag': TAG, 'cases': out,
-        'rule': '基线已满足的用例不进当前版 − 不装的差；当前版臂通过次数 ≥ 有效 run 的 2/3 记守住，否则记退化',
-        'regressed': sorted(c for c, v in out.items() if v['status'] == 'regressed'),
+        'rule': '基线已满足的用例不进当前版 − 不装的差；有上一版时当前版分 ≥ 上一版分记守住、否则退化；'
+                '无上一版时当前版通过 ≥ 有效 run 的 2/3 记无上一版、否则低于基线',
+        'regressed': sorted(c for c, v in out.items() if v['status'] in FLAGGED),
     }
     return rec
 
@@ -277,12 +284,12 @@ def report_sections(rec):
         return []
     lines = ['', '## 回归守护（基线已满足的用例）', '',
              '这些用例在不装插件时就能 ≥ 2/3 通过（`baseline` 判定，tag `%s`），不出「当前版 − 不装」的差，'
-             '不计入总体差；只看装上当前版后有没有退化。' % b['tag'], '',
+             '不计入总体差；只比上一版有没有退化（没有上一版臂时看当前版是否仍 ≥ 2/3 通过）。' % b['tag'], '',
              '| 用例 | 回归结论 | 当前版分 | 当前版通过 / 有效 run | 上一版分 | 不装分 |', '|---|---|---|---|---|---|']
     f = lambda x: '—' if x is None else '%.2f' % x
     for c, v in sorted(b['cases'].items()):
         lines.append('| %s | %s | %s | %d / %d | %s | %s |' % (
-            c, ('**%s**' if v['status'] == 'regressed' else '%s') % REGRESSION_TEXT[v['status']],
+            c, ('**%s**' if v['status'] in FLAGGED else '%s') % REGRESSION_TEXT[v['status']],
             f(v['current_score']), v['current_passes'], v['current_valid_runs'], f(v['previous_score']),
             f(v['none_score'])))
     return lines
