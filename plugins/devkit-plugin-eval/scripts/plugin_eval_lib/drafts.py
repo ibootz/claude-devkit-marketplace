@@ -33,11 +33,12 @@ SCHEMA_VERSION = 1
 DRAFT_PRIORITY = 300          # 分歧样本 10 > 抽检 20 > 用例草稿 300 > 复盘候选 400（票 08 集成口径）
 STATUS_OPEN = 'open'
 STATUS_REJECTED = 'rejected'
-SOURCES = ('ai', 'history', 'rehang', 'review-candidate')
+SOURCES = ('ai', 'history', 'rehang', 'review-candidate', 'compact-replay')
 # 类别 → 用例 tags 里的类别标记。纪律、文风、诱导三类要挂条款 id；skill / agent 类按 skill:<名> / agent:<名> 归属
 CATEGORIES = ('discipline', 'style', 'style-scenario', 'induced', 'skill-trigger', 'skill-no-trigger',
-              'agent-dispatch', 'agent-no-dispatch', 'agent-follow')
-CLAUSE_CATEGORIES = ('discipline', 'style', 'style-scenario', 'induced')
+              'agent-dispatch', 'agent-no-dispatch', 'agent-follow', 'compact-replay', 'review-replay')
+# compact-replay（票 13 compact 回放）挂条款；review-replay（复盘候选改写）由改写 AI 判挂哪条，判不出不挂，也能上页
+CLAUSE_CATEGORIES = ('discipline', 'style', 'style-scenario', 'induced', 'compact-replay')
 TIER_PROVEN, TIER_REVIEW, TIER_REHANG, TIER_OTHER = 1, 2, 3, 4
 TIER_TEXT = {TIER_PROVEN: '已证明有差的条款', TIER_REVIEW: '复盘已命中的条款', TIER_REHANG: '退役条款的用例退回改挂',
              TIER_OTHER: '其余'}
@@ -464,6 +465,15 @@ def _collect(subject, key):
                 '；AI 建议：%s' % rh['ai_hint'] if rh.get('ai_hint') else '')))
         if meta.get('history_source'):
             facts.append(('历史素材出处', meta['history_source']))
+        rp = meta.get('replay') or {}
+        if rp:
+            facts.append(('compact 回放', '合成历史 %s（模板 %s，尾巴 %s 轮）；底本 %s' % (
+                rp.get('history_file'), rp.get('summary_template'), rp.get('tail_turns'), rp.get('base_case') or 'AI 起草')))
+        rc = meta.get('review_candidate') or {}
+        if rc:
+            facts.append(('复盘候选', '%s 的 %s（%s %s）；挂条款理由：%s' % (
+                rc.get('review_date'), rc.get('candidate_id'), rc.get('kind'), rc.get('rule'),
+                meta.get('clause_reason') or '—')))
         title = '%s：%s' % (b['case'], meta.get('intent') or meta.get('clause_intent') or meta.get('category') or '')
         out.append(pending.PendingItem(id='%s:%s' % (key, b['case']), title=title[:160], body=_case_body(d),
                                        facts=tuple(facts), payload={'case': b['case']}))
@@ -576,14 +586,18 @@ pending.register_type(CASE_DRAFT)
 
 def add_parser(sub):
     p = sub.add_parser('drafts', help='用例草稿：write 让 AI 起草并出待审页；page 只出待审页；list 只读地看草稿区；'
-                                      'sync 把退役条款的用例退回草稿区（write、page 也会先做这一步）')
-    p.add_argument('action', choices=('write', 'page', 'list', 'sync'))
+                                      'sync 把退役条款的用例退回草稿区（write、page 也会先做这一步）；'
+                                      'compact 生成 compact 之后的回放用例（每插件 ≤3）；'
+                                      'from-review 把复盘里选了「转草稿」的候选由 AI 改写成合成用例')
+    p.add_argument('action', choices=('write', 'page', 'list', 'sync', 'compact', 'from-review'))
     p.add_argument('name')
     p.add_argument('--model', help='write：起草用的模型，缺省 %s' % 'claude-fable-5-1')
-    p.add_argument('--limit', type=int, default=20, help='write：本次最多起草几个目标（条款 / skill / agent 的缺口），默认 20')
-    p.add_argument('--clauses', help='write：只起草这些条款，逗号分隔，如 C001,C007（含之前判为离线评不了的）；'
+    p.add_argument('--limit', type=int, default=20, help='write：本次最多起草几个目标（条款 / skill / agent 的缺口），默认 20；'
+                        'compact：本次最多生成几个，另受每插件合计 ≤3 的上限约束')
+    p.add_argument('--clauses', help='write / compact：只起草这些条款，逗号分隔，如 C001,C007（含之前判为离线评不了的）；'
                                      '点名时已打回的草稿不算覆盖，会重写。不点名时打回的草稿仍算该条款已有草稿，不自动重写')
-    p.add_argument('--no-page', action='store_true', help='write：只写草稿，不出待审页')
+    p.add_argument('--no-page', action='store_true', help='write / compact / from-review：只写草稿，不出待审页')
+    p.add_argument('--date', help='from-review：用哪天的复盘结果（YYYY-MM-DD），缺省最新一份')
     return p
 
 
@@ -611,6 +625,12 @@ def main(args, data_dir):
         if args.action == 'write':
             from . import drafter
             return drafter.main(args, data_dir)
+        if args.action == 'compact':
+            from . import replay
+            return replay.main(args, data_dir)
+        if args.action == 'from-review':
+            from . import candidate_drafts
+            return candidate_drafts.main(args, data_dir)
         if args.action == 'list':
             # 只读（审查 11 应修 3）：不退回退役用例、不清空目录。退回会把用例移出 evals/、改变 evals 指纹，
             # 有对照在跑或待续跑时续跑会被拒；退回只在 sync / page / write 时做

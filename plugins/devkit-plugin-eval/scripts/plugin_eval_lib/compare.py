@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import (armplan, arms, baseline, clauses, drafts, envplugins, evalrun, fingerprint, gitstate, injection,  # noqa: F401
-               injection_check, judge, judgepending, preflight, record, registry, resume, reviewgap, sandbox_sweep,
+               injection_check, judge, judgepending, preflight, record, registry, replay, resume, reviewgap, sandbox_sweep,
                scoring, traces)
 
 
@@ -104,6 +104,7 @@ def _run_arm(spec, *, ctx):
                                      model=ctx['model'])
     ctx['log']('[%s] 开跑：%s 个用例 × %s 次' % (spec.label, len(ctx['cases']), ctx['runs']))
     exit_code, stderr = ctx['runner'](cmd, arm_dir, ctx['env'], log_dir)
+    replay.purge_transcripts(arm_dir)      # 回放用例（history_file）的子会话转录写在用例目录里，跑完即删（票 13）
 
     rec = {
         'label': spec.label,
