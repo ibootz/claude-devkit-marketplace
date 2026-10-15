@@ -204,7 +204,7 @@ class HookSmokeTest(Base):
 
     def test_symlink_to_outside_plugin_dir_still_reachable(self):
         """集成审查 N2：hook 脚本是指向插件目录外的相对符号链接时，副本跟随链接拷内容，冒烟不得 127。"""
-        target = write(self.tmp / 'shared' / 'run-hook', '#!/bin/sh\nexit 0\n')
+        target = write(self.repo / 'shared' / 'run-hook', '#!/bin/sh\nexit 0\n')
         os.chmod(target, 0o755)
         link = self.plugin / 'hooks' / 'run-hook'
         link.parent.mkdir(parents=True, exist_ok=True)
