@@ -215,11 +215,13 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
     data_dir = Path(data_dir)
     entry, plugin_dir, manifest, evals_src, cases, extra_exclude = load_target(data_dir, name)  # 未登记即抛 NotRegistered
     repo = Path(entry['repo'])
-    try:   # 评委配置写错要在开跑前报，免得各臂白跑
-        judge_opts = {'enabled': use_judge, 'model': judge_model, 'runner': judge_runner,
-                      'config': judge.load_config(repo / 'plugin-evals' / name)}
-    except judge.JudgeConfigError as e:
-        raise CompareError(str(e))
+    judge_opts = {'enabled': bool(use_judge), 'model': judge_model, 'runner': judge_runner}
+    if use_judge:   # --no-judge 时不读 judge-config.json；评委配置与判定标准写错要在开跑前报，免得各臂白跑
+        try:
+            judge_opts['config'] = judge.load_config(repo / 'plugin-evals' / name)
+            judge.check_criteria(evals_src, cases)
+        except judge.JudgeConfigError as e:
+            raise CompareError(str(e))
     version = manifest.get('version') or 'noversion'
     # 臂计划先定：前置检查要拿快照与环境插件去冒烟、validate。
     plan = plan_for(plugin_dir, name, manifest, cases, evals_src, extra_exclude, base=base, env_plugins=env_plugins,
@@ -251,7 +253,8 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
         meta = dict(log=log, run_id=run_id, name=name, version=version, plugin_fp=plugin_fp, evals_fp=evals_fp,
                     extra_exclude=extra_exclude, entry=entry, cases=cases, threshold=threshold, started=started,
                     claude=claude, child_env=child_env, runs=runs, concurrency=concurrency, model=model,
-                    run_dir=run_dir, data_dir=data_dir, plan=plan, pre=pre, judge_opts=judge_opts)
+                    run_dir=run_dir, data_dir=data_dir, plan=plan, pre=pre, judge_opts=judge_opts,
+                    clause_model=clause_model)
         arm_records = {}
         lock = resume.RunLock(data_dir, run_id)
         lock.acquire()
@@ -286,14 +289,15 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
 
 def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp, evals_fp, extra_exclude, entry,
                  cases, threshold, started, claude, child_env, runs, concurrency, model, run_dir, data_dir,
-                 plan, pre, statics, prior_preflight=None, decorate=None, judge_opts=None):
+                 plan, pre, statics, prior_preflight=None, decorate=None, judge_opts=None, clause_model=None):
     """判分、注入核验、汇总不完整原因、写 injection-check.json、run.json 与 report.md。
     arm_records 里带 _agg 的臂才判分、才有逐 run 的注入核验。pre 是本次的前置检查报告（Report）；
     prior_preflight 是续跑时首跑记下的那份（dict），软项提示并进本次。decorate(rec) 在落盘前改记录。"""
     for key, rec in arm_records.items():
         rec['_static'] = statics.get(key)
         rec['_runs'] = _runs_from_agg(rec.get('_agg'), data_dir)
-    # AI 评委（票 09）：要读汇总里的 rule grader 结果，排在 _score_arms 摘掉 _agg 之前。续跑时 judge_opts 为 None
+    # AI 评委（票 09）：要读汇总里的 rule grader 结果，排在 _score_arms 摘掉 _agg 之前。
+    # 续跑时 judge_opts 由 resume.judge_opts_from 按首跑的 environment.judge 还原（早于该字段的运行为 None）
     judge_doc, judge_reasons = judge.run(
         arm_records=arm_records, labels={s.key: s.label for s in plan.specs},
         evals_src=registry.plugin_dir(entry) / 'evals', run_dir=run_dir, run_id=run_id,
@@ -325,9 +329,8 @@ def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp,
         delta=scoring.delta(arm_records['current'], arm_records['none']),
         cases=cases, incomplete_reasons=reasons, threshold=threshold,
         started_at=_now_iso(started), finished_at=_now_iso(datetime.now(timezone.utc)),
-        environment={'claude_path': str(claude), 'node_path': evalrun.which_node(child_env),
-                     'runs_per_case': runs, 'concurrency': concurrency, 'model_override': model,
-                     'platform': sys.platform},
+        environment=resume.environment_block(claude=claude, child_env=child_env, runs=runs, concurrency=concurrency,
+                                             model=model, judge_opts=judge_opts, clause_model=clause_model),
     )
     rec.update(plan.record_fields(arm_records))
     pre.add(preflight.check_version_model(preflight.previous_compare(Path(run_dir).parent, exclude=run_id),
@@ -336,6 +339,8 @@ def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp,
     rec.update(injection_check=injection_check.summary(inj_check), resident_tokens=resident)
     if judge_doc:
         rec.update(judge_model=judge_doc['model'], judge=judge.summarize(judge_doc))
+    elif isinstance(judge_opts, dict) and judge_opts.get('enabled') is False:
+        rec['judge'] = {'skipped': 'no-judge'}
     rec.update(clauses.record_fields(run_dir))
     if decorate:
         rec = decorate(rec)

@@ -134,7 +134,8 @@ def render_report(rec):
         '- 运行：`%s`，%s 至 %s（UTC）' % (rec['run_id'], rec['started_at'], rec['finished_at']),
         '- 插件内容指纹：`%s`' % p['fingerprint'],
         '- Claude Code：%s；主力模型：%s' % (rec['claude_code_version'], rec['main_model']),
-        '- 判分：只用规则 grader；每例每臂 %s 次' % (rec.get('environment') or {}).get('runs_per_case', '?'),
+        '- 判分：%s；每例每臂 %s 次' % (judgereport.scoring_line(rec),
+                                    (rec.get('environment') or {}).get('runs_per_case', '?')),
         '- 是否完整：%s' % ('是' if rec['complete'] else '**不完整**'),
         '- 是否通过：%s（口径：%s，threshold=%s）' % ('是' if rec['passed'] else '否', rec['pass_criterion'], rec['threshold']),
         '- 花费：$%.4f（%s）；token：输入 %d、输出 %d、缓存读 %d、缓存写 %d' % (

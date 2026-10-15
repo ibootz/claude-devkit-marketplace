@@ -635,6 +635,23 @@ def _collect(subject):
         payload={'run_id': rec.get('run_id'), 'proposal': cc.get('proposal') or PROPOSAL_FILE})]
 
 
+def _deactivate_gold(subject, newly_retired, ts):
+    """条款退役：挂在它上面的 AI 评委金标（gold/<id>.json 的 clause）置 active=false，停止参与校准（不删）。"""
+    gold_dir = subject.run_dir.parent.parent / 'gold'
+    if not newly_retired or not gold_dir.is_dir():
+        return
+    for f in sorted(gold_dir.glob('*.json')):
+        rel = '../../gold/%s' % f.name
+        try:
+            g = subject.read_json(rel)
+        except ValueError:
+            continue        # 坏金标由评委校准时报出，这里不拦条款清单的确认
+        if isinstance(g, dict) and g.get('clause') in newly_retired and g.get('active', True):
+            g['active'] = False
+            g['deactivated'] = {'reason': 'clause-retired', 'clause': g['clause'], 'at': ts}
+            subject.stage_json(rel, g)
+
+
 def _apply(subject, item, code, now):
     cc = subject.read_json(CHECK_FILE)
     prop = subject.read_json((item.get('payload') or {}).get('proposal') or PROPOSAL_FILE)
@@ -670,6 +687,7 @@ def _apply(subject, item, code, now):
                     s for s in sugg if (s['case'], s['retired_id']) not in have]
                 subject.stage_json(REHANG_REL, old)
             subject.stage_json(LIST_REL, new)
+            _deactivate_gold(subject, set(retired_ids(new)) - set(retired_ids(cur)), ts)
         elif done.get('code') == 'A' and cur_fp == done.get('list_fingerprint'):
             pass   # 上次写回已落盘清单（只差 run.json）：重试时不重复改
         else:

@@ -11,8 +11,9 @@ from pathlib import Path
 
 import _support
 from _support import tmpdir, write
-from plugin_eval_lib import cli, compare, judge, judgepending, pending, record, registry
+from plugin_eval_lib import cli, clauses, compare, judge, judgepending, pending, record, registry, resume
 from test_compare import FakeEval, passing_preflight
+from test_resume import ScriptedEval
 
 T0 = datetime(2026, 10, 15, 9, 0, 0, tzinfo=timezone.utc)
 
@@ -180,12 +181,17 @@ class GoldTest(JudgeCompareBase):
         doc2 = self.judge_json(res2)
         self.assertEqual(doc2['gold']['total'], 5)
         self.assertEqual(doc2['gold']['judged'], 5)
+        self.assertEqual({k: v['total'] for k, v in doc2['gold']['by_source'].items()},
+                         {'disagreement': 2, 'spot-check': 3})
+        self.assertEqual({json.loads(f.read_text(encoding='utf-8'))['source'] for f in gold_files},
+                         {'disagreement', 'spot-check'})
         # 5 条金标用户都判通过；评委对 CRIT-A 判 fail：CRIT-A 上的金标不一致
         n_a = sum(1 for f in gold_files if 'CRIT-A' in json.loads(f.read_text(encoding='utf-8'))['criterion_text'])
         self.assertEqual(doc2['gold']['agreed'], 5 - n_a)
         self.assertAlmostEqual(doc2['gold']['agreement_rate'], (5 - n_a) / 5)
         self.assertFalse(doc2['gold']['enabled'])
-        self.assertTrue(doc2['trusted'])
+        self.assertIsNone(doc2['trusted'])                     # 未配置校准：采信（未校准）
+        self.assertIn('是否采信：采信（未校准）', (res2.run_dir / 'report.md').read_text(encoding='utf-8'))
         self.assertEqual(len(fj2.calls), 16 + 5)
 
     def test_unclear_verdict_not_saved_as_gold(self):
@@ -196,7 +202,8 @@ class GoldTest(JudgeCompareBase):
     def test_low_agreement_marks_untrusted(self):
         self.compare(FakeJudge(lambda p, n: 'fail' if criterion_says('CRIT-A')(p) else 'pass'))
         self._adjudicate_all('A')
-        write(self.evals / 'judge-config.json', json.dumps({'gold_agreement_threshold': 0.9, 'gold_min_samples': 3}))
+        # 分歧来源的金标 2 条（抽检 3 条不计入启用所需条数）
+        write(self.evals / 'judge-config.json', json.dumps({'gold_agreement_threshold': 0.9, 'gold_min_samples': 2}))
         res = self.compare(FakeJudge(lambda p, n: 'fail'), minute=5)   # 评委一律 fail：与用户的「通过」全不一致
         rec = self.run_json(res)
         self.assertFalse(rec['judge']['trusted'])
@@ -210,10 +217,54 @@ class GoldTest(JudgeCompareBase):
         self.compare(FakeJudge(lambda p, n: 'fail' if criterion_says('CRIT-A')(p) else 'pass'))
         self._adjudicate_all('A')
         write(self.evals / 'judge-config.json', json.dumps({'gold_agreement_threshold': 0.9, 'gold_min_samples': 50}))
-        rec = self.run_json(self.compare(FakeJudge(lambda p, n: 'fail'), minute=5))
-        self.assertTrue(rec['judge']['trusted'])
+        res = self.compare(FakeJudge(lambda p, n: 'fail'), minute=5)
+        rec = self.run_json(res)
+        self.assertIsNone(rec['judge']['trusted'])             # 三态：不足启用条数 → null，报告写「采信（未校准）」
         self.assertFalse(rec['judge']['gold']['enabled'])
+        self.assertEqual(rec['judge']['gold']['state'], 'insufficient')
         self.assertIn('不足', rec['judge']['gold']['note'])
+        self.assertTrue(rec['complete'])
+        self.assertIn('是否采信：采信（未校准）', (res.run_dir / 'report.md').read_text(encoding='utf-8'))
+
+    def test_spot_check_gold_does_not_count_toward_calibration(self):
+        """判采信只用分歧来源：抽检来源一致率高也救不回分歧来源的不一致。"""
+        self.compare(FakeJudge(lambda p, n: 'fail' if criterion_says('CRIT-A')(p) else 'pass'))
+        self._adjudicate_all('A')                                  # 分歧 2 条（CRIT-A）+ 抽检 3 条，用户全判通过
+        write(self.evals / 'judge-config.json', json.dumps({'gold_agreement_threshold': 0.5, 'gold_min_samples': 2}))
+        rec = self.run_json(self.compare(FakeJudge(lambda p, n: 'fail' if criterion_says('CRIT-A')(p) else 'pass'),
+                                         minute=5))
+        g = rec['judge']['gold']
+        self.assertEqual(g['by_source']['disagreement']['agreement_rate'], 0)
+        self.assertEqual(g['by_source']['spot-check']['agreement_rate'], 1)
+        self.assertGreater(g['agreement_rate'], 0.5)              # 合起来过阈值……
+        self.assertFalse(rec['judge']['trusted'])                 # ……但只按分歧来源判：不采信
+
+    def test_calibration_short_because_of_call_errors_is_incomplete(self):
+        """校准已配置、金标够条数，却因评委调用出错判成的不够：运行不完整（可续跑），出错进 reasons。"""
+        self.compare(FakeJudge(lambda p, n: 'fail' if criterion_says('CRIT-A')(p) else 'pass'))
+        self._adjudicate_all('A')
+        write(self.evals / 'judge-config.json', json.dumps({'gold_agreement_threshold': 0.5, 'gold_min_samples': 2}))
+        # 金标的判定标准正文就是 CRIT-A / CRIT-B：评委对金标调用（每条只判一遍）一律出错，样本两遍照常
+        gold_texts = {json.loads(f.read_text(encoding='utf-8'))['criterion_text']
+                      for f in (self.evals / 'gold').glob('*.json')}
+        fj = FakeJudge(lambda p, n: ('error', 'You have hit your usage limit')
+                       if n == 0 and any(t in p for t in gold_texts) and 'GOLD' not in p else 'pass')
+        orig = judge.calibrate
+
+        def failing_calibrate(plugin_evals, cfg, judge_fn):
+            return orig(plugin_evals, cfg, lambda prompt: {'verdict': None, 'reason': None, 'error': '撞限',
+                                                           'models': [], 'usage': {}, 'cost_usd': 0})
+        judge.calibrate = failing_calibrate
+        try:
+            res = self.compare(fj, minute=5)
+        finally:
+            judge.calibrate = orig
+        rec = self.run_json(res)
+        self.assertEqual(rec['judge']['gold']['state'], 'insufficient-errors')
+        self.assertFalse(rec['complete'])
+        self.assertTrue(any('金标校准' in r and '续跑时重判' in r for r in rec['incomplete_reasons']),
+                        rec['incomplete_reasons'])
+        self.assertIsNone(rec['judge']['trusted'])
 
 
 class ModelConfigTest(JudgeCompareBase):
@@ -248,12 +299,26 @@ class ModelConfigTest(JudgeCompareBase):
         self.assertFalse((self.evals / 'runs').exists())
 
     def test_no_judge_flag_and_no_criteria_skip_judge(self):
+        write(self.evals / 'judge-config.json', '{坏的配置')      # --no-judge 时不读配置：坏配置也不拦
         fj = FakeJudge(lambda p, n: 'pass')
         res = self.compare(fj, use_judge=False)
         self.assertEqual(fj.calls, [])
-        self.assertIsNone(self.run_json(res)['judge'])
+        rec = self.run_json(res)
+        self.assertEqual(rec['judge'], {'skipped': 'no-judge'})
+        self.assertEqual(rec['environment']['judge'], {'enabled': False, 'model': None})
         self.assertFalse((res.run_dir / 'judge.json').exists())
-        self.assertIn('未调 AI 评委', (res.run_dir / 'report.md').read_text(encoding='utf-8'))
+        report = (res.run_dir / 'report.md').read_text(encoding='utf-8')
+        self.assertIn('按 --no-judge 跳过', report)
+        self.assertIn('- 判分：规则 grader 定分与是否通过；AI 评委按 --no-judge 跳过', report)
+        # 没有判定标准：照旧写「未调 AI 评委」
+        for f in self.plugin.glob('evals/*/judge/*.md'):
+            f.unlink()
+        (self.evals / 'judge-config.json').unlink()
+        res2 = self.compare(FakeJudge(lambda p, n: 'pass'), minute=3)
+        self.assertIsNone(self.run_json(res2)['judge'])
+        self.assertIn('未调 AI 评委', (res2.run_dir / 'report.md').read_text(encoding='utf-8'))
+        self.assertIn('只用规则 grader（没有用例声明 AI 评委判定标准）',
+                      (res2.run_dir / 'report.md').read_text(encoding='utf-8'))
 
     def test_cli_flags(self):
         out, err = io.StringIO(), io.StringIO()
@@ -287,6 +352,132 @@ class ErrorAndResumeTest(JudgeCompareBase):
         self.assertEqual(len(good.calls), 8)
         self.assertFalse([s for s in doc['samples'] if s['status'] == 'error'])
         self.assertTrue(doc['complete'])
+
+
+class CriteriaAndClauseTest(JudgeCompareBase):
+    def test_bad_frontmatter_aborts_before_any_eval(self):
+        write(self.plugin / 'evals' / 'case-b' / 'judge' / 'tone.md', '---\nrulez: g1\n---\nCRIT-B 回复语气平和\n')
+        with self.assertRaises(compare.CompareError) as cm:
+            self.compare(FakeJudge(lambda p, n: 'pass'))
+        self.assertIn('不认识的键 rulez', str(cm.exception))
+        self.assertFalse((self.evals / 'runs').exists())
+
+    def test_unknown_rule_grader_warned_in_report(self):
+        write(self.plugin / 'evals' / 'case-b' / 'judge' / 'tone.md', '---\nrule: nope\n---\nCRIT-B 回复语气平和\n')
+        res = self.compare(FakeJudge(lambda p, n: 'pass'))
+        rec = self.run_json(res)
+        self.assertTrue(any('「nope」在该用例里不存在' in w for w in rec['judge']['warnings']), rec['judge']['warnings'])
+        report = (res.run_dir / 'report.md').read_text(encoding='utf-8')
+        self.assertIn('AI 评委判定标准有告警', report)
+        self.assertIn('### 判定标准告警', report)
+
+    def _clause_list(self, retired=()):
+        write(self.evals / 'clauses.json', json.dumps({'clauses': [
+            {'id': 'C001', 'criterion': '照规则做', 'status': 'retired' if 'C001' in retired else 'active'},
+            {'id': 'C002', 'criterion': '语气平和', 'status': 'active'}]}))
+
+    def test_gold_records_clause_and_retired_clause_gold_is_inactive(self):
+        write(self.plugin / 'evals' / 'case-a' / 'judge' / 'follows.md', '---\nrule: rule\nclause: C001\n---\nCRIT-A 助手照规则做了\n')
+        self._clause_list()
+        self.compare(FakeJudge(lambda p, n: 'fail' if criterion_says('CRIT-A')(p) else 'pass'))
+        GoldTest._adjudicate_all(self, 'A')
+        golds = [json.loads(f.read_text(encoding='utf-8')) for f in (self.evals / 'gold').glob('*.json')]
+        on_a = [g for g in golds if g['case'] == 'case-a']
+        self.assertTrue(on_a and all(g['clause'] == 'C001' and g['active'] for g in on_a))
+        self.assertTrue(all(g['trace_dir'] for g in golds))
+        # 条款 C001 退役：金标不参与校准，报告告警
+        self._clause_list(retired=('C001',))
+        res = self.compare(FakeJudge(lambda p, n: 'pass'), minute=5)
+        rec = self.run_json(res)
+        self.assertEqual(rec['judge']['gold']['total'], len(golds) - len(on_a))
+        self.assertEqual(rec['judge']['gold']['retired_clauses'], ['C001'])
+        self.assertTrue(any('C001 已退役' in w for w in rec['judge']['warnings']))
+
+    def test_confirming_clause_retirement_deactivates_gold(self):
+        write(self.plugin / 'evals' / 'case-a' / 'judge' / 'follows.md', '---\nrule: rule\nclause: C001\n---\nCRIT-A 助手照规则做了\n')
+        self._clause_list()
+        self.compare(FakeJudge(lambda p, n: 'fail' if criterion_says('CRIT-A')(p) else 'pass'))
+        GoldTest._adjudicate_all(self, 'A')
+        sub = pending.Subject(self.repo, next((self.evals / 'runs').iterdir()), {'run_id': 'x'})
+        clauses._deactivate_gold(sub, {'C001'}, '2026-10-15T09:00:00Z')
+        sub.commit()
+        golds = [json.loads(f.read_text(encoding='utf-8')) for f in (self.evals / 'gold').glob('*.json')]
+        self.assertTrue(all((not g['active']) == (g.get('clause') == 'C001') for g in golds))
+        self.assertTrue(all(g['deactivated']['reason'] == 'clause-retired' for g in golds if not g['active']))
+
+
+class ResumeOptionsTest(JudgeCompareBase):
+    """续跑沿用首跑的评委选项（--no-judge、--judge-model）；补跑后金标仍指向原 trace。"""
+
+    def scripted(self, **kw):
+        outcomes = {(arm, c): [True] * 8 for arm in ('none', 'current') for c in ('case-a', 'case-b')}
+        return ScriptedEval(self.sandboxes, outcomes, **kw)
+
+    def first(self, fake, **kw):
+        return compare.run_compare(
+            self.data, 'demo-plugin', runs=2, concurrency=1, claude='/fake/claude', runner=fake, env={'PATH': '/usr/bin'},
+            tmp_parent=self.assembly, sandbox_roots=[self.sandboxes], log=lambda *a: None,
+            preflight_check=passing_preflight, now=lambda: datetime(2026, 10, 15, 8, 0, tzinfo=timezone.utc), **kw)
+
+    def resume(self, fake, run_dir, fj):
+        return resume.resume_run(self.data, run_dir, claude='/fake/claude', runner=fake, tmp_parent=self.assembly,
+                                 sandbox_roots=[self.sandboxes], log=lambda *a: None,
+                                 preflight_check=passing_preflight, judge_runner=fj)
+
+    def test_no_judge_first_run_resume_does_not_judge(self):
+        fake = self.scripted(crash_on='current')
+        with self.assertRaises(RuntimeError):
+            self.first(fake, use_judge=False)
+        run_dir = next((self.evals / 'runs').iterdir())
+        ckpt = json.loads((run_dir / 'run.json').read_text(encoding='utf-8'))
+        self.assertEqual(ckpt['environment']['judge'], {'enabled': False, 'model': None})
+        fj = FakeJudge(lambda p, n: 'pass')
+        res = self.resume(fake, run_dir, fj)
+        self.assertEqual(fj.calls, [])
+        self.assertEqual(res.record['judge'], {'skipped': 'no-judge'})
+
+    def test_judge_model_from_first_run_kept_on_resume(self):
+        fake = self.scripted(crash_on='current')
+        with self.assertRaises(RuntimeError):
+            self.first(fake, judge_model='model-x', clause_model='clause-model-y')
+        run_dir = next((self.evals / 'runs').iterdir())
+        ckpt = json.loads((run_dir / 'run.json').read_text(encoding='utf-8'))
+        self.assertEqual(ckpt['environment']['judge'], {'enabled': True, 'model': 'model-x'})
+        self.assertEqual(ckpt['environment']['clause_model'], 'clause-model-y')
+        fj = FakeJudge(lambda p, n: 'pass')
+        res = self.resume(fake, run_dir, fj)
+        self.assertTrue(fj.calls)
+        self.assertEqual(set(fj.calls), {'model-x'})
+        self.assertEqual(res.record['judge_model'], 'model-x')
+        self.assertEqual(res.record['environment']['clause_model'], 'clause-model-y')
+
+    def test_gold_keeps_pointing_at_original_trace_after_resume(self):
+        """首跑有无效 run（不完整）→ 用户裁定分歧样本存金标 → 续跑补跑无效 run：金标与沿用的裁定仍对着原 trace。"""
+        fake = self.scripted(fail={('current', 'case-a', 0): 'You have hit your usage limit'})
+        fj = FakeJudge(lambda p, n: 'fail' if criterion_says('CRIT-A')(p) else 'pass')
+        res = self.first(fake, judge_runner=fj)
+        self.assertFalse(res.record['complete'])
+        GoldTest._adjudicate_all(self, 'B')
+        doc = self.judge_json(res)
+        decided = {s['trace_dir']: s for s in doc['samples'] if s.get('user')}
+        golds = {g['id']: g for g in (json.loads(f.read_text(encoding='utf-8'))
+                                      for f in (self.evals / 'gold').glob('*.json'))}
+        self.assertTrue(golds)
+        before = {gid: gzip.decompress((self.evals / g['sample_file']).read_bytes()) for gid, g in golds.items()}
+        res2 = self.resume(fake, res.run_dir, FakeJudge(lambda p, n: 'fail' if criterion_says('CRIT-A')(p) else 'pass'))
+        self.assertTrue(res2.record['complete'], res2.record['incomplete_reasons'])
+        doc2 = self.judge_json(res2)
+        by_trace = {(s['trace_dir'], s['criterion']): s for s in doc2['samples']}
+        for gid, g in golds.items():
+            s = by_trace[(g['trace_dir'], g['criterion'])]
+            self.assertEqual(s['gold_id'], gid)
+            self.assertEqual(s['user']['verdict'], 'fail')
+            self.assertEqual(s['sample_file'], g['sample_file'][len('runs/%s/' % res.run_dir.name):])
+            self.assertEqual(gzip.decompress((self.evals / g['sample_file']).read_bytes()), before[gid])
+        for t, s in decided.items():
+            self.assertEqual(by_trace[(t, s['criterion'])]['user'], s['user'])
+        # 用量：沿用样本的判分条目也计入续跑后的合计
+        self.assertEqual(doc2['usage']['calls'], sum(len(s['passes']) for s in doc2['samples']) + doc2['gold']['total'])
 
 
 class PureFunctionTest(unittest.TestCase):
@@ -342,8 +533,15 @@ class PureFunctionTest(unittest.TestCase):
         tmp = tmpdir(self)
         home = '/home/someone'
         src = write(tmp / 'trace.jsonl', '\n'.join(json.dumps(o) for o in [
-            {'type': 'system', 'subtype': 'init', 'cwd': home + '/proj', 'note': 'mail a.b@example.invalid'},
-            {'type': 'assistant', 'message': {'content': [{'type': 'thinking', 'thinking': 't', 'signature': 'SIG'}]}},
+            {'type': 'system', 'subtype': 'init', 'cwd': home + '/proj', 'plugins': [{'name': 'INIT-ONLY'}]},
+            {'type': 'system', 'subtype': 'hook_response', 'output': 'HOOK-OUTPUT'},
+            {'type': 'user', 'message': {'content': 'USER-PROMPT-LINE'}},
+            {'type': 'assistant', 'message': {'content': [
+                {'type': 'thinking', 'thinking': 'THINKING-BODY', 'signature': 'SIG'},
+                {'type': 'text', 'text': '读 %s/proj，mail a.b@example.invalid' % home}]}},
+            {'type': 'user', 'message': {'content': [{'type': 'tool_result', 'content': 'TOOL-RESULT'},
+                                                     {'type': 'text', 'text': 'USER-SIDE-TEXT'}]}},
+            {'type': 'result', 'result': 'FINAL'},
         ]) + '\nnot json\n')
         a, b = tmp / 'a.jsonl.gz', tmp / 'b.jsonl.gz'
         self.assertTrue(judge.store_sample(src, a, home=home))
@@ -354,6 +552,11 @@ class PureFunctionTest(unittest.TestCase):
         self.assertNotIn('@example.invalid', text)
         self.assertNotIn('SIG', text)
         self.assertIn('~/proj', text)
+        for gone in ('"system"', 'INIT-ONLY', 'HOOK-OUTPUT', 'USER-PROMPT-LINE', 'THINKING-BODY', 'USER-SIDE-TEXT'):
+            self.assertNotIn(gone, text)
+        for kept in ('TOOL-RESULT', 'FINAL', '"assistant"'):
+            self.assertIn(kept, text)
+        self.assertEqual(len(text.strip().splitlines()), 3)
         self.assertFalse(judge.store_sample(tmp / 'missing.jsonl', tmp / 'c.gz'))
 
     def test_criteria_frontmatter(self):
@@ -364,7 +567,17 @@ class PureFunctionTest(unittest.TestCase):
         self.assertEqual([c['id'] for c in cs], ['x'])
         self.assertEqual(cs[0]['rule'], 'g1')
         self.assertEqual(cs[0]['arms'], ['current', 'none'])
+        self.assertEqual(cs[0]['problems'], [])
         self.assertEqual(judge.case_criteria(tmp, 'nothing'), [])
+        judge.check_criteria(tmp, ['c'])
+        write(tmp / 'c' / 'judge' / 'y.md', '---\nclause: C001\n---\n正文\n')
+        self.assertEqual(judge.case_criteria(tmp, 'c')[1]['clause'], 'C001')
+        write(tmp / 'd' / 'judge' / 'z.md', '---\nrules: g1\narms: [current, nobody]\nclause: 第一条\n---\n正文\n')
+        with self.assertRaises(judge.JudgeConfigError) as cm:
+            judge.check_criteria(tmp, ['c', 'd'])
+        msg = str(cm.exception)
+        for needle in ('不认识的键 rules', '不认识的臂名 nobody', 'clause 应是一个条款 id'):
+            self.assertIn(needle, msg)
 
     def test_report_without_judge_mentions_no_criteria(self):
         import test_record

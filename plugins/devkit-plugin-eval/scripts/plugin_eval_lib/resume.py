@@ -141,10 +141,35 @@ def plugin_block(*, name, version, plugin_fp, evals_fp, extra_exclude, entry, **
             'path_in_repo': entry['plugin_path'], 'evals_fingerprint': evals_fp}
 
 
+def environment_block(*, claude, child_env, runs, concurrency, model, judge_opts=None, clause_model=None, **_):
+    """run.json 的 environment 段（检查点与最终结果共用）。judge / clause_model 是首跑的命令行选项，续跑读回沿用：
+    judge = {enabled, model}（model 只记 --judge-model，配置文件与缺省值续跑时照常解析）；早于本字段的运行为 None。"""
+    jo = judge_opts if isinstance(judge_opts, dict) else None
+    return {'claude_path': str(claude), 'node_path': evalrun.which_node(child_env),
+            'runs_per_case': runs, 'concurrency': concurrency, 'model_override': model,
+            'platform': sys.platform,
+            'judge': None if jo is None else {'enabled': jo.get('enabled') is not False, 'model': jo.get('model')},
+            'clause_model': clause_model}
+
+
 def _environment(meta):
-    return {'claude_path': str(meta['claude']), 'node_path': evalrun.which_node(meta['child_env']),
-            'runs_per_case': meta['runs'], 'concurrency': meta['concurrency'], 'model_override': meta['model'],
-            'platform': sys.platform}
+    return environment_block(**meta)
+
+
+def judge_opts_from(environment, plugin_evals, runner=None):
+    """续跑：按首跑记下的 environment.judge 还原评委选项。首跑 --no-judge → 不调评委、不读配置；
+    首跑 --judge-model X → 仍用 X。早于本字段的运行返回 None（按配置与 judge.json 解析，同旧行为）。"""
+    from . import judge
+    j = (environment or {}).get('judge')
+    if not isinstance(j, dict):
+        return {'runner': runner} if runner else None
+    if j.get('enabled') is False:
+        return {'enabled': False}
+    try:
+        cfg = judge.load_config(plugin_evals)
+    except judge.JudgeConfigError as e:
+        raise ResumeError(str(e))
+    return {'enabled': True, 'model': j.get('model'), 'runner': runner, 'config': cfg}
 
 
 def write_json_atomic(path, obj):
@@ -393,7 +418,8 @@ def _evals_changed(old, new, cases):
 
 
 def resume_run(data_dir, run_dir, *, claude=None, runner=evalrun.run_eval, env=None, tmp_parent=None,
-               sandbox_roots=None, keep_assembly=False, log=None, now=None, preflight_check=None):
+               sandbox_roots=None, keep_assembly=False, log=None, now=None, preflight_check=None,
+               judge_runner=None, clause_ai=None):
     log = log or (lambda msg: print(msg, file=sys.stderr))
     now = now or (lambda: datetime.now(timezone.utc))
     data_dir, run_dir = Path(data_dir), Path(run_dir)
@@ -439,6 +465,8 @@ def resume_run(data_dir, run_dir, *, claude=None, runner=evalrun.run_eval, env=N
         raise ResumeError('run.json 的 environment.runs_per_case 缺失或非法：%r' % runs)
     concurrency = environment.get('concurrency') or 1
     model = environment.get('model_override')
+    judge_opts = judge_opts_from(environment, repo / 'plugin-evals' / name, runner=judge_runner)
+    clause_model = environment.get('clause_model')
     threshold = old.get('threshold', 1.0)
     cases = list(old.get('cases') or [])
     evals_src = plugin_dir / 'evals'
@@ -482,11 +510,18 @@ def resume_run(data_dir, run_dir, *, claude=None, runner=evalrun.run_eval, env=N
         meta = dict(log=log, run_id=run_id, name=name, version=version, plugin_fp=plugin_fp, evals_fp=evals_fp,
                     extra_exclude=extra_exclude, entry=entry, cases=cases, threshold=threshold, started=started,
                     claude=claude, child_env=child_env, runs=runs, concurrency=concurrency, model=model,
-                    run_dir=run_dir, data_dir=data_dir, plan=plan, pre=pre)
+                    run_dir=run_dir, data_dir=data_dir, plan=plan, pre=pre, judge_opts=judge_opts,
+                    clause_model=clause_model)
         old_arms = {k: v for k, v in (old.get('arms') or {}).items() if v}
         old_pending = old.get('pending')
         lock = RunLock(data_dir, run_id).acquire()
         try:
+            if not (Path(run_dir) / compare.clauses.CHECK_FILE).is_file():
+                # 首跑在条款检查之前就退出了：续跑补做，沿用首跑的 --clause-model
+                compare.clauses.check_for_run(repo=repo, name=name, plugin_dir=plugin_dir, run_dir=run_dir,
+                                              run_id=run_id, env=child_env, cases=cases, ai=clause_ai,
+                                              model=clause_model, claude=claude, tmp_parent=tmp_parent,
+                                              now=started, log=log)
             meta['statics'] = compare.static_profiles(plan.specs, child_env, tmp_parent)
             tmp_root = Path(tempfile.mkdtemp(prefix='devkit-plugin-eval-resume-', dir=tmp_parent))
             base_ctx = {

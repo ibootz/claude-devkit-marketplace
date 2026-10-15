@@ -4,20 +4,29 @@
 票 01 报告「三、问题 3」实测静默忽略），正文是判定标准，可选 frontmatter：
     rule: <grader 名>      与之对照的规则 grader；评委判法与它相反即「评委与规则冲突」，算分歧样本
     arms: [current, none]  只判这些臂；缺省判全部臂
+    clause: C001           这条判定标准所属的条款 id（票 10 的 clauses.json）；金标随之记下，条款退役后金标停用
+frontmatter 只认这三个键。未知键、未知臂名、条款 id 形态不对：compare 开跑前报错（check_criteria）；
+rule 指向的 grader 在用例里不存在、条款 id 不在清单里或已退役：在报告里显式告警（judge.json 的 warnings）。
 样本 = 臂 × 用例 × 第几次 run × 判定标准。每个样本调两次评委（两遍独立判），判法：
 - 两遍都出错之外的任一遍出错 → error（不进待审页，运行判不完整，续跑时重判）；
 - 两遍判法不同，或两遍都判「判不了」，或两遍一致却与 rule grader 相反 → disagreement（分歧样本，全进待审页）；
 - 其余 → agreed；从中以 run_id 为种子随机抽 SPOT_CHECK_COUNT 条进待审页（抽检），不足全进。
-分歧与抽检样本的 trace（去掉家目录、邮箱与签名后）压缩存进 runs/<run_id>/samples/，入库；其余 trace 只留本机。
+分歧与抽检样本的 trace 压缩存进 runs/<run_id>/samples/<臂>--<用例>--<trace 目录哈希>.jsonl.gz，入库；其余 trace 只留本机。
+入库只留三类行：assistant（去掉 thinking 块）、user 里的 tool_result、result；system/init 等整行不入库，
+再去掉家目录、邮箱与签名。样本 id、样本文件名与金标 id 都按 trace 目录（哈希）定：续跑换了第几次 run 的编号，
+沿用的判分、用户裁定与金标仍指向原来那份 trace。
 
-金标（plugin-evals/<插件>/gold/<id>.json）：用户在待审页裁定过的样本（judgepending.py 写）。每次判样本之前，
-先让评委把全部有效金标判一遍，算与用户裁定的一致率写进 judge.json；配置了阈值与启用所需条数、且判成的金标
-够条数时才校准：一致率低于阈值即本次 AI 判分「不采信」。
+金标（plugin-evals/<插件>/gold/<id>.json）：用户在待审页裁定过的分歧样本与抽检样本（judgepending.py 写，
+source = disagreement / spot-check）。每次判样本之前，先让评委把全部有效金标判一遍（active=false 的、所属条款
+已退役的不判），按来源分开记一致率。判采信与否只用分歧来源：配置了阈值与启用所需条数、且分歧来源判成的金标
+够条数时才校准，一致率低于阈值即「不采信」（trusted=false），不低于即采信（true）；没配置或条数不够即
+「采信（未校准）」（trusted=null）。配置了、但因评委调用出错才不够条数时，运行判不完整，续跑时重判。
 
 配置：plugin-evals/<插件>/judge-config.json（可缺省）：
     {"model": "claude-fable-5-1", "gold_agreement_threshold": 0.8, "gold_min_samples": 5}
 评委模型优先级：compare --judge-model > 配置 model > 续跑时首跑记下的模型 > DEFAULT_MODEL（最贵一档）。
-阈值、条数留空（null 或不写）即不启用校准。
+续跑沿用首跑的 --judge-model 与 --no-judge（记在 run.json 的 environment.judge）。
+阈值、条数留空（null 或不写）即不启用校准。--no-judge 时不读本配置。
 """
 import gzip
 import hashlib
@@ -57,6 +66,11 @@ SYSTEM_PROMPT = (
 _EMAIL_RE = re.compile(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+')
 _FM_RE = re.compile(r'\A---\s*\n(.*?)\n---\s*\n?', re.S)
 _ID_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*$')
+_CLAUSE_RE = re.compile(r'^C\d{3,}$')
+FRONTMATTER_KEYS = ('rule', 'arms', 'clause')
+KNOWN_ARMS = ('none', 'previous', 'current', 'current_with_env')   # armplan 的臂键
+SOURCES = ('disagreement', 'spot-check')
+SOURCE_LABEL = {'disagreement': '分歧样本', 'spot-check': '抽检样本'}
 
 
 class JudgeConfigError(Exception):
@@ -106,7 +120,8 @@ def load_config(plugin_evals):
 
 
 def resolve_options(opts, run_dir):
-    """合并命令行（opts）、配置文件与续跑前的 judge.json，返回完整选项。opts 为 None 表示续跑或未指定。"""
+    """合并命令行（opts）、配置文件与续跑前的 judge.json，返回完整选项。opts 为 None 表示未指定（早于
+    environment.judge 的运行续跑时也是 None）。enabled=False（--no-judge）时直接返回，不读配置。"""
     opts = dict(opts or {})
     if opts.get('enabled') is False:
         return {'enabled': False}
@@ -151,7 +166,8 @@ def _frontmatter(text):
 
 
 def case_criteria(evals_src, case):
-    """用例 judge/*.md → [{id, text, rule, arms, fingerprint}]，按 id 排序。没有 judge/ 返回 []。"""
+    """用例 judge/*.md → [{id, text, rule, arms, clause, problems, fingerprint}]，按 id 排序。没有 judge/ 返回 []。
+    problems：frontmatter 的未知键、未知臂名、条款 id 形态不对（check_criteria 据此在开跑前报错）。"""
     d = Path(evals_src) / case / 'judge'
     out = []
     if not d.is_dir():
@@ -162,9 +178,38 @@ def case_criteria(evals_src, case):
         if not body:
             continue
         arms = meta.get('arms')
-        out.append({'id': f.stem, 'text': body, 'rule': meta.get('rule') or None,
-                    'arms': [arms] if isinstance(arms, str) else arms, 'fingerprint': 'sha256:' + _sha(raw, 64)})
+        arms = [arms] if isinstance(arms, str) else arms
+        clause = meta.get('clause') or None
+        problems = ['不认识的键 %s（只认 %s）' % (k, '、'.join(FRONTMATTER_KEYS))
+                    for k in sorted(meta) if k not in FRONTMATTER_KEYS]
+        problems += ['arms 里有不认识的臂名 %s（可用：%s）' % (a, '、'.join(KNOWN_ARMS))
+                     for a in arms or [] if a not in KNOWN_ARMS]
+        if clause is not None and (not isinstance(clause, str) or not _CLAUSE_RE.match(clause)):
+            problems.append('clause 应是一个条款 id（形如 C001）：%r' % (clause,))
+        out.append({'id': f.stem, 'text': body, 'rule': meta.get('rule') or None, 'arms': arms,
+                    'clause': clause if isinstance(clause, str) else None, 'problems': problems,
+                    'fingerprint': 'sha256:' + _sha(raw, 64)})
     return out
+
+
+def check_criteria(evals_src, cases):
+    """开跑前查各用例 judge/*.md 的 frontmatter：有问题抛 JudgeConfigError（列全），免得各臂白跑。"""
+    bad = ['%s/judge/%s.md：%s' % (c, crit['id'], p) for c in cases for crit in case_criteria(evals_src, c)
+           for p in crit['problems']]
+    if bad:
+        raise JudgeConfigError('AI 评委判定标准的 frontmatter 有问题：\n  ' + '\n  '.join(bad))
+
+
+def _clause_status(plugin_evals):
+    """(清单里全部 id 集合或 None, 退役 id 集合)。清单读不出时当作没有清单（金标照常参与，告警里不判条款）。"""
+    from . import clauses     # 延迟导入：clauses → pending → resume → compare → judge
+    try:
+        lst = clauses._read_json(Path(plugin_evals) / clauses.LIST_FILE)
+    except (OSError, ValueError):
+        return None, set()
+    if not isinstance(lst, dict):
+        return None, set()
+    return {c.get('id') for c in lst.get('clauses') or [] if isinstance(c, dict)}, set(clauses.retired_ids(lst))
 
 
 def case_prompt(evals_src, case):
@@ -256,12 +301,44 @@ def scrub(obj, home=None):
     return _scrub_obj(record.scrub_home(obj, home), home)
 
 
+def sample_lines(lines):
+    """入库样本只留评委与用户要读的三类行：assistant（去掉 thinking 块）、user 里的 tool_result、result。
+    system/init（插件清单、本机路径）、hook 输出、用户原始请求行等整行不入库。"""
+    out = []
+    for o in lines:
+        if not isinstance(o, dict):
+            continue
+        t = o.get('type')
+        if t == 'assistant':
+            msg = dict(o.get('message') or {})
+            content = msg.get('content')
+            if isinstance(content, list):
+                msg['content'] = [c for c in content
+                                  if not (isinstance(c, dict) and c.get('type') in ('thinking', 'redacted_thinking'))]
+            out.append(dict(o, message=msg))
+        elif t == 'user':
+            content = (o.get('message') or {}).get('content')
+            if isinstance(content, list):
+                results = [c for c in content if isinstance(c, dict) and c.get('type') == 'tool_result']
+                if results:
+                    out.append(dict(o, message=dict(o.get('message') or {}, content=results)))
+        elif t == 'result':
+            out.append(o)
+    return out
+
+
+def sample_file_name(sample):
+    """样本文件按 trace 目录的哈希命名：续跑换了第几次 run 的编号也不会覆盖或错指。"""
+    return '%s/%s--%s--%s.jsonl.gz' % (SAMPLES_DIR, sample['arm'], sample['case'].replace('/', '__'),
+                                       _sha(sample['trace_dir'] or sample['key']))
+
+
 def store_sample(trace_path, dest, home=None):
-    """trace.jsonl → 去家目录、邮箱、thinking 签名后 gzip（mtime=0，同内容同字节）。返回是否写成。"""
+    """trace.jsonl → 只留三类行（sample_lines），去家目录、邮箱、thinking 签名后 gzip（mtime=0，同内容同字节）。"""
     lines = read_trace_lines(trace_path)
     if lines is None:
         return False
-    body = ''.join(json.dumps(scrub(o, home), ensure_ascii=False) + '\n' for o in lines)
+    body = ''.join(json.dumps(scrub(o, home), ensure_ascii=False) + '\n' for o in sample_lines(lines))
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + '.tmp')
@@ -364,6 +441,31 @@ def _case_key(case):
     return d[len('evals/'):] if d.startswith('evals/') else (d or case.get('name'))
 
 
+def sample_id(trace_dir, key, criterion):
+    """样本 id 按（trace 目录、判定标准）定；没有 trace 目录时退回按样本 key。"""
+    return 's-' + _sha('%s#%s' % (trace_dir, criterion) if trace_dir else key, 10)
+
+
+def grader_problems(arm_records, labels, evals_src):
+    """rule 指向的 grader 在该用例的汇总里不存在：[告警文字]（开跑前读不到 grader 名单，判分时才查）。"""
+    out, seen = [], set()
+    for arm in labels:
+        agg = (arm_records.get(arm) or {}).get('_agg')
+        for case in (agg or {}).get('cases', []):
+            ck = _case_key(case)
+            names = {g.get('name') for run in (case.get('arms') or {}).get('with') or []
+                     for g in run.get('graders') or []}
+            names |= {g.get('name') for g in case.get('graders') or [] if isinstance(g, dict)}
+            if not names:
+                continue
+            for c in case_criteria(evals_src, ck):
+                if c['rule'] and c['rule'] not in names and (ck, c['id']) not in seen:
+                    seen.add((ck, c['id']))
+                    out.append('%s/judge/%s.md 的 rule 指向的 grader「%s」在该用例里不存在（有：%s），本条不与规则对照'
+                               % (ck, c['id'], c['rule'], '、'.join(sorted(n for n in names if n))))
+    return out
+
+
 def collect_samples(arm_records, labels, evals_src, trace_key):
     """从各臂汇总里列出要判的样本。arm_records[臂]['_agg'] 是 eval 汇总（带 devkitTraceDir）。"""
     samples = []
@@ -383,11 +485,13 @@ def collect_samples(arm_records, labels, evals_src, trace_key):
                     if c['arms'] and arm not in c['arms']:
                         continue
                     key = '%s/%s/%d/%s' % (arm, ck, i + 1, c['id'])
+                    trace_dir = run.get(trace_key)
                     samples.append({
-                        'id': 's-' + _sha(key, 10), 'key': key, 'arm': arm, 'arm_label': labels[arm], 'case': ck,
-                        'run': i + 1, 'criterion': c['id'], 'criterion_fingerprint': c['fingerprint'],
+                        'id': sample_id(trace_dir, key, c['id']), 'key': key, 'arm': arm, 'arm_label': labels[arm],
+                        'case': ck, 'run': i + 1, 'criterion': c['id'], 'criterion_fingerprint': c['fingerprint'],
+                        'clause': c.get('clause'),
                         'rule_grader': c['rule'], 'rule_passed': _rule_result(case, i, c['rule']),
-                        'trace_dir': run.get(trace_key), 'passes': [], 'status': None, 'disagreement': None,
+                        'trace_dir': trace_dir, 'passes': [], 'status': None, 'disagreement': None,
                         'spot_check': False, 'sample_file': None, 'user': None, 'final_verdict': None,
                         'gold_id': None, '_criterion': c,
                     })
@@ -460,7 +564,9 @@ def summarize(doc):
         'errors': count('error'), 'spot_checks': sum(1 for s in samples if s.get('spot_check')),
         'user_decided': sum(1 for s in samples if s.get('user')),
         'gold': {k: (doc.get('gold') or {}).get(k) for k in ('total', 'judged', 'agreed', 'agreement_rate', 'threshold',
-                                                           'min_samples', 'enabled', 'note')},
+                                                           'min_samples', 'enabled', 'state', 'note', 'by_source',
+                                                           'basis_source', 'call_errors', 'retired_clauses')},
+        'warnings': doc.get('warnings') or [],
         'scores': doc.get('scores'), 'usage': doc.get('usage'), 'flagged': flagged,
         'arm_labels': {s['arm']: s.get('arm_label') for s in samples},
     }
@@ -468,44 +574,66 @@ def summarize(doc):
 
 # ---------------- 金标 ----------------
 
-def load_gold(plugin_evals):
+def gold_source(g):
+    """金标来源；早于来源字段的金标都是分歧样本裁定的（票 09 首版只存分歧）。"""
+    return g.get('source') if g.get('source') in SOURCES else 'disagreement'
+
+
+def load_gold(plugin_evals, retired=()):
+    """有效金标：active 不是 false、用户裁定为通过 / 不通过、所属条款没有退役（clause 在 retired 里的不参与校准）。"""
     d = Path(plugin_evals) / GOLD_DIR
     out = []
     if not d.is_dir():
         return out
     for f in sorted(d.glob('*.json')):
         g = _read_json(f)
-        if isinstance(g, dict) and g.get('active', True) and g.get('user_verdict') in ('pass', 'fail'):
+        if isinstance(g, dict) and g.get('active', True) and g.get('user_verdict') in ('pass', 'fail') \
+                and g.get('clause') not in retired:
             out.append(g)
     return out
 
 
-def calibrate(plugin_evals, cfg, judge_fn):
-    """先判金标：每条判一遍，与用户裁定比。judge_fn(prompt) -> 判分条目。"""
-    gold = load_gold(plugin_evals)
-    items = []
-    for g in gold:
-        lines = read_trace_lines(Path(plugin_evals) / (g.get('sample_file') or ''))
-        if lines is None:
-            items.append({'id': g.get('id'), 'gold_verdict': g['user_verdict'], 'ai_verdict': None, 'match': None,
-                          'error': '样本 trace 不在仓里：%s' % g.get('sample_file')})
-            continue
-        e = judge_fn(build_prompt(g.get('criterion_text') or '', g.get('prompt') or '', render_transcript(lines)))
-        items.append({'id': g.get('id'), 'gold_verdict': g['user_verdict'], 'ai_verdict': e['verdict'],
-                      'reason': e['reason'], 'error': e['error'], '_entry': e,
-                      'match': None if e['error'] else e['verdict'] == g['user_verdict']})
+def _rate(items):
     judged = [i for i in items if i['match'] is not None]
     agreed = sum(1 for i in judged if i['match'])
-    rate = agreed / len(judged) if judged else None
+    return {'total': len(items), 'judged': len(judged), 'agreed': agreed,
+            'agreement_rate': agreed / len(judged) if judged else None}
+
+
+def calibrate(plugin_evals, cfg, judge_fn):
+    """先判金标：每条判一遍，与用户裁定比；一致率按来源分开记，判采信只看分歧来源。judge_fn(prompt) -> 判分条目。
+    state：not-configured / insufficient（金标本身不够）/ insufficient-errors（够，但调用出错后判成的不够）/ enabled。"""
+    _, retired = _clause_status(plugin_evals)
+    gold = load_gold(plugin_evals, retired)
+    items = []
+    for g in gold:
+        src = gold_source(g)
+        lines = read_trace_lines(Path(plugin_evals) / (g.get('sample_file') or ''))
+        if lines is None:
+            items.append({'id': g.get('id'), 'source': src, 'gold_verdict': g['user_verdict'], 'ai_verdict': None,
+                          'match': None, 'error': '样本 trace 不在仓里：%s' % g.get('sample_file')})
+            continue
+        e = judge_fn(build_prompt(g.get('criterion_text') or '', g.get('prompt') or '', render_transcript(lines)))
+        items.append({'id': g.get('id'), 'source': src, 'gold_verdict': g['user_verdict'], 'ai_verdict': e['verdict'],
+                      'reason': e['reason'], 'error': e['error'], '_entry': e, 'call_error': bool(e['error']),
+                      'match': None if e['error'] else e['verdict'] == g['user_verdict']})
+    overall = _rate(items)
+    by_source = {src: _rate([i for i in items if i['source'] == src]) for src in SOURCES}
+    basis = by_source['disagreement']
+    call_errors = sum(1 for i in items if i['source'] == 'disagreement' and i.get('call_error'))
     t, n = cfg.get('gold_agreement_threshold'), cfg.get('gold_min_samples')
     if t is None or n is None:
-        enabled, note = False, '未配置一致率阈值或启用所需条数（%s），不启用校准，只记一致率' % CONFIG_NAME
-    elif len(judged) < n:
-        enabled, note = False, '判成的金标 %d 条，不足启用所需 %d 条，不启用校准' % (len(judged), n)
+        state, note = 'not-configured', '未配置一致率阈值或启用所需条数（%s），不启用校准，只记一致率' % CONFIG_NAME
+    elif basis['judged'] >= n:
+        state, note = 'enabled', '已启用校准（只按分歧来源的一致率判）'
+    elif basis['judged'] + call_errors >= n:
+        state, note = 'insufficient-errors', ('分歧来源的金标够 %d 条，但 %d 条评委调用出错，判成 %d 条不足启用所需 %d 条；'
+                                              '运行判不完整，续跑时重判' % (n, call_errors, basis['judged'], n))
     else:
-        enabled, note = True, '已启用校准'
-    return {'total': len(gold), 'judged': len(judged), 'agreed': agreed, 'agreement_rate': rate, 'threshold': t,
-            'min_samples': n, 'enabled': enabled, 'note': note, 'items': items}
+        state, note = 'insufficient', '分歧来源判成的金标 %d 条，不足启用所需 %d 条，不启用校准' % (basis['judged'], n)
+    return dict(overall, threshold=t, min_samples=n, enabled=state == 'enabled', state=state, note=note,
+                by_source=by_source, basis_source='disagreement', call_errors=call_errors,
+                retired_clauses=sorted(retired), items=items)
 
 
 # ---------------- 主流程 ----------------
@@ -524,7 +652,10 @@ def run(*, arm_records, labels, evals_src, run_dir, run_id, opts, claude, env, t
     runner = opts.get('runner') or claude_runner(claude, env)
     model = opts['model']
     started = _iso(now())
-    prev = {s.get('key'): s for s in ((_read_json(Path(run_dir) / JUDGE_FILE) or {}).get('samples') or [])}
+    prev = {}
+    for old in (_read_json(Path(run_dir) / JUDGE_FILE) or {}).get('samples') or []:
+        # 续跑按（trace 目录、判定标准）对上首跑的样本：补跑会让同一份 trace 的「第几次 run」编号变掉
+        prev[(old.get('trace_dir'), old.get('criterion')) if old.get('trace_dir') else old.get('key')] = old
 
     def judge_fn(prompt):
         return _judge_once(runner, prompt, model)
@@ -535,12 +666,13 @@ def run(*, arm_records, labels, evals_src, run_dir, run_id, opts, claude, env, t
     # 续跑：同一样本、同一份 trace、同一判定标准、两遍都没出错的，沿用首跑判分与用户裁定
     todo = []
     for s in samples:
-        old = prev.get(s['key'])
+        old = prev.get((s['trace_dir'], s['criterion']) if s['trace_dir'] else s['key'])
         if (old and old.get('trace_dir') == s['trace_dir']
                 and old.get('criterion_fingerprint') == s['criterion_fingerprint'] and old.get('status') != 'error'
                 and len(old.get('passes') or []) == PASSES):
             s['passes'], s['user'], s['gold_id'] = old['passes'], old.get('user'), old.get('gold_id')
-            s['reused'] = True
+            s['sample_file'] = old.get('sample_file')
+            s['reused'], s['_was_spot'] = True, bool(old.get('spot_check'))
             continue
         trace = Path(data_dir) / s['trace_dir'] / 'trace.jsonl' if s['trace_dir'] else None
         lines = read_trace_lines(trace) if trace else None
@@ -559,16 +691,21 @@ def run(*, arm_records, labels, evals_src, run_dir, run_id, opts, claude, env, t
     for s in samples:
         s['status'], s['disagreement'] = classify(s)
     agreed = [s for s in samples if s['status'] == 'agreed']
-    for s in random.Random(run_id).sample(agreed, min(SPOT_CHECK_COUNT, len(agreed))):
+    kept = [s for s in agreed if s.get('_was_spot')]          # 续跑：首跑抽中的抽检照旧（可能已裁定）
+    rest = [s for s in agreed if not s.get('_was_spot')]
+    for s in kept + random.Random(run_id).sample(rest, min(max(0, SPOT_CHECK_COUNT - len(kept)), len(rest))):
         s['spot_check'] = True
     for s in samples:
         s['final_verdict'] = final_verdict(s)
         if (s['status'] == 'disagreement' or s['spot_check']) and s['trace_dir']:
-            rel = '%s/%s--%s-%d.jsonl.gz' % (SAMPLES_DIR, s['arm'], s['case'].replace('/', '__'), s['run'])
+            rel = sample_file_name(s)
+            if s.get('sample_file') == rel and (Path(run_dir) / rel).is_file():
+                continue
             if store_sample(Path(data_dir) / s['trace_dir'] / 'trace.jsonl', Path(run_dir) / rel):
                 s['sample_file'] = rel
 
-    entries = [p for s in samples if not s.get('reused') for p in s['passes']]
+    # 用量与模型：沿用样本的判分条目带着首跑记下的 usage，一并合计（续跑后是整份 judge.json 的总数）
+    entries = [p for s in samples for p in s['passes']]
     entries += [i['_entry'] for i in gold['items'] if '_entry' in i]
     models = sorted({m for e in entries for m in e.get('models') or []})
     usage = _merge_usage(entries)
@@ -578,13 +715,28 @@ def run(*, arm_records, labels, evals_src, run_dir, run_id, opts, claude, env, t
         reasons.append('AI 评委：%d 个样本判分出错（%s），续跑时重判' % (
             len(errors), '；'.join(sorted({next((p['error'] for p in s['passes'] if p.get('error')), '?')[:120]
                                          for s in errors}))[:400]))
-    trusted, why = True, None
-    if gold['enabled'] and gold['agreement_rate'] is not None and gold['agreement_rate'] < gold['threshold']:
-        trusted = False
-        why = '金标一致率 %.2f 低于阈值 %.2f（判成 %d 条，一致 %d 条）' % (
-            gold['agreement_rate'], gold['threshold'], gold['judged'], gold['agreed'])
+    if gold['state'] == 'insufficient-errors':
+        reasons.append('AI 评委：金标校准有 %d 条评委调用出错，分歧来源判成 %d 条不足启用所需 %d 条，续跑时重判' % (
+            gold['call_errors'], gold['by_source']['disagreement']['judged'], gold['min_samples']))
+    trusted, why = None, None          # null = 采信（未校准）
+    basis = gold['by_source']['disagreement']
+    if gold['enabled']:
+        trusted = basis['agreement_rate'] >= gold['threshold']
+        if not trusted:
+            why = '分歧来源的金标一致率 %.2f 低于阈值 %.2f（判成 %d 条，一致 %d 条）' % (
+                basis['agreement_rate'], gold['threshold'], basis['judged'], basis['agreed'])
+    warnings = grader_problems(arm_records, labels, evals_src)
+    known, retired = _clause_status(plugin_evals)
+    for ck, cid, clause in sorted({(s['case'], s['criterion'], s.get('clause')) for s in samples if s.get('clause')}):
+        if clause in retired:
+            warnings.append('%s/judge/%s.md 所属条款 %s 已退役：这条判定标准上的金标不参与校准，用例待改挂' % (ck, cid, clause))
+        elif known is not None and clause not in known:
+            warnings.append('%s/judge/%s.md 所属条款 %s 不在条款清单里' % (ck, cid, clause))
+        elif known is None:
+            warnings.append('%s/judge/%s.md 声明了所属条款 %s，但还没有条款清单可核对' % (ck, cid, clause))
     for i in gold['items']:
         i.pop('_entry', None)
+        i.pop('call_error', None)
     cases_info = {}
     for s in samples:   # 待审页与金标要用的用例原文：用例 prompt 与判定标准（都来自已入库的用例目录）
         info = cases_info.setdefault(s['case'], {'prompt': case_prompt(evals_src, s['case']), 'criteria': {}})
@@ -592,22 +744,23 @@ def run(*, arm_records, labels, evals_src, run_dir, run_id, opts, claude, env, t
     for s in samples:
         s.pop('_criterion', None)
         s.pop('reused', None)
-        for p in s['passes']:
-            p.pop('usage', None)
+        s.pop('_was_spot', None)
     doc = {
         'schema_version': SCHEMA_VERSION, 'run_id': run_id, 'requested_model': model,
         'model': model if (not models or model in models) else models[0],   # 实际所用：以评委回报的模型为准
         'models_used': models, 'model_source': opts.get('model_source'), 'passes': PASSES,
         'started_at': started, 'finished_at': _iso(now()),
         'config': {k: opts['config'].get(k) for k in ('path', 'model', 'gold_agreement_threshold', 'gold_min_samples')},
-        'gold': gold, 'trusted': trusted, 'untrusted_reason': why, 'complete': not errors,
+        'gold': gold, 'trusted': trusted, 'untrusted_reason': why,
+        'complete': not errors and gold['state'] != 'insufficient-errors', 'warnings': warnings,
         'spot_check_rule': '从两遍一致的样本里以 run_id 为种子随机抽 %d 条，不足全抽' % SPOT_CHECK_COUNT,
         'cases': cases_info, 'samples': samples, 'scores': compute_scores(samples), 'usage': usage,
     }
     log('[AI 评委] 两遍一致 %d、分歧 %d、出错 %d；抽检 %d；金标一致率 %s%s' % (
         len(agreed), sum(1 for s in samples if s['status'] == 'disagreement'), len(errors),
         sum(1 for s in samples if s['spot_check']),
-        '—' if gold['agreement_rate'] is None else '%.2f' % gold['agreement_rate'], '；AI 判分不采信' if not trusted else ''))
+        '—' if gold['agreement_rate'] is None else '%.2f' % gold['agreement_rate'],
+        {False: '；AI 判分不采信', None: '；采信（未校准）'}.get(trusted, '')))
     return doc, reasons
 
 

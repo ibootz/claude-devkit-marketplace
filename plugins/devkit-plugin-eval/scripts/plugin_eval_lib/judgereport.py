@@ -1,6 +1,7 @@
 """report.md 里 AI 评委（票 09）的两段：首段醒目提示（不采信、判分出错）与「## AI 评委判分」一节。
 只读 run.json 的 judge 字段（judge.summarize 的输出），不读 judge.json；待审页写回用户裁定后整节重渲。
 本节内只用 ### 小标题：pending.upsert_section 按下一个 `## ` 定节尾。
+是否采信三态：true 采信（已校准）、false 不采信、null 采信（未校准）。judge = {"skipped": "no-judge"} 时写明按 --no-judge 跳过。
 """
 SECTION_HEADING = '## AI 评委判分'
 _V = {'pass': '通过', 'fail': '不通过', 'unclear': '判不了', None: '—'}
@@ -11,9 +12,32 @@ def _f(x):
     return '—' if x is None else '%.2f' % x
 
 
+def trust_text(j):
+    t = j.get('trusted')
+    if t is True:
+        return '采信'
+    if t is False:
+        return '**不采信**（%s）' % j.get('untrusted_reason')
+    return '采信（未校准）'
+
+
+def skipped(j):
+    return isinstance(j, dict) and j.get('skipped') == 'no-judge'
+
+
+def scoring_line(rec):
+    """报告首段「判分」一行：按本次实际情况写。"""
+    j = rec.get('judge')
+    if skipped(j):
+        return '规则 grader 定分与是否通过；AI 评委按 --no-judge 跳过'
+    if j:
+        return '规则 grader 定分与是否通过；AI 评委另判 %d 个样本，只作信息（见「AI 评委判分」）' % (j.get('samples') or 0)
+    return '只用规则 grader（没有用例声明 AI 评委判定标准）'
+
+
 def report_banner(rec):
     j = rec.get('judge')
-    if not j:
+    if not j or skipped(j):
         return []
     out = []
     if j.get('trusted') is False:
@@ -21,6 +45,11 @@ def report_banner(rec):
                 % j.get('untrusted_reason')]
     if j.get('errors'):
         out += ['', '> **AI 评委有 %d 个样本判分出错**，运行判为不完整，续跑时重判。' % j['errors']]
+    g = j.get('gold') or {}
+    if g.get('state') == 'insufficient-errors':
+        out += ['', '> **AI 评委金标校准没做成**：%s。' % g.get('note')]
+    if j.get('warnings'):
+        out += ['', '> **AI 评委判定标准有告警**（%d 条，见「AI 评委判分」一节）。' % len(j['warnings'])]
     return out
 
 
@@ -28,6 +57,9 @@ def section_body(rec):
     """「## AI 评委判分」整节文本（含标题行，末尾带换行）。"""
     j = rec.get('judge')
     lines = [SECTION_HEADING, '']
+    if skipped(j):
+        lines += ['按 --no-judge 跳过：本次未调 AI 评委，也未读 judge-config.json。', '']
+        return '\n'.join(lines)
     if not j:
         lines += ['本次没有用例声明 AI 评委判定标准（用例目录下的 `judge/*.md`），未调 AI 评委。', '']
         return '\n'.join(lines)
@@ -42,12 +74,22 @@ def section_body(rec):
             g.get('total'), g.get('judged'), g.get('agreed'), _f(g.get('agreement_rate')),
             '未配置' if g.get('threshold') is None else g['threshold'],
             '未配置' if g.get('min_samples') is None else g['min_samples'], g.get('note') or ''),
-        '- 是否采信：%s' % ('采信' if j.get('trusted') else '**不采信**（%s）' % j.get('untrusted_reason')),
+    ]
+    for src, label in (('disagreement', '分歧样本'), ('spot-check', '抽检样本')):
+        b = (g.get('by_source') or {}).get(src)
+        if b:
+            lines.append('  - 来自%s的金标：%d 条，判成 %d 条，一致率 %s%s' % (
+                label, b['total'], b['judged'], _f(b['agreement_rate']), '（判采信与否只看这一项）'
+                if src == (g.get('basis_source') or 'disagreement') else '（只记，不参与判采信）'))
+    lines += [
+        '- 是否采信：%s' % trust_text(j),
         '- 评委花费：$%.4f（%s，%s 次调用）' % (u.get('cost_usd') or 0, u.get('cost_basis', ''), u.get('calls', 0)),
         '',
         'AI 判分只作信息：不改规则分，也不进「是否通过」。样本通过记 1、不通过记 0；分歧样本经用户裁定后才计入。',
         '',
     ]
+    if j.get('warnings'):
+        lines += ['### 判定标准告警', ''] + ['- %s' % w for w in j['warnings']] + ['']
     scores = (j.get('scores') or {}).get('arms') or {}
     if scores:
         lines += ['### 各臂 AI 判分', '', '| 臂 | 用例 | AI 判分 |', '|---|---|---|']

@@ -4,6 +4,8 @@
 本模块取 10、20（票 11 / 12 往后排）。
 用户在页上给出自己的判法（通过 / 不通过 / 判不了），写回 judge.json 的样本 user 字段；通过、不通过两种
 另存为金标样本 plugin-evals/<插件>/gold/<id>.json，下次对照先判它校准评委。判不了的不进金标。
+金标 id 按（run_id、trace 目录、判定标准）定，记下来源 source（disagreement / spot-check）与所属条款 clause；
+所属条款已退役时 active=false（不参与校准）。
 页上不显示样本来自哪一臂：用户盲判，金标不受「装没装插件」的预期左右。
 写回可重复执行（同一回复码重试时结果相同），接得住 pending 落盘中途失败后的重试。
 """
@@ -64,7 +66,9 @@ def _collect_spot_checks(subject):
             if s.get('spot_check') and s.get('status') == 'agreed' and not s.get('user')]
 
 
-def gold_id(run_id, key):
+def gold_id(run_id, sample):
+    """按 trace 目录定：续跑换了第几次 run 的编号，同一份 trace 的金标 id 不变。"""
+    key = '%s#%s' % (sample['trace_dir'], sample['criterion']) if sample.get('trace_dir') else sample['key']
     return 'g-' + hashlib.sha256(('%s/%s' % (run_id, key)).encode('utf-8')).hexdigest()[:12]
 
 
@@ -79,11 +83,17 @@ def _apply(subject, item, code, now, source):
     s['final_verdict'] = judge.final_verdict(s)
     run_id = doc.get('run_id') or subject.rec.get('run_id')
     if verdict in ('pass', 'fail'):
-        gid = gold_id(run_id, s['key'])
+        gid = gold_id(run_id, s)
+        if s.get('gold_id') and s['gold_id'] != gid:
+            subject.stage_delete('../../%s/%s.json' % (judge.GOLD_DIR, s['gold_id']))
         case_info = (doc.get('cases') or {}).get(s['case']) or {}
         p = subject.rec.get('plugin') or {}
+        _, retired = judge._clause_status(subject.run_dir.parent.parent)
+        active = s.get('clause') not in retired
         subject.stage_json('../../%s/%s.json' % (judge.GOLD_DIR, gid), {
-            'schema_version': 1, 'id': gid, 'active': True, 'created_at': ts, 'source': source,
+            'schema_version': 1, 'id': gid, 'active': active, 'created_at': ts, 'source': source,
+            'clause': s.get('clause'), 'trace_dir': s.get('trace_dir'),
+            'deactivated': None if active else {'reason': 'clause-retired', 'clause': s.get('clause'), 'at': ts},
             'plugin': p.get('name'), 'plugin_version': p.get('version'), 'run_id': run_id,
             'sample_key': s['key'], 'sample_id': s['id'], 'arm': s['arm'], 'case': s['case'], 'run': s['run'],
             'criterion': s['criterion'], 'criterion_fingerprint': s.get('criterion_fingerprint'),
