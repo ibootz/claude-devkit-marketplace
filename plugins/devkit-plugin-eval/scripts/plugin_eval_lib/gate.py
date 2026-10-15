@@ -37,6 +37,9 @@ MAIN_REF_CANDIDATES = ('origin/main', 'main', 'origin/master', 'master')
 
 BASIS_COMPARE = 'compare'
 BASIS_GATE = 'gate'
+SKIPPED_KINDS = ('clauses',)       # 单跑条款清单的运行：不是评测结果，扫 runs/ 时跳过
+JUDGE_UNTRUSTED_NOTE = '本报告 AI 判分不采信，已审时由用户判断'
+DIRTY_BLOCKER = '插件目录有未提交改动（不含 evals/），先提交再跑 gate'
 
 
 class GateError(Exception):
@@ -94,9 +97,19 @@ class Commit:
     path: str                       # 该提交里 plugin.json 的路径
     version: Optional[str]
     trailers: List[tuple] = field(default_factory=list)   # [(小写键, 值)]
+    body_lines: List[tuple] = field(default_factory=list)  # 提交信息全文里形如「键: 值」的行 [(小写键, 值)]
 
     def trailer(self, key):
         return [v for k, v in self.trailers if k == key]
+
+    def required(self):
+        """eval-required:：trailer 之外再按提交信息全文逐行宽松识别（声明后面跟了空行和署名段时 git 不认它是 trailer）。"""
+        got = self.trailer(TRAILER_REQUIRED)
+        return got or [v for k, v in self.body_lines if k == TRAILER_REQUIRED]
+
+    def untrailered(self):
+        """正文出现 eval-skip: / eval-required:、trailer 却没取到的键：输出警告（eval-skip: 不宽松识别，只警告）。"""
+        return sorted({k for k, _ in self.body_lines if k in (TRAILER_SKIP, TRAILER_REQUIRED) and not self.trailer(k)})
 
 
 def _git(git, top, *args):
@@ -114,23 +127,36 @@ def _parse_trailers(text):
     return out
 
 
+_BODY_KEY_RE = re.compile(r'^(eval-required|eval-skip):(.*)$', re.IGNORECASE)
+
+
+def _body_keys(text):
+    out = []
+    for ln in text.splitlines():
+        m = _BODY_KEY_RE.match(ln.strip())
+        if m:
+            out.append((m.group(1).lower(), m.group(2).strip()))
+    return out
+
+
 def manifest_history(git, top, manifest_rel, ref):
     """沿 ref 追踪 plugin.json（跨改名），新到旧：[Commit]。读不出 plugin.json 的提交、merge 提交跳过。"""
-    proc = _git(git, top, 'log', '--follow', '--date-order', '--format=%x00%H%x1f%(trailers:only,unfold)%x1e',
-                '--name-only', ref, '--', manifest_rel)
+    proc = _git(git, top, 'log', '--follow', '--date-order',
+                '--format=%x00%H%x1f%(trailers:only,unfold)%x1d%B%x1e', '--name-only', ref, '--', manifest_rel)
     if proc.returncode != 0:
         return []
     out = []
     for chunk in proc.stdout.split('\x00')[1:]:
         head, _, names = chunk.partition('\x1e')
-        sha, _, trailers = head.partition('\x1f')
+        sha, _, rest = head.partition('\x1f')
+        trailers, _, body = rest.partition('\x1d')
         paths = [ln.strip() for ln in names.splitlines() if ln.strip()]
         if not paths:
             continue
         data = previous._manifest_at(git, top, sha.strip(), paths[-1])
         if data is None:
             continue
-        out.append(Commit(sha.strip(), paths[-1], data.get('version'), _parse_trailers(trailers)))
+        out.append(Commit(sha.strip(), paths[-1], data.get('version'), _parse_trailers(trailers), _body_keys(body)))
     return out
 
 
@@ -266,6 +292,9 @@ def assess_run(rec, *, version, plugin_fp, run_id='?'):
         note = _degraded_note(rec)
         if note:
             notes.append(note)
+        judge = rec.get('judge') if isinstance(rec.get('judge'), dict) else {}
+        if judge.get('trusted') is False:
+            notes.append(JUDGE_UNTRUSTED_NOTE)
     elif kind == BASIS_GATE:
         if rec.get('passed') is not True:
             reasons.append('规则子集未通过（passed=%r）' % rec.get('passed'))
@@ -289,8 +318,11 @@ def load_runs(runs_dir):
 
 
 def assess_all(runs, *, version, plugin_fp):
+    """单跑条款清单的运行（kind=clauses）不是评测结果，直接跳过、不列进「未采信」。"""
     res = []
     for run_id, rec, err in runs:
+        if not err and isinstance(rec, dict) and rec.get('kind') in SKIPPED_KINDS:
+            continue
         if err:
             res.append(Assessment(run_id, None, None, False, [err], []))
         else:
@@ -400,7 +432,7 @@ def evaluate(plugin_dir, *, main_ref=None, since=None, platform=None, git=None, 
     target = locate(plugin_dir)
     git = shutil.which('git') if git is None else git
     plugin_fp = fingerprint.plugin_fingerprint(target.plugin_dir, target.extra_exclude)
-    notes = []
+    notes, blockers = [], []      # blockers：与评测依据无关、单独判未过闸的原因
 
     # ---- git：当前版本的升版 trailer、上一版本号、跳过记录、漏检 ----
     top, hist_head, cur_commits, prev_version, main_used = None, [], [], None, None
@@ -435,10 +467,20 @@ def evaluate(plugin_dir, *, main_ref=None, since=None, platform=None, git=None, 
         else:
             leak_notes = ['找不到 main 分支（试过 %s）：跳过漏检；可用 --main-ref 指定' % '、'.join(MAIN_REF_CANDIDATES)]
         _, dirty = gitstate.git_state(top, rel, git=git)
-        if dirty:
-            notes.append('插件目录有未提交改动（不含 evals/）：本次判的是工作区内容，发版前先提交')
+        if dirty is not False:
+            # 工作区与 HEAD 不一致时，已审报告评的内容不一定是将要推出去的提交（例：工作区恰好等于已审内容、HEAD 不同）
+            blockers.append(DIRTY_BLOCKER if dirty else '读不到插件目录的 git 状态（git status 失败），无法确认工作区与提交一致')
+        if not prev_version:
+            notes.append('新插件首个版本（历史上没有更早的版本号）：不按 major 升版判闸门内%s'
+                         % ('' if not any(c.required() for c in cur_commits)
+                            else '；升版提交声明了 eval-required:，仍按声明判闸门内'))
+        for c in cur_commits:
+            for k in c.untrailered():
+                notes.append('警告：提交 %s 的正文里出现 `%s:`，但 git 没把它认作 trailer（多半是后面还跟着空行与署名段）%s'
+                             % (c.sha[:12], k, '；已按正文宽松识别' if k == TRAILER_REQUIRED
+                                else '；eval-skip: 只认 trailer，本次不放行——改成提交信息最后一段'))
 
-    required = [v for c in cur_commits for v in c.trailer(TRAILER_REQUIRED)]
+    required = [v for c in cur_commits for v in c.required()]
     skipped = [v for c in cur_commits for v in c.trailer(TRAILER_SKIP)]
     major = is_major_bump(target.raw_version, prev_version)
     gated = bool(major or required)
@@ -464,10 +506,11 @@ def evaluate(plugin_dir, *, main_ref=None, since=None, platform=None, git=None, 
     else:
         ut_result, tests_ok, test_lines = None, True, ['本次未跑（run_tests=False，只供单测用）']
 
-    passed = (eval_ok or via_skip) and tests_ok
+    passed = (eval_ok or via_skip) and tests_ok and not blockers
     data = {
         'plugin': target.name, 'version': target.version, 'plugin_dir': str(target.plugin_dir),
-        'fingerprint': plugin_fp, 'passed': passed,
+        'fingerprint': plugin_fp, 'passed': passed, 'blockers': blockers,
+        'judge_untrusted': [a.run_id for a in basis if JUDGE_UNTRUSTED_NOTE in a.notes],
         'gated': gated, 'gated_by': gated_by, 'previous_version': prev_version,
         'eval_ok': eval_ok, 'eval_skip': skipped, 'passed_via_skip': via_skip,
         'basis': [a.to_dict() for a in basis],
@@ -496,7 +539,11 @@ def render(d, target):
         lines.append('- 覆盖：闸门内——%s；须有已审的离线对照' % '；'.join(d['gated_by']))
     else:
         lines.append('- 覆盖：闸门外（非 major、未声明 eval-required:）；须有已审的离线对照，或通过的规则子集')
+    if d['blockers']:
+        lines += ['', '## 未过闸原因（与评测依据无关）'] + ['- %s' % b for b in d['blockers']]
     lines += ['', '## 评测依据']
+    if d['judge_untrusted']:
+        lines.append('- **注意：%s**（%s）' % (JUDGE_UNTRUSTED_NOTE, '、'.join('runs/%s' % r for r in d['judge_untrusted'])))
     if d['basis']:
         for a in d['basis']:
             what = '已审的离线对照（审阅于 %s）' % a['reviewed_at'] if a['kind'] == BASIS_COMPARE else '通过的规则子集'
@@ -531,7 +578,7 @@ def render(d, target):
     if d['notes']:
         lines += ['', '## 说明'] + ['- %s' % n for n in d['notes']]
     verdict = '过闸' if d['passed'] else '未过闸'
-    why = []
+    why = list(d['blockers'])
     if not (d['eval_ok'] or d['passed_via_skip']):
         why.append('缺可采信的评测依据')
     if not d['unit_tests']['ok']:

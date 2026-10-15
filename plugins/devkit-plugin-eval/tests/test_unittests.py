@@ -123,6 +123,14 @@ class RunTest(unittest.TestCase):
         self.assertEqual((res['declaration'], res['errors']), ('invalid', ['not-json']))
         self.assertFalse(ut.gate_verdict(res)[0])
 
+    def test_non_utf8_declaration_is_invalid(self):
+        d = tmpdir(self)
+        (d / 'unit-tests.json').write_bytes('{"tests": [{"run": ["python3", "测试.py"]}]}'.encode('gbk'))
+        res = ut.run_plugin(d)
+        self.assertEqual((res['declaration'], res['errors']), ('invalid', ['not-json']))
+        self.assertIn('不是 UTF-8', res['messages'][0])
+        self.assertFalse(ut.gate_verdict(res)[0])
+
     def test_git_local_env_stripped(self):
         env = ut.child_env({'GIT_DIR': '/x', 'GIT_INDEX_FILE': '/y', 'KEEP': '1'})
         self.assertNotIn('GIT_DIR', env)

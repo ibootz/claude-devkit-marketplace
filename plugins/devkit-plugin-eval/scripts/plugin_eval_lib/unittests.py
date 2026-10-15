@@ -247,7 +247,13 @@ def run_plugin(plugin_dir, platform=None, env=None, resolve=resolve_interpreter)
     decl_path = plugin_dir / DECL_NAME
     if not decl_path.is_file():
         return result
-    tests, errors = validate_declaration(decl_path.read_text(encoding='utf-8'))
+    try:
+        text = decl_path.read_text(encoding='utf-8')
+    except UnicodeDecodeError as e:
+        # 非 UTF-8 的声明归为「声明不合法」（错误码沿用 not-json，与 JS 实现的码表一致），不让闸门因异常中止
+        result.update(declaration='invalid', errors=['not-json'], messages=['不是 UTF-8 编码的 JSON：%s' % e])
+        return result
+    tests, errors = validate_declaration(text)
     if errors:
         result.update(declaration='invalid', errors=sorted({c for c, _ in errors}), messages=[m for _, m in errors])
         return result

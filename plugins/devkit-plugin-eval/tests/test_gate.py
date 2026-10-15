@@ -95,6 +95,7 @@ class AcceptTest(GateTestBase):
         write(self.r.plugin / 'evals' / 'case-a' / 'prompt.md', 'tweaked\n')
         self.assertTrue(self.gate().passed)            # 只补 evals/ 用例不影响
         write(self.r.plugin / 'hooks' / 'inject.js', 'console.log("changed")\n')
+        self.r.commit('改 hook')                       # 先提交：未提交改动另有专门的未过闸原因（见 DirtyWorkspaceTest）
         res = self.gate()
         self.assertFalse(res.passed)
         self.assertIn('插件内容指纹与当前不一致', res.data['rejected_same_version'][0]['reasons'][0])
@@ -241,6 +242,78 @@ class CoverageTest(GateTestBase):
         self.r.set_version('1.1.0')
         res = self.gate()
         self.assertTrue(any('尚未提交' in n for n in res.data['notes']))
+
+
+class DirtyWorkspaceTest(GateTestBase):
+    """工作区 dirty 不是 False 时直接判未过闸（票 14 应修 1）。"""
+
+    def test_uncommitted_change_blocks_even_with_matching_report(self):
+        self.r.add_run('r1', run_rec('1.0.0', self.r.fp()))
+        write(self.r.plugin / 'hooks' / 'extra.js', '// 未提交\n')
+        self.r.add_run('r2', run_rec('1.0.0', self.r.fp()))   # 已审内容 = 工作区内容
+        res = self.gate()
+        self.assertFalse(res.passed)
+        self.assertEqual(res.data['blockers'], [gate.DIRTY_BLOCKER])
+        self.assertIn('插件目录有未提交改动（不含 evals/），先提交再跑 gate', res.lines[-1])
+
+    def test_worktree_equals_reviewed_content_but_head_differs(self):
+        reviewed_fp = self.r.fp()
+        self.r.add_run('r1', run_rec('1.0.0', reviewed_fp))   # 在提交 A 上审过
+        write(self.r.plugin / 'hooks' / 'inject.js', 'console.log("B")\n')
+        self.r.commit('提交 B')                               # HEAD 变成 B
+        write(self.r.plugin / 'hooks' / 'inject.js', 'console.log("hi")\n')   # 工作区退回 A 的内容，未提交
+        self.assertEqual(self.r.fp(), reviewed_fp)
+        res = self.gate()
+        self.assertEqual([a['run_id'] for a in res.data['basis']], ['r1'])   # 依据本身照采信
+        self.assertFalse(res.passed)                                         # 但 HEAD 不是已审内容：未过闸
+        self.assertEqual(res.data['blockers'], [gate.DIRTY_BLOCKER])
+
+    def test_evals_only_change_does_not_block(self):
+        self.r.add_run('r1', run_rec('1.0.0', self.r.fp()))
+        write(self.r.plugin / 'evals' / 'case-z' / 'prompt.md', '补一个用例\n')
+        self.assertTrue(self.gate().passed)
+
+
+class GateIntegrationTest(GateTestBase):
+    """A 批集成：clauses 运行跳过、AI 判分不采信提示、新插件首版说明、eval-required 宽松识别。"""
+
+    def test_clauses_runs_are_skipped(self):
+        self.r.add_run('20261015T000000Z-1.0.0-clauses', {'kind': 'clauses', 'plugin': {'name': NAME, 'version': '1.0.0'}})
+        res = self.gate()
+        self.assertEqual(res.data['rejected_same_version'], [])
+        self.assertEqual(res.data['other_runs'], 0)
+
+    def test_untrusted_judge_report_still_accepted_with_prominent_note(self):
+        rec = run_rec('1.0.0', self.r.fp())
+        rec['judge'] = {'trusted': False}
+        self.r.add_run('r1', rec)
+        res = self.gate()
+        self.assertTrue(res.passed, '\n'.join(res.lines))
+        self.assertEqual(res.data['judge_untrusted'], ['r1'])
+        self.assertIn('- **注意：本报告 AI 判分不采信，已审时由用户判断**（runs/r1）', res.lines)
+
+    def test_first_version_of_new_plugin_noted_and_not_gated(self):
+        res = self.gate()
+        self.assertFalse(res.data['gated'])
+        self.assertTrue(any(n.startswith('新插件首个版本') for n in res.data['notes']), res.data['notes'])
+        self.r.set_version('2.0.0')
+        self.r.commit('升 2.0.0')
+        self.assertFalse(any(n.startswith('新插件首个版本') for n in self.gate().data['notes']))
+
+    def test_eval_required_followed_by_blank_line_and_signature(self):
+        self.r.set_version('1.1.0')
+        self.r.commit('升 1.1.0', trailers=['eval-required: 改了注入文本', '', 'Co-Authored-By: t <t@example.invalid>'])
+        res = self.gate()
+        self.assertTrue(res.data['gated'])
+        self.assertIn('eval-required: 改了注入文本', res.data['gated_by'][0])
+        self.assertTrue(any(n.startswith('警告：') and 'eval-required' in n for n in res.data['notes']), res.data['notes'])
+
+    def test_eval_skip_outside_trailer_warns_and_does_not_pass(self):
+        self.r.set_version('1.1.0')
+        self.r.commit('升 1.1.0', trailers=['eval-skip: 只改 README', '', 'Co-Authored-By: t <t@example.invalid>'])
+        res = self.gate()
+        self.assertFalse(res.data['passed_via_skip'])
+        self.assertTrue(any(n.startswith('警告：') and 'eval-skip' in n for n in res.data['notes']), res.data['notes'])
 
 
 class SkipTest(GateTestBase):

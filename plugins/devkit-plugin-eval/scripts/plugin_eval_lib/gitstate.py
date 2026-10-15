@@ -29,7 +29,7 @@ def _lines_without(text, line):
 def _gitignore_only_self_line(git, repo, plugin_path):
     """仓根 .gitignore 相对 HEAD 是否只差 compare 写的那一行（含：HEAD 里没有、工作区只有这一行）。"""
     line = gitignore_line(plugin_path)
-    head = _run(git, repo, 'show', 'HEAD:.gitignore')
+    head = _run(git, repo, 'show', 'HEAD:./.gitignore')
     head_text = head.stdout if head.returncode == 0 else ''
     p = Path(repo) / '.gitignore'
     try:
