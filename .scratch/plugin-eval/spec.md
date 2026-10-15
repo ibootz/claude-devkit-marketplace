@@ -391,3 +391,4 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
 - 2026-10-15 用户审过本 spec（原话「spec 已经审核」），Status 改为 `ready-for-agent`。入库时排除 `probe/traces/`：子会话转录里有 eval 注入的账号邮箱，本仓公开，只留本机，已加进仓根 `.gitignore`。
 - 2026-10-15 拆为 17 张实施票（用户确认粒度、阻塞关系，无合并或再拆），写在 `.scratch/devkit-plugin-eval/issues/`。
 - 2026-10-15 执行方式（用户拍板 1a、2a）：01、02 两张票的后台会话（7058cce7、2a42d84b）跑完，主会话审过分支后合进 main；03 起每张票由主会话派 subagent（独立 worktree），`/mattpocock-skills:implement` 的要求（TDD、代码审查、提交到当前分支）写进派发 prompt，主会话审过后合进 main。
+- 2026-10-15 票 02 遗留口径（用户拍板 2a）：票 02 给 8 个插件新增 `unit-tests.json`，不升这 8 个插件的版本号；插件内容指纹口径不变，仍只排除 `evals/`，不额外排除 `unit-tests.json`（只排除它而不排除 `tests/` 口径不一致）。等本 spec「审后改一字就要重跑」的重开条件触发时再议指纹范围。

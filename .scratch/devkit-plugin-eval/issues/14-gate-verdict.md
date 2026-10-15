@@ -26,3 +26,5 @@ Status: ready-for-agent
 **参考：** [spec](../../plugin-eval/spec.md) 的「2.8 发版闸门（gate）」「2.7 确定性单测」；[12](../../plugin-eval/issues/12-release-gate-coverage.md)、[13](../../plugin-eval/issues/13-result-layout.md) 第 7 条、[18](../../plugin-eval/issues/18-unit-test-declaration.md)
 
 ## Comments
+
+- 2026-10-15，票 03 审查遗留（主会话定、jev 同意）：run.json 的 `dirty` 现按插件目录 `git status` 计，含 `evals/`，也含 compare 自己往插件目录写的那行 `.gitignore`（仓根插件首次对照必为 dirty）。本票实现闸门时统一 dirty 口径：dirty 排除 `evals/`（与插件内容指纹的排除范围一致），并排除 compare 自写的 `.gitignore` 行。票 03 不改。
