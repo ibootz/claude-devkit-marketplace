@@ -21,6 +21,6 @@ Status: ready-for-agent
 - [ ] 历史素材 5 例已进草稿区
 - [ ] 改插件文件前按仓根 CLAUDE.md 先读规定的技能
 
-**参考：** [spec](../../plugin-eval/spec.md) 的spec「2.3 用例从哪来」；[17](../../plugin-eval/issues/17-case-sourcing.md)；[11](../../plugin-eval/issues/11-judging-and-human-checkpoints.md) 第 4 条
+**参考：** [spec](../../plugin-eval/spec.md) 的「2.3 用例从哪来」；[17](../../plugin-eval/issues/17-case-sourcing.md)；[11](../../plugin-eval/issues/11-judging-and-human-checkpoints.md) 第 4 条
 
 ## Comments

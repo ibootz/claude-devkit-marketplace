@@ -17,6 +17,6 @@ Status: ready-for-agent
 - [ ] 报告列出被测插件每类注入的常驻 token 数，前后两版可对比
 - [ ] 改插件文件前按仓根 CLAUDE.md 先读规定的技能
 
-**参考：** [spec](../../plugin-eval/spec.md) 的spec「2.2 离线对照（compare）」第 5、7 步；[05](../../plugin-eval/issues/05-probe-plugin-eval-on-hook-injection.md)（哪些注入进 trace）、[09](../../plugin-eval/issues/09-build-vs-extend.md)
+**参考：** [spec](../../plugin-eval/spec.md) 的「2.2 离线对照（compare）」第 5、7 步；[05](../../plugin-eval/issues/05-probe-plugin-eval-on-hook-injection.md)（哪些注入进 trace）、[09](../../plugin-eval/issues/09-build-vs-extend.md)
 
 ## Comments

@@ -21,6 +21,6 @@ Status: ready-for-agent
 - [ ] 评委模型可通过配置改，`run.json` 记实际所用模型
 - [ ] 改插件文件前按仓根 CLAUDE.md 先读规定的技能
 
-**参考：** [spec](../../plugin-eval/spec.md) 的spec「2.4 判分与人工介入」；[11](../../plugin-eval/issues/11-judging-and-human-checkpoints.md)；[08](../../plugin-eval/issues/08-cadence-and-budget.md) 覆盖说明（评委默认最贵一档）
+**参考：** [spec](../../plugin-eval/spec.md) 的「2.4 判分与人工介入」；[11](../../plugin-eval/issues/11-judging-and-human-checkpoints.md)；[08](../../plugin-eval/issues/08-cadence-and-budget.md) 覆盖说明（评委默认最贵一档）
 
 ## Comments

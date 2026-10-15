@@ -22,6 +22,6 @@ Status: ready-for-agent
 - [ ] 调 `claude` 前先解析出可执行文件路径；stdout 设为 UTF-8
 - [ ] 改插件文件前按仓根 CLAUDE.md 先读规定的技能
 
-**参考：** [spec](../../plugin-eval/spec.md) 的spec「2.1 交付形态」「2.2 离线对照（compare）」第 3、4、8 步、「四、目录布局与状态文件」；[09](../../plugin-eval/issues/09-build-vs-extend.md)、[13](../../plugin-eval/issues/13-result-layout.md)
+**参考：** [spec](../../plugin-eval/spec.md) 的「2.1 交付形态」「2.2 离线对照（compare）」第 3、4、8 步、「四、目录布局与状态文件」；[09](../../plugin-eval/issues/09-build-vs-extend.md)、[13](../../plugin-eval/issues/13-result-layout.md)
 
 ## Comments

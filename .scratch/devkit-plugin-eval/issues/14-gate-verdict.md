@@ -23,6 +23,6 @@ Status: ready-for-agent
 - [ ] 02 的共用声明样例在本票 Python 实现下判定结果与 JS 实现一致
 - [ ] 改插件文件前按仓根 CLAUDE.md 先读规定的技能
 
-**参考：** [spec](../../plugin-eval/spec.md) 的spec「2.8 发版闸门（gate）」「2.7 确定性单测」；[12](../../plugin-eval/issues/12-release-gate-coverage.md)、[13](../../plugin-eval/issues/13-result-layout.md) 第 7 条、[18](../../plugin-eval/issues/18-unit-test-declaration.md)
+**参考：** [spec](../../plugin-eval/spec.md) 的「2.8 发版闸门（gate）」「2.7 确定性单测」；[12](../../plugin-eval/issues/12-release-gate-coverage.md)、[13](../../plugin-eval/issues/13-result-layout.md) 第 7 条、[18](../../plugin-eval/issues/18-unit-test-declaration.md)
 
 ## Comments

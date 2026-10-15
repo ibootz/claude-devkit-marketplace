@@ -14,6 +14,6 @@ Status: ready-for-agent
 - [ ] 不完整的 `run.json` 被闸门判据排除（可先用单测断言判据函数，14 接入后再端到端验证）
 - [ ] 改插件文件前按仓根 CLAUDE.md 先读规定的技能
 
-**参考：** [spec](../../plugin-eval/spec.md) 的spec「2.2 离线对照（compare）」末两段；[09](../../plugin-eval/issues/09-build-vs-extend.md) 与 [08](../../plugin-eval/issues/08-cadence-and-budget.md) 的 2026-10-15 覆盖说明
+**参考：** [spec](../../plugin-eval/spec.md) 的「2.2 离线对照（compare）」末两段；[09](../../plugin-eval/issues/09-build-vs-extend.md) 与 [08](../../plugin-eval/issues/08-cadence-and-budget.md) 的 2026-10-15 覆盖说明
 
 ## Comments

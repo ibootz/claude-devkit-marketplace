@@ -19,6 +19,6 @@ Status: ready-for-agent
 - [ ] 构造距上次复盘 8 天，`gate` 与对照都提示先复盘
 - [ ] 改插件文件前按仓根 CLAUDE.md 先读规定的技能
 
-**参考：** [spec](../../plugin-eval/spec.md) 的spec「2.8 发版闸门（gate）」；[12](../../plugin-eval/issues/12-release-gate-coverage.md) 第 2 条及覆盖说明；[20](../../plugin-eval/issues/20-clause-list-lifecycle.md) 第 4 条；[09](../../plugin-eval/issues/09-build-vs-extend.md)（超 7 天提醒）
+**参考：** [spec](../../plugin-eval/spec.md) 的「2.8 发版闸门（gate）」；[12](../../plugin-eval/issues/12-release-gate-coverage.md) 第 2 条及覆盖说明；[20](../../plugin-eval/issues/20-clause-list-lifecycle.md) 第 4 条；[09](../../plugin-eval/issues/09-build-vs-extend.md)（超 7 天提醒）
 
 ## Comments

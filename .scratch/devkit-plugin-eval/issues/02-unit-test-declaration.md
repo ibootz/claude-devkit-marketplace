@@ -22,7 +22,7 @@ Status: resolved
 - [x] 共用声明样例集已就位，本票 JS 实现对每个样例的判定结果写进样例旁的期望文件
 - [x] 改插件文件前按仓根 CLAUDE.md 先读规定的技能
 
-**参考：** [spec](../../plugin-eval/spec.md) 的spec「2.7 确定性单测」；[16](../../plugin-eval/issues/16-existing-deterministic-tests.md)、[18](../../plugin-eval/issues/18-unit-test-declaration.md)
+**参考：** [spec](../../plugin-eval/spec.md) 的「2.7 确定性单测」；[16](../../plugin-eval/issues/16-existing-deterministic-tests.md)、[18](../../plugin-eval/issues/18-unit-test-declaration.md)
 
 ## Comments
 

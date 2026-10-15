@@ -22,6 +22,6 @@ Status: ready-for-agent
 - [ ] 注入文字含时间等每次都变的内容时有归一化处理，不会恒判过期（以一个构造用例证明）
 - [ ] 改插件文件前按仓根 CLAUDE.md 先读规定的技能
 
-**参考：** [spec](../../plugin-eval/spec.md) 的spec「2.2 离线对照（compare）」第 2 步、「2.3 用例从哪来」条款清单段；[20](../../plugin-eval/issues/20-clause-list-lifecycle.md)；[17](../../plugin-eval/issues/17-case-sourcing.md) 第 2 条
+**参考：** [spec](../../plugin-eval/spec.md) 的「2.2 离线对照（compare）」第 2 步、「2.3 用例从哪来」条款清单段；[20](../../plugin-eval/issues/20-clause-list-lifecycle.md)；[17](../../plugin-eval/issues/17-case-sourcing.md) 第 2 条
 
 ## Comments

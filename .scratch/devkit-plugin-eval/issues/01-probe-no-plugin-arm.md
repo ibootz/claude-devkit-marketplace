@@ -18,11 +18,11 @@ spec 定了每个臂各跑一次 `claude plugin eval --ablation none`，但「�
 - [x] `cleanupPeriodDays` 未设置时的默认值，查官方文档或实测得出，写明出处
 - [x] spec「实施待定」第 1、3、4、6 条已更新
 
-**参考：** [spec](../../plugin-eval/spec.md) 的spec「一、直接用 claude plugin eval 的部分」与「实施待定」第 1、3、4、6 条；[19 history_file 回放实测](../../plugin-eval/issues/19-probe-history-file-replay.md)（auto ablation 会把回放用例降为只跑 with 臂）
+**参考：** [spec](../../plugin-eval/spec.md) 的「一、直接用 claude plugin eval 的部分」与「实施待定」第 1、3、4、6 条；[19 history_file 回放实测](../../plugin-eval/issues/19-probe-history-file-replay.md)（auto ablation 会把回放用例降为只跑 with 臂）
 
 ## Comments
 
-- 2026-10-15 实测完成（Claude Code 2.1.300，7 次 eval 合计 $2.75 标价估算，未撞订阅用量限制）。完整报告：[probe/REPORT.md](../probe/REPORT.md)。结论摘要：
+- 2026-10-15 实测完成（Claude Code 2.1.300，7 次 eval 合计 $2.75 标价估算；code-review 后补跑 extras-mixed 1 次，8 次合计 $2.83，未撞订阅用量限制）。完整报告：[probe/REPORT.md](../probe/REPORT.md)。结论摘要：
   1. **空桩可行**：eval 接受只含 `plugin.json` 的插件；空桩臂与 without 臂的模型可见面（工具、skill、slash 命令、agent、MCP）逐项相同，计分 grader 结果相同，同一 eval 里装空桩与不装 Δ=0。03 照原设计每臂一次 `--ablation none`，「不装」臂用空桩目录。`with-without` 取 `W/OUT` 也可用，留作备选。
   2. **新发现，03 必须处理**：`--ablation none` 下 `arm: with-only` grader 计入分数（空桩臂因此 0.2 而非 0.33）。外围脚本算臂分时只取计分 grader，或用例不写这类标记。已加进 spec「一」已实测第 6 条。
   3. **附加文件**：用例目录与 `evals/` 根目录可放任意附加文件，静默忽略；`graders/` 下带 frontmatter 却无 `type:` 的 md、`prompt.md` frontmatter 里的未知键，都会让该用例加载失败（退出码 1，与「低于阈值」同码，脚本要看 `casesTotal` 与 stderr）。

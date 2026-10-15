@@ -22,6 +22,6 @@ Status: ready-for-agent
 - [ ] 复盘候选进待审页，用户勾选结果写回
 - [ ] 改插件文件前按仓根 CLAUDE.md 先读规定的技能
 
-**参考：** [spec](../../plugin-eval/spec.md) 的spec「2.5 会话复盘（review）」；[10](../../plugin-eval/issues/10-session-jsonl-signals.md)；字段路径见 [research/session-jsonl-signals.md](../../plugin-eval/research/session-jsonl-signals.md)
+**参考：** [spec](../../plugin-eval/spec.md) 的「2.5 会话复盘（review）」；[10](../../plugin-eval/issues/10-session-jsonl-signals.md)；字段路径见 [research/session-jsonl-signals.md](../../plugin-eval/research/session-jsonl-signals.md)
 
 ## Comments

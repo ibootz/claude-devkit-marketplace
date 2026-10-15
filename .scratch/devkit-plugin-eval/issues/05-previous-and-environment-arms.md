@@ -23,6 +23,6 @@ Status: ready-for-agent
 - [ ] 加一个环境插件跑对照，两份插件的注入都生效，`run.json` 记下环境插件来源
 - [ ] 改插件文件前按仓根 CLAUDE.md 先读规定的技能
 
-**参考：** [spec](../../plugin-eval/spec.md) 的spec「2.2 离线对照（compare）」第 3 步；[14](../../plugin-eval/issues/14-previous-version-arm.md)
+**参考：** [spec](../../plugin-eval/spec.md) 的「2.2 离线对照（compare）」第 3 步；[14](../../plugin-eval/issues/14-previous-version-arm.md)
 
 ## Comments

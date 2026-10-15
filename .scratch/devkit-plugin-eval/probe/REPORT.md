@@ -123,7 +123,7 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/probe.py" --dq-data "${CLAUDE_PLUGIN_DATA}"
 
 ### 结果
 
-| 项 | eval 沙箱（`out/envprobe.json`，trace 里的 tool_result） | 真实会话（`out/realsession.out`） |
+| 项 | eval 沙箱（trace 里的 tool_result，在本地 `traces/envprobe`，含账号邮箱未入库；`out/envprobe.json` 只有 grader 匹配模式） | 真实会话（`out/realsession.out`） |
 |---|---|---|
 | `env.CLAUDE_PLUGIN_DATA` | `<unset>` | `<unset>` |
 | `env.CLAUDE_PLUGIN_ROOT` / `CLAUDE_SKILL_DIR` / `CLAUDE_PROJECT_DIR` | 都是 `<unset>` | 都是 `<unset>` |

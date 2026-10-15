@@ -18,6 +18,6 @@ Status: ready-for-agent
 - [ ] 合成历史里搜不到被测插件注入文本
 - [ ] 改插件文件前按仓根 CLAUDE.md 先读规定的技能
 
-**参考：** [spec](../../plugin-eval/spec.md) 的spec「2.3 用例从哪来」复盘候选与 compact 段；[17](../../plugin-eval/issues/17-case-sourcing.md) 第 3、4 条；[19](../../plugin-eval/issues/19-probe-history-file-replay.md)（history_file 格式与约束）
+**参考：** [spec](../../plugin-eval/spec.md) 的「2.3 用例从哪来」复盘候选与 compact 段；[17](../../plugin-eval/issues/17-case-sourcing.md) 第 3、4 条；[19](../../plugin-eval/issues/19-probe-history-file-replay.md)（history_file 格式与约束）
 
 ## Comments

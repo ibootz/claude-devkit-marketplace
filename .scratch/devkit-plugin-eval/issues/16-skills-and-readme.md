@@ -20,6 +20,6 @@ Status: ready-for-agent
 - [ ] README 覆盖 spec「三、谁跑、何时跑、占用户多少时间」的内容
 - [ ] 改插件文件前按仓根 CLAUDE.md 先读规定的技能（含 skill-creator 与 writing-for-agents）
 
-**参考：** [spec](../../plugin-eval/spec.md) 的spec「2.1 交付形态」「三、谁跑、何时跑、占用户多少时间」；[09](../../plugin-eval/issues/09-build-vs-extend.md)（交付形态）
+**参考：** [spec](../../plugin-eval/spec.md) 的「2.1 交付形态」「三、谁跑、何时跑、占用户多少时间」；[09](../../plugin-eval/issues/09-build-vs-extend.md)（交付形态）
 
 ## Comments

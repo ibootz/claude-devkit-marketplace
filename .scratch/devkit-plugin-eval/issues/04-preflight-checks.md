@@ -19,6 +19,6 @@ Status: ready-for-agent
 - [ ] 检查逻辑不维护 shim 名单，平台差异只在配置目录定位、Python 解析、`claude` 可执行路径三处
 - [ ] 改插件文件前按仓根 CLAUDE.md 先读规定的技能
 
-**参考：** [spec](../../plugin-eval/spec.md) 的spec「2.6 前置检查」；[15](../../plugin-eval/issues/15-preflight-checks.md)；[05](../../plugin-eval/issues/05-probe-plugin-eval-on-hook-injection.md)（asdf shim 在临时 HOME 下 exit 126，eval 不报错）
+**参考：** [spec](../../plugin-eval/spec.md) 的「2.6 前置检查」；[15](../../plugin-eval/issues/15-preflight-checks.md)；[05](../../plugin-eval/issues/05-probe-plugin-eval-on-hook-injection.md)（asdf shim 在临时 HOME 下 exit 126，eval 不报错）
 
 ## Comments
