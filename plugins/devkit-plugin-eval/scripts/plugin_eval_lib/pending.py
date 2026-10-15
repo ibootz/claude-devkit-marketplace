@@ -12,7 +12,8 @@
 - always=True 的类型必上页；其余按 priority（小者先）装满 PAGE_LIMIT，装不下的那一档以 run_id 为种子随机抽取。
 
 内置类型只有「报告审阅」（本票）。后续：分歧样本与抽检（票 09）、条款清单变更（票 10）、用例草稿（票 11）、
-复盘候选（票 12，复盘一页：届时让 Subject 也能指向 reviews/<日期>.json）。
+复盘候选与「建议跑对照」（票 12，见 review_pending：每个插件每次复盘一页，Subject 指向 reviews/<日期>.json，
+回复码的 run_id 形如 review-<日期>，apply_reply 按这个前缀转给 review_pending）。
 
 回复码：`PE1 <run_id> <page_id> <序号><选项码> ...`，如 `PE1 20261015T084918Z-4.1.0-compare 3fa9c1d2 1A`。
 page_id 每次生成页时重算并记进 run.json 的 pending.page_id；只认最新一页、且只能写回一次。
@@ -105,12 +106,14 @@ class TypeRegistry(object):
 
 
 class Subject(object):
-    """一次运行：run_dir 下的 run.json（rec，可直接改）与暂存的其它文件改动。"""
+    """一次运行：run_dir 下的 run.json（rec，可直接改）与暂存的其它文件改动。
+    会话复盘（票 12）复用它：run_dir 是 reviews/，record_name 是 <日期>.json。"""
 
-    def __init__(self, repo, run_dir, rec):
+    def __init__(self, repo, run_dir, rec, record_name='run.json'):
         self.repo = Path(repo).resolve()
         self.run_dir = Path(run_dir).resolve()
         self.rec = rec
+        self.record_name = record_name
         self.staged = {}              # 绝对路径 -> 新文本；None 表示删除
         self.warnings = []
 
@@ -147,7 +150,7 @@ class Subject(object):
         写进被测仓的内容都过 record.scrub_home（会入库）。返回改动过的文件（相对被测仓）。
         落盘出 OSError 时清掉残片 .pending-tmp，抛 PendingError 并列出已写成的文件。"""
         changed = []
-        run_json = self.run_dir / 'run.json'
+        run_json = self.run_dir / self.record_name
         self.rec = record.scrub_home(self.rec)
         self.staged[run_json] = json.dumps(self.rec, ensure_ascii=False, indent=2) + '\n'
         for p in sorted(self.staged, key=lambda x: x == run_json):
@@ -407,8 +410,8 @@ class _locked(object):
         return False
 
 
-def _generate(data_dir, name, repo, run_dir, now, types):
-    subject = Subject(repo, run_dir, _load_run(run_dir))
+def _generate(data_dir, name, repo, run_dir, now, types, subject=None):
+    subject = subject or Subject(repo, run_dir, _load_run(run_dir))
     rec = subject.rec
     run_id = rec.get('run_id') or run_dir.name
     if _unfinished(rec):
@@ -575,6 +578,9 @@ def apply_reply(data_dir, name, code, run_id=None, *, now=None, types=None):
     code_run, page_id, decisions = parse_reply(code)
     if run_id is not None and run_id != code_run:
         raise ReplyError('回复码对不上该次运行：回复码是 %s 的，命令指定的是 %s' % (code_run, run_id))
+    if code_run.startswith('review-'):          # 复盘待审页（票 12）
+        from . import review_pending
+        return review_pending.apply_reply(data_dir, name, code_run, page_id, decisions, now=now, types=types)
     try:
         repo, run_dir = _find_run(data_dir, name, code_run, err=ReplyError)
     except NothingPending as e:
@@ -583,8 +589,8 @@ def apply_reply(data_dir, name, code, run_id=None, *, now=None, types=None):
         return _apply(repo, run_dir, code_run, page_id, decisions, now, types)
 
 
-def _apply(repo, run_dir, code_run, page_id, decisions, now, types):
-    subject = Subject(repo, run_dir, _load_run(run_dir))
+def _apply(repo, run_dir, code_run, page_id, decisions, now, types, subject=None):
+    subject = subject or Subject(repo, run_dir, _load_run(run_dir))
     pend = subject.rec.get('pending') or {}
     if pend.get('page_id') != page_id:
         raise ReplyError('回复码对不上该次运行的最新待审页：回复码的页是 %s，run.json 记的最新页是 %s。'
@@ -625,12 +631,17 @@ def add_parser(sub):
     p.add_argument('name')
     p.add_argument('--run', help='运行 id（runs/ 下的目录名）；生成页时默认取最新一次离线对照')
     p.add_argument('--reply', help='用户从待审页复制回来的回复码（整串，加引号）')
+    p.add_argument('--review', nargs='?', const='latest', metavar='日期',
+                   help='生成会话复盘的待审页（reviews/<日期>.json，缺省取最新一份）；写回仍用 --reply')
     return p
 
 
 def main(args, data_dir):
     try:
-        if args.reply is not None:
+        if args.reply is None and getattr(args, 'review', None) is not None:
+            from . import review_pending
+            page = review_pending.generate(data_dir, args.name, None if args.review == 'latest' else args.review)
+        elif args.reply is not None:
             res = apply_reply(data_dir, args.name, args.reply, run_id=args.run)
             print('已写回运行 %s：' % res.run_id)
             for no, opt, label, title in res.decisions:
@@ -639,7 +650,8 @@ def main(args, data_dir):
             for w in res.warnings:
                 print('  注意：%s' % w)
             return 0
-        page = generate(data_dir, args.name, run_id=args.run)
+        else:
+            page = generate(data_dir, args.name, run_id=args.run)
     except NothingPending as e:
         print('没有待审项：%s' % e)
         return 0
@@ -649,7 +661,8 @@ def main(args, data_dir):
     print('待审页：%s' % page.html_path)
     print('浏览器打开：%s' % page.html_path.resolve().as_uri())
     print('本页 %d 项（共 %d 项待判%s）' % (len(page.items), page.total,
-                                      '，已抽样，规则与名单写进 report.md「待审页抽样」' if page.sampled_out else ''))
+                                      ('，已抽样，规则与名单记在复盘结果的 pending 字段' if page.run_id.startswith('review-')
+                                       else '，已抽样，规则与名单写进 report.md「待审页抽样」') if page.sampled_out else ''))
     print('回复码以「%s %s %s」开头。用户贴回后运行：' % (REPLY_PREFIX, page.run_id, page.page_id))
     print("  python3 plugin_eval.py --data-dir '%s' pending %s --reply '<回复码>'" % (data_dir, args.name))
     return 0
