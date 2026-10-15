@@ -69,8 +69,9 @@ test('解释器：python3 依次试 python3 → python → py -3，以 probe 成
   assert.equal(lib.resolveInterpreter('bash', { find: () => null }), null)
 })
 
-test('解释器：Windows 按 PATHEXT 找到 .cmd', () => {
+test('解释器：Windows 按 PATHEXT 找到 .cmd，不取同名的无扩展名垫片', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rut-pathext-'))
+  fs.writeFileSync(path.join(dir, 'tool'), '')
   fs.writeFileSync(path.join(dir, 'tool.cmd'), '')
   const found = lib.findExecutable('tool', { env: { PATH: dir, PATHEXT: '.EXE;.CMD' }, platform: 'win32' })
   // macOS 默认文件系统不分大小写，PATHEXT 的 .CMD 也能命中 tool.cmd
@@ -111,6 +112,55 @@ test('退出：子进程已退出、孙进程攥着管道时按退出码收尾�
   const r = await lib.runPlugin(dir, { env: process.env })
   assert.equal(r.tests[0].status, 'passed')
   assert.ok(Date.now() - started < 4500, `耗时 ${Date.now() - started}ms`)
+  fs.rmSync(dir, { recursive: true, force: true })
+})
+
+function alive(pid) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function waitDead(pid, ms) {
+  const until = Date.now() + ms
+  while (alive(pid) && Date.now() < until) await new Promise((r) => setTimeout(r, 100))
+  return !alive(pid)
+}
+
+test('退出：子进程在超时前退出、孙进程攥着管道，宽限期跨过超时点也不误判超时', { skip: process.platform === 'win32' }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rut-late-'))
+  fs.writeFileSync(path.join(dir, 'unit-tests.json'), JSON.stringify({ tests: [{ run: ['node', 'late.js'], timeout_sec: 1 }] }))
+  fs.writeFileSync(path.join(dir, 'late.js'), "require('child_process').spawn('sleep', ['30'], { stdio: 'inherit' }); setTimeout(() => process.exit(0), 700)\n")
+  const r = await lib.runPlugin(dir, { env: process.env })
+  assert.equal(r.tests[0].status, 'passed')
+  fs.rmSync(dir, { recursive: true, force: true })
+})
+
+test('退出：单测结束后同进程组的残留孙进程被收掉', { skip: process.platform === 'win32' }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rut-leftover-'))
+  fs.writeFileSync(path.join(dir, 'unit-tests.json'), JSON.stringify({ tests: [{ run: ['node', 'leak.js'] }] }))
+  fs.writeFileSync(path.join(dir, 'leak.js'), "const c = require('child_process').spawn('sleep', ['30'], { stdio: 'ignore' }); require('fs').writeFileSync('pid', String(c.pid)); c.unref()\n")
+  const r = await lib.runPlugin(dir, { env: process.env })
+  assert.equal(r.tests[0].status, 'passed')
+  const pid = Number(fs.readFileSync(path.join(dir, 'pid'), 'utf8'))
+  assert.ok(await waitDead(pid, 2000), `孙进程 ${pid} 仍在`)
+  fs.rmSync(dir, { recursive: true, force: true })
+})
+
+test('信号：CLI 收到 SIGINT 时转杀正在跑的单测', { skip: process.platform === 'win32' }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rut-sigint-'))
+  fs.writeFileSync(path.join(dir, 'unit-tests.json'), JSON.stringify({ tests: [{ run: ['node', 'hang.js'] }] }))
+  fs.writeFileSync(path.join(dir, 'hang.js'), "require('fs').writeFileSync('pid', String(process.pid)); setTimeout(() => {}, 30000)\n")
+  const cli = require('child_process').spawn(process.execPath, [path.resolve(__dirname, '..', 'run-unit-tests.js'), dir], { stdio: 'ignore' })
+  const pidFile = path.join(dir, 'pid')
+  const until = Date.now() + 5000
+  while (!fs.existsSync(pidFile) && Date.now() < until) await new Promise((r) => setTimeout(r, 100))
+  const pid = Number(fs.readFileSync(pidFile, 'utf8'))
+  cli.kill('SIGINT')
+  assert.ok(await waitDead(pid, 3000), `单测进程 ${pid} 在 CLI 退出后仍在`)
   fs.rmSync(dir, { recursive: true, force: true })
 })
 

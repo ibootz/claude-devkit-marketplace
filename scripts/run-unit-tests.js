@@ -133,16 +133,18 @@ function stagedPaths() {
 
 // ---------- 解释器解析 ----------
 
-// 判断一条 argv 能否执行一次 `--version` 成功。注入 probe 便于单测。
+// 判断一条 argv 能否执行一次 `--version` 成功，且报的是 Python 3（老环境的 python 可能是 2，
+// 2 下跑 3 的单测会语法报错、被判成失败，而它应当算「解释器解析不到」）。注入 probe 便于单测。
 function defaultProbe(argv) {
   const exe = findExecutable(argv[0])
   if (!exe) return false
-  const r = spawnSync(exe, [...argv.slice(1), '--version'], { stdio: 'ignore', timeout: 10000, windowsHide: true, shell: needsShell(exe) })
-  return r.status === 0
+  const r = spawnSync(exe, [...argv.slice(1), '--version'], { encoding: 'utf8', timeout: 10000, windowsHide: true, shell: needsShell(exe) })
+  // Python 2 把版本号打在 stderr，3 打在 stdout，两路都看
+  return r.status === 0 && /^Python 3\./m.test(`${r.stdout || ''}${r.stderr || ''}`)
 }
 
 // 返回解析后的 argv 前缀（数组）或 null。
-// python3 依次试 python3 → python → py -3，以实际执行 --version 成功为准：Windows 的
+// python3 依次试 python3 → python → py -3，以实际执行 --version 报出 Python 3 为准：Windows 的
 // WindowsApps\python3 是 Microsoft Store 零字节桩，PATH 上查得到却跑不了。
 // 其余解释器只解析出可执行文件路径（Windows 上可能是 .cmd）；带路径分隔符的相对插件根解析。
 function resolveInterpreter(name, { cwd = process.cwd(), probe = defaultProbe, find = (n) => findExecutable(n, { cwd }) } = {}) {
@@ -161,7 +163,14 @@ function findExecutable(name, { cwd = process.cwd(), env = process.env, platform
     const full = path.resolve(cwd, name)
     return isFile(full) ? full : null
   }
-  const exts = platform === 'win32' ? ['', ...(env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)] : ['']
+  // Windows 不执行无扩展名文件：npm 全局目录里 tsx（sh 垫片）与 tsx.cmd 并存，只能取后者。
+  // 名字本身已带 PATHEXT 里的扩展名（如 python.exe）时才按原名找。
+  let exts = ['']
+  if (platform === 'win32') {
+    const pathext = (env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)
+    const own = path.extname(name).toUpperCase()
+    exts = own && pathext.some((e) => e.toUpperCase() === own) ? [''] : pathext
+  }
   for (const dir of (env.PATH || '').split(path.delimiter)) {
     if (!dir) continue
     for (const ext of exts) {
@@ -204,7 +213,12 @@ function childEnv() {
   return env
 }
 
-// 跑一条命令，返回 { status: 'passed'|'failed'|'timeout', code, output, ms }
+// 正在跑的那条单测的子进程；收到 SIGINT / SIGTERM 时由 main 里的处理器整组杀掉
+let current = null
+// setTimeout 上限约 24.8 天，超了 Node 会改成 1ms 立即触发
+const MAX_TIMER_MS = 2 ** 31 - 1
+
+// 跑一条命令，返回 { status: 'passed'|'failed'|'timeout', code, signal, output, ms }
 function runOne(argv, cwd, timeoutSec, env) {
   return new Promise((resolve) => {
     const started = Date.now()
@@ -219,23 +233,28 @@ function runOne(argv, cwd, timeoutSec, env) {
       detached: process.platform !== 'win32',
       stdio: ['ignore', 'pipe', 'pipe'],
     })
+    current = child
     const chunks = []
     child.stdout.on('data', (d) => chunks.push(d))
     child.stderr.on('data', (d) => chunks.push(d))
     let timedOut = false
     let exitCode = null
+    let exitSignal = null
     let done = false
     const finish = (spawnError) => {
       if (done) return
       done = true
+      current = null
       clearTimeout(timer)
       clearTimeout(grace)
+      // 单测已结束，进程组里残留的孙进程（后台 server、sleep &）一并收掉，免得每次提交漏一个
+      if (process.platform !== 'win32') killTree(child)
       child.stdout.destroy()
       child.stderr.destroy()
       let output = Buffer.concat(chunks).toString('utf8')
       if (spawnError) output += `\n启动失败：${spawnError.message}`
       const status = timedOut ? 'timeout' : exitCode === 0 ? 'passed' : 'failed'
-      resolve({ status, code: exitCode, output, ms: Date.now() - started })
+      resolve({ status, code: exitCode, signal: exitSignal, output, ms: Date.now() - started })
     }
     // 正常路径等 close（输出读全）；子进程已退出但孙进程攥着管道时，宽限 2 秒后按退出码收尾
     let grace = null
@@ -243,10 +262,13 @@ function runOne(argv, cwd, timeoutSec, env) {
       timedOut = true
       killTree(child)
       grace = setTimeout(() => finish(), 2000)
-    }, timeoutSec * 1000)
+    }, Math.min(timeoutSec * 1000, MAX_TIMER_MS))
     child.on('error', (e) => finish(e))
-    child.on('exit', (code) => {
+    child.on('exit', (code, signal) => {
       exitCode = code
+      exitSignal = signal
+      // 已退出就不再计超时，否则宽限期内到点会把 exit 0 判成超时
+      clearTimeout(timer)
       if (!grace) grace = setTimeout(() => finish(), 2000)
     })
     child.on('close', () => finish())
@@ -334,9 +356,11 @@ function report(result, { quietUndeclared }) {
         break
       case 'timeout':
       case 'failed': {
-        const why = t.status === 'timeout' ? `超时（${(t.ms / 1000).toFixed(1)}s）` : `退出码 ${t.code}`
+        const why = t.status === 'timeout' ? `超时（${(t.ms / 1000).toFixed(1)}s）` : t.signal ? `被信号 ${t.signal} 终止` : `退出码 ${t.code}`
         console.error(`${tag}：✗ ${label}——${why}`)
-        const lines = (t.output || '').trimEnd().split(/\r?\n/)
+        const out = (t.output || '').trim()
+        if (!out) break
+        const lines = out.split(/\r?\n/)
         if (lines.length > OUTPUT_TAIL_LINES) console.error(`    ……（省略前 ${lines.length - OUTPUT_TAIL_LINES} 行）`)
         for (const l of lines.slice(-OUTPUT_TAIL_LINES)) console.error(`    ${l}`)
         break
@@ -372,6 +396,13 @@ async function main() {
   const dirs = opts.staged
     ? selectPlugins(stagedPaths()).map((n) => path.join(ROOT, 'plugins', n))
     : opts.dirs.map((d) => path.resolve(d))
+  // Ctrl-C 时 git 与本脚本退出，但单测在独立进程组里收不到信号，得替它转杀
+  for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, () => {
+      if (current) killTree(current)
+      process.exit(130)
+    })
+  }
   const env = childEnv()
   const results = []
   for (const dir of dirs) {

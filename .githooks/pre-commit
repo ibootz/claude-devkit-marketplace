@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# pre-commit：提交前做两道校验，任一道不过就拦下本次提交。
+# pre-commit：提交前按暂存路径做下面几道校验，任一道不过就拦下本次提交。
 #   1. 插件版本四方一致、命名符合 devkit-<xxx>（plugins/<dir>/.claude-plugin/plugin.json、
 #      plugins/<dir>/.codex-plugin/plugin.json、.claude-plugin/marketplace.json、
 #      .agents/plugins/marketplace.json）——scripts/check-versions.js
 #   2. 被改插件的确定性单测——scripts/run-unit-tests.js --staged。暂存路径命中 plugins/<name>/**
 #      的插件，按其插件根的单测声明 unit-tests.json 逐条跑；未声明的插件静默放行。声明格式与
 #      判据写在该脚本头部。改 devkit-task-keeper 时这一道约 40 秒，其余插件 0～8 秒。
+#   3. 单测脚本自身的单测——scripts/tests/run-unit-tests.test.js，约 8 秒，只在改到它时跑。
 #
 # 【为什么要挂成 hook，而不是只写进 README】
 # scripts/check-versions.js 早就存在，README 里也写了「改完跑一下」，但 2026-08-04 审计
@@ -15,11 +16,12 @@
 #
 # 【判据】
 # 取自 git 的确定输出，不猜语义：本次暂存文件的路径前缀。落在 plugins/ 或两份市场清单
-# 里才跑校验。
+# 里才跑前两道；落在单测脚本自身（scripts/run-unit-tests.js、它的单测与共用样例）时另跑
+# 它自己的单测，免得判定规则改了而 expected.json 与 Python 实现的对齐静默失效。
 #
 # 【什么时候不触发】
 # 暂存文件里没有任何一个落在上述范围时直接放行——改 README、改 .claude/rules/、改
-# scripts/ 自身、改根目录文档都不需要跑这道校验。
+# scripts/ 下其它脚本、改根目录文档都不需要跑这几道校验。
 #
 # 【怎么绕过】
 # 确有正当理由要提交一次不一致的状态（例如分两次提交、先落插件后落清单），或带着失败的单测提交：
@@ -31,17 +33,34 @@
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
+# 先整份读进变量再 grep：管道里 grep -q 命中即退出，暂存清单很长时 git diff 会吃 SIGPIPE，
+# pipefail 下整条判失败、被 `!` 取反成「没碰插件」，几道校验一起静默跳过。
+STAGED="$(git diff --cached --name-only)"
+staged_match() { printf '%s\n' "$STAGED" | grep -E "$1" >/dev/null; }
 
-# 本次提交没碰插件与市场清单 → 与版本登记无关，直接放行
-if ! git diff --cached --name-only |
-  grep -qE '^(plugins/|\.claude-plugin/marketplace\.json$|\.agents/plugins/marketplace\.json$)'; then
+TOUCH_PLUGINS=0
+TOUCH_RUNNER=0
+staged_match '^(plugins/|\.claude-plugin/marketplace\.json$|\.agents/plugins/marketplace\.json$)' && TOUCH_PLUGINS=1
+staged_match '^scripts/(run-unit-tests\.js$|tests/run-unit-tests\.test\.js$|unit-tests-fixtures/)' && TOUCH_RUNNER=1
+
+# 本次提交既没碰插件与市场清单，也没碰单测脚本 → 直接放行
+if [ "$TOUCH_PLUGINS" = 0 ] && [ "$TOUCH_RUNNER" = 0 ]; then
   exit 0
 fi
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "[pre-commit] 未找到 node，跳过版本一致性校验与插件单测" >&2
+  echo "[pre-commit] 未找到 node，跳过版本一致性校验与单测" >&2
   exit 0
 fi
+
+if [ "$TOUCH_RUNNER" = 1 ] && ! node "$ROOT/scripts/tests/run-unit-tests.test.js" >/dev/null 2>&1; then
+  echo "[pre-commit] scripts/run-unit-tests.js 自身的单测未通过，本次提交已拦下。" >&2
+  echo "  看详情：node scripts/tests/run-unit-tests.test.js" >&2
+  echo "  有意改了判定规则：先 --update 重写 expected.json，并同步 devkit-plugin-eval 的 Python 实现" >&2
+  exit 1
+fi
+
+[ "$TOUCH_PLUGINS" = 1 ] || exit 0
 
 if ! node "$ROOT/scripts/check-versions.js" --quiet; then
   echo "" >&2
