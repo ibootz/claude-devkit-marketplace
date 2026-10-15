@@ -294,10 +294,10 @@ class ReviewScanTest(unittest.TestCase):
     def test_clause_ids_derived_from_events_and_hook_rules(self):
         """票 10 的 clauses.json：规则脚本挂在哪些事件（hooks.json）× 未退役条款的 events，唯一相交才映射。"""
         self._clauses([
-            {'id': 'C001', 'text': '不用独立 cd', 'events': ['PreToolUse'], 'status': 'active'},
-            {'id': 'C002', 'text': '旧条款', 'events': ['PreToolUse'], 'status': 'retired'},
-            {'id': 'C003', 'text': '每轮要点', 'events': ['UserPromptSubmit'], 'status': 'active'},
-            {'id': 'C004', 'text': '每轮另一条', 'events': ['UserPromptSubmit'], 'status': 'active'}])
+            {'id': 'C001', 'criterion': '不用独立 cd', 'events': ['PreToolUse'], 'status': 'active'},
+            {'id': 'C002', 'criterion': '旧条款', 'events': ['PreToolUse'], 'status': 'retired'},
+            {'id': 'C003', 'criterion': '每轮要点', 'events': ['UserPromptSubmit'], 'status': 'active'},
+            {'id': 'C004', 'criterion': '每轮另一条', 'events': ['UserPromptSubmit'], 'status': 'active'}])
         self.fx.run()
         cands = {(c['rule'], c['after_compact']): c for c in self.fx.load()['candidates']}
         guard = cands[('hooks/guard.js#check=no-cd', False)]
