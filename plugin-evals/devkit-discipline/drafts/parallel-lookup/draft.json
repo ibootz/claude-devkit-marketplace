@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "case": "parallel-lookup",
+  "source": "history",
+  "created_at": "2026-10-15T12:00:00Z",
+  "created_by": {
+    "by": "票 11 历史素材迁入"
+  },
+  "status": "open",
+  "category": "discipline",
+  "clauses": [],
+  "clause_intent": "互不依赖的只读检索在同一轮里并发发起",
+  "intent": "三个互不依赖的文件在同一轮并发读取，并答对三个常量",
+  "history_source": "离线对照探针 probe 的 parallel-lookup 用例（.scratch/plugin-eval/probe/cases/devkit-discipline/evals/parallel-lookup）；去掉了两个注入标记 grader，文件桩由 printf 改为 heredoc",
+  "evidence": {
+    "probe_scores": {
+      "with": 1.0,
+      "without": 1.0
+    },
+    "note": "probe 实测两臂都是 1.00（Δ=0）：通过后预计被 baseline 判为基线已满足，转作回归守护并补诱导用例"
+  }
+}

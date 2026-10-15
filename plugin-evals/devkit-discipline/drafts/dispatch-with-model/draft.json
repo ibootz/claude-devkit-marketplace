@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "case": "dispatch-with-model",
+  "source": "history",
+  "created_at": "2026-10-15T12:00:00Z",
+  "created_by": {
+    "by": "票 11 历史素材迁入"
+  },
+  "status": "open",
+  "category": "discipline",
+  "clauses": [],
+  "clause_intent": "派发子代理时显式写明 model 参数",
+  "intent": "两件互不相关的事分别派子代理时，每次派发都带 model",
+  "history_source": "离线对照探针 probe 的 dispatch-model 用例（.scratch/plugin-eval/probe/cases/devkit-discipline/evals/dispatch-model）；去掉了两个只在装插件时成立的注入标记 grader",
+  "evidence": {
+    "proven_delta": 0.67,
+    "proven_note": "probe 实测：装 1.00、不装 0.33，Δ=+0.67（.scratch/plugin-eval/probe/REPORT.md 第 93 行）"
+  }
+}
