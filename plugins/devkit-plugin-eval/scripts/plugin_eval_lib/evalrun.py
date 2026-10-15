@@ -83,7 +83,11 @@ def _kill_tree(proc, own_group):
             proc.kill()
         return
     if not own_group:
-        proc.kill()
+        proc.terminate()   # 先 SIGTERM，让 eval 自己收拾它起的 claude 子进程；宽限期过了再强杀
+        try:
+            proc.wait(timeout=KILL_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            proc.kill()
         return
     for sig in (signal.SIGTERM, signal.SIGKILL):
         try:
@@ -98,9 +102,10 @@ def _kill_tree(proc, own_group):
 
 
 class _ExitOnSignal(object):
-    """限时模式下 eval 在独立进程组里，父进程被 SIGTERM / SIGHUP 按默认处理直接退出时整组会留在后台继续跑
-    （如后台跑的 compare 被 TaskStop 停掉）。这里把这两个信号转成 SystemExit（退出码 128+信号值），
-    让 run_eval 的 except BaseException 执行到 _kill_tree。只在主线程装（signal 的限制），退出时还原。"""
+    """父进程被 SIGTERM / SIGHUP 按默认处理直接退出时，eval 会留在后台继续跑（如后台跑的 compare 被 TaskStop 停掉）：
+    限时模式下 eval 在独立进程组里，整组都留下；不限时模式下 eval 与父进程同组，只有信号单发给父进程时才留下。
+    这里把这两个信号转成 SystemExit（退出码 128+信号值），让 run_eval 的 except BaseException 执行到 _kill_tree。
+    限时与不限时都装；只在主线程装（signal 的限制），退出时还原。"""
 
     SIGNALS = ('SIGTERM', 'SIGHUP')
 
@@ -138,7 +143,7 @@ def run_eval(cmd, cwd, env, log_dir, timeout=None):
     with open(log_dir / 'eval.stdout', 'wb') as out, open(log_dir / 'eval.stderr', 'wb') as err:
         # 限时才另起进程组（超时好整组杀）；不限时保持原样，终端 Ctrl-C 照常连带 eval 一起停
         kw = {'start_new_session': True} if timeout and sys.platform != 'win32' else {}
-        with _ExitOnSignal(bool(kw)):
+        with _ExitOnSignal(sys.platform != 'win32'):
             proc = subprocess.Popen(cmd, cwd=str(cwd), env=env, stdout=out, stderr=err, stdin=subprocess.DEVNULL, **kw)
             try:
                 proc.wait(timeout=timeout)

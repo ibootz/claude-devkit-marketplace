@@ -10,7 +10,7 @@ from pathlib import Path
 
 import _support
 from _support import tmpdir, aggregate, grader, make_plugin, make_sandbox, run_result
-from plugin_eval_lib import cli, compare, completeness, pending, registry, resume
+from plugin_eval_lib import cli, compare, completeness, pending, preflight, registry, resume
 from test_compare import passing_preflight
 
 GRADERS = [grader('rule')]
@@ -401,6 +401,67 @@ class PendingWithResumeTest(ResumeTestBase):
         new_code = 'PE1 %s %s 1A' % (old_page.run_id, rec['pending']['page_id'])
         pending.apply_reply(self.data, 'demo-plugin', new_code)
         self.assertEqual(self.load(first.run_dir)['review']['status'], '已审')
+
+    def test_resume_crash_then_resume_keeps_first_run_preflight_and_pending(self):
+        """集成审查 N1：续跑中途又崩，检查点仍带首跑软项与待审页历史；再续跑成功后照样重新生成待审页。"""
+        first_only = '首跑独有的软项提示'
+
+        def first_preflight(**kw):
+            rep = preflight.Report('compare')
+            rep.add(preflight.Item('first-only', '首跑软项', preflight.SOFT, preflight.WARN, first_only))
+            return rep
+
+        fake = ScriptedEval(self.sandboxes, FLAKY, fail={('current', 'case-a', 1): LIMIT_ERROR})
+        self.minute = 1
+        first = compare.run_compare(self.data, 'demo-plugin', runs=3, concurrency=2, runner=fake,
+                                    now=lambda: datetime(2026, 10, 15, 8, 1, tzinfo=timezone.utc),
+                                    **dict(self.kw(), preflight_check=first_preflight))
+        old_page = pending.generate(self.data, 'demo-plugin', run_id=first.run_dir.name)
+        pending.apply_reply(self.data, 'demo-plugin', 'PE1 %s %s 1A' % (old_page.run_id, old_page.page_id))
+
+        fake.crash_on = 'current'
+        with self.assertRaises(RuntimeError):
+            self.resume(fake, first.run_dir)
+        ckpt = self.load(first.run_dir)
+        self.assertFalse(ckpt['complete'])
+        self.assertIn(first_only, ckpt['preflight']['warnings'])
+        self.assertIn(first_only, ckpt['preflight']['first_run']['warnings'])
+        self.assertEqual(ckpt['pending']['superseded_by_resume'], 1)
+        self.assertIsNone(ckpt['pending']['page_id'])
+        self.assertEqual([h['page_id'] for h in ckpt['pending']['history']], [old_page.page_id])
+
+        self.resume(fake, first.run_dir)
+        rec = self.load(first.run_dir)
+        self.assertTrue(rec['complete'])
+        self.assertIn(first_only, rec['preflight']['warnings'])
+        self.assertIn(first_only, rec['preflight']['first_run']['warnings'])
+        self.assertNotIn('first_run', rec['preflight']['first_run'])     # 指向真正的首跑，不层层嵌套（N7）
+        self.assertNotIn(rec['pending']['page_id'], (None, old_page.page_id))
+        self.assertEqual([h['page_id'] for h in rec['pending']['history']], [old_page.page_id])
+        self.assertEqual(rec['review']['status'], '待审')
+        self.assertEqual(len(rec['resume']['attempts']), 2)
+
+
+class LegacyTraceDirTest(ResumeTestBase):
+    def test_resume_fills_trace_dir_for_runs_from_old_aggregate(self):
+        """集成审查 N3：0.1.0 的老运行汇总没有 devkitTraceDir，续跑时按票 03 命名补上，序号按剔除无效 run 之前算。"""
+        fake = ScriptedEval(self.sandboxes, FLAKY, fail={('current', 'case-a', 1): LIMIT_ERROR})
+        first = self.compare(fake)
+        agg_path = first.run_dir / 'arms' / 'current' / 'aggregate-result.json'
+        agg = json.loads(agg_path.read_text(encoding='utf-8'))
+        expected = []          # 首跑记下的值（有效 run），抹掉字段后续跑应补回同样的值
+        for c in agg['cases']:
+            for r in c['arms']['with']:
+                d = r.pop(compare.TRACE_DIR_KEY)
+                if not r.get('error'):
+                    expected.append(d)
+        agg_path.write_text(json.dumps(agg), encoding='utf-8')
+        self.resume(fake, first.run_dir)
+        merged = json.loads(agg_path.read_text(encoding='utf-8'))
+        old_dirs = [r[compare.TRACE_DIR_KEY] for c in merged['cases'] for r in c['arms']['with']
+                    if 'devkitResumeAttempt' not in r]
+        self.assertEqual(sorted(old_dirs), sorted(expected))
+        self.assertTrue(any(d.endswith('/current/case-a-3') for d in old_dirs), old_dirs)
 
 
 class CompletenessTest(unittest.TestCase):

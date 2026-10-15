@@ -289,7 +289,7 @@ def _subset_evals(evals_src, subset, dest):
 
     def ignore_results(dirpath, names):
         return ['results'] if Path(dirpath) == evals_src and 'results' in names else []
-    shutil.copytree(evals_src, dest, ignore=ignore_results, ignore_dangling_symlinks=True)
+    arms.copy_tree(evals_src, dest, ignore=ignore_results)
     for c in arms.discover_cases(dest):
         if c not in subset:
             shutil.rmtree(dest / c)
@@ -299,6 +299,11 @@ def _subset_evals(evals_src, subset, dest):
 def _resume_arm(spec, *, old_rec, run_dir, cases, runs, base_ctx, tmp_root, attempt, attempt_no):
     agg_path = Path(run_dir) / 'arms' / spec.key / 'aggregate-result.json'
     prev_agg = json.loads(agg_path.read_text(encoding='utf-8')) if old_rec and agg_path.is_file() else None
+    # 0.1.0 的老运行汇总没记转录目录：按票 03 的命名 traces/<run_id>/<臂>/<用例>-<序号> 补上（序号取剔除无效 run 之前的位置）
+    for c in (prev_agg or {}).get('cases', []):
+        for i, r in enumerate(c.get('arms', {}).get('with', []), 1):
+            r.setdefault(compare.TRACE_DIR_KEY, 'traces/%s/%s/%s-%d' % (base_ctx['run_id'], spec.key,
+                                                                          compare._case_slug(c), i))
     need = missing_runs(prev_agg, cases, runs)
     if prev_agg is not None and not need:
         rec = _public(old_rec)
@@ -474,7 +479,7 @@ def resume_run(data_dir, run_dir, *, claude=None, runner=evalrun.run_eval, env=N
         old_pending = old.get('pending')
         lock = RunLock(data_dir, run_id).acquire()
         try:
-            meta['statics'] = compare.static_profiles(plan.specs, child_env)
+            meta['statics'] = compare.static_profiles(plan.specs, child_env, tmp_parent)
             tmp_root = Path(tempfile.mkdtemp(prefix='devkit-plugin-eval-resume-', dir=tmp_parent))
             base_ctx = {
                 'evals_src': evals_src, 'extra_exclude': extra_exclude, 'traces_root': data_dir / 'traces' / run_id,
@@ -490,7 +495,12 @@ def resume_run(data_dir, run_dir, *, claude=None, runner=evalrun.run_eval, env=N
                         base_ctx=base_ctx, tmp_root=tmp_root, attempt=attempt, attempt_no=attempt_no)
                     progress = {k: v for k, v in old_arms.items() if k not in arm_records}
                     progress.update(arm_records)
-                    write_checkpoint(meta, progress, extra={'resume': {'attempts': prior + [attempt]}})
+                    # 续跑中途再崩时，检查点照样留着首跑的前置检查与待审页历史，下次续跑才接得上
+                    ckpt = {'resume': {'attempts': prior + [attempt]},
+                            'preflight': compare._merge_preflight(pre.to_dict(), old.get('preflight'))}
+                    if old_pending:
+                        ckpt['pending'] = _superseded_pending(old_pending, attempt_no)
+                    write_checkpoint(meta, progress, extra=ckpt)
             finally:
                 if not keep_assembly:
                     shutil.rmtree(tmp_root, ignore_errors=True)

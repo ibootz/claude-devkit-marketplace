@@ -8,7 +8,8 @@
 「不装」臂用空桩跑 --ablation none，等同不装（票 01 报告第二节实测）。
 上一版臂的 ArmSpec.source 是 git archive 解出的快照目录（previous.py）；环境插件臂在组装后由
 envplugins.install 把环境插件拷进组装目录内（eval 只从 containment root 内加载用例 plugins 字段列的插件）。
-断开的符号链接跳过不拷（装到本机时它同样指向不存在的文件），否则 copytree 拷完整棵树才抛 shutil.Error。
+断开的符号链接跳过不拷（装到本机时它同样指向不存在的文件），否则 copytree 拷完整棵树才抛 shutil.Error；
+本包所有整棵拷贝都走 copy_tree，跟随符号链接拷内容。
 """
 import json
 import os
@@ -59,6 +60,18 @@ def write_stub(dest):
     }, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
 
+def copy_tree(src, dest, ignore=None):
+    """shutil.copytree 的包装：跟随符号链接拷内容，断开的链接跳过不拷。
+    不用 copytree 的 ignore_dangling_symlinks：标准库按进程 cwd 判断相对链接是否断开，
+    指向别处的相对链接（如插件目录外的共用脚本）会被当成断链静默丢掉。"""
+    def _ignore(dirpath, names):
+        out = set(ignore(dirpath, names)) if ignore else set()
+        return out | {n for n in names
+                      if os.path.islink(os.path.join(dirpath, n)) and not os.path.exists(os.path.join(dirpath, n))}
+    shutil.copytree(src, dest, ignore=_ignore)
+    return dest
+
+
 def assemble_arm(root, spec, evals_src, extra_exclude=()):
     dest = Path(root) / spec.key
     if dest.exists():
@@ -71,11 +84,11 @@ def assemble_arm(root, spec, evals_src, extra_exclude=()):
 
         def ignore(dirpath, names):
             return [n for n in names if Path(dirpath) == src and n in top_excluded]
-        shutil.copytree(src, dest, ignore=ignore, ignore_dangling_symlinks=True)
+        copy_tree(src, dest, ignore=ignore)
 
     evals_src = Path(evals_src)
 
     def ignore_results(dirpath, names):
         return ['results'] if Path(dirpath) == evals_src and 'results' in names else []
-    shutil.copytree(evals_src, dest / 'evals', ignore=ignore_results, ignore_dangling_symlinks=True)
+    copy_tree(evals_src, dest / 'evals', ignore=ignore_results)
     return dest

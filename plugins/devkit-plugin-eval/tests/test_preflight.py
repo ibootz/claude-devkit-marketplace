@@ -200,6 +200,19 @@ class HookSmokeTest(Base):
         text = json.dumps(runs, ensure_ascii=False) + rep.render()
         self.assertIn('${CLAUDE_PLUGIN_ROOT}', text)
         self.assertNotIn(str(self.tmp), text)
+        self.assertNotIn('/private${', text)   # macOS 上 /var 实为 /private/var：替换前要先 resolve（集成审查展示问题）
+
+    def test_symlink_to_outside_plugin_dir_still_reachable(self):
+        """集成审查 N2：hook 脚本是指向插件目录外的相对符号链接时，副本跟随链接拷内容，冒烟不得 127。"""
+        target = write(self.tmp / 'shared' / 'run-hook', '#!/bin/sh\nexit 0\n')
+        os.chmod(target, 0o755)
+        link = self.plugin / 'hooks' / 'run-hook'
+        link.parent.mkdir(parents=True, exist_ok=True)
+        os.symlink(os.path.relpath(target, link.parent), link)
+        set_hooks(self.plugin, ['"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook"'])
+        rep = self.check()
+        self.assertTrue(rep.passed, rep.render())
+        self.assertEqual([r['exit_code'] for r in rep.hook_runs], [0])
 
     def test_no_hooks_is_ok(self):
         rep = self.check()

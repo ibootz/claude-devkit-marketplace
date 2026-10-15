@@ -74,9 +74,10 @@ def _case_slug(case):
     return scoring._case_rel_dir(case).replace('/', '__')
 
 
-def static_profiles(specs, env):
+def static_profiles(specs, env, tmp_parent=None):
     """各臂常驻注入的静态画像（票 06）：{臂 key: 画像}，「不装」臂为 None。同一插件目录只算一次。
-    在 eval 开跑前算：静态执行 hook 的结果与 eval 无关，放到跑完后算会让中途退出的运行缺这份数据。"""
+    在 eval 开跑前算：静态执行 hook 的结果与 eval 无关，放到跑完后算会让中途退出的运行缺这份数据。
+    与冒烟一样在插件副本里执行：hook 往 ${CLAUDE_PLUGIN_ROOT} 写的文件不落进用户工作区，也不改插件指纹。"""
     by_source, out = {}, {}
     for spec in specs:
         if spec.source is None:
@@ -84,7 +85,12 @@ def static_profiles(specs, env):
             continue
         src = str(spec.source)
         if src not in by_source:
-            by_source[src] = injection.static_profile(spec.source, env=env)
+            work = Path(tempfile.mkdtemp(prefix='devkit-plugin-eval-static-', dir=tmp_parent)).resolve()
+            try:
+                copy = preflight._plugin_copy(Path(spec.source).resolve(), work / 'plugin')
+                by_source[src] = injection.static_profile(copy, env=env, work_parent=work / 'work')
+            finally:
+                shutil.rmtree(work, ignore_errors=True)
         out[spec.key] = by_source[src]
     return out
 
@@ -250,7 +256,7 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
         lock.acquire()
         try:
             resume.write_checkpoint(meta, arm_records)
-            meta['statics'] = static_profiles(plan.specs, child_env)
+            meta['statics'] = static_profiles(plan.specs, child_env, tmp_parent)
             assembly_root = Path(tempfile.mkdtemp(prefix='devkit-plugin-eval-', dir=tmp_parent))
             ctx = {
                 'assembly_root': assembly_root, 'evals_src': evals_src, 'extra_exclude': extra_exclude,
@@ -323,11 +329,12 @@ def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp,
 
 
 def _merge_preflight(current, prior):
-    """续跑：首跑的软项提示保留（去重后排在前面），整份首跑结果另存在 first_run 下。"""
+    """续跑：首跑的软项提示保留（去重后排在前面），整份首跑结果另存在 first_run 下。
+    多次续跑时 prior 已是合并过的那份：first_run 沿用它记下的真正首跑，不层层嵌套。"""
     if not prior:
         return current
     merged = dict(current)
     merged['warnings'] = list(dict.fromkeys(list(prior.get('warnings') or []) + list(current.get('warnings') or [])))
-    merged['first_run'] = prior
+    merged['first_run'] = prior.get('first_run') or prior
     return merged
 

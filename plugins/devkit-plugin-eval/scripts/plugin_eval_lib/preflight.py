@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import envplugins, evalrun, injection, registry
+from . import arms, envplugins, evalrun, injection, registry
 
 HARD, SOFT = 'hard', 'soft'
 OK, FAIL, SKIP, WARN = 'ok', 'fail', 'skip', 'warn'
@@ -154,14 +154,14 @@ _COPY_SKIP_TOP = ('.git', 'evals', 'plugin-evals')
 
 
 def _plugin_copy(plugin_dir, dest):
-    """冒烟在插件副本里跑：hook 往 ${CLAUDE_PLUGIN_ROOT} 写的东西（如 __pycache__）不落进用户工作区、不让它显示 dirty。"""
+    """冒烟在插件副本里跑：hook 往 ${CLAUDE_PLUGIN_ROOT} 写的东西（如 __pycache__）不落进用户工作区、不让它显示 dirty。
+    符号链接跟随拷内容（与臂组装同一个 arms.copy_tree）：指向插件目录外的相对链接原样拷过来会断。"""
     src = Path(plugin_dir)
 
     def ignore(dirpath, names):
         top = [n for n in names if Path(dirpath) == src and n in _COPY_SKIP_TOP]
         return top + [n for n in names if n == '__pycache__']
-    shutil.copytree(src, dest, symlinks=True, ignore=ignore)
-    return dest
+    return arms.copy_tree(src, dest, ignore=ignore)
 
 
 def smoke_hooks(plugins, env, tmp_parent=None):
@@ -171,7 +171,8 @@ def smoke_hooks(plugins, env, tmp_parent=None):
     带 PYTHONDONTWRITEBYTECODE=1）。报错里的临时路径换回 <临时HOME> / ${CLAUDE_PLUGIN_ROOT}。
     """
     runs, unreachable, errors = [], [], []
-    home = Path(tempfile.mkdtemp(prefix='devkit-plugin-eval-home-', dir=tmp_parent))
+    # resolve：macOS 上 /var 实为 /private/var，不先解析，报错里的副本路径会替换成「/private${CLAUDE_PLUGIN_ROOT}」
+    home = Path(tempfile.mkdtemp(prefix='devkit-plugin-eval-home-', dir=tmp_parent)).resolve()
     try:
         hook_env = dict(env)
         hook_env.update(HOME=str(home), USERPROFILE=str(home))

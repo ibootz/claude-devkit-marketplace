@@ -172,7 +172,7 @@ def install(arm_dir, env_plugins):
 
         def ignore(dirpath, names, src=src):
             return [n for n in names if Path(dirpath) == src and n in COPY_EXCLUDE]
-        shutil.copytree(src, dest, ignore=ignore, ignore_dangling_symlinks=True)
+        arms.copy_tree(src, dest, ignore=ignore)
         targets.append(dest)
     evals = arm_dir / 'evals'
     skipped = []
