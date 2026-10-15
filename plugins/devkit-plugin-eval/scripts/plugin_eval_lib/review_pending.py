@@ -40,7 +40,8 @@ def _candidate_collect(subject):
                                      p.get('uuid'), p.get('timestamp')) for p in c.get('pointers') or []]
         facts = [('信号', kind), ('规则', c.get('rule')), ('次数（按 uuid 去重后）', c.get('count')),
                  ('其中子代理', c.get('subagent_count')), ('是否在 compact 之后', '是' if c.get('after_compact') else '否'),
-                 ('命中条款 id', '、'.join(c.get('clause_ids') or []) or '无（条款清单没有登记这个信号）'),
+                 ('命中条款 id', '、'.join(c.get('clause_ids') or []) or
+                  '未映射（%s）' % ((c.get('clause_mapping') or {}).get('reason') or '条款清单没有登记这个信号')),
                  ('插件版本', '、'.join('%s×%d' % kv for kv in sorted((c.get('plugin_versions') or {}).items())) or '取不到')]
         facts += [('定位指针 %d（会话 / uuid / 时间）' % i, p) for i, p in enumerate(ptrs, 1)]
         out.append(pending.PendingItem(
@@ -56,6 +57,7 @@ def _candidate_apply(subject, item, code, now):
         if isinstance(c, dict) and c.get('id') == cid:
             c['selection'] = 'draft' if code == 'A' else 'skip'
             c['decided_at'] = _iso(now)
+            c['carried_from'] = None
             return
     raise pending.PendingError('复盘结果里找不到候选 %s（复盘结果可能被重跑覆盖过）' % cid)
 

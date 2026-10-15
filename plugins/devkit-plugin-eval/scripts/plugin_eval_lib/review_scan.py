@@ -143,7 +143,8 @@ def _new_plugin_stats():
 class ScanResult:
     plugins: dict
     stats: dict
-    environment: dict
+    environment: dict          # 全局：只有 Claude Code 版本（各会话最新一条）
+    main_models: dict = None   # {插件: 加载过该插件的会话里最新的主力模型}；不留全局模型清单
 
 
 class Scanner(object):
@@ -161,8 +162,7 @@ class Scanner(object):
             'unattributed_injections': Counter(), 'sessions': set(),
         }
         self.latest_version = (None, None)          # (时间, Claude Code 版本)
-        self.latest_main_model = (None, None)
-        self.models = Counter()
+        self.session_models = {}                    # 会话 id -> (时间, 主力模型)：只取主线程（非子代理）的回复
 
     # ---------- 文件 ----------
 
@@ -172,7 +172,8 @@ class Scanner(object):
         self.stats['subagent_files' if is_subagent else 'main_files'] += 1
         ctx = {'segment': 0, 'hook_texts': {}, 'hac': [], 'ss_by_segment': defaultdict(set), 'agent_id': agent_id,
                'subagent': is_subagent, 'file_session': path.stem if not is_subagent else path.parent.parent.name,
-               'listed_sessions': set(), 'counted_segments': set()}
+               'listed_sessions': set(), 'counted_segments': set(),
+               'first_seen': {}}     # 插件 -> 本文件里最早出现注入或 hook_success 的段号（compact 分母用）
         try:
             fh = open(str(path), 'r', encoding='utf-8', errors='replace')
         except OSError:
@@ -251,11 +252,12 @@ class Scanner(object):
         msg = rec.get('message') if isinstance(rec.get('message'), dict) else {}
         model = msg.get('model')
         if model and model != '<synthetic>':
-            self.models[model] += 1
             ts = rec.get('timestamp')
+            sid = rec.get('sessionId') or ctx['file_session']
+            cur = self.session_models.get(sid)
             if not rec.get('isSidechain') and not ctx['subagent'] and isinstance(ts, str) and \
-                    (self.latest_main_model[0] is None or ts > self.latest_main_model[0]):
-                self.latest_main_model = (ts, model)
+                    (cur is None or ts > cur[0]):
+                self.session_models[sid] = (ts, model)
         for block in msg.get('content') or []:
             if isinstance(block, dict) and block.get('type') == 'tool_use' and block.get('name') == 'Skill':
                 skill = (block.get('input') or {}).get('skill') if isinstance(block.get('input'), dict) else None
@@ -347,6 +349,8 @@ class Scanner(object):
             texts = self._hook_texts(a)
             cands = self.index.by_hook(a.get('hookEvent'), a.get('hookName'), a.get('command'))
             plugin, how = self.index.resolve(cands, texts[0] if texts else None)
+            if plugin in self.p:
+                ctx['first_seen'].setdefault(plugin, ctx['segment'])
             for tx in texts:   # 归不到已登记插件的记成 __other / __ambiguous / __unknown，收尾时据此决定要不要再看标签
                 ctx['hook_texts'].setdefault(_digest(tx), set()).add(plugin or '__' + how)
             if count:
@@ -459,6 +463,7 @@ class Scanner(object):
                 if count:
                     self.stats['unattributed_injections'][event or '?'] += 1
                 continue
+            ctx['first_seen'][plugin] = min(seg, ctx['first_seen'].get(plugin, seg))
             if event == 'SessionStart' and seg >= 1:
                 ctx['ss_by_segment'][seg].add(plugin)
             if not count:
@@ -472,21 +477,30 @@ class Scanner(object):
             self.p[plugin]['sessions_signal'].add(sid)
         for seg in sorted(ctx['counted_segments']):
             for plugin in self.p:
+                # 分母只算该插件在本文件这次 compact 之前出现过注入或 hook_success 的边界：没加载它的会话不该拉低重注率
+                if ctx['first_seen'].get(plugin, seg) >= seg:
+                    continue
                 self.p[plugin]['compact']['boundaries_seen'] += 1
                 if plugin in ctx['ss_by_segment'].get(seg, ()):
                     self.p[plugin]['compact']['reinjected'] += 1
 
     # ---------- 结果 ----------
 
+    def plugin_main_model(self, plugin):
+        """加载过该插件（skill 清单列出或有信号）的会话里，时间最新的那条主线程回复的模型。"""
+        ps = self.p[plugin]
+        best = max((self.session_models[s] for s in ps['sessions_listed'] | ps['sessions_signal']
+                    if s in self.session_models), default=(None, None))
+        return best[1]
+
     def result(self):
-        env = {'claude_code_version': self.latest_version[1], 'main_model': self.latest_main_model[1],
-               'models': dict(self.models.most_common())}
+        env = {'claude_code_version': self.latest_version[1]}
         stats = dict(self.stats)
         stats['claude_code_versions'] = dict(sorted(self.stats['claude_code_versions'].items()))
         stats['entrypoints'] = dict(self.stats['entrypoints'])
         stats['unattributed_injections'] = dict(self.stats['unattributed_injections'])
         stats['sessions'] = len(self.stats['sessions'])
-        return ScanResult(self.p, stats, env)
+        return ScanResult(self.p, stats, env, {p: self.plugin_main_model(p) for p in self.p})
 
 
 def iter_session_files(projects_dir, since_ts=None):

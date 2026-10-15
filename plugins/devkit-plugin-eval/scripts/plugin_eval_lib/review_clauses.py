@@ -1,62 +1,62 @@
-"""会话复盘读条款清单的最小接口：给复盘候选标「命中条款 id」。
+"""会话复盘读条款清单：给复盘候选标「命中条款 id」。格式按票 10 的 clauses.json，不新增要用户手填的字段。
 
-条款清单由票 10 落地（文件名、完整字段都归票 10 定）。本模块只约定复盘要用的最小读取面，集成时由票 10 对齐：
-- 清单文件放 `<仓>/plugin-evals/<插件>/` 下，按 CLAUSE_FILES 依次找第一个存在的；
-- 顶层是 {"clauses": [...]}，每条至少有 `id`；`retired: true` 的退役条款不参与归属；
-- 可选 `review_signals`：字符串列表，写复盘信号键（见 signal_keys），任一相等即算命中。
-  没写 `review_signals` 的条款不会被自动命中——复盘只看机械信号，不读条款的判定标准原文去猜。
-
-清单不存在、读不出或格式不对时返回空清单并带一句说明，复盘照跑，候选的 clause_ids 为空。
+- 清单：`<仓>/plugin-evals/<插件>/clauses.json`，顶层 {"clauses": [...]}，每条有 `id`（C%03d）、`events`
+  （条款出自哪些 hook 事件的注入文字）与 `status`；只有 status=active 的参与归属（退役判断同票 10 的 retired_ids）。
+- 映射（推导，不读条款原文去猜）：候选的规则键里有脚本相对路径（`hooks/guard.js#check=x` 取 `hooks/guard.js`）；
+  被测插件 hooks.json 里挂这个脚本的事件集合，与条款的 events 有交集的未退役条款恰好一条时，记这一条。
+  零条或多条都算推不出：clause_ids 为空，clause_mapping 如实记「未映射」与原因。
+- 清单不存在、读不出或格式不对时返回空清单并带一句说明，复盘照跑，候选全部「未映射」。
 """
 import json
 from dataclasses import dataclass
 from pathlib import Path
 
-CLAUSE_FILES = ('clauses.json',)   # 暂定：票 10 定下文件名后改这里
+LIST_FILE = 'clauses.json'          # 与票 10 的 clauses.LIST_FILE 同名（不 import clauses：避免导入期循环）
 
 
 @dataclass(frozen=True)
 class Clause:
     id: str
-    signals: tuple
+    events: tuple
 
 
 def load(plugin_evals_dir):
-    """返回 ([Clause], 说明或 None)。只收未退役、带 review_signals 的条款。"""
-    d = Path(plugin_evals_dir)
-    for name in CLAUSE_FILES:
-        p = d / name
-        if not p.is_file():
+    """返回 ([Clause], 说明或 None)。只收 status=active 的条款；没有清单时说明为 None、清单为空。"""
+    p = Path(plugin_evals_dir) / LIST_FILE
+    if not p.is_file():
+        return [], None
+    try:
+        data = json.loads(p.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as e:
+        return [], '条款清单 %s 读不出（%s），候选都不标条款 id' % (LIST_FILE, type(e).__name__)
+    items = data.get('clauses') if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        return [], '条款清单 %s 没有 clauses 列表，候选都不标条款 id' % LIST_FILE
+    out = []
+    for c in items:
+        if not isinstance(c, dict) or not isinstance(c.get('id'), str) or c.get('status') != 'active':
             continue
-        try:
-            data = json.loads(p.read_text(encoding='utf-8'))
-        except (OSError, ValueError) as e:
-            return [], '条款清单 %s 读不出（%s），候选不标条款 id' % (name, type(e).__name__)
-        items = data.get('clauses') if isinstance(data, dict) else None
-        if not isinstance(items, list):
-            return [], '条款清单 %s 没有 clauses 列表，候选不标条款 id' % name
-        out = []
-        for c in items:
-            if not isinstance(c, dict) or not isinstance(c.get('id'), str) or c.get('retired'):
-                continue
-            sigs = c.get('review_signals')
-            if isinstance(sigs, list):
-                sigs = tuple(s for s in sigs if isinstance(s, str) and s)
-                if sigs:
-                    out.append(Clause(c['id'], sigs))
-        return out, None
-    return [], None
+        events = tuple(e for e in c.get('events') or [] if isinstance(e, str))
+        out.append(Clause(c['id'], events))
+    return out, None
 
 
-def signal_keys(kind, rule):
-    """一个候选能被条款认领的全部信号键：`<kind>:<rule>`；rule 带 `#check=<x>` 时另加 `<kind>:<脚本>` 与 `check=<x>`。"""
-    keys = ['%s:%s' % (kind, rule)]
-    script, _, check = rule.partition('#check=')
-    if check:
-        keys += ['%s:%s' % (kind, script), 'check=%s' % check]
-    return keys
+def script_of(rule):
+    return (rule or '?').partition('#check=')[0]
 
 
-def match(clauses, kind, rule):
-    keys = set(signal_keys(kind, rule))
-    return sorted({c.id for c in clauses if keys.intersection(c.signals)})
+def match(clauses, rule, script_events, has_list=True):
+    """(clause_ids, clause_mapping)。script_events：{脚本相对路径: {事件}}（被测插件 hooks.json 推出）。"""
+    if not has_list:
+        return [], {'status': 'unmapped', 'reason': '没有可用的条款清单'}
+    script = script_of(rule)
+    events = script_events.get(script) or set()
+    if not events:
+        return [], {'status': 'unmapped', 'reason': '规则脚本 %s 不在被测插件的 hooks.json 里，推不出事件' % script}
+    hits = sorted(c.id for c in clauses if events.intersection(c.events))
+    if len(hits) == 1:
+        return hits, {'status': 'mapped', 'reason': '脚本挂在 %s，与该条款的 events 唯一相交' % '、'.join(sorted(events))}
+    if not hits:
+        return [], {'status': 'unmapped', 'reason': '没有未退役条款的 events 含 %s' % '、'.join(sorted(events))}
+    return [], {'status': 'unmapped', 'reason': '%d 条未退役条款的 events 都含 %s（%s），推不出是哪一条'
+                % (len(hits), '、'.join(sorted(events)), '、'.join(hits))}

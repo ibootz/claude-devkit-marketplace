@@ -2,10 +2,13 @@
 `plugin-evals/<插件>/reviews/<日期>.json`（零计数也写）。spec「2.5 会话复盘」。
 
 原始 jsonl 不入库、不另存；抽取在 review_scan 里完成，结果只含计数、信号名与定位指针（会话 id、uuid、时间、版本），
-不含对话原文。写盘前再过一遍 record.scrub_home，并由 assert_no_text 兜底检查没有路径与长文本。
+不含对话原文。写盘前先对未脱敏的结果自检（assert_no_text：路径含 `~/`、长文本；check_pointers：指针字段白名单），
+全部插件都过了再统一写盘（每个文件拿与待审页写回同一把锁），写前再过一遍 record.scrub_home。
 
 同一天重跑覆盖当天文件，已勾选的复盘候选（按候选 id）与「建议跑对照」的已读标记带过去；旧待审页作废。
-日期取 UTC（与 runs/ 的运行 id、preflight 判「上次复盘」同一口径）。
+更早日期已裁定的同一候选 id 跨日期沿用（插件版本相同时），记下沿用自哪天的哪次裁定（carried_from）；
+插件版本变了就重新上页；命中新的规则键时候选 id 本身就不同。
+日期用本机本地日期命名 reviews/<日期>.json，结果里另记时区偏移 tz_offset；时刻字段仍是 UTC。
 """
 import hashlib
 import json
@@ -23,6 +26,12 @@ KIND = 'review'
 REVIEW_ID_PREFIX = 'review-'
 DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 LONG_TEXT_LIMIT = 300       # 结果里任何字符串超过这个长度就当成混进了原文，拒绝写盘
+_PATH_RE = re.compile(r'/(?:Users|home)/|[A-Za-z]:\\Users\\|~/')
+_UUID_RE = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+_TOKEN_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+_TS_RE = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})?$')
+_RULE_RE = re.compile(r'^(?:\?|[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)(?:#check=[A-Za-z0-9_.:-]{1,80})?$')
+_VERSION_RE = re.compile(r'^[A-Za-z0-9_.+-]{1,40}$')
 KIND_TEXT = {'block': '拦截', 'hook_error': 'hook 报错'}
 
 
@@ -131,7 +140,16 @@ def candidate_id(plugin, kind, rule, after):
     return 'c-' + h
 
 
-def build_candidates(plugin, events, clauses):
+def script_events(index, name):
+    """被测插件 hooks.json：{脚本相对路径: {事件}}，复盘候选按它推条款。"""
+    out = {}
+    for p, spec in index.specs:
+        if p == name:
+            out.setdefault(review_scan.Scanner._script(spec.command), set()).add(spec.event)
+    return out
+
+
+def build_candidates(plugin, events, clauses, *, script_events=None, has_list=True):
     """复盘候选：同一插件、同一信号种类、同一规则、同在 compact 前或后的若干次命中并成一个候选，
     只存次数与最近 EXAMPLES_PER_GROUP 次的定位指针（会话 id、子代理 id、uuid、时间、插件版本、Claude Code 版本）。"""
     groups = {}
@@ -146,14 +164,15 @@ def build_candidates(plugin, events, clauses):
     out = []
     for (kind, rule, after), g in sorted(groups.items(), key=lambda kv: (-kv[1]['count'], kv[0])):
         ptrs = sorted(g['pointers'], key=lambda p: p.get('timestamp') or '', reverse=True)[:review_scan.EXAMPLES_PER_GROUP]
+        ids, mapping = review_clauses.match(clauses, rule, script_events or {}, has_list=has_list)
         out.append({
             'id': candidate_id(plugin, kind, rule, after), 'kind': kind, 'rule': rule, 'count': g['count'],
             'subagent_count': g['subagent'], 'after_compact': after,
-            'clause_ids': review_clauses.match(clauses, kind, rule),
+            'clause_ids': ids, 'clause_mapping': mapping,
             'plugin_versions': dict(g['versions']),
             'pointers': [{k: p.get(k) for k in ('session_id', 'agent_id', 'uuid', 'timestamp', 'plugin_version',
                                                  'claude_code_version')} for p in ptrs],
-            'selection': None, 'decided_at': None,
+            'selection': None, 'decided_at': None, 'carried_from': None,
         })
     return out
 
@@ -176,8 +195,16 @@ def _latency(lat):
                 'max_ms': max(v)} for k, v in sorted(lat.items()) if v}
 
 
-def build_record(*, name, entry, ps, scan, index, installed, clauses, clause_note, prev, now, days, since):
-    date = now.strftime('%Y-%m-%d')
+def local_date(now, tz=None):
+    """(本机本地日期, 时区偏移 '+08:00')。tz 只给单测固定时区用。"""
+    loc = now.astimezone(tz) if tz else now.astimezone()
+    off = loc.strftime('%z')
+    return loc.strftime('%Y-%m-%d'), '%s:%s' % (off[:3], off[3:]) if off else '+00:00'
+
+
+def build_record(*, name, entry, ps, scan, index, installed, clauses, clause_note, prev, now, days, since,
+                 date=None, tz_offset='+00:00', has_list=True):
+    date = date or now.strftime('%Y-%m-%d')
     manifest = _read_json(registry.plugin_dir(dict(entry, name=name)) / '.claude-plugin' / 'plugin.json') or {}
     events = ps['blocks'] + ps['hook_errors']
     has_ss = any(s.event == 'SessionStart' for p, s in index.specs if p == name)
@@ -188,6 +215,7 @@ def build_record(*, name, entry, ps, scan, index, installed, clauses, clause_not
     inst = {r['id']: r['version'] for recs in installed.values() for r in recs}
     return {
         'schema_version': SCHEMA_VERSION, 'kind': KIND, 'run_id': review_id(date), 'date': date,
+        'date_basis': 'local', 'tz_offset': tz_offset,
         'generated_at': now.strftime('%Y-%m-%dT%H:%M:%SZ'),
         'plugin': {'name': name, 'version': manifest.get('version'),
                    'installed': [{'id': r['id'], 'version': r['version'], 'scope': r['scope']}
@@ -195,7 +223,7 @@ def build_record(*, name, entry, ps, scan, index, installed, clauses, clause_not
         'window': {'days': days, 'since': since.strftime('%Y-%m-%dT%H:%M:%SZ'),
                    'until': now.strftime('%Y-%m-%dT%H:%M:%SZ')},
         'scan': scan.stats,
-        'environment': dict(scan.environment, co_loaded_plugins=[
+        'environment': dict(scan.environment, main_model=(scan.main_models or {}).get(name), co_loaded_plugins=[
             {'name': p, 'sessions': n, 'installed_versions': sorted({v for i, v in inst.items()
                                                                      if i.split('@', 1)[0] == p and v})}
             for p, n in sorted(co.items(), key=lambda kv: (-kv[1], kv[0]))],
@@ -211,11 +239,34 @@ def build_record(*, name, entry, ps, scan, index, installed, clauses, clause_not
             'compact': {'has_session_start_hook': has_ss, 'boundaries_seen': ps['compact']['boundaries_seen'],
                         'reinjected_after': ps['compact']['reinjected']},
         },
-        'candidates': build_candidates(name, events, clauses),
+        'candidates': build_candidates(name, events, clauses, script_events=script_events(index, name),
+                                       has_list=has_list),
         'clause_list_note': clause_note,
-        'compare_hint': compare_hint(prev, scan.environment),
+        'compare_hint': compare_hint(prev, dict(scan.environment, main_model=(scan.main_models or {}).get(name))),
         'pending': None,
     }
+
+
+def carry_earlier(rec, earlier):
+    """跨日期沿用：earlier = [(日期, 记录)]（新到旧，都早于本次）。同一候选 id 在更早日期已裁定、且那次复盘时的
+    插件版本与本次相同，就沿用裁定并记下来源（哪天、哪次裁定）；版本变了不沿用，重新上页。"""
+    version = (rec.get('plugin') or {}).get('version')
+    for c in rec['candidates']:
+        if c.get('selection'):
+            continue
+        for d, old in earlier:
+            if not isinstance(old, dict):
+                continue
+            hit = next((o for o in old.get('candidates') or [] if isinstance(o, dict) and o.get('id') == c['id']
+                        and o.get('selection')), None)
+            if hit is None:
+                continue
+            if (old.get('plugin') or {}).get('version') == version:
+                src = hit.get('carried_from') or {'date': d, 'run_id': review_id(d), 'decided_at': hit.get('decided_at'),
+                                                   'plugin_version': version}
+                c['selection'], c['decided_at'], c['carried_from'] = hit['selection'], hit.get('decided_at'), src
+            break           # 只看最近一次出现过裁定的日期：那次版本不同就不再往前找
+    return rec
 
 
 def merge_previous(rec, old):
@@ -226,6 +277,7 @@ def merge_previous(rec, old):
     for c in rec['candidates']:
         if c['id'] in done:
             c['selection'], c['decided_at'] = done[c['id']]['selection'], done[c['id']].get('decided_at')
+            c['carried_from'] = done[c['id']].get('carried_from')
     oh, nh = old.get('compare_hint') or {}, rec['compare_hint']
     if oh.get('acknowledged_at') and oh.get('diffs') == nh.get('diffs'):
         nh['acknowledged_at'] = oh['acknowledged_at']
@@ -249,9 +301,35 @@ def assert_no_text(obj, path='$'):
         for i, v in enumerate(obj):
             bad += assert_no_text(v, '%s[%d]' % (path, i))
     elif isinstance(obj, str):
-        if len(obj) > LONG_TEXT_LIMIT or '\n' in obj or (home and home != '~' and home in obj) or \
-                re.search(r'/(?:Users|home)/|[A-Za-z]:\\Users\\', obj):
+        if len(obj) > LONG_TEXT_LIMIT or '\n' in obj or (home and home != '~' and home in obj) or _PATH_RE.search(obj):
             bad.append(path)
+    return bad
+
+
+def check_pointers(rec):
+    """指针字段白名单：会话 id 是 uuid、uuid / 子代理 id 是短标识、时间戳合 ISO 形态、规则键是脚本相对路径或 `?`、
+    版本号是短版本串。返回违规位置列表。"""
+    bad = []
+
+    def chk(value, rx, where, nullable=True):
+        if value is None and nullable:
+            return
+        if not isinstance(value, str) or not rx.match(value):
+            bad.append(where)
+
+    for kind in ('blocks', 'hook_errors'):
+        for rule in ((rec.get('signals') or {}).get(kind) or {}):
+            chk(rule, _RULE_RE, '$.signals.%s.<key>' % kind, nullable=False)
+    for i, c in enumerate(rec.get('candidates') or []):
+        chk(c.get('rule'), _RULE_RE, '$.candidates[%d].rule' % i, nullable=False)
+        for j, ptr in enumerate(c.get('pointers') or []):
+            at = '$.candidates[%d].pointers[%d]' % (i, j)
+            chk(ptr.get('session_id'), _UUID_RE, at + '.session_id', nullable=False)
+            chk(ptr.get('agent_id'), _TOKEN_RE, at + '.agent_id')
+            chk(ptr.get('uuid'), _TOKEN_RE, at + '.uuid')
+            chk(ptr.get('timestamp'), _TS_RE, at + '.timestamp')
+            for k in ('plugin_version', 'claude_code_version'):
+                chk(ptr.get(k), _VERSION_RE, '%s.%s' % (at, k))
     return bad
 
 
@@ -264,8 +342,19 @@ def _write(path, rec):
 
 # ---------------- 入口 ----------------
 
-def run_review(data_dir, *, days=None, now=None, env=None, cfg=None, hook_labels=True, check=True, log=None):
-    """返回 [(插件名, 结果文件路径, 记录)]。前置检查硬项失败抛 preflight.PreflightFailed。"""
+def _earlier(d, date):
+    """reviews/ 下早于 date 的结果：[(日期, 记录)]，新到旧。"""
+    if not d.is_dir():
+        return []
+    dates = sorted((p.stem for p in d.glob('*.json') if DATE_RE.match(p.stem) and p.stem < date), reverse=True)
+    return [(x, _read_json(d / ('%s.json' % x))) for x in dates]
+
+
+def run_review(data_dir, *, days=None, now=None, env=None, cfg=None, hook_labels=True, check=True, log=None,
+               tz=None):
+    """返回 [(插件名, 结果文件路径, 记录)]。前置检查硬项失败抛 preflight.PreflightFailed。
+    先给全部插件建好结果并自检，任一不过即整批不写；都过了再逐个拿锁写盘。tz 只给单测固定时区用。"""
+    from . import pending        # 延迟导入：pending → resume → compare，导入期会与本模块成环
     log = log or (lambda m: print(m, file=sys.stderr))
     env = dict(os.environ if env is None else env)
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
@@ -291,20 +380,29 @@ def run_review(data_dir, *, days=None, now=None, env=None, cfg=None, hook_labels
         scanner.scan_file(path, is_subagent=sub)
     scan = scanner.result()
 
-    out = []
-    date = now.strftime('%Y-%m-%d')
+    date, tz_offset = local_date(now, tz)
+    built = []
     for name, entry in sorted(entries.items()):
         repo = Path(entry['repo'])
-        clauses, clause_note = review_clauses.load(repo / 'plugin-evals' / name)
-        prev = preflight.previous_compare(repo / 'plugin-evals' / name / 'runs')
+        evals = repo / 'plugin-evals' / name
+        clauses, clause_note = review_clauses.load(evals)
+        prev = preflight.previous_compare(evals / 'runs')
         rec = build_record(name=name, entry=entry, ps=scan.plugins[name], scan=scan, index=index, installed=installed,
-                           clauses=clauses, clause_note=clause_note, prev=prev, now=now, days=days, since=since)
+                           clauses=clauses, clause_note=clause_note, prev=prev, now=now, days=days, since=since,
+                           date=date, tz_offset=tz_offset, has_list=(evals / review_clauses.LIST_FILE).is_file())
         path = reviews_dir(repo, name) / ('%s.json' % date)
-        rec = record.scrub_home(merge_previous(rec, _read_json(path) if path.is_file() else None))
-        bad = assert_no_text(rec)
+        rec = carry_earlier(merge_previous(rec, _read_json(path) if path.is_file() else None),
+                            _earlier(path.parent, date))
+        # 自检在 scrub_home 之前：脱敏会把家目录换成 ~，再查就漏了（检测正则也认 `~/`）
+        bad = assert_no_text(rec) + check_pointers(rec)
         if bad:
-            raise ReviewError('%s 的复盘结果里有疑似原文或路径（%s），拒绝写盘' % (name, '、'.join(bad[:5])))
-        _write(path, rec)
+            raise ReviewError('%s 的复盘结果里有疑似原文、路径或不合形态的指针（%s），整批拒绝写盘'
+                              % (name, '、'.join(bad[:5])))
+        built.append((name, path, record.scrub_home(rec)))
+    out = []
+    for name, path, rec in built:
+        with pending._locked(data_dir, 'review-%s-%s' % (name, date), err=ReviewError):   # 与待审页写回同一把锁
+            _write(path, rec)
         out.append((name, path, rec))
     return out
 
