@@ -5,6 +5,7 @@ import io
 import json
 import threading
 import unittest
+from unittest import mock
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
 from pathlib import Path
@@ -352,6 +353,29 @@ class ErrorAndResumeTest(JudgeCompareBase):
         self.assertEqual(len(good.calls), 8)
         self.assertFalse([s for s in doc['samples'] if s['status'] == 'error'])
         self.assertTrue(doc['complete'])
+
+    def test_judge_step_crash_does_not_abort_finalize_and_resume_rejudges(self):
+        """评委这一步整体抛异常（如评委回的 JSON 不是对象、样本写盘 OSError）：收尾照常写 run.json 与报告，
+        记为不完整原因；续跑时重判。"""
+        with mock.patch.object(compare.judge, 'run', side_effect=ValueError('评委返回的不是 JSON 对象')):
+            res = self.compare(FakeJudge(lambda p, n: 'pass'))
+        rec = self.run_json(res)
+        self.assertFalse(rec['complete'])
+        self.assertIn('AI 评委这一步出错（ValueError: 评委返回的不是 JSON 对象），本次没有评委判分；续跑时重判',
+                      rec['incomplete_reasons'])
+        self.assertEqual(rec['judge'], {'failed': 'ValueError: 评委返回的不是 JSON 对象'})
+        report = (res.run_dir / 'report.md').read_text(encoding='utf-8')
+        self.assertIn('**AI 评委这一步出错**', report)
+        self.assertNotIn('没有用例声明 AI 评委判定标准', report)
+        self.assertIn('这一步出错', judgereport.console_line(rec['judge']))
+        good = FakeJudge(lambda p, n: 'pass')
+        res2 = resume.resume_run(self.data, res.run_dir, claude='/fake/claude',
+                                 runner=FakeEval(self.sandboxes, {'none': False, 'current': True}),
+                                 tmp_parent=self.assembly, sandbox_roots=[self.sandboxes], log=lambda *a: None,
+                                 preflight_check=passing_preflight, judge_runner=good)
+        self.assertTrue(res2.record['complete'], res2.record['incomplete_reasons'])
+        self.assertTrue(good.calls)
+        self.assertNotIn('failed', res2.record['judge'])
 
 
 class CriteriaAndClauseTest(JudgeCompareBase):

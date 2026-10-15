@@ -298,11 +298,17 @@ def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp,
         rec['_runs'] = _runs_from_agg(rec.get('_agg'), data_dir)
     # AI 评委（票 09）：要读汇总里的 rule grader 结果，排在 _score_arms 摘掉 _agg 之前。
     # 续跑时 judge_opts 由 resume.judge_opts_from 按首跑的 environment.judge 还原（早于该字段的运行为 None）
-    judge_doc, judge_reasons = judge.run(
-        arm_records=arm_records, labels={s.key: s.label for s in plan.specs},
-        evals_src=registry.plugin_dir(entry) / 'evals', run_dir=run_dir, run_id=run_id,
-        opts=judge.resolve_options(judge_opts, run_dir), claude=claude, env=child_env, trace_key=TRACE_DIR_KEY,
-        data_dir=data_dir, concurrency=concurrency, log=log)
+    judge_failed = None
+    try:
+        judge_doc, judge_reasons = judge.run(
+            arm_records=arm_records, labels={s.key: s.label for s in plan.specs},
+            evals_src=registry.plugin_dir(entry) / 'evals', run_dir=run_dir, run_id=run_id,
+            opts=judge.resolve_options(judge_opts, run_dir), claude=claude, env=child_env, trace_key=TRACE_DIR_KEY,
+            data_dir=data_dir, concurrency=concurrency, log=log)
+    except Exception as e:      # 与条款清单一步同口径：评委这一步出错不中止收尾，记为不完整，续跑时重判
+        judge_failed = '%s: %s' % (type(e).__name__, e)
+        judge_doc, judge_reasons = None, ['AI 评委这一步出错（%s），本次没有评委判分；续跑时重判' % judge_failed]
+        log('[AI 评委] %s' % judge_reasons[0])
     _score_arms(arm_records, log)
     inj_check, resident = injection_check.build(arm_records)
     for problem in inj_check['problems']:
@@ -337,7 +343,9 @@ def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp,
                                           rec['claude_code_version'], rec['main_model']))
     rec['preflight'] = _merge_preflight(pre.to_dict(), prior_preflight)
     rec.update(injection_check=injection_check.summary(inj_check), resident_tokens=resident)
-    if judge_doc:
+    if judge_failed:
+        rec['judge'] = {'failed': judge_failed}
+    elif judge_doc:
         rec.update(judge_model=judge_doc['model'], judge=judge.summarize(judge_doc))
     elif isinstance(judge_opts, dict) and judge_opts.get('enabled') is False:
         rec['judge'] = {'skipped': 'no-judge'}

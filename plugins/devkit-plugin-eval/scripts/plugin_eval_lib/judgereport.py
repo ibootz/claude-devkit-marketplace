@@ -1,7 +1,7 @@
 """report.md 里 AI 评委（票 09）的两段：首段醒目提示（不采信、判分出错）与「## AI 评委判分」一节。
 只读 run.json 的 judge 字段（judge.summarize 的输出），不读 judge.json；待审页写回用户裁定后整节重渲。
 本节内只用 ### 小标题：pending.upsert_section 按下一个 `## ` 定节尾。
-是否采信三态：true 采信（已校准）、false 不采信、null 采信（未校准）。judge = {"skipped": "no-judge"} 时写明按 --no-judge 跳过。
+是否采信三态：true 采信（已校准）、false 不采信、null 采信（未校准）。judge = {"skipped": "no-judge"} 时写明按 --no-judge 跳过；judge = {"failed": 原因} 时写明评委这一步出错、续跑重判。
 """
 SECTION_HEADING = '## AI 评委判分'
 _V = {'pass': '通过', 'fail': '不通过', 'unclear': '判不了', None: '—'}
@@ -25,12 +25,19 @@ def skipped(j):
     return isinstance(j, dict) and j.get('skipped') == 'no-judge'
 
 
+def failed(j):
+    """评委这一步整体出错（compare 收尾兜住的异常）：记录里只有 {'failed': 出错原因}，运行判不完整。"""
+    return isinstance(j, dict) and bool(j.get('failed'))
+
+
 def console_line(j):
     """compare / resume 收尾在终端打印的评委一行；没有评委段时返回 None。"""
     if not isinstance(j, dict):
         return None
     if skipped(j):
         return 'AI 评委：按 --no-judge 跳过'
+    if failed(j):
+        return 'AI 评委：这一步出错（%s），本次没有评委判分；运行判不完整，续跑时重判' % j['failed']
     rate = (j.get('gold') or {}).get('agreement_rate')
     return 'AI 评委 %s：样本 %s、分歧 %s、抽检 %s、出错 %s；金标一致率 %s；%s' % (
         j.get('model'), j.get('samples'), j.get('disagreements'), j.get('spot_checks'), j.get('errors'),
@@ -42,6 +49,8 @@ def scoring_line(rec):
     j = rec.get('judge')
     if skipped(j):
         return '规则 grader 定分与是否通过；AI 评委按 --no-judge 跳过'
+    if failed(j):
+        return '规则 grader 定分与是否通过；AI 评委这一步出错，本次没有评委判分（续跑时重判）'
     if j:
         return '规则 grader 定分与是否通过；AI 评委另判 %d 个样本，只作信息（见「AI 评委判分」）' % (j.get('samples') or 0)
     return '只用规则 grader（没有用例声明 AI 评委判定标准）'
@@ -51,6 +60,8 @@ def report_banner(rec):
     j = rec.get('judge')
     if not j or skipped(j):
         return []
+    if failed(j):
+        return ['', '> **AI 评委这一步出错**（%s），本次没有评委判分；运行判为不完整，续跑时重判。' % j['failed']]
     out = []
     if j.get('trusted') is False:
         out += ['', '> **AI 判分不采信**：%s。本次 AI 评委的判分只作参考，不能作为改插件或发版的依据。'
@@ -71,6 +82,9 @@ def section_body(rec):
     lines = [SECTION_HEADING, '']
     if skipped(j):
         lines += ['按 --no-judge 跳过：本次未调 AI 评委，也未读 judge-config.json。', '']
+        return '\n'.join(lines)
+    if failed(j):
+        lines += ['AI 评委这一步出错（%s），本次没有评委判分；运行判为不完整，续跑时重判。' % j['failed'], '']
         return '\n'.join(lines)
     if not j:
         lines += ['本次没有用例声明 AI 评委判定标准（用例目录下的 `judge/*.md`），未调 AI 评委。', '']
