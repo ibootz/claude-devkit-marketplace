@@ -51,7 +51,9 @@ Status: resolved
 - 演示里的「确认 / 打回」由 AI 代回复码，不是用户本人裁定。
 - 第 3 步演示的提案生成于 ref 映射修复之前，其 rehang_hint 文字里仍有「N1」；修复后由单测覆盖。
 
-### 暂定口径（待主会话复核）
+### 已定（2026-10-15 主会话复核）
+
+审查判合理的照现状保留。第 3 条被下方「A 批集成定稿」改写；第 8、9、14 条的缺陷（审查应修 1、3）已修。
 
 1. 清单文件 `plugin-evals/<p>/clauses.json`，id 格式 `C%03d`（超过 999 自然变长），取历史最大号加一，扫描清单与所有 `runs/*/clause-proposal.json`，打回的提案用过的号也不复用。备选：UUID 短码。理由：人读、报告列宽小。用户可见。
 2. 抽取模型默认 Fable（`claude-fable-5-1`），`compare --clause-model` / `clauses --model` 可改。备选：Sonnet。理由：简报「AI 评委默认最贵档」同口径。用户可见。
@@ -67,3 +69,24 @@ Status: resolved
 12. 清单旁存注入文本快照 `clauses-injection.txt`，增量重抽靠它做差异；运行目录另存本次快照 `clause-injection.txt`。用户不可见。
 13. 单跑 `clauses` 不做全量前置检查。理由：只执行注入 hook、不起 eval。用户不可见。
 14. 报告首段「条款清单待确认」放在注入核验提示之后；确认 / 打回后改写为「条款清单变更已确认（时间，UTC）」/「已打回」。用户可见。
+
+### 2026-10-15 A 批（09/10/12/14）集成定稿（集成分支 worktree-agent-aa78acdaffe679a6d，devkit-plugin-eval 0.3.0）
+
+**主会话定稿口径（覆盖上面第 3 条）**
+
+- `clauses` 子命令保留，只在该插件尚无 `clauses.json` 时执行；已有清单时拒绝，提示「已有条款清单，重抽是跑对照的第一步，请改跑 compare」（`clauses.EXISTING_LIST_MSG`）。spec 第四节已登记运行目录 `-clauses` 后缀与 `kind=clauses`。
+- `pending` 不带 `--run` 时也会选中 `kind=clauses` 的运行，并在「更早运行」里列出（`pending.RUN_KINDS`）；第 3 条里「要带 `--run`」不再成立。单测 `test_pending_without_run_picks_clauses_run_and_lists_it_as_earlier`。
+- gate 扫运行记录时跳过 `kind=clauses`（`gate.SKIPPED_KINDS`）。单测 `GateIntegrationTest.test_clauses_runs_are_skipped`。
+
+**审查应修落地**
+
+1. 被打回的提案不再复用：任一运行对同一组（基线清单指纹、新指纹）记过 `rejected`，`find_reusable` 就返回空。单测 `test_rejected_pair_is_never_reused_even_if_another_run_has_it_pending`。
+2. 清单 JSON 损坏不中止对照：`check_for_run` 的异常分支不再读清单，`list_fingerprint` 记 None；`used_ids` 同样容错。单测 `test_corrupt_list_does_not_abort_compare`。
+3. 裁定时同步改 `clause-check.json` 的 `status`（`confirmed` / `rejected`），报告渲染也看 `decision`，重渲染不再退回「待确认」。单测 `test_extract_confirm_writes_list_with_ids_criteria_fingerprint` 的 status 断言。
+- 顺手修：判 hook 失败的口径与 `injection.run_hook` 一致，只有超时或退出码 2 算失败，非 0 退出码但有输出仍算注入。单测 `test_nonzero_exit_with_output_still_counts_as_injection`。
+
+**与 09、12 的接线**：条款退役被确认时，把挂在该条款上的金标置 `active=false`；票 12 的复盘只认 `status=active` 的条款，按 `events` 推映射。
+
+**给票 15**：「注入文本指纹变了 → 建议跑对照」可复用 `clauses.capture_injection` 取当前注入文字与指纹，与 `clauses.json` 的 `injection_fingerprint` 比。
+
+本票集成时没有新增暂定口径。

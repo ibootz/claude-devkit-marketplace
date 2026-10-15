@@ -52,7 +52,9 @@ Status: resolved
 5. 候选进页与写回：`test_candidates_on_page_and_selection_written_back_and_kept_on_rerun`、`test_bad_reply_changes_nothing`、`test_more_than_ten_candidates_are_sampled`；真实数据上 devkit-discipline 18 个候选抽样 10 个上页，AI 演示贴回 `1A 2B` 后两项分别写成 `draft` / `skip`（AI 演示，不算用户勾选，未入库）。
 6. 读技能：见上。
 
-**暂定口径（待主会话复核）**
+**已定（2026-10-15 主会话复核）**
+
+审查判合理的照现状保留。第 5 条（UTC 日期）被主会话口径 7 改写，第 9 条（`review_signals`）改为按票 10 的格式推导，第 2 条补了跨日期沿用，第 6 条主力模型改为按插件取，第 15 条的分母已修，均见下方「A 批集成定稿」。
 
 1. 每个插件每次复盘一页，回复码 run_id 为 `review-<日期>`，入口 `pending <插件> --review`。备选：所有插件合一页。理由：票 08 框架按插件出页、回复码绑定单个结果文件。用户可见。
 2. 候选按（kind、rule、是否 compact 之后）归组，每组留最近 3 条指针。备选：一次事件一个候选。理由：真实数据单插件上千次同类拦截，逐条上页无法审。用户可见。
@@ -75,5 +77,32 @@ Status: resolved
 - 真实复盘里约 1 万次 UserPromptSubmit 注入未归因：多数来自未登记插件（JSON 输出型 UPS hook 没有 `hook_success`，指纹配不上；内容标签只覆盖登记插件），少数是登记插件旧版本的首行与当前版本不同、按标签认不出。
 - `plugin.installed` 里带的是本插件的 `<插件>@<市场>` id；登记的插件都在本市场，名字可公开。
 - 「距上次对照超过 7 天提醒」不在本票，属于 compare / gate。
-- spec 未登记 reviews JSON 的字段表；集成时按本票结果文件补进 spec。
+- ~~spec 未登记 reviews JSON 的字段表~~：集成时已登记进 spec 第四节。
 - Windows / Linux 未实测。
+
+### 2026-10-15 A 批（09/10/12/14）集成定稿（集成分支 worktree-agent-aa78acdaffe679a6d，devkit-plugin-eval 0.3.0）
+
+**主会话定稿口径**
+
+- 复盘候选的裁定跨日期沿用（口径 6）：同一候选 id 在更早日期已裁定过的，不再上页，除非插件版本变了；命中新的规则键时候选 id 本身就不同，自然重新上页。沿用记录写 `carried_from = {date, run_id, decided_at, plugin_version}`（`review.carry_earlier`）。单测 `test_decision_carries_across_dates_unless_version_changed`。
+- 复盘日期（口径 7）：用本机本地日期命名 `reviews/<日期>.json`，结果里记 `date_basis=local` 与 `tz_offset`（如 `+08:00`）；`generated_at` 与指针时间仍是 UTC。单测 `test_date_is_local_with_offset`。
+
+**条款映射（对齐票 10 的 clauses.json）**：只认 `status=active` 的条款。候选规则键里的脚本相对路径（`hooks/guard.js#check=x` 取 `hooks/guard.js`）→ 被测插件 hooks.json 里挂这个脚本的事件集合 → 与未退役条款的 `events` 有交集的恰好一条时，记这一条。零条或多条都记 `clause_ids=[]`，`clause_mapping={status: unmapped, reason}` 写明原因；待审页「命中条款 id」显示「未映射（原因）」。不新增要用户手填的字段。单测 `test_clause_ids_derived_from_events_and_hook_rules`、`test_no_clause_list_means_unmapped`。
+
+**审查应修落地**
+
+- ① 自检挪到 `scrub_home` 之前，检测正则加 `~/`；新增指针白名单 `review.check_pointers`：会话 id 必须是 uuid，uuid 与子代理 id 是短标识，时间戳合 ISO 形态，`rule` 与 `signals.blocks` / `signals.hook_errors` 的键必须是脚本相对路径形态或 `?`。单测 `test_self_check_runs_before_scrub_and_rejects_home_paths`、`test_pointer_whitelist`。
+- ② 删除全局 `models` 清单；`environment.main_model` 只取加载过本插件（skill 清单列出或有信号）的会话里最新一条主线程回复的模型。单测 `test_main_model_is_per_plugin_and_no_global_model_list`。
+- ③ compact 分母只算该插件在本文件这次 compact 之前出现过注入或 hook_success 的边界。单测 `test_compact_denominator_skips_sessions_without_the_plugin`。
+- 顺手修：先给全部插件建结果并自检，任一不过整批不写（`test_bad_pointer_in_any_plugin_writes_nothing`）；写盘拿与待审页写回同一把锁 `review-<插件>-<日期>`（`test_write_takes_the_review_lock`）；复盘页抽样提示改指「复盘结果的 pending.sampled_out」，不再指向 report.md。
+- 待审项类型加了「适用于哪类结果」（`pending.ItemType.kinds`），复盘页只跑复盘类型，不再调用 09、10 的 collect。单测 `test_review_page_skips_compare_kind_collectors`。
+
+**暂定口径（待主会话复核）**
+
+1. 条款映射只在「恰好一条未退役条款的 events 与脚本挂载事件相交」时记 id；多条相交记「未映射」。备选：多条时全列。理由：全列会把无关条款带进来，误导转用例。可回退：改 `review_clauses.match` 一处。用户可见（待审页「命中条款 id」）。
+2. 跨日期沿用只看最近一次出现过该候选裁定的日期；那次的插件版本不同就不再往前找，重新上页。用户在页上重新裁定会清掉 `carried_from`。用户可见。
+3. 自检不过时整批插件都不写盘，报错列出前 5 个违规位置。备选：只跳过不过的插件。理由：简报要求「不写出部分结果」。用户可见。
+
+**已知缺口**
+
+- 前置检查判「距上次复盘」时仍把 `reviews/<日期>` 当 UTC 零点（`preflight.py` 的复盘日期解析），与本地日期最多差一个时区偏移；票 15 的「超 7 天提醒」复用时留意。

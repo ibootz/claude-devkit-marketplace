@@ -179,7 +179,7 @@ eval 承担的部分：
 | 读着累不累；副作用产物质量 | 用户终裁 |
 
 **AI 评委**：在 eval 之外读完整转录判分；**每条判两遍**；**默认用最贵一档模型（如 Fable），可配置**（[08](issues/08-cadence-and-budget.md) 10-15 覆盖）。
-**金标校准**：每次评测先让评委判一遍金标样本，与用户一致率不够就不采信本次 AI 判分。金标来自用户裁定过的分歧样本，不另外标注。一致率阈值与启用所需条数等第一批数据出来再定。
+**金标校准**：每次评测先让评委判一遍金标样本，与用户一致率不够就不采信本次 AI 判分。金标来自用户在待审页裁定过的分歧样本与抽检样本，不另外标注；每条金标记来源（分歧 / 抽检），一致率按来源分开记录，判采信与否只用分歧来源的一致率（2026-10-15 A 批集成定稿修订，见 Comments）。金标不足启用条数时记「采信（未校准）」。一致率阈值与启用所需条数等第一批数据出来再定。
 **用户看多少**：分歧样本全看；另从两遍一致的样本里随机抽 3 条。
 
 **四个人工环节**集中在一个本地 HTML 待审页：判分裁定、用例草稿勾选、报告审阅、复盘候选选题（另加条款清单确认）。用户选完复制回复码贴回对话，CLI 写回 `run.json` 与 `judge.json`。
@@ -260,7 +260,7 @@ eval 承担的部分：
 | 解释器解析不到 | 判失败 | 跳过并警告 |
 | 任一条非零或超时 | 判失败 | 拦（`--no-verify` 可绕过） |
 
-pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声明、在工作区跑，判据形态与 [scripts/check-versions.js](vscode://file/Users/zhangq/Workspace/mine/claude-devkit-marketplace/scripts/check-versions.js) 一致，不依赖已安装的 `devkit-plugin-eval`。实测代价：改 `devkit-task-keeper` 每次提交多约 37 秒，其余插件 0～5 秒。
+pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声明、在工作区跑，判据形态与 [scripts/check-versions.js](../../scripts/check-versions.js) 一致，不依赖已安装的 `devkit-plugin-eval`。实测代价：改 `devkit-task-keeper` 每次提交多约 37 秒，其余插件 0～5 秒。
 实施时备一组共用的声明样例，让 Python 与 JS 两套实现各跑一遍对齐（建议，未拍板）。
 
 ### 2.8 发版闸门（`gate`）（[12](issues/12-release-gate-coverage.md)、[13](issues/13-result-layout.md)）
@@ -282,7 +282,7 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
 - 升版改动碰到 skill description 或 agent 定义，或**注入文本指纹相对上次对照变了**：合成一条「建议跑对照（会先更新条款清单）」（[20](issues/20-clause-list-lifecycle.md)）；
 - 距上次复盘超 7 天的提醒。
 
-**落点**：通用命令，入参为插件目录。本仓**不接 git hook**，用户发版（推 main）前手动运行（[12](issues/12-release-gate-coverage.md)）。用户知情后接受的风险：靠人记得跑；本仓 [.githooks/pre-commit](vscode://file/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.githooks/pre-commit) 注释记录过「靠文档提醒的实际执行率是零」。
+**落点**：通用命令，入参为插件目录。本仓**不接 git hook**，用户发版（推 main）前手动运行（[12](issues/12-release-gate-coverage.md)）。用户知情后接受的风险：靠人记得跑；本仓 [.githooks/pre-commit](../../.githooks/pre-commit) 注释记录过「靠文档提醒的实际执行率是零」。
 
 ## 三、谁跑、何时跑、占用户多少时间
 
@@ -305,17 +305,24 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
 <repo>/plugins/<plugin>/evals/<case>/        # 已通过的用例，eval 原生，随插件分发
 <repo>/plugins/<plugin>/unit-tests.json      # 单测声明，随插件分发
 <repo>/plugin-evals/<plugin>/                # 插件目录外，入库，不分发
-  <条款清单文件>                              # 条款 id、判定标准、退役标记、抽取时的注入文本指纹
+  clauses.json                               # 条款清单：条款 id、判定标准、事件、状态、抽取时的注入文本指纹
+  clauses-injection.txt                      # 清单对应的注入文本快照（增量重抽做差异用）
+  clause-rehang.json                         # 条款退役后用例改挂建议（票 11 消费）
+  judge-config.json                          # AI 评委配置（可选）
   drafts/<case>/                             # 用例草稿
-  runs/<时间>-<版本>-<compare|gate>/
+  runs/<时间>-<版本>-<compare|gate|clauses>/
     run.json                                 # 唯一真源
     arms/<臂>/aggregate-result.json
     injection-check.json                     # 注入到达核验
+    clause-check.json                        # 本次条款清单检查（compare 与 clauses 运行都有）
+    clause-proposal.json                     # 条款清单变更提案（有变更时）
+    clause-injection.txt                     # 本次注入文本快照
     judge.json                               # 两遍判分、金标一致率、用户裁定
-    samples/<id>.jsonl.gz                    # 用户看过的样本 trace
+    samples/<臂>--<用例>--<trace 哈希>.jsonl.gz # 用户看过的样本 trace（分歧、抽检）
     report.md                                # 给人读
-  reviews/<日期>.json                         # 会话复盘抽取结果，不含原文
+  reviews/<日期>.json                         # 会话复盘抽取结果，不含原文；日期为本机本地日期
   gold/<id>.json                             # 金标样本
+<repo>/plugins/<plugin>/evals/<case>/judge/<id>.md   # 用例声明的 AI 评委判定标准（在 evals/ 下，不进插件内容指纹）
 ~/.claude/plugins/data/devkit-plugin-eval-<marketplace>/
   registry.json                              # 被测插件登记清单（插件名 + 仓路径）
   traces/                                    # 全量 trace 本机缓存，留 90 天
@@ -335,6 +342,17 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
   - `preflight.first_run`：只在续跑过的运行里出现，是首跑那次的整份前置检查结果。多次续跑时仍指向首跑。首跑的软项提示另外去重并进顶层 `preflight.warnings`。
   - `claude_code_versions`（顶层）与 `arms.<臂>.claude_versions`、`arms.<臂>.main_models`：Claude Code 版本与主力模型的全部取值（2026-10-15 拍板 07-1）。顶层列表是各臂全部版本去重排序，每次运行都有，多于一个即混用；臂级两个列表只在续跑过的臂上出现，按出现先后，首跑值在前。单值字段 `claude_code_version`、`arms.<臂>.claude_version`、`arms.<臂>.main_model` 保留首跑值不变。`main_models` 多于一个时运行判不完整。
   - `pending.superseded_by_resume`：续跑改了结果时，旧待审页作废。此时 `page_id` 置为 null，`superseded_by_resume` 记第几次续跑作废的，已写回过的旧页留进 `pending.history`。续跑收尾重新生成一页时，`pending` 换成新页，`history` 照留。
+- devkit-plugin-eval 0.3.0 起（2026-10-15 集成 A 批 09 / 10 / 12 / 14 时登记）：
+  - **运行种类**：`kind` 取 `compare` / `gate` / `clauses`。`kind=clauses` 是单跑 `clauses` 子命令产生的运行，目录后缀 `-clauses`，只在插件尚无 `clauses.json` 时产生；闸门不读这类运行，`pending` 不带 `--run` 时照常选中。
+  - **`judge-config.json`**（可选）：`model`（评委模型，null 用缺省最贵一档）、`gold_agreement_threshold`（0～1 或 null）、`gold_min_samples`（≥1 或 null）；其它键报错。`--no-judge` 时不读。
+  - **用例 `judge/<id>.md`**：frontmatter 键只认 `rule`（对应的规则 grader 名，可空）、`arms`（判哪些臂，缺省全部；臂名取 `none` / `previous` / `current` / `current_with_env`）、`clause`（所属条款 id，可空）；正文是判定标准。未知键、未知臂名开跑前报错；grader 不存在、条款不在清单或已退役记进 `judge.json` 的 `warnings`，报告显式列出。
+  - **`judge.json`**：`run_id`、`requested_model`、`model`（实际所用）、`models_used`、`model_source`、`passes`（2）、`config`、`gold`、`trusted`、`untrusted_reason`、`complete`、`warnings`、`spot_check_rule`、`cases`、`samples[]`、`scores`、`usage`。`samples[]` 每条：`id`（由 trace 目录、臂/用例/第几次、判定标准算出）、`arm`、`case`、`run`、`criterion`、`criterion_fingerprint`、`clause`、`rule_grader`、`rule_passed`、`trace_dir`、`passes[]`（`verdict` pass/fail/unclear、`reason`、`error`）、`status`（agreed / disagreement / error）、`disagreement`、`spot_check`、`sample_file`、`user`、`final_verdict`、`gold_id`。`gold`：`total`、`judged`、`agreed`、`agreement_rate`、`threshold`、`min_samples`、`enabled`、`state`（not-configured / insufficient / insufficient-errors / enabled）、`by_source`（按来源分开的条数与一致率）、`basis_source`（disagreement）、`call_errors`、`retired_clauses`。
+  - **`gold/<id>.json`**：`id`、`source`（`disagreement` / `spot-check`）、`clause`、`active`（所属条款退役后为 false，不参与校准，文件不删）、`deactivated`、`trace_dir`、`run_id`、`plugin`、`plugin_version`、`sample_id`、`arm`、`case`、`run`、`criterion`、`criterion_fingerprint`、`criterion_text`、`prompt`、`sample_file`、`user_verdict`、`ai_verdicts`、`disagreement`、`rule_grader`、`rule_passed`、`judge_model`、`created_at`。
+  - **`clauses.json`**：`schema_version`、`plugin`、`clauses[]`（`id` 形如 `C%03d`，号永不复用；`criterion`；`events`；`status` active / retired；退役时 `retire_reason`、`replaced_by`、`retired_at`、`retired_in_run`；改写时 `history`）、`injection_fingerprint`、`injection_snapshot`、`normalization`（归一化规则名，现为 `injection-text-v1`）、`confirmed_at`、`confirmed_from_run`、`changelog[]`。
+  - **`clause-check.json`**：`status`（up-to-date / pending-confirmation / confirmed / rejected / no-injection / unreliable / ai-error / error）、`stale`、`injection_fingerprint`、`list_injection_fingerprint`、`list_fingerprint`（清单读不出时为 null）、`hooks`、`normalization`、`errors`、`proposal`、`proposal_kind`、`proposal_counts`、`reused_from`、`ai`、`decision`（裁定后的 `code`、`status`、`at` 等）。
+  - **run.json 新增**：`clause_check`（clause-check.json 原样搬入）与 `clause_list_fingerprint`；`judge_model`（评委实际所用模型）；`judge`（judge.json 的摘要：`model`、`model_source`、`passes`、`trusted` 三态 true / false / null、`untrusted_reason`、`complete`、样本计数、`gold` 摘要、`warnings`、`scores`、`usage`、`flagged`；`--no-judge` 时为 `{"skipped": "no-judge"}`）；`environment.judge`（`{enabled, model}`，续跑沿用首跑的 `--no-judge` / `--judge-model`）与 `environment.clause_model`。
+  - **`reviews/<日期>.json`**：`kind=review`、`run_id`（`review-<日期>`）、`date`、`date_basis`（local）、`tz_offset`、`generated_at`（UTC）、`plugin`（`name`、`version`、`installed`）、`window`、`scan`、`environment`（`claude_code_version`、本插件的 `main_model`、`co_loaded_plugins`、`co_loaded_unregistered_count`）、`signals`（`skills`、`blocks`、`hook_errors`、`permission_decisions`、`injections`、`hook_latency`、`compact`）、`candidates[]`（`id`、`kind`、`rule`、`count`、`subagent_count`、`after_compact`、`clause_ids`、`clause_mapping`、`plugin_versions`、`pointers`、`selection`、`decided_at`、`carried_from`）、`clause_list_note`、`compare_hint`、`pending`。
+  - **`gate --json` 输出**：`plugin`、`version`、`plugin_dir`、`fingerprint`、`passed`、`blockers`（与评测依据无关的未过闸原因，如工作区未提交）、`judge_untrusted`、`gated`、`gated_by`、`previous_version`、`eval_ok`、`eval_skip`、`passed_via_skip`、`basis`、`rejected_same_version`、`other_runs`、`unit_tests`、`skip_records`、`main_ref`、`leaks`、`notes`。不落盘。
 
 ## 不做的
 
@@ -408,3 +426,13 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
   - Q7（票 06 实测在真实 HOME 下留下的 eval 会话转录，431KB，仓外未入库）：删除。主会话已删，只删这一个文件。
   - Q8（续跑后自动重新生成待审页、审阅状态回到待审）：维持现状。
   - 票 04 口径①（spec 例外）：eval 子进程的 PATH 剔除 `~/.asdf/shims`（版本管理器 shim 在空 HOME 下起不来），找 `claude` 可执行文件时退回本进程的完整 PATH，与 compare、resume 一致。也就是说，「2.6 前置检查」表里「hook 解释器可达」一行说的「同一 PATH」（冒烟与 eval 子进程同一份）仍成立，例外只在解析 `claude` 自身这一步。
+- 2026-10-15 A 批（09/10/12/14）集成定稿（集成分支 `worktree-agent-aa78acdaffe679a6d`，devkit-plugin-eval 0.3.0；主会话与 jev 复核定稿，用户授权「不用停下确认」）：
+  1. `clauses` 子命令保留，只在该插件尚无 `clauses.json` 时执行；已有清单时拒绝，提示「已有条款清单，重抽是跑对照的第一步，请改跑 compare」。第四节登记了 `-clauses` 目录后缀与 `kind=clauses`。本条覆盖设计票 [20](issues/20-clause-list-lifecycle.md) Answer 第 4 条「不另设命令」的字面：冷启动（尚无清单）时另设命令，其余照旧由 compare 重抽。
+  2. 金标来源：分歧样本与抽检样本裁定后都存金标，金标记 `source`（`disagreement` / `spot-check`）；一致率按来源分开记录；判采信与否只用分歧来源的一致率。本条覆盖 2.4 原句「金标来自用户裁定过的分歧样本，不另外标注」，2.4 已修订。
+  3. 采信三态：`judge.trusted=null`，报告写「采信（未校准）」——金标不足启用条数时如此；配置了校准、但因评委调用出错导致条数不足，运行判不完整、可续跑。集成另定（暂定，待主会话复核）：未配置校准时同样 `null`。
+  4. AI 判分不采信的已审报告作闸门依据：闸门照采信，输出醒目提示「本报告 AI 判分不采信，已审时由用户判断」（与 2.2 对退化报告的口径一致；AI 判分不进「是否通过」）。
+  5. 新插件首个版本不算闸门内（2.8 只列 major 升版与 `eval-required:` 声明，需要时用 `eval-required:` 声明）；gate 对新插件首版输出一条说明。
+  6. 复盘候选的裁定跨日期沿用：同一候选 id 已裁定过的不再上页，除非插件版本变了或该组命中了新的规则键；沿用记录写清来自哪天的哪次裁定（`carried_from`）。
+  7. 复盘日期用本机本地日期命名 `reviews/<日期>.json`，结果里另记时区偏移 `tz_offset`。
+  - 另登记：AI 评委两遍都判「判不了」算分歧、交用户裁定，任一遍出错算不完整（票 09 已定口径 3）；`--no-judge` 跳过评委，run.json 记 `{"skipped": "no-judge"}`。
+  - 2.6 字面要求 `gate` 开跑前跑前置检查；票 14 的 gate 只读记录、不调模型，暂不跑，等票 15 规则子集真跑模型时再接（已写进票 15 Comments）。

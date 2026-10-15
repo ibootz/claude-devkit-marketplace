@@ -95,7 +95,9 @@ Status: resolved
 - 对仓里已入库的 9 份演示 run.json 跑 `assess_run`：全部因「待审」不采信。demo-06 broken 另报 `injection_check.ok=false`，demo-04 另报 dirty，demo-05 outside-repo 另报 `dirty=null` 与 not-git 退化提示。说明真实字段形状下判据可用。
 - 本票没有跑真实 eval：闸门只读已有记录，不调模型。
 
-**暂定口径（待主会话复核）**
+**已定（2026-10-15 主会话复核）**
+
+审查八条都判合理，照现状保留。第 6 条与 spec 2.6 的字面冲突交票 15：已写进票 15 Comments「gate 跑规则子集时再接前置检查」。
 
 1. **续跑后 dirty 读哪个来源**
    - 选了：读 `preflight.dirty`，即最后一次续跑时的值；没有 `preflight` 段的旧记录退回读 `arms.current.dirty`。首跑时不是 false 而续跑时是 false，照常采信，并提示一句。
@@ -136,3 +138,33 @@ Status: resolved
 - 给票 15：
   - 规则子集的 run.json 至少要有 `kind=gate`、`plugin.version`、`plugin.fingerprint`、`complete`、`passed`、`claude_code_versions`，以及 `preflight.dirty` 或 `arms.current.dirty`，闸门才认。
   - 「建议跑对照」与「超 7 天提醒」两类提示加在 `gate.evaluate` 的 `notes` 里即可。
+
+### 2026-10-15 A 批（09/10/12/14）集成定稿（集成分支 worktree-agent-aa78acdaffe679a6d，devkit-plugin-eval 0.3.0）
+
+**主会话定稿口径**
+
+- AI 判分不采信的已审报告（口径 4）：照采信，输出醒目提示「本报告 AI 判分不采信，已审时由用户判断」（`gate.JUDGE_UNTRUSTED_NOTE`，输出字段 `judge_untrusted` 列出这些运行）。单测 `test_untrusted_judge_report_still_accepted_with_prominent_note`。
+- 新插件首个版本（口径 5）：不按 major 升版判闸门内，输出一条说明「新插件首个版本（历史上没有更早的版本号）：不按 major 升版判闸门内」；升版提交显式声明了 `eval-required:` 时仍按声明判闸门内，说明里一并写明。单测 `test_first_version_of_new_plugin_noted_and_not_gated`。
+- 扫运行记录时跳过 `kind=clauses`（`gate.SKIPPED_KINDS`）。单测 `test_clauses_runs_are_skipped`。
+
+**审查应修落地**
+
+1. 工作区 dirty 不为 False 时直接判未过闸，原因写「插件目录有未提交改动（不含 evals/），先提交再跑 gate」（`gate.DIRTY_BLOCKER`，输出字段 `blockers`，报告节「未过闸原因（与评测依据无关）」）。单测 `DirtyWorkspaceTest.test_worktree_equals_reviewed_content_but_head_differs`、`test_uncommitted_change_blocks_even_with_matching_report`、`test_evals_only_change_does_not_block`。
+2. `eval-required:` 除 trailer 外，再按提交信息全文逐行 `^eval-required:` 宽松识别；正文出现 `eval-skip:` / `eval-required:` 而 trailer 没取到时输出警告。单测 `test_eval_required_followed_by_blank_line_and_signature`、`test_eval_skip_outside_trailer_warns_and_does_not_pass`。
+- 顺手修：非 UTF-8 的单测声明归为「声明不合法」（`test_non_utf8_declaration_is_invalid`）；`HEAD:.gitignore` 改为 `HEAD:./.gitignore`。
+
+**已知缺口（审查「可留后续」其余各条）**
+
+- 漏检往严的方向误报：漏检用 `git archive` 算指纹，不含被 gitignore 的文件，而 run.json 的指纹按工作区算、含这些文件；插件里有被忽略的文件时，合格的已审报告会被判成漏检，提示原因归错。本仓 `plugins/` 下目前除 `__pycache__` 外没有被忽略的文件。
+- 插件目录不是 git 仓根的子路径时，`plugin-evals/<名>` 按顶层取，漏检检查会被跳过（给说明）。
+- 带路径的解释器名会 `resolve()` 掉符号链接，JS 的 `path.resolve` 不会；只在解释器路径本身是符号链接时有差异。
+
+**暂定口径（待主会话复核）**
+
+1. 插件目录不在 git 仓里时不触发 dirty 未过闸（无提交可比），沿用原「不在 git 仓里」说明。备选：一律判未过闸。用户可见。
+2. git status 失败（dirty 为 null）同样判未过闸，原因写「读不到插件目录的 git 状态（git status 失败），无法确认工作区与提交一致」。用户可见。
+3. 正文出现 `eval-skip:` 而 trailer 没取到时只警告、不放行（`eval-skip` 是放行条件，宽松识别会让误写也放行）；`eval-required:` 则按正文宽松识别（往严的方向）。用户可见。
+
+**给票 15**
+
+- 「注入文本指纹变了 → 建议跑对照」本批不实现，见票 15 Comments。

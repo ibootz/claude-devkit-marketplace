@@ -57,7 +57,9 @@ Status: resolved
 
 花费（标价估算，订阅只作信息）：eval 三次合计 $1.08，评委三次合计 $1.49（46 次调用），另有 1 次探针调用 $0.02。没撞限流。run3 里被改的金标与 run1 的裁定都是 AI 演示，不是用户审阅，所以金标与「已审」都不入库。
 
-**暂定口径（待主会话复核）**
+**已定（2026-10-15 主会话复核）**
+
+审查判合理的照现状保留；第 4、7、12 条被下方「A 批集成定稿」改写，以那里为准。
 
 1. 用例怎么声明交 AI 评委：`<用例>/judge/<id>.md`，frontmatter `rule` / `arms`。备选：用 eval 原生 `type: llm` grader（eval 会自己调模型判，spec「不用 eval 内置 llm 评委」排除）、写进 `prompt.md` frontmatter（未知键会让用例加载失败，票 01 实测）。用户可见：是（写用例的人要照这个格式）。
 2. 判哪些臂：默认全部臂（不装、上一版、当前版、+环境插件），可用 `arms` 收窄。备选：只判当前版（省一半调用，但算不出 AI 判分的臂间差）。用户可见：是（调用次数）。
@@ -72,13 +74,40 @@ Status: resolved
 11. 评委调用用 `--safe-mode`；评委的系统提示要求只输出 `{"verdict": "pass|fail|unclear", "reason": "…"}`。用户可见：否。
 12. 续跑时没有 judge.json（首跑在评委之前就断了），评委模型回落到配置或默认，首跑命令行的 `--judge-model` 记不下来（检查点不记评委参数）。备选：检查点加字段（要动 resume.py）。用户可见：是，但只在「首跑传了 --judge-model 又断在评委之前」时。
 
-**需主会话在 spec 登记（本票未改 spec，免得与同批票冲突）**：`judge.json` 结构、`judge-config.json`、`gold/<id>.json` 字段、用例 `judge/` 子目录、`run.json` 的 `judge` 字段（summary）与 `judge_model` 取实际所用模型；实施待定第 7 条「金标一致率阈值与启用条数」现为配置项、默认留空。
+**需主会话在 spec 登记（本票未改 spec，免得与同批票冲突；集成时已登记进 spec 第四节）**：`judge.json` 结构、`judge-config.json`、`gold/<id>.json` 字段、用例 `judge/` 子目录、`run.json` 的 `judge` 字段（summary）与 `judge_model` 取实际所用模型；实施待定第 7 条「金标一致率阈值与启用条数」现为配置项、默认留空。
 
 **已知缺口与扩展点**
 
 - 金标判一遍、样本判两遍都是串行于各臂之后；评委并发数沿用 `-j`（上限 8）。
-- 样本 id（`s-<10 位>`）只由「臂/用例/第几次/判定标准」算出，跨运行会重名；金标 id 带 run_id，不重名。
+- ~~样本 id（`s-<10 位>`）只由「臂/用例/第几次/判定标准」算出~~：集成时改为按 `trace_dir` 哈希（见下方应修 B）。
 - 金标的 `active` 字段留给票 10 条款退役时置 false；本票不处理条款 id 与金标的关联（判定标准还没挂条款 id）。
 - 闸门（票 14）可读 `run.json` 的 `judge.trusted` 与 `judge.complete`；本票没有改闸门判据。
 - 待审页的 HTML 渲染沿用票 08 框架，本票只在单测里检查页上文字，没有用浏览器打开 judge 项。
 - Windows / Linux 未实测。
+
+### 2026-10-15 A 批（09/10/12/14）集成定稿（集成分支 worktree-agent-aa78acdaffe679a6d，devkit-plugin-eval 0.3.0）
+
+**主会话定稿口径（覆盖上面第 4、7、12 条）**
+
+- 金标来源：分歧样本与抽检样本裁定后都存金标，`gold/<id>.json` 记 `source`（`disagreement` / `spot-check`）。一致率按来源分开记（judge.json 的 `gold.by_source`），判采信与否只用分歧来源的一致率。spec 2.4 已同步修订。单测 `test_spot_check_gold_does_not_count_toward_calibration`。
+- 采信三态：`judge.trusted` 取 `true` / `false` / `null`。金标不足启用条数时为 `null`，报告写「采信（未校准）」。配置了校准、但因评委调用出错导致判成条数不足时，`gold.state=insufficient-errors`，运行判不完整（`complete=false`，原因进 `reasons`），可续跑。
+- 闸门对 AI 判分不采信的已审报告照采信，并输出醒目提示「本报告 AI 判分不采信，已审时由用户判断」（`gate.JUDGE_UNTRUSTED_NOTE`）。
+- 续跑：`--no-judge` 与 `--judge-model` 写进检查点 `environment.judge = {enabled, model}`，续跑时由 `resume.judge_opts_from` 读回。
+
+**报告节顺序（集成定的）**：record.py 首段提示依次为注入核验 → 条款清单（票 10）→ AI 评委（本票）；report.md 末尾先放条款节，再放评委节。
+
+**审查应修落地**
+
+- A 续跑丢 `--no-judge` / `--judge-model`：见上。单测 `ResumeOptionsTest.test_no_judge_first_run_resume_does_not_judge`、`test_judge_model_from_first_run_kept_on_resume`。
+- B 样本文件名改为 `samples/<臂>--<用例>--<trace_dir 哈希>.jsonl.gz`，金标 id 由 run_id 与 trace_dir 哈希算出；续跑按（trace_dir, 判定标准）匹配，沿用样本与裁定。单测 `test_gold_keeps_pointing_at_original_trace_after_resume`（改回按位置匹配后该单测失败，已反证）。
+- C 见上面三态。单测 `test_calibration_short_because_of_call_errors_is_incomplete`。
+- D 入库样本只保留 `assistant`（去掉 thinking 块）、`user` 的 tool_result、`result` 三类行，`system/init` 整行不入库。单测 `test_stored_sample_scrubbed_and_deterministic`。
+- 顺手修：`--no-judge` 时 run.json 记 `judge={"skipped": "no-judge"}`、报告写「按 --no-judge 跳过」、不读 judge-config.json；首段「判分：」一行按实际改写；续跑后 usage 合并首跑沿用样本的数据。单测 `test_no_judge_flag_and_no_criteria_skip_judge`。
+
+**接票 10 的条款清单**：判定标准 frontmatter 加可选键 `clause: C001`，金标记下 `clause`。条款退役被确认时，该条款的金标置 `active=false`（`clauses._deactivate_gold`）；校准时也按 `clauses.retired_ids()` 排除。frontmatter 未知键、`arms` 里的未知臂名：compare 开跑前报错（`judge.check_criteria`）。`rule` 指向的 grader 不存在、条款不在清单里或已退役：记进 judge.json 的 `warnings`，报告「### 判定标准告警」逐条列出。单测 `CriteriaAndClauseTest`、`test_bad_frontmatter_aborts_before_any_eval`。
+
+**暂定口径（待主会话复核）**
+
+1. 没配置校准（阈值或条数留空）时同样 `trusted=null`、报告写「采信（未校准）」，与「不足启用条数」同态。备选：未配置时记 `true`。理由：没校准就不该声称已采信。可回退：改 `judge.run` 里 `trusted` 的取值一处。用户可见。
+2. frontmatter 未知键、未知臂名直接拒绝开跑；grader 名不存在只告警。理由：前两者是格式写错，跑了也白跑；grader 名要等各臂跑完才知道存不存在。备选：都只告警。用户可见。
+3. 两遍都判「判不了」算分歧（上面第 3 条），已登记进 spec Comments。
