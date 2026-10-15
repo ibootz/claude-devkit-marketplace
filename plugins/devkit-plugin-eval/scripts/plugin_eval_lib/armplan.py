@@ -2,15 +2,14 @@
 
 臂与跑的顺序：不装 → 上一版（取得到才跑）→ 当前版 → 当前版+环境插件（传了 --env-plugin 才跑）。
 
-中止（抛 ArmSourceError，不建运行目录）：--base 解析不到；环境插件取不到、重名或与被测插件同名；
-上一版快照或环境插件没过 `claude plugin validate`（spec「2.6 前置检查」：插件结构合法是硬项，被测插件、
-快照、环境插件都过）。
+中止（抛 ArmSourceError，不建运行目录）：--base 解析不到；环境插件取不到、重名或与被测插件同名。
 退化（跳过上一版臂，照跑两臂）：见 previous.py 模块说明；快照失败也在这里退化。
 
-hook 冒烟（同为 2.6 硬项）由前置检查（票 04）负责：Plan.source_dirs() 给出快照与环境插件目录供它逐个冒烟。
+快照与环境插件的 `claude plugin validate`、hook 冒烟（spec「2.6 前置检查」硬项，被测插件、快照、环境插件都过）
+由前置检查（票 04）负责：Plan.preflight_targets() 给出 [(标签, 目录)] 供它逐个检查。所以 plan_arms 排在
+前置检查之前，且只写临时目录。
 """
 import shutil
-import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,18 +26,6 @@ class ArmSourceError(Exception):
     pass
 
 
-def claude_validator(claude):
-    """返回 validate(dir) → None（通过）或失败说明。"""
-    def validate(d):
-        proc = subprocess.run([str(claude), 'plugin', 'validate', str(d)], capture_output=True, text=True,
-                              encoding='utf-8', errors='replace', stdin=subprocess.DEVNULL)
-        if proc.returncode == 0:
-            return None
-        tail = (proc.stdout + proc.stderr).strip().splitlines()[-6:]
-        return '退出码 %s：%s' % (proc.returncode, ' / '.join(ln.strip() for ln in tail if ln.strip()))
-    return validate
-
-
 @dataclass
 class Plan:
     specs: list
@@ -49,8 +36,16 @@ class Plan:
     snapshot_dir: Optional[Path] = None
 
     def source_dirs(self):
-        """快照与环境插件目录，供前置检查做 hook 冒烟（被测插件当前版不在内）。"""
-        return ([self.snapshot_dir] if self.snapshot_dir else []) + [ep.dir for ep in self.env_plugins]
+        """快照与环境插件目录（被测插件当前版不在内）。"""
+        return [d for _, d in self.preflight_targets()]
+
+    def preflight_targets(self):
+        """[(标签, 目录)]：前置检查除被测插件外还要 validate 与冒烟的快照、环境插件。"""
+        out = []
+        if self.snapshot_dir:
+            out.append(('上一版快照 %s（%s）' % (self.previous.version, (self.previous.commit or '')[:12]),
+                        self.snapshot_dir))
+        return out + [('环境插件 %s' % ep.spec, ep.dir) for ep in self.env_plugins]
 
     def cleanup(self):
         if self.snapshot_root is not None:
@@ -89,8 +84,9 @@ def _env_list(env_specs, tested_name, env):
     return eps
 
 
-def plan_arms(*, plugin_dir, name, version, cases, evals_src, base=None, env_specs=(), validate,
-              current_record, tmp_parent=None, extra_exclude=(), env=None, log=None):
+def plan_arms(*, plugin_dir, name, version, cases, evals_src, base=None, env_specs=(), tmp_parent=None,
+              extra_exclude=(), env=None, log=None):
+    """version 是工作目录 plugin.json 的 version 原值（没写为 None）。"""
     log = log or (lambda msg: None)
     env_plugins = _env_list(env_specs, name, env)
     try:
@@ -112,13 +108,6 @@ def plan_arms(*, plugin_dir, name, version, cases, evals_src, base=None, env_spe
         if res.degraded:
             log('[上一版] 跳过：%s' % res.reason)
 
-        checks = [('上一版快照 %s（%s）' % (res.version, res.commit[:12]), plan.snapshot_dir)] if plan.snapshot_dir else []
-        checks += [('环境插件 %s' % ep.spec, ep.dir) for ep in env_plugins]
-        for what, d in checks:
-            problem = validate(d)
-            if problem:
-                raise ArmSourceError('%s 没过 claude plugin validate（前置检查硬项，不提供绕过）：%s' % (what, problem))
-
         if res.cross_rename:
             plan.incomparable_cases = previous.cases_naming_skills(evals_src, cases, {name, res.name})
 
@@ -128,11 +117,12 @@ def plan_arms(*, plugin_dir, name, version, cases, evals_src, base=None, env_spe
                 source='git-snapshot', version=res.version, name=res.name, commit=res.commit,
                 path_in_repo=res.path_in_repo, obtained_by=res.obtained_by, base=res.base,
                 cross_rename=res.cross_rename,
+                head_sha=None, dirty=None,   # 快照取自历史提交：没有工作区，当前版的 HEAD / dirty 不属于它
                 fingerprint=fingerprint.plugin_fingerprint(plan.snapshot_dir, extra_exclude))))
         specs.append(arms.ArmSpec('current', '当前版', Path(plugin_dir)))
         if env_plugins:
             specs.append(arms.ArmSpec('current_with_env', ENV_LABEL, Path(plugin_dir), env_plugins=tuple(env_plugins),
-                                      record=dict(current_record, source='working-tree+env',
+                                      record=dict(source='working-tree+env',
                                                   env_plugins=[ep.record() for ep in env_plugins])))
         plan.specs = specs
         return plan

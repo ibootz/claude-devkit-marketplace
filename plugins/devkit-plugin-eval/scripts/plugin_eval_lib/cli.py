@@ -1,12 +1,12 @@
-"""命令行：register / list / compare。
+"""命令行：register / list / check / compare。
 
-退出码：0 成功；2 用法、登记、环境类错误（含未登记）；3 对照跑完但结果不完整（用例加载失败、run 出错等）。
+退出码：0 成功；2 用法、登记、环境类错误（含未登记、前置检查硬项失败）；3 对照跑完但结果不完整（用例加载失败、run 出错等）。
 """
 import argparse
 import json
 import sys
 
-from . import armplan, compare, datadir, evalrun, registry
+from . import armplan, compare, datadir, evalrun, preflight, registry
 
 
 def _utf8_stdio():
@@ -26,6 +26,15 @@ def _parser():
     r.add_argument('--repo', required=True, help='被测插件所在仓的根目录')
 
     sub.add_parser('list', help='列出已登记插件')
+
+    k = sub.add_parser('check', help='单跑前置检查（compare 开跑前也自动执行）；硬项失败退出码 2')
+    k.add_argument('name', nargs='?', help='被测插件名：查离线对照前的各项')
+    k.add_argument('--model', help='compare 打算传的 --model（顺带查 eval 支不支持该参数）')
+    k.add_argument('--review', action='store_true', help='查会话复盘前的各项')
+    k.add_argument('--judge', action='store_true', help='与 --review 同用：本次要调 AI 评委，加查登录态')
+    k.add_argument('--base', metavar='提交|版本号', help='同 compare --base：冒烟与 validate 覆盖这一版快照')
+    k.add_argument('--env-plugin', action='append', default=[], metavar='插件名@市场|路径',
+                   help='同 compare --env-plugin：冒烟、validate 与 containment 覆盖这些环境插件')
 
     c = sub.add_parser('compare', help='跑一次离线对照：不装、上一版（取得到才跑）、当前版，可加环境插件臂')
     c.add_argument('name')
@@ -55,6 +64,21 @@ def _print_extra_arms(rec, fmt):
         print('当前版+环境插件（%s）%s' % ('、'.join(e['name'] for e in env.get('env_plugins', [])), fmt(env['score'])))
 
 
+def _check(args, data_dir):
+    if not args.name and not args.review:
+        print('错误：check 要给被测插件名（查离线对照前的各项），或 --review（查会话复盘前的各项）', file=sys.stderr)
+        return 2
+    reports = []
+    if args.name:
+        reports.append(preflight.check_compare(data_dir=data_dir, name=args.name, env=evalrun.child_env(),
+                                               model=args.model, soft=True))
+    if args.review:
+        reports.append(preflight.check_review(data_dir=data_dir, env=evalrun.child_env(), need_judge=args.judge))
+    for rep in reports:
+        print(rep.render())
+    return 0 if all(r.passed for r in reports) else 2
+
+
 def main(argv=None):
     _utf8_stdio()
     args = _parser().parse_args(argv)
@@ -69,11 +93,13 @@ def main(argv=None):
         if args.cmd == 'list':
             print(json.dumps(registry.load(data_dir)['plugins'], ensure_ascii=False, indent=2))
             return 0
+        if args.cmd == 'check':
+            return _check(args, data_dir)
         res = compare.run_compare(data_dir, args.name, runs=args.runs, concurrency=args.concurrency,
                                   model=args.model, threshold=args.threshold, keep_assembly=args.keep_assembly,
                                   base=args.base, env_plugins=args.env_plugin)
     except (registry.RegistryError, datadir.DataDirError, evalrun.ClaudeNotFound, compare.CompareError,
-            armplan.ArmSourceError) as e:
+            armplan.ArmSourceError, preflight.PreflightFailed) as e:
         print('错误：%s' % e, file=sys.stderr)
         return 2
 

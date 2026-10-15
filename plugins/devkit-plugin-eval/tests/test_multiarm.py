@@ -8,7 +8,7 @@ from unittest import mock
 
 import _support
 from _support import tmpdir, write
-from plugin_eval_lib import armplan, compare, envplugins, previous, registry
+from plugin_eval_lib import armplan, compare, envplugins, preflight, previous, registry
 from test_compare import FakeEval
 
 GIT = shutil.which('git')
@@ -75,6 +75,8 @@ class MultiArmTest(unittest.TestCase):
         self.assembly_parent = self.tmp / 'assembly'
         self.assembly_parent.mkdir()
         self.validated = []
+        self.preflight_kw = []
+        self.validate_problem = None
 
     def git(self, *args, cwd=None):
         return subprocess.run(['git', '-C', str(cwd or self.repo), '-c', 'user.name=t', '-c', 'user.email=t@example.invalid',
@@ -85,12 +87,19 @@ class MultiArmTest(unittest.TestCase):
         self.git('commit', '-q', '-m', msg)
         return self.git('rev-parse', 'HEAD')
 
-    def validate(self, d):
-        self.validated.append(Path(d))
-        return None
+    def preflight(self, **kw):
+        """假的前置检查：记下 compare 交来的快照与环境插件（validate / 冒烟对象），可按需判 validate 失败。"""
+        self.preflight_kw.append(kw)
+        rep = preflight.Report('compare')
+        for label, d in kw.get('others') or []:
+            self.validated.append(Path(d))
+            if self.validate_problem:
+                rep.add(preflight.Item('plugin_valid', '插件结构合法', preflight.HARD, preflight.FAIL,
+                                       '[%s] %s' % (label, self.validate_problem)))
+        return rep
 
     def run_compare(self, fake, name='demo-plugin', **kw):
-        kw.setdefault('validate', self.validate)
+        kw.setdefault('preflight_check', self.preflight)
         return compare.run_compare(
             self.data, name, runs=1, concurrency=1, claude='/fake/claude', runner=fake,
             env={'PATH': '/usr/bin'}, tmp_parent=self.assembly_parent, sandbox_roots=[self.sandboxes],
@@ -143,10 +152,13 @@ class MultiArmTest(unittest.TestCase):
 
     def test_snapshot_validate_failure_aborts(self):
         registry.register(self.data, 'demo-plugin', self.repo)
-        with self.assertRaises(armplan.ArmSourceError) as cm:
-            self.run_compare(InspectingEval(self.sandboxes, SCORES), validate=lambda d: 'manifest 不合法')
-        self.assertIn('上一版', str(cm.exception))
-        self.assertEqual(list(self.assembly_parent.iterdir()), [])
+        self.validate_problem = 'manifest 不合法'
+        with self.assertRaises(preflight.PreflightFailed) as cm:
+            self.run_compare(InspectingEval(self.sandboxes, SCORES))
+        self.assertIn('上一版快照', str(cm.exception))
+        self.assertEqual(list(self.assembly_parent.iterdir()), [])     # 前置检查失败也清掉快照
+        self.assertFalse((self.repo / 'plugin-evals').exists())         # 硬项在任何仓库写入之前
+        self.assertFalse((self.repo / '.gitignore').exists())
 
     def test_snapshot_failure_degrades(self):
         registry.register(self.data, 'demo-plugin', self.repo)
