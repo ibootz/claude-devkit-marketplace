@@ -21,3 +21,14 @@ Status: ready-for-agent
 **参考：** [spec](../../plugin-eval/spec.md) 的「2.3 用例从哪来」复盘候选与 compact 段；[17](../../plugin-eval/issues/17-case-sourcing.md) 第 3、4 条；[19](../../plugin-eval/issues/19-probe-history-file-replay.md)（history_file 格式与约束）
 
 ## Comments
+
+### 2026-10-15 来自 A 批集成审查（审查 C）：别依赖复盘候选的 `clause_ids`
+
+票 12 的复盘候选几乎全部是「未映射」，`clause_ids=[]`，原因见票 12 的 Comments「A 批集成审查修订」一节。条款的 `events` 只有三个常驻注入事件，拦截类候选的脚本多半挂在 PreToolUse 上；就算挂在常驻事件上，也会同时撞上几十条条款。
+
+约束（集成审查结论）：本票的实现不能依赖复盘候选的 `clause_ids`。
+
+建议（未拍板，实现本票时再定）：
+
+- 「候选转草稿」时，草稿要挂哪条条款，由改写时的 AI 按触发内容判断，或在用户勾选时指定。
+- 「compact 后回放用例」挑高风险条款时，直接从 `clauses.json` 的未退役条款里挑，不经过复盘候选的映射。

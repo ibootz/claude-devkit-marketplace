@@ -114,3 +114,14 @@ Status: resolved
 1. 没配置校准（阈值或条数留空）时同样 `trusted=null`、报告写「采信（未校准）」，与「不足启用条数」同态。备选：未配置时记 `true`。理由：没校准就不该声称已采信。可回退：改 `judge.run` 里 `trusted` 的取值一处。用户可见。
 2. frontmatter 未知键、未知臂名直接拒绝开跑；grader 名不存在只告警。理由：前两者是格式写错，跑了也白跑；grader 名要等各臂跑完才知道存不存在。备选：都只告警。用户可见。
 3. 两遍都判「判不了」算分歧（上面第 3 条），已登记进 spec Comments。
+
+### 2026-10-15 A 批集成审查修订（集成审查结论「修后合并」，同一集成分支）
+
+**已修**
+
+- 评委这一步整体抛异常不再中断对照收尾（审查 E）：`compare.finalize_run` 里的 `judge.run` 包了兜底，口径与条款清单一步相同。评委回的 JSON 不是对象、样本写盘出 OSError、判定标准文件不是 UTF-8，任一种都记一条不完整原因「AI 评委这一步出错（<异常类型>: <信息>），本次没有评委判分；续跑时重判」，run.json 的 `judge` 记 `{"failed": "<异常类型>: <信息>"}`。报告首段、「判分：」一行、「AI 评委判分」一节与终端一行都写「出错」，不再误写成「没有用例声明判定标准」。spec 的 run.json 字段说明已同步。单测 `test_judge_step_crash_does_not_abort_finalize_and_resume_rejudges`（含续跑后判完整）。
+- 演示目录 `.scratch/devkit-plugin-eval/demo-integ-A/` 加了 README.md，注明其中的裁定是 AI 演示、不是用户审阅（审查 G）；run.json 与 report.md 未改。
+
+**已知缺口（新增，记录不修）**
+
+- 续跑时评委模型可能混用（审查 F）。`judge.resolve_options` 的取值顺序是：命令行 `--judge-model` > judge-config.json 的 `model` > 续跑沿用首跑 > 默认。首跑没带 `--judge-model`、续跑前又改了配置里的 `model` 时，沿用的样本出自旧模型，新判的样本出自新模型，judge.json 与报告都没有标出混用。后续修法二选一：续跑时首跑记下的模型优先于配置；或者每个样本记下自己的评委模型，混用时在报告里告警。

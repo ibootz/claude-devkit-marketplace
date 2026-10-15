@@ -80,7 +80,7 @@ Status: resolved
 
 **审查应修落地**
 
-1. 被打回的提案不再复用：任一运行对同一组（基线清单指纹、新指纹）记过 `rejected`，`find_reusable` 就返回空。单测 `test_rejected_pair_is_never_reused_even_if_another_run_has_it_pending`。
+1. （已被下方「A 批集成审查修订」覆盖，此条口径作废）被打回的提案不再复用：任一运行对同一组（基线清单指纹、新指纹）记过 `rejected`，`find_reusable` 就返回空。单测 `test_rejected_pair_is_never_reused_even_if_another_run_has_it_pending`。
 2. 清单 JSON 损坏不中止对照：`check_for_run` 的异常分支不再读清单，`list_fingerprint` 记 None；`used_ids` 同样容错。单测 `test_corrupt_list_does_not_abort_compare`。
 3. 裁定时同步改 `clause-check.json` 的 `status`（`confirmed` / `rejected`），报告渲染也看 `decision`，重渲染不再退回「待确认」。单测 `test_extract_confirm_writes_list_with_ids_criteria_fingerprint` 的 status 断言。
 - 顺手修：判 hook 失败的口径与 `injection.run_hook` 一致，只有超时或退出码 2 算失败，非 0 退出码但有输出仍算注入。单测 `test_nonzero_exit_with_output_still_counts_as_injection`。
@@ -90,3 +90,16 @@ Status: resolved
 **给票 15**：「注入文本指纹变了 → 建议跑对照」可复用 `clauses.capture_injection` 取当前注入文字与指纹，与 `clauses.json` 的 `injection_fingerprint` 比。
 
 本票集成时没有新增暂定口径。
+
+### 2026-10-15 A 批集成审查修订（集成审查结论「修后合并」，同一集成分支）
+
+**覆盖上面「审查应修落地」第 1 条**：原写法「任一运行对同一组（基线清单指纹、新指纹）记过 `rejected`，`find_reusable` 就返回空」已作废，原单测 `test_rejected_pair_is_never_reused_even_if_another_run_has_it_pending` 已删除。原写法的问题：打回一次之后，连重抽出的新提案也不再复用；用户确认之前每跑一次 compare 都会重调 AI（首次整份抽取每次约 $0.86）、多耗一批条款 id、多出一个待审项。
+
+**现行口径**：打回只作废被打回的那一份提案。按提案的 `created_in_run` 认份：沿用某份提案的运行会把它抄进自己的目录，`created_in_run` 不变。`find_reusable` 先收集所有被打回提案的 `created_in_run`，跳过 `created_in_run` 落在这个集合里的运行（沿用了被打回提案的运行也一并跳过），其余照常返回最新的待确认提案。单测：
+
+- `test_rejected_proposal_is_not_reused_via_a_run_that_copied_it`：A 抽出提案 → B 沿用 A → 在 B 的页上打回 → C 不再从 A 沿用，重新抽（原审查的 A/B/C 场景，`find_reusable` 返回 None）。
+- `test_reextracted_proposal_after_reject_is_reused`：R1 打回 → R2 重抽出新提案 → R3 沿用 R2，不调 AI。
+
+**已知缺口（新增，记录不修）**
+
+- 重复建运行（审查 H）。首次抽取还没裁定时，再跑一次 `clauses` 子命令，会另建一个 `-clauses` 运行目录，并沿用同一份提案，待审页上因此出现两份相同的条款清单项。在其中一页确认后，另一页的条款项会因清单已变而作废，不会写错清单，只是多一页要看。后续修法：`clauses` 子命令发现有可沿用的待确认提案时，直接提示去哪一页裁定，不新建运行。

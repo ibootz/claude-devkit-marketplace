@@ -106,3 +106,17 @@ Status: resolved
 **已知缺口**
 
 - 前置检查判「距上次复盘」时仍把 `reviews/<日期>` 当 UTC 零点（`preflight.py` 的复盘日期解析），与本地日期最多差一个时区偏移；票 15 的「超 7 天提醒」复用时留意。
+
+### 2026-10-15 A 批集成审查修订（集成审查结论「修后合并」，同一集成分支）
+
+**已修**
+
+- 同一天重跑复盘的竞态（审查 D）：同一天的旧结果原先在锁外读取，写盘时才拿锁，中间落一次待审页写回就会被覆盖。现在先对合并后的副本做全部自检（任一插件不过，整批不写）；写盘时在锁 `review-<插件>-<日期>` 内重读旧结果、重新合并、重新自检，再 `scrub_home` 写盘。单测 `test_rerun_rereads_old_result_inside_the_lock`。把读取挪回锁外，这条单测失败，已做变异验证。
+- 钉住「自检在脱敏之前」：上面「审查应修落地」① 的单测 `test_self_check_runs_before_scrub_and_rejects_home_paths` 只测了 `assert_no_text` 本身，改回「先脱敏再自检」也照样全过。新增单测 `test_self_check_happens_before_scrub`：家目录不在 /Users 或 /home 下，结果里出现家目录本身时，脱敏后只剩 `~`，检测正则认不出，只有先自检才拦得住。把自检挪到脱敏之后，这条单测失败，已做变异验证。
+
+**记录（审查 C，不修）**
+
+- 复盘候选的条款映射实际几乎映射不出，候选会全部记成「未映射」。原因有两条：
+  - 条款的 `events` 只会是三个常驻注入事件：SessionStart、SubagentStart、UserPromptSubmit。审查给的数据是 demo-10 清单里 SessionStart 79 条、SubagentStart 58 条、UserPromptSubmit 22 条。
+  - 拦截类候选的脚本多半挂在 PreToolUse 上，与条款事件没有交集；就算挂在常驻事件上，也会同时撞上几十条条款，不可能「恰好一条相交」。
+- 这属于如实记录，不算错：映射规则不变（见上面暂定口径 1）。票 13 不能依赖 `clause_ids`，已在票 13 的 Comments 写明。

@@ -168,3 +168,9 @@ Status: resolved
 **给票 15**
 
 - 「注入文本指纹变了 → 建议跑对照」本批不实现，见票 15 Comments。
+
+### 2026-10-15 A 批集成审查修订（集成审查结论「修后合并」，同一集成分支）
+
+**已修**
+
+- 漏检检查不认宽松识别的 `eval-required:`（审查 B）。当前版本的闸门判定用 `Commit.required()`：声明后面跟了空行和署名段时，git 不认它是 trailer，`required()` 也按提交信息全文逐行识别。漏检检查原先只认 trailer，同一版本在当前版本判定里进了闸门，推到 main 时却不报漏检。已改为 `c.required()`，与当前版本判定同口径。单测 `test_eval_required_followed_by_blank_line_and_signature_without_report_is_leak`。
