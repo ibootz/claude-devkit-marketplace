@@ -266,7 +266,8 @@ def carry_earlier(rec, earlier):
                 src = hit.get('carried_from') or {'date': d, 'run_id': review_id(d), 'decided_at': hit.get('decided_at'),
                                                    'plugin_version': version}
                 c['selection'], c['decided_at'], c['carried_from'] = hit['selection'], hit.get('decided_at'), src
-                if (hit.get('conversion') or {}).get('status') == 'drafted':     # 已改写成草稿的不再改写（票 13）
+                # 已改写成草稿、或 AI 判为写不成的（都是终态）不再调 AI；作废的不沿用，重判不花钱（审查 13 S4）
+                if (hit.get('conversion') or {}).get('status') in ('drafted', 'skipped'):
                     c['conversion'] = hit['conversion']
             break           # 只看最近一次出现过裁定的日期：那次版本不同就不再往前找
     return rec

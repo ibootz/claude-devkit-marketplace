@@ -423,9 +423,23 @@ def _draft_rel(subject, case):
     return '../../%s/%s' % (DRAFTS_DIR, case)
 
 
+IGNORE_MARK = '.gitignore'      # 复盘改写草稿目录里内容为 * 的防误提交文件（candidate_drafts 写，通过时不随搬）
+
+
+def _is_ignore_mark(f):
+    """草稿目录顶层、内容只有 * 的 .gitignore。"""
+    if f.name != IGNORE_MARK:
+        return False
+    try:
+        return f.read_text(encoding='utf-8').strip() == '*'
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
 def _case_body(case_dir):
     parts = []
-    for f in sorted(p for p in Path(case_dir).rglob('*') if p.is_file() and p.name != META_FILE):
+    for f in sorted(p for p in Path(case_dir).rglob('*') if p.is_file() and p.name != META_FILE
+                    and not (p.parent == Path(case_dir) and _is_ignore_mark(p))):
         try:
             text = f.read_text(encoding='utf-8')
         except (OSError, UnicodeDecodeError):
@@ -474,6 +488,9 @@ def _collect(subject, key):
             facts.append(('复盘候选', '%s 的 %s（%s %s）；挂条款理由：%s' % (
                 rc.get('review_date'), rc.get('candidate_id'), rc.get('kind'), rc.get('rule'),
                 meta.get('clause_reason') or '—')))
+            facts.append(('隐私', '由本机真实会话改写，通过前逐字审隐私（prompt、历史、grader、文件桩都要看）'))
+            if meta.get('injection_checked') is False:
+                facts.append(('注入核对', '未做注入核对：改写时取不到被测插件的注入文字，看历史里有没有插件规矩原文'))
         title = '%s：%s' % (b['case'], meta.get('intent') or meta.get('clause_intent') or meta.get('category') or '')
         out.append(pending.PendingItem(id='%s:%s' % (key, b['case']), title=title[:160], body=_case_body(d),
                                        facts=tuple(facts), payload={'case': b['case']}))
@@ -518,7 +535,8 @@ def _apply_draft(subject, item, code, now):
             raise pending.PendingError('草稿 %s eval 加载不了：%s' % (case, '；'.join(problems)))
         for f in files:
             rel = f.relative_to(d)
-            if f.name != META_FILE or rel.parent != Path('.'):
+            # draft.json 与复盘改写草稿的防误提交 .gitignore 不随搬，只删（C 批定稿 1）
+            if not (rel.parent == Path('.') and (f.name == META_FILE or _is_ignore_mark(f))):
                 try:
                     text = f.read_text(encoding='utf-8')
                 except UnicodeDecodeError:

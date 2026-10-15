@@ -207,4 +207,6 @@ def main(argv=None):
         print('  不完整原因：%s' % r)
     if not rec['complete']:
         print('续跑（已完成的 run 不重跑，只补跑判无效与未跑的 run）：%s' % resume.resume_hint(res.run_dir, data_dir))
+    elif args.cmd == 'compare':      # resume 收尾自动出页；compare 不出页，给出下一步命令（票 16 CLI 缺口 1）
+        print(resume.pending_hint(data_dir, args.name, res.run_dir.name))
     return res.exit_code

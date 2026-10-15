@@ -142,7 +142,8 @@ class ConvertTest(CandidateBase):
 
     def test_past_retention_and_record_gone(self):
         write(self.cfg / 'settings.json', json.dumps({'cleanupPeriodDays': 7}))
-        self.write_review(candidate('c-aaaaaaaaaaaa', ts='2026-09-01T09:00:06.000Z'),
+        # 读不到时才按时间戳区分（C 批定稿 3）：早于保留期 → past-retention；否则记录不在 → record-gone
+        self.write_review(candidate('c-aaaaaaaaaaaa', uid='u-not-there', ts='2026-09-01T09:00:06.000Z'),
                           candidate('c-bbbbbbbbbbbb', uid='u-not-there'))
         s = self.run_(FakeAI())
         conv = self.conversions()
@@ -276,6 +277,151 @@ class PrivacyTest(CandidateBase):
         self.assertEqual(cd.host_terms('拉 git.acme-corp.com 与 com.zephyr.billing.Foo'),
                          {'acme-corp', 'zephyr', 'billing'})
         self.assertEqual(cd.host_terms('见 github.com 文档'), set())
+
+
+TOOL_OUTPUT = '对账脚本每月一号凌晨两点把上月全部订单汇总成一份对账单并推送到财务共享盘'
+
+
+class BatchCFixTest(CandidateBase):
+    """C 批集成：审查 13 的 B1、S1–S5、L1 与主会话定稿 1–3。"""
+
+    def with_tool_output(self):
+        recs = session_records(str(self.tmp / 'work' / 'acme-billing'))
+        recs[2]['message']['content'][0].update(is_error=False, content=TOOL_OUTPUT)
+        write(self.session, ''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in recs))
+
+    def test_copy_from_tool_result_rejected(self):
+        """B1：从 tool_result 抄来的内容也拒写。"""
+        self.with_tool_output()
+        self.write_review(candidate('c-aaaaaaaaaaaa'))
+        self.run_(FakeAI(rewrite(prompt='先读一下这段说明：' + TOOL_OUTPUT + '，再改 src 目录')))
+        conv = self.conversions()['c-aaaaaaaaaaaa']
+        self.assertEqual(conv['status'], 'privacy-rejected', conv)
+        self.assertIn('verbatim-overlap', conv['findings'])
+        self.assertEqual(self.drafts_written(), [])
+
+    def test_public_text_exempt_from_overlap(self):
+        """集成真跑后补：片段里的 Claude Code 固定文案与被测插件自己的文字，草稿照抄不算逐字重合；别的工具输出照拒。"""
+        hook_msg = '这条命令被纪律守卫拦下：请改用子 shell 进入目录后再执行后续命令'
+        write(self.plugin / 'hooks' / 'cd-guard.js', 'module.exports = %r;\n' % hook_msg)
+        recs = session_records(str(self.tmp / 'work' / 'acme-billing'))
+        recs[2]['message']['content'][0]['content'] = hook_msg
+        recs.append(dict(recs[0], uuid='s1', parentUuid='u2', isCompactSummary=True,
+                         message={'role': 'user', 'content': cd.CC_BOILERPLATE[0] + ' 摘要正文略。'}))
+        write(self.session, ''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in recs))
+        public = cd.public_text(self.plugin)
+        self.assertIn(cd._norm(hook_msg), public)
+        self.assertIn(cd._norm(cd.CC_BOILERPLATE[0]), public)
+        sources = [hook_msg, cd.CC_BOILERPLATE[0] + ' 摘要正文略。', TOOL_OUTPUT]
+        draft_text = ['被拦时提示：' + hook_msg, cd.CC_BOILERPLATE[0] + ' 虚构项目 pagelint 的摘要。']
+        self.assertEqual(cd.privacy_findings(draft_text, source_texts=sources, public=public), {})
+        self.assertIn('verbatim-overlap', cd.privacy_findings(draft_text, source_texts=sources))   # 不传豁免语料照拒
+        self.assertIn('verbatim-overlap', cd.privacy_findings(['抄来：' + TOOL_OUTPUT], source_texts=sources,
+                                                              public=public))
+        # 走完整流程：草稿照抄 hook 文案也能写成
+        self.write_review(candidate('c-aaaaaaaaaaaa'))
+        self.run_(FakeAI(rewrite(prompt='进 src 目录前先想想：' + hook_msg)))
+        self.assertEqual(self.conversions()['c-aaaaaaaaaaaa']['status'], 'drafted')
+
+    def test_three_letter_terms(self):
+        """S1：主机名、包名标签与 cwd 末段 ≥3 字即取，通用词不取。"""
+        self.assertEqual(cd.host_terms('import com.abc.billing.Foo; git.abc.com'), {'abc', 'billing'})
+        self.assertEqual(cd.host_terms('调 api.example.com 与 cdn.web.app'), set())
+        self.assertIn('abc', cd._path_terms('/opt/work/abc'))
+        self.assertNotIn('lib', cd._path_terms('/opt/work/lib'))
+        # 3 字私有词按整词匹配：abc 命中「abc 的工具」，不命中 abcd
+        self.assertIn('private-term', cd.privacy_findings(['给 abc 的工具加参数'], private_terms={'abc'}))
+        self.assertEqual(cd.privacy_findings(['abcd 是虚构项目'], private_terms={'abc'}), {})
+
+    def test_private_terms_file_and_env_union(self):
+        """定稿 2：环境变量与数据目录词表取并集。"""
+        write(self.data / cd.PRIVATE_TERMS_FILE, '# 公司与项目代号\nzephyrine\nquillon, other\n')
+        terms = cd.configured_terms({cd.PRIVATE_TERMS_ENV: 'Envterm'}, self.data)
+        self.assertEqual(terms, {'zephyrine', 'quillon', 'other', 'Envterm'})
+        self.write_review(candidate('c-aaaaaaaaaaaa'))
+        self.run_(FakeAI(rewrite(prompt='给内部代号 Quillon 的工具加参数，先看 src 目录')))
+        self.assertIn('private-term', self.conversions()['c-aaaaaaaaaaaa']['findings'])
+
+    def test_no_terms_warns_on_stderr_and_summary(self):
+        self.write_review(candidate('c-aaaaaaaaaaaa'))
+        ns = cli._parser().parse_args(['drafts', 'from-review', NAME, '--no-page'])
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ, self.env, clear=True), redirect_stdout(out), redirect_stderr(err):
+            self.assertEqual(cd.main(ns, self.data, ai=FakeAI(rewrite()), injection_text=INJECTION), 0)
+        self.assertIn(cd.NO_TERMS_NOTE, err.getvalue())
+        self.assertIn(cd.NO_TERMS_NOTE, out.getvalue())
+        self.assertIn(cd.PRIVACY_NOTE, out.getvalue())
+        write(self.data / cd.PRIVATE_TERMS_FILE, 'zephyrine\n')
+        self.write_review(candidate('c-aaaaaaaaaaaa'))
+        for p in list(self.drafts_root.iterdir()):
+            __import__('shutil').rmtree(str(p))
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ, self.env, clear=True), redirect_stdout(out), redirect_stderr(err):
+            cd.main(ns, self.data, ai=FakeAI(rewrite()), injection_text=INJECTION)
+        self.assertNotIn(cd.NO_TERMS_NOTE, err.getvalue() + out.getvalue())
+
+    def test_draft_dir_gitignored_and_mark_dropped_on_approve(self):
+        """定稿 1：草稿目录有内容为 * 的 .gitignore（git status 看不到草稿）；通过后移进 evals/ 时不随搬。"""
+        import shutil
+        import subprocess
+        self.write_review(candidate('c-aaaaaaaaaaaa'))
+        self.run_(FakeAI(rewrite()))
+        d = self.drafts_written()[0]
+        self.assertEqual((d.path / '.gitignore').read_text(encoding='utf-8'), '*\n')
+        git = shutil.which('git')
+        if git:
+            subprocess.run([git, 'init', '-q', str(self.repo)], check=True)
+            st = subprocess.run([git, '-C', str(self.repo), 'status', '--porcelain', '--untracked-files=all'],
+                                capture_output=True, text=True, check=True).stdout
+            self.assertNotIn('review-', st)
+            self.assertIn('plugin-evals/', st)          # 别的文件照常可见：确认 git status 本身有效
+        run_dir, page, _ = self.batch()
+        html = Path(page.html_path).read_text(encoding='utf-8')
+        self.assertIn(cd.PRIVACY_NOTE, html)
+        self.assertNotIn('===== .gitignore =====', html)
+        self.reply(page, ['1A'])
+        moved = self.plugin / 'evals' / d.case
+        self.assertTrue((moved / 'prompt.md').is_file())
+        self.assertFalse((moved / '.gitignore').exists())
+        self.assertFalse((moved / drafts.META_FILE).exists())
+        self.assertFalse((d.path / '.gitignore').exists())
+
+    def test_readable_even_if_older_than_retention(self):
+        """定稿 3：先试读，读得到就照常改写；读不到再按时间戳区分原因码。"""
+        write(self.cfg / 'settings.json', json.dumps({'cleanupPeriodDays': 7}))
+        self.write_review(candidate('c-aaaaaaaaaaaa', ts='2026-09-01T09:00:06.000Z'),
+                          candidate('c-bbbbbbbbbbbb', sid=GONE_SID, ts='2026-09-01T09:00:06.000Z'),
+                          candidate('c-cccccccccccc', sid=GONE_SID))
+        self.run_(FakeAI(rewrite()))
+        conv = self.conversions()
+        self.assertEqual(conv['c-aaaaaaaaaaaa']['status'], 'drafted')
+        self.assertEqual((conv['c-bbbbbbbbbbbb']['status'], conv['c-bbbbbbbbbbbb']['code']), ('void', 'past-retention'))
+        self.assertEqual((conv['c-cccccccccccc']['status'], conv['c-cccccccccccc']['code']), ('void', 'file-gone'))
+
+    def test_skipped_carried_across_dates_void_not(self):
+        """S4：跨日期 skipped 也沿用（不再调 AI），void 不沿用。"""
+        old = {'plugin': {'version': '1.0.0'}, 'candidates': [
+            dict(candidate('c-aaaaaaaaaaaa'), conversion={'status': 'skipped', 'code': 'needs-write-tools'}),
+            dict(candidate('c-bbbbbbbbbbbb'), conversion={'status': 'void', 'code': 'file-gone'})]}
+        later = {'plugin': {'version': '1.0.0'}, 'candidates': [candidate('c-aaaaaaaaaaaa', selection=None),
+                                                                candidate('c-bbbbbbbbbbbb', selection=None)]}
+        review.carry_earlier(later, [(DATE, old)])
+        self.assertEqual(later['candidates'][0]['conversion']['status'], 'skipped')
+        self.assertNotIn('conversion', later['candidates'][1])
+
+    def test_no_injection_text_marks_unchecked(self):
+        """L1：取不到注入文字照常写，draft.json 记 injection_checked=false，待审页写明。"""
+        self.write_review(candidate('c-aaaaaaaaaaaa'))
+        s = self.run_(FakeAI(rewrite(history=[('先列一下目录', '有 src 与 tests。')])), injection_text='')
+        self.assertIs(s['injection_checked'], False)
+        d = self.drafts_written()[0]
+        self.assertIs(d.meta['injection_checked'], False)
+        run_dir, page, _ = self.batch()
+        self.assertIn('未做注入核对', Path(page.html_path).read_text(encoding='utf-8'))
+        self.write_review(candidate('c-bbbbbbbbbbbb'))
+        self.run_(FakeAI(rewrite()))
+        d2 = [x for x in self.drafts_written() if x.case != d.case][0]
+        self.assertIs(d2.meta['injection_checked'], True)
 
 
 class MappingReasonTest(unittest.TestCase):

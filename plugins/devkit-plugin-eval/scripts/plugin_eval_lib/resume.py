@@ -208,10 +208,19 @@ def usage_limit_note(arm_rec):
     return '（其中 %d 个撞订阅用量限制）' % n if n else ''
 
 
+def _cli_prefix(data_dir):
+    script = Path(__file__).resolve().parents[1] / 'plugin_eval.py'
+    return '"%s" "%s" --data-dir "%s"' % (sys.executable, script, data_dir)
+
+
 def resume_hint(run_dir, data_dir):
     """给命令行输出用的续跑命令（含本机绝对路径，不写进入库产物）。"""
-    script = Path(__file__).resolve().parents[1] / 'plugin_eval.py'
-    return '"%s" "%s" --data-dir "%s" resume "%s"' % (sys.executable, script, data_dir, run_dir)
+    return '%s resume "%s"' % (_cli_prefix(data_dir), run_dir)
+
+
+def pending_hint(data_dir, name, run_id):
+    """compare 收尾打印的下一步（生成本次对照的待审页）。带 --run：后台跑期间别的 drafts / clauses 运行不会抢走「最新」。"""
+    return '下一步：生成待审页 → %s pending %s --run %s' % (_cli_prefix(data_dir), name, run_id)
 
 
 def report_section(rec):

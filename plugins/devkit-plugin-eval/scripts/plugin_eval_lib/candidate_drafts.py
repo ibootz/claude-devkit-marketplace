@@ -6,19 +6,29 @@
 
 结果写回该候选的 `conversion`（复盘结果文件里，与待审页写回同一把锁）：
   drafted           写进了草稿区（draft = 草稿目录名）
-  void              过了保留期：指针指向的会话文件或记录已不在，或时间早于 cleanupPeriodDays（code 说明哪种）
+  void              原文读不到：先试读会话，读不到时按指针时间区分原因码——早于 cleanupPeriodDays（缺省 30 天）记
+                    past-retention，否则文件不在记 file-gone、记录不在记 record-gone（C 批定稿 3）
   skipped           AI 判为写不成离线用例（code 是枚举，不记 AI 的自由文字：复盘结果入库，自由文字可能带原文）
   privacy-rejected  隐私自检不过，整条不写（findings 只记命中类别与个数）
   invalid           改写结果结构不合格或 eval 加载不了
   error             AI 调用失败
-前三种是终态，不再重试；后三种下次 from-review 再试。
+前三种是终态，不再重试；后三种下次 from-review 再试。跨日期沿用 drafted 与 skipped，void 不沿用（review.carry_earlier）。
+
+草稿防误提交（C 批定稿 1）：每个改写出的草稿目录里放一个内容为 `*` 的 `.gitignore`（GITIGNORE_MARK），整个目录不进
+git status；待审页通过、移进 evals/ 时这个文件不随搬（drafts._apply_draft）。输出与待审页都写明 PRIVACY_NOTE。
 
 隐私自检（写盘前，对将写盘的每段文字）：
   - 路径形态（家目录、`/Users|home/`、Windows 用户目录、`~/`）与邮箱形态（`example.invalid` 除外）；
-  - 从这次会话本身取出的私有词：工作目录的项目名、家目录用户名、git 分支名、出现过的主机名与包名里的非通用段；
-  - 用户自配的私有词：环境变量 PLUGIN_EVAL_PRIVATE_TERMS（逗号分隔，不区分大小写；词表不进仓库）；
-  - 与原文片段（用户与助手的话、工具调用参数）去空白后逐字重合 ≥ OVERLAP_CHARS 字。
-任一命中整条不写。改写出的合成历史另查与被测插件注入文字的重合（replay.injection_hits），命中也不写。
+  - 从这次会话本身取出的私有词：工作目录的项目名、家目录用户名、git 分支名、出现过的主机名与包名里的非通用段
+    （cwd 各段与主机名、包名的标签 ≥ MIN_TERM 字即取，通用段见 _GENERIC）；
+  - 用户自配的私有词，两个入口取并集（C 批定稿 2；词表都不进任何仓库）：环境变量 PLUGIN_EVAL_PRIVATE_TERMS（逗号分隔），
+    与用户级数据目录下的 PRIVATE_TERMS_FILE（每行一个或逗号分隔，`#` 起注释）；不区分大小写。都为空时 stderr 与摘要各提示一行；
+  - 与原文片段（除 compact 边界标记外的全部片段：用户与助手的话、工具调用参数、工具输出、hook 报错、compact 摘要）
+    去空白后逐字重合 ≥ OVERLAP_CHARS 字；重合窗口出现在豁免语料里的不算（public_text：Claude Code 固定文案
+    CC_BOILERPLATE 与被测插件自己的文本文件，C 批集成真跑后补，暂定口径）。
+私有词 ≤ MIN_TERM 字的按整词匹配（前后不是字母数字），更长的按子串匹配。任一命中整条不写。
+改写出的合成历史另查与被测插件注入文字的重合（replay.injection_hits），命中也不写；取不到注入文字时照常写，
+draft.json 记 injection_checked=false，待审页事实栏写明「未做注入核对」。
 """
 import copy
 import json
@@ -41,6 +51,15 @@ TEXT_LIMIT = 1200           # 片段里每段文字截断长度
 EXCERPT_LIMIT = 12000       # 片段总长上限
 MAX_CHAIN = 60
 PRIVATE_TERMS_ENV = 'PLUGIN_EVAL_PRIVATE_TERMS'
+PRIVATE_TERMS_FILE = 'private-terms.txt'     # 用户级数据目录（--data-dir）下，不在任何被评仓里
+NO_TERMS_NOTE = '未配置私有词，只能靠会话推断与形态检测'
+PRIVACY_NOTE = '由本机真实会话改写，通过前逐字审隐私'
+GITIGNORE_MARK = drafts.IGNORE_MARK
+MIN_TERM = 3                # cwd 各段与主机名、包名标签的取词门槛（审查 13 S1：3 字母的公司缩写也要拦）
+CC_BOILERPLATE = ('This session is being continued from a previous conversation that ran out of context. '
+                  'The summary below covers the earlier portion of the conversation.',)
+PUBLIC_SUFFIXES = ('.js', '.mjs', '.cjs', '.py', '.sh', '.md', '.json', '.txt', '.yaml', '.yml')
+PUBLIC_LIMIT = 2000000      # 豁免语料读被测插件文件的总字数上限
 SKIP_CODES = ('not-reproducible-offline', 'needs-write-tools', 'needs-user-reply', 'not-plugin-behavior',
               'cannot-anonymize')
 _EMAIL_RE = re.compile(r'[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)')
@@ -50,7 +69,13 @@ _GENERIC = {'github', 'gitlab', 'google', 'anthropic', 'claude', 'example', 'loc
             'apple', 'microsoft', 'openai', 'stackoverflow', 'mozilla', 'docs', 'www', 'http', 'https', 'mail',
             'main', 'master', 'develop', 'head', 'feature', 'release', 'test', 'tests', 'users', 'home', 'workspace',
             'projects', 'project', 'src', 'code', 'repo', 'repos', 'tmp', 'private', 'worktrees', 'plugins', 'cache',
-            'shared', 'user', 'admin', 'root', 'json', 'html', 'yaml', 'markdown', 'none', 'null', 'true', 'false'}
+            'shared', 'user', 'admin', 'root', 'json', 'html', 'yaml', 'markdown', 'none', 'null', 'true', 'false',
+            # 门槛放到 3 字后补的通用段：服务与基础设施、常见目录、协议、示例名
+            'api', 'app', 'web', 'cdn', 'svc', 'lib', 'bin', 'etc', 'usr', 'var', 'opt', 'mnt', 'dev', 'doc', 'img',
+            'css', 'git', 'svn', 'ssh', 'ftp', 'npm', 'pkg', 'cmd', 'out', 'log', 'logs', 'run', 'new', 'old', 'foo',
+            'bar', 'baz', 'qux', 'raw', 'cli', 'sdk', 'dns', 'vpn', 'smtp', 'imap', 'static', 'assets', 'build',
+            'dist', 'node', 'java', 'org', 'net', 'com', 'inc', 'prod', 'stage', 'staging', 'local', 'internal',
+            'intranet', 'volumes', 'library', 'desktop', 'documents', 'downloads', 'work', 'data', 'service'}
 
 SYSTEM_PROMPT = ('你是 Claude Code 插件离线评测的用例改写者。你会读到一段真实会话的片段，把它改写成一个合成的离线用例：'
                  '保留「什么样的任务、什么样的动作触发了这个信号」，其余全部换成虚构内容。'
@@ -131,22 +156,20 @@ def _parse_ts(s):
 
 
 def resolve(cfg, cand, *, now, retention_days):
-    """按指针（新到旧）找第一个还能读的触发记录。返回 (片段 dict, None) 或 (None, 作废原因码)。"""
+    """按指针（新到旧）找第一个还能读的触发记录。返回 (片段 dict, None) 或 (None, 作废原因码)。
+    先试读：读得到就照常改写，哪怕指针时间早于保留期。读不到时再按时间戳区分原因：早于 cleanupPeriodDays 记
+    past-retention，否则文件不在记 file-gone、记录不在记 record-gone（C 批定稿 3）。都读不到时取最新指针的原因码。"""
     codes = []
     for ptr in cand.get('pointers') or []:
+        f = locate(cfg, ptr)
+        recs = _records(f) if f is not None else []
+        if any(r.get('uuid') == ptr.get('uuid') for r in recs):
+            return excerpt(recs, ptr.get('uuid')), None
         ts = _parse_ts(ptr.get('timestamp'))
         if ts is not None and ts < now - timedelta(days=retention_days):
             codes.append('past-retention')
-            continue
-        f = locate(cfg, ptr)
-        if f is None:
-            codes.append('file-gone')
-            continue
-        recs = _records(f)
-        if not any(r.get('uuid') == ptr.get('uuid') for r in recs):
-            codes.append('record-gone')
-            continue
-        return excerpt(recs, ptr.get('uuid')), None
+        else:
+            codes.append('file-gone' if f is None else 'record-gone')
     return None, (codes[0] if codes else 'no-pointer')
 
 
@@ -246,7 +269,7 @@ def _path_terms(cwd):
         i = parts.index('.claude')
         if i > 0:
             out.add(parts[i - 1])
-    return {x for x in out if len(x) >= 4 and x.lower() not in _GENERIC}
+    return {x for x in out if len(x) >= MIN_TERM and x.lower() not in _GENERIC}
 
 
 def host_terms(text):
@@ -256,7 +279,7 @@ def host_terms(text):
         labels = m.group(0).lower().split('.')
         if not (labels[-1] in _TLDS or labels[0] in _TLDS):
             continue
-        out |= {lb for lb in labels if len(lb) >= 4 and lb not in _TLDS and lb not in _GENERIC and not lb.isdigit()}
+        out |= {lb for lb in labels if len(lb) >= MIN_TERM and lb not in _TLDS and lb not in _GENERIC and not lb.isdigit()}
     return out
 
 
@@ -266,13 +289,52 @@ def _norm(text):
     return re.sub(r'\s+', '', text or '')
 
 
-def configured_terms(env=None):
+def configured_terms(env=None, data_dir=None):
+    """用户自配的私有词：环境变量 PRIVATE_TERMS_ENV 与 <data_dir>/PRIVATE_TERMS_FILE 取并集。"""
     raw = (env if env is not None else os.environ).get(PRIVATE_TERMS_ENV) or ''
-    return {t.strip() for t in raw.split(',') if t.strip()}
+    out = {t.strip() for t in raw.split(',') if t.strip()}
+    f = Path(data_dir) / PRIVATE_TERMS_FILE if data_dir is not None else None
+    if f is not None and f.is_file():
+        try:
+            text = f.read_text(encoding='utf-8')
+        except (OSError, UnicodeDecodeError):
+            text = ''
+        for line in text.splitlines():
+            out |= {t.strip() for t in line.split('#', 1)[0].split(',') if t.strip()}
+    return out
 
 
-def privacy_findings(texts, *, private_terms=(), source_texts=(), home=None):
-    """将写盘的文字里命中的隐私类别与个数：{类别: 个数}。空 = 通过。不回命中原文。"""
+def _term_hit(term, low):
+    if len(term) <= MIN_TERM:          # 短词按整词匹配：abc 不误中 abcd 这类常见词
+        return re.search(r'(?<![a-z0-9])%s(?![a-z0-9])' % re.escape(term), low) is not None
+    return term in low
+
+
+def public_text(plugin_dir):
+    """逐字重合检查的豁免语料（去空白）：Claude Code 自带的固定文案，加被测插件自己的文本文件。
+    这些文字本来就在被测仓或 Claude Code 里，片段里出现、草稿里照抄都不泄露（C 批集成真跑：compact 摘要的固定开头、
+    hook 报错里的插件脚本路径曾整条误拒）。"""
+    parts = list(CC_BOILERPLATE)
+    root = Path(plugin_dir) if plugin_dir else None
+    total = 0
+    if root is not None and root.is_dir():
+        for f in sorted(root.rglob('*')):
+            if total >= PUBLIC_LIMIT:
+                break
+            if not f.is_file() or f.suffix not in PUBLIC_SUFFIXES or 'evals' in f.relative_to(root).parts:
+                continue
+            try:
+                t = f.read_text(encoding='utf-8')
+            except (OSError, UnicodeDecodeError):
+                continue
+            parts += [t, f.relative_to(root).as_posix()]
+            total += len(t)
+    return _norm('\n'.join(parts))
+
+
+def privacy_findings(texts, *, private_terms=(), source_texts=(), home=None, public=''):
+    """将写盘的文字里命中的隐私类别与个数：{类别: 个数}。空 = 通过。不回命中原文。
+    public：去空白的豁免语料（public_text），出现在里面的重合窗口不算逐字重合。"""
     home = (home or os.path.expanduser('~')).rstrip('/')
     found = {}
 
@@ -284,6 +346,15 @@ def privacy_findings(texts, *, private_terms=(), source_texts=(), home=None):
     for s in source_texts:
         n = _norm(s)
         windows |= {n[i:i + OVERLAP_CHARS] for i in range(len(n) - OVERLAP_CHARS + 1)}
+    exempt = {}             # 命中窗口 → 是否在豁免语料里（只查命中的，豁免语料可能很长）
+
+    def overlap(w):
+        if w not in windows:
+            return False
+        if public and w not in exempt:
+            exempt[w] = w in public
+        return not exempt.get(w, False)
+
     for t in texts:
         if not t:
             continue
@@ -294,11 +365,11 @@ def privacy_findings(texts, *, private_terms=(), source_texts=(), home=None):
                 hit('email')
         low = t.lower()
         for term in terms:
-            if term in low:
+            if _term_hit(term, low):
                 hit('private-term')
         if windows:
             n = _norm(t)
-            if any(n[i:i + OVERLAP_CHARS] in windows for i in range(len(n) - OVERLAP_CHARS + 1)):
+            if any(overlap(n[i:i + OVERLAP_CHARS]) for i in range(len(n) - OVERLAP_CHARS + 1)):
                 hit('verbatim-overlap')
     return found
 
@@ -367,7 +438,8 @@ def _history(case, slug, after_compact):
     return sid, recs
 
 
-def convert_one(cand, ex, *, repo, name, ai, model, active, review_date, private_terms, injection_text, now, taken):
+def convert_one(cand, ex, *, repo, name, ai, model, active, review_date, private_terms, injection_text, now, taken,
+                public=''):
     """改写一个候选。返回 conversion dict（写回复盘结果）与 (花费, 调用次数)。只在全部检查通过后才写盘。"""
     from . import drafter
     obj, meta = ai(build_prompt(name, cand, ex, active), _schema(), model)
@@ -389,10 +461,12 @@ def convert_one(cand, ex, *, repo, name, ai, model, active, review_date, private
     problems = casefiles.validate_spec(spec)
     if problems:
         return {'status': 'invalid', 'code': 'spec', 'problems': len(problems), 'at': at}, cost
-    if recs and injection_text and replay.injection_hits(replay.message_texts(recs), injection_text):
+    injection_checked = bool((injection_text or '').strip())
+    if recs and injection_checked and replay.injection_hits(replay.message_texts(recs), injection_text):
         return {'status': 'invalid', 'code': 'history-has-injection', 'at': at}, cost
     meta_out = {'schema_version': drafts.SCHEMA_VERSION, 'case': slug, 'source': SOURCE, 'category': CATEGORY,
                 'clauses': cids, 'clause_reason': obj.get('clause_reason') or None,
+                'injection_checked': injection_checked,
                 'intent': case.get('intent'), 'target': 'review:%s' % cand.get('id'), 'created_at': at,
                 'created_by': {'model': model}, 'status': drafts.STATUS_OPEN,
                 'review_candidate': {'review_date': review_date, 'candidate_id': cand.get('id'),
@@ -403,15 +477,18 @@ def convert_one(cand, ex, *, repo, name, ai, model, active, review_date, private
                            'compact': bool(recs and recs[0].get('subtype') == 'compact_boundary')} if recs else None}
     rendered = casefiles.render_case(spec)
     texts = list(rendered.values()) + list(rendered.keys()) + [json.dumps(meta_out, ensure_ascii=False)]
-    sources = [v for k, v in ex['items'] if k in ('user', 'assistant', 'tool_use', 'compact_summary')]
-    found = privacy_findings(texts, private_terms=set(private_terms) | ex['private'], source_texts=sources)
+    sources = [v for k, v in ex['items'] if k != 'compact']      # 工具输出、hook 报错也比（审查 13 B1）
+    found = privacy_findings(texts, private_terms=set(private_terms) | ex['private'], source_texts=sources,
+                             public=public)
     if found:
         return {'status': 'privacy-rejected', 'findings': dict(sorted(found.items())), 'at': at}, cost
     dest = drafts.drafts_root(repo, name) / slug
     casefiles.write_case(dest, spec)
+    (dest / GITIGNORE_MARK).write_text('*\n', encoding='utf-8')     # 整个草稿目录不进 git status（C 批定稿 1）
     drafts.write_meta(dest, meta_out)
     left = casefiles.check_case_dir(dest)
-    found = privacy_findings(_case_texts(dest), private_terms=set(private_terms) | ex['private'], source_texts=sources)
+    found = privacy_findings(_case_texts(dest), private_terms=set(private_terms) | ex['private'], source_texts=sources,
+                             public=public)
     if left or found:
         import shutil
         shutil.rmtree(str(dest), ignore_errors=True)
@@ -451,13 +528,21 @@ def run(data_dir, name, *, date=None, ai, model, now=None, env=None, injection_t
     have = _existing(repo, name)
     todo = [c for c in rec.get('candidates') or [] if isinstance(c, dict) and c.get('selection') == 'draft'
             and (c.get('conversion') or {}).get('status') not in TERMINAL]
+    private_terms = configured_terms(env, data_dir)
     summary = {'review_date': review_date, 'model': model, 'calls': 0, 'cost_usd': 0.0, 'written': [], 'invalid': [],
-               'skipped': [], 'linked': [], 'stopped': None, 'conversions': {}}
+               'skipped': [], 'linked': [], 'stopped': None, 'conversions': {},
+               'private_terms_configured': bool(private_terms), 'injection_checked': None}
     if not todo:
         return summary
+    if not private_terms:
+        log('[from-review] ！！%s（环境变量 %s 或数据目录下的 %s 都没有词）' % (
+            NO_TERMS_NOTE, PRIVATE_TERMS_ENV, PRIVATE_TERMS_FILE))
     if injection_text is None:
         injection_text = replay.default_injection_text(plugin_dir, repo, name)
-    private_terms = configured_terms(env)
+    summary['injection_checked'] = bool((injection_text or '').strip())
+    if not summary['injection_checked']:
+        log('[from-review] 取不到被测插件的注入文字，本次草稿不做注入核对（draft.json 记 injection_checked=false）')
+    public = public_text(plugin_dir)
     root = drafts.drafts_root(repo, name)
     taken = {p.name for p in root.iterdir()} if root.is_dir() else set()
     for cand in todo:
@@ -472,7 +557,7 @@ def run(data_dir, name, *, date=None, ai, model, now=None, env=None, injection_t
                 try:
                     conv, cost = convert_one(cand, ex, repo=repo, name=name, ai=ai, model=model, active=active,
                                              review_date=review_date, private_terms=private_terms,
-                                             injection_text=injection_text, now=now, taken=taken)
+                                             injection_text=injection_text, now=now, taken=taken, public=public)
                 except Exception as e:  # noqa: BLE001 —— clause_ai.ClauseAIError 等：记 error，停止后续（同 drafter）
                     conv = {'status': 'error', 'code': type(e).__name__, 'at': _iso(now)}
                     summary['stopped'] = str(e)[:200]
@@ -491,7 +576,7 @@ def run(data_dir, name, *, date=None, ai, model, now=None, env=None, injection_t
                                        'problems': ['%s %s' % (conv['status'], conv.get('code') or conv.get('findings'))]})
         elif conv['status'] in ('skipped', 'void'):
             summary['skipped'].append({'target': 'review:%s' % cid, 'code': conv.get('code'),
-                                       'reason': '过了保留期，作废' if conv['status'] == 'void' else 'AI 判为写不成离线用例'})
+                                       'reason': '原文读不到，作废' if conv['status'] == 'void' else 'AI 判为写不成离线用例'})
         log('[from-review] 候选 %s：%s %s' % (cid, conv['status'], conv.get('draft') or conv.get('code') or ''))
     summary['cost_usd'] = round(summary['cost_usd'], 6)
     write_back(data_dir, name, path, summary['conversions'])
@@ -516,7 +601,7 @@ def write_back(data_dir, name, path, conversions):
 
 # ---------------- 命令行 ----------------
 
-STATUS_TEXT = {'drafted': '已写进草稿区', 'void': '作废（过了保留期）', 'skipped': 'AI 判为写不成离线用例',
+STATUS_TEXT = {'drafted': '已写进草稿区', 'void': '作废（原文读不到）', 'skipped': 'AI 判为写不成离线用例',
                'privacy-rejected': '隐私自检不过，未写', 'invalid': '结构不合格，未写', 'error': 'AI 调用失败'}
 
 
@@ -533,6 +618,13 @@ def main(args, data_dir, *, ai=None, injection_text=None):
     conv = summary['conversions']
     print('复盘候选转草稿（%s）：处理 %d 个；AI 调用 %d 次，花费（标价估算）$%.4f' % (
         summary['review_date'], len(conv), summary['calls'], summary['cost_usd']))
+    if conv and not summary['private_terms_configured']:
+        print('！！%s。可设环境变量 %s（逗号分隔），或在数据目录下建 %s（每行一个）' % (
+            NO_TERMS_NOTE, PRIVATE_TERMS_ENV, Path(data_dir) / PRIVATE_TERMS_FILE))
+    if summary['written']:
+        print('！！这些草稿%s。草稿目录里有内容为 * 的 .gitignore，不会被提交；待审页通过、移进 evals/ 时去掉' % PRIVACY_NOTE)
+    if summary['written'] and summary['injection_checked'] is False:
+        print('  注意：取不到被测插件的注入文字，这些草稿未做注入核对')
     for cid, c in sorted(conv.items()):
         extra = c.get('draft') or c.get('code') or ''
         if c.get('findings'):

@@ -245,5 +245,45 @@ class CliTest(unittest.TestCase):
         self.assertIn('scaffold_script', out.getvalue())
 
 
+class CompareNextStepTest(unittest.TestCase):
+    """票 16 CLI 缺口 1：compare 收尾打印下一步（带 --run 的完整 pending 命令）；不完整时只给续跑命令。"""
+
+    def rec(self, complete):
+        return {'delta': {'overall': 0.5}, 'arms': {'none': {'score': 0.5}, 'current': {'score': 1.0}},
+                'previous_arm': {}, 'complete': complete, 'review': {'status': '待审'}, 'usage': {'cost_usd': 0.1},
+                'judge': None, 'incomplete_reasons': [] if complete else ['eval 超时']}
+
+    def run_cli(self, complete):
+        import shlex
+        import sys
+        from unittest import mock
+        tmp = tmpdir(self)
+        run_dir = tmp / 'repo' / 'plugin-evals' / 'p' / 'runs' / '20261016T010203Z-1.0.0-compare'
+        res = compare.CompareResult(run_dir, self.rec(complete), 0 if complete else 3)
+        out = io.StringIO()
+        with mock.patch.object(compare, 'run_compare', return_value=res), mock.patch.object(
+                cli.evalrun, 'runner_with_timeout', return_value=None), \
+                redirect_stdout(out), redirect_stderr(io.StringIO()):
+            code = cli.main(['--data-dir', str(tmp / 'data'), 'compare', 'p'])
+        lines = [ln for ln in out.getvalue().splitlines() if ln.startswith('下一步：生成待审页 → ')]
+        return code, out.getvalue(), lines, shlex, sys
+
+    def test_complete_prints_full_pending_command(self):
+        code, text, lines, shlex, sys = self.run_cli(True)
+        self.assertEqual(code, 0)
+        self.assertEqual(len(lines), 1, text)
+        argv = shlex.split(lines[0].split('→ ', 1)[1])
+        self.assertEqual(argv[0], sys.executable)
+        self.assertTrue(Path(argv[1]).is_file() and argv[1].endswith('plugin_eval.py'))
+        ns = cli._parser().parse_args(argv[2:])
+        self.assertEqual((ns.cmd, ns.name, ns.run), ('pending', 'p', '20261016T010203Z-1.0.0-compare'))
+
+    def test_incomplete_gives_resume_not_pending(self):
+        code, text, lines, _, _ = self.run_cli(False)
+        self.assertEqual(code, 3)
+        self.assertEqual(lines, [])
+        self.assertIn('续跑', text)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -6,6 +6,7 @@ import unittest
 import uuid
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 from _support import write
 from plugin_eval_lib import arms, casefiles, cli, clauses, compare, drafts, registry, replay
@@ -180,6 +181,25 @@ class CompareCleansTranscriptsTest(unittest.TestCase):
             self.assertTrue((traces / arm / 'replay-transcripts' / 'compact-a' / ('%s.jsonl' % sid)).is_file(), arm)
         self.assertFalse(any(p.name == '%s.jsonl' % sid for p in repo.rglob('*')))      # 不进被测仓
 
+    def test_purge_error_does_not_abort_arm(self):
+        """审查 13 L3：转录移动出错只记一行日志，已跑完的臂与整个对照照常收尾。"""
+        repo = self.tmp / 'repo'
+        plugin = repo / 'plugins' / 'demo-plugin'
+        write(plugin / '.claude-plugin' / 'plugin.json', json.dumps({'name': 'demo-plugin', 'version': '1.2.3'}))
+        write(plugin / 'evals' / 'c1' / 'prompt.md', '---\nname: c1\n---\n做事\n')
+        write(plugin / 'evals' / 'c1' / 'graders' / 'g1.md', '---\ntype: regex\ntarget: last_message\npattern: ok\n---\n')
+        data = self.tmp / 'data'
+        registry.register(data, 'demo-plugin', repo)
+        (self.tmp / 'sb').mkdir()
+        logs = []
+        with mock.patch.object(replay, 'purge_transcripts', side_effect=OSError('磁盘满')):
+            res = compare.run_compare(data, 'demo-plugin', runs=1, concurrency=1, claude='/fake/claude',
+                                      runner=FakeEval(self.tmp / 'sb', {'none': False, 'current': True}),
+                                      env={'PATH': '/usr/bin'}, sandbox_roots=[self.tmp / 'sb'],
+                                      log=logs.append, preflight_check=passing_preflight, use_judge=False)
+        self.assertTrue(res.record['complete'])
+        self.assertEqual(sum('回放转录移出组装目录失败' in m for m in logs), 2)
+
 
 class GenerateTest(Base):
     def setUp(self):
@@ -259,6 +279,32 @@ class GenerateTest(Base):
                       meta={'source': 'compact-replay', 'category': 'compact-replay', 'status': 'rejected'})
         chosen, _ = replay.select_clauses(self.repo, NAME, self.plugin)
         self.assertEqual([c['id'] for c in chosen], ['C004', 'C001'])
+
+    def test_named_clause_rewrites_rejected(self):
+        """C 批定稿 4：--clauses 点名时，已打回的回放草稿不算覆盖、不占名额，会重写；不点名时仍算覆盖。"""
+        self.add_case('drafts', 'compact-old', ['compact-replay', 'C003'],
+                      meta={'source': 'compact-replay', 'category': 'compact-replay', 'status': 'rejected'})
+        chosen, _ = replay.select_clauses(self.repo, NAME, self.plugin, only={'C003'})
+        self.assertEqual([c['id'] for c in chosen], ['C003'])
+        s = self.gen(only={'C003'})
+        self.assertEqual(s['written'], ['compact-read-docs'])
+        self.assertEqual(drafts.read_meta(self.drafts_root / 'compact-old')['status'], 'rejected')   # 旧的原样留着
+
+    def test_named_clause_already_covered_says_so(self):
+        self.add_case('drafts', 'compact-live', ['compact-replay', 'C003'],
+                      meta={'source': 'compact-replay', 'category': 'compact-replay'})
+        chosen, notes = replay.select_clauses(self.repo, NAME, self.plugin, only={'C003'})
+        self.assertEqual(chosen, [])
+        self.assertTrue(any('C003' in n and '不重做' in n for n in notes), notes)
+
+    def test_quota_full_tells_how_to_free(self):
+        for i, st in enumerate(('rejected', 'open', 'open')):
+            self.add_case('drafts', 'compact-q%d' % i, ['compact-replay', 'C00%d' % (i + 1)],
+                          meta={'source': 'compact-replay', 'category': 'compact-replay', 'status': st})
+        chosen, notes = replay.select_clauses(self.repo, NAME, self.plugin)
+        self.assertEqual(chosen, [])
+        self.assertIn('删除已打回的回放草稿目录可腾出名额', notes[-1])
+        self.assertIn('drafts/compact-q0', notes[-1])
 
     def test_history_with_injection_is_not_written(self):
         s = self.gen(ai=FakeAI(), injection_text=replay.SUMMARY, limit=1)

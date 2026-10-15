@@ -66,7 +66,7 @@ REVIEW_CANDIDATE = pending.ItemType(
     key='review-candidate', label='复盘候选',
     options=(('A', '转用例草稿（由 AI 现读本机会话改写成合成用例，进 drafts/ 再审）'), ('B', '不转')),
     collect=_candidate_collect, apply=_candidate_apply, priority=CANDIDATE_PRIORITY, kinds=frozenset({review.KIND}),
-    hint='会话复盘发现的一类违规或现象。只列信号与定位指针，不含对话原文；转草稿时才现读本机会话，原文过了保留期即作废。')
+    hint='会话复盘发现的一类违规或现象。只列信号与定位指针，不含对话原文；转草稿时才现读本机会话，原文读不到（多半是过了保留期被清掉）即作废。')
 
 
 def _hint_collect(subject):

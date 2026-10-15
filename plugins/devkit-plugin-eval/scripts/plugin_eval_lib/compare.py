@@ -104,7 +104,11 @@ def _run_arm(spec, *, ctx):
                                      model=ctx['model'])
     ctx['log']('[%s] 开跑：%s 个用例 × %s 次' % (spec.label, len(ctx['cases']), ctx['runs']))
     exit_code, stderr = ctx['runner'](cmd, arm_dir, ctx['env'], log_dir)
-    moved = replay.purge_transcripts(arm_dir, keep_dir=log_dir / 'replay-transcripts')   # 票 13：回放转录写在用例目录里
+    try:        # 票 13：回放转录写在用例目录里。移动出错只记一行，不中止已付费跑完的这一臂（审查 13 L3）
+        moved = replay.purge_transcripts(arm_dir, keep_dir=log_dir / 'replay-transcripts')
+    except Exception as e:  # noqa: BLE001
+        moved = []
+        ctx['log']('[%s] 回放转录移出组装目录失败（不影响本臂结果）：%s: %s' % (spec.label, type(e).__name__, e))
     if moved:
         ctx['log']('[%s] 回放用例的子会话转录 %d 项移出组装目录，存到 trace 目录 replay-transcripts/' % (spec.label, len(moved)))
 

@@ -238,8 +238,9 @@ def _cases_under(root):
     return [(c, root / c) for c in arms.discover_cases(root)]
 
 
-def existing_compact(repo, name, plugin_dir):
-    """已有的 compact 回放用例（evals/ 与草稿区，含打回的）：{用例键: 条款 id 列表}。"""
+def existing_compact(repo, name, plugin_dir, *, skip_rejected_for=None):
+    """已有的 compact 回放用例（evals/ 与草稿区，含打回的）：{用例键: 条款 id 列表}。
+    skip_rejected_for（--clauses 点名的条款 id 集合）：挂着这些条款、已打回的回放草稿不算（C 批定稿 4）。"""
     out = {}
     for c, d in _cases_under(Path(plugin_dir) / 'evals'):
         tags = clauses.case_tags(d)
@@ -247,8 +248,16 @@ def existing_compact(repo, name, plugin_dir):
             out['evals/' + c] = drafts.clause_ids(tags)
     for d in drafts.list_drafts(repo, name):
         if TAG in d.tags or d.meta.get('source') == SOURCE:
-            out['drafts/' + d.case] = drafts.clause_ids(d.tags)
+            ids = drafts.clause_ids(d.tags)
+            if skip_rejected_for and d.status == drafts.STATUS_REJECTED and set(ids) & set(skip_rejected_for):
+                continue
+            out['drafts/' + d.case] = ids
     return out
+
+
+def _rejected_keys(repo, name):
+    return {'drafts/' + d.case for d in drafts.list_drafts(repo, name)
+            if d.status == drafts.STATUS_REJECTED and (TAG in d.tags or d.meta.get('source') == SOURCE)}
 
 
 def _scored_ok(case_dir):
@@ -288,17 +297,28 @@ def select_clauses(repo, name, plugin_dir, *, only=None, limit=MAX_PER_PLUGIN):
     """挑做 compact 版的高风险条款。返回 (选中 [{id, criterion, events, base, reasons}], 说明清单)。
     排序（暂定口径，票 13 Comments）：1 已证明有差（离线对照或底本自带实测证据）→ 2 复盘命中 → 3 事件含 SessionStart
     （真实长会话里它只在开头与 compact / resume 时注入一次，之后各轮不再重注，最容易被稀释；UserPromptSubmit 类每轮都贴着
-    用户发言重注）→ 4 已有普通用例可作底本（不花钱起草）→ 条款号。每个插件合计 ≤ MAX_PER_PLUGIN 个（evals/ 与草稿区里已有的、含打回的都算）。"""
+    用户发言重注）→ 4 已有普通用例可作底本（不花钱起草）→ 条款号。每个插件合计 ≤ MAX_PER_PLUGIN 个（evals/ 与草稿区里已有的、含打回的都算）。
+    only（--clauses 点名）时，挂着点名条款、已打回的回放草稿不算覆盖、也不占名额，会重写（C 批定稿 4，同 B 批定稿 3）；
+    不点名时打回的仍算覆盖。"""
     lst = clauses.load_list(repo, name)
     if not lst:
         raise ReplayError('插件 %s 还没有条款清单（plugin-evals/%s/%s）：先跑 `clauses %s`' % (
             name, name, clauses.LIST_FILE, name))
-    have = existing_compact(repo, name, plugin_dir)
+    have = existing_compact(repo, name, plugin_dir, skip_rejected_for=only)
     covered = {cid for ids in have.values() for cid in ids}
     quota = MAX_PER_PLUGIN - len(have)
     notes = []
+    if only is not None:
+        dup = sorted(set(only) & covered)
+        if dup:
+            notes.append('点名的条款已有 compact 回放用例（未打回），不重做：%s' % '、'.join(dup))
     if quota <= 0:
-        return [], ['已有 %d 个 compact 回放用例（上限 %d）：%s' % (len(have), MAX_PER_PLUGIN, '、'.join(sorted(have)))]
+        rej = sorted(_rejected_keys(repo, name) & set(have))
+        hint = '。删除已打回的回放草稿目录可腾出名额（%s）' % (
+            '已打回的 %d 个：%s；也可用 --clauses 点名重写它们的条款' % (len(rej), '、'.join(rej)) if rej
+            else '目前没有已打回的')
+        return [], notes + ['已有 %d 个 compact 回放用例（上限 %d）：%s%s' % (
+            len(have), MAX_PER_PLUGIN, '、'.join(sorted(have)), hint)]
     proven, hit = drafts.evidence(repo, name, plugin_dir)
     bases = base_cases(repo, name, plugin_dir)
     for cid, items in bases.items():

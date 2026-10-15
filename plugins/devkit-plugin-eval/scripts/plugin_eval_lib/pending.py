@@ -639,7 +639,7 @@ def _apply(repo, run_dir, code_run, page_id, decisions, now, types, subject=None
 def add_parser(sub):
     p = sub.add_parser('pending', help='生成待审页；或带 --reply 接收用户贴回的回复码并写回')
     p.add_argument('name')
-    p.add_argument('--run', help='运行 id（runs/ 下的目录名）；生成页时默认取最新一次离线对照')
+    p.add_argument('--run', help='运行 id（runs/ 下的目录名）；生成页时默认取最新一次对照 / 条款 / 草稿运行')
     p.add_argument('--reply', help='用户从待审页复制回来的回复码（整串，加引号）')
     p.add_argument('--review', nargs='?', const='latest', metavar='日期',
                    help='生成会话复盘的待审页（reviews/<日期>.json，缺省取最新一份）；写回仍用 --reply')
