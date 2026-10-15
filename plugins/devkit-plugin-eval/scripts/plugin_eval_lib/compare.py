@@ -11,7 +11,6 @@
 """
 import json
 import shutil
-import subprocess
 import sys
 import tempfile
 from collections import Counter
@@ -19,8 +18,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import (armplan, arms, envplugins, evalrun, fingerprint, injection, injection_check, preflight, record,
-               registry, resume, sandbox_sweep, scoring, traces)
+from . import (armplan, arms, envplugins, evalrun, fingerprint, gitstate, injection, injection_check, preflight,
+               record, registry, resume, sandbox_sweep, scoring, traces)
 
 
 # eval 正常跑完的退出码：0 全过、1 有用例低于 --threshold（判分我们自己重算，不看它）。其余（如 2）是中途中止。
@@ -45,21 +44,14 @@ def _now_iso(dt):
 
 
 def git_state(repo, plugin_path):
-    """返回 (HEAD sha, 插件目录是否有未提交改动)。不在 git 仓或没有 git 时都是 None。"""
-    git = shutil.which('git')
-    if not git:
-        return None, None
-    head = subprocess.run([git, '-C', str(repo), 'rev-parse', 'HEAD'], capture_output=True, text=True)
-    if head.returncode != 0:
-        return None, None
-    scope = ['--', '.', ':(exclude)plugin-evals'] if plugin_path == '.' else ['--', plugin_path]
-    st = subprocess.run([git, '-C', str(repo), 'status', '--porcelain', *scope], capture_output=True, text=True)
-    return head.stdout.strip(), (bool(st.stdout.strip()) if st.returncode == 0 else None)
+    """返回 (HEAD sha, 插件目录是否有未提交改动)。不在 git 仓或没有 git 时都是 None。
+    dirty 口径（排除 evals/ 与本模块自写的 .gitignore 行）见 gitstate.py，票 14 统一。"""
+    return gitstate.git_state(repo, plugin_path)
 
 
 def ensure_gitignore(repo, plugin_path):
     """把 <插件>/evals/results/ 写进仓根 .gitignore（eval 裸跑时会往那里写产物）。已有则不动。"""
-    line = 'evals/results/' if plugin_path == '.' else '%s/evals/results/' % plugin_path.rstrip('/')
+    line = gitstate.gitignore_line(plugin_path)
     gi = Path(repo) / '.gitignore'
     text = gi.read_text(encoding='utf-8') if gi.exists() else ''
     if line in (ln.strip() for ln in text.splitlines()):

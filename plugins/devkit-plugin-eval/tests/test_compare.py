@@ -203,7 +203,10 @@ class CompareTest(unittest.TestCase):
                          fingerprint.plugin_fingerprint(repo, ('.git', 'plugin-evals')))
         status = subprocess.run(['git', '-C', str(repo), 'status', '--porcelain', '--', '.', ':(exclude)plugin-evals'],
                                 capture_output=True, text=True).stdout.strip()
-        self.assertEqual(rec['arms']['current']['dirty'], bool(status))
+        # 工作区里只有 compare 新建、只含自写那一行的 .gitignore；票 14 统一的 dirty 口径不算它
+        self.assertEqual(status, '?? .gitignore')
+        self.assertIs(rec['arms']['current']['dirty'], False)
+        self.assertIs(rec['preflight']['dirty'], False)
 
     @unittest.skipUnless(shutil.which('git'), 'git 不可用')
     def test_git_head_and_dirty_recorded(self):
