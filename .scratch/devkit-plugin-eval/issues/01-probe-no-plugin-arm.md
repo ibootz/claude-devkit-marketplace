@@ -29,3 +29,9 @@ spec 定了每个臂各跑一次 `claude plugin eval --ablation none`，但「�
   4. **`CLAUDE_PLUGIN_DATA`**：Bash 调起的 Python 进程环境里没有（eval 沙箱与真实会话都实测为 unset）；SKILL.md 正文里写 `${CLAUDE_PLUGIN_DATA}` 会被替换成绝对路径。做法：SKILL.md 传参；兜底按 `plugins/cache/<marketplace>/<plugin>/` 推出 `plugins/data/<plugin>-<marketplace>/`。
   5. **`cleanupPeriodDays` 默认 30 天**，最小 1，设 0 校验失败；出处为官方文档 settings-reference 与 2.1.300 settings schema。本机 `~/.claude/settings.json` 设的是 90。
 - 证据位置：`probe/cases/`（三组探针插件与用例）、`probe/out/`（`--json`、stdout、stderr、退出码、结构比对）、`probe/excerpts/`（文档原文、可执行文件字符串）、`probe/tools/`。子会话转录与 trace 在 `probe/traces/`，含账号邮箱，已加进仓根 `.gitignore`，未入库。
+- 2026-10-15 `/code-review low` 后的修订（报告与 spec 已同步改）：
+  1. 「空桩臂与 without 臂逐项相同」改为「排除两条随机出现的用量类 slash 命令后逐项相同」：real-ww 的 without#3 多出 `extra-usage`、`usage-credits`，首请求 token 10412。
+  2. 补跑 extras-mixed（入库的 4 例整目录，$0.0824）：坏用例只跳过自己，但**不进 `--json`、`casesTotal` 不计它**，只有 stderr 与退出码 1 能看出来。已加进 spec「一」已实测第 7 条，03 必须处理。
+  3. with-only 的剔除依据查实为 `--json` 里用例级的 `cases[].graders[].config.arm`；逐 run 的 `withOnly`/`scored` 在 none 模式下分不出。已写进 spec「一」第 6 条。
+  4. `run.sh`、`realsession.sh` 改为先把插件目录转成绝对路径再 `cd`；`compare-init.js` 在沙箱清掉后改读 `traces/` 本地副本（两种路径实测输出一致）。
+  5. 未采纳两条：`Status: resolved` 是派票时用户指定的值，保留；报告里非 md 文件的 `vscode://file/` 绝对路径链接是本仓落盘 md 的约定（plugin-eval 两份报告同样写法），合并后即可打开，保留。

@@ -6,6 +6,7 @@
 PLUGIN=$1; WORK=$2
 OUT=$(cd "$(dirname "$0")/.." && pwd)/out
 mkdir -p "$OUT" "$WORK"
+PLUGIN=$(cd "$PLUGIN" && pwd) || exit 9   # 先转绝对路径：下面 cd 之后还要把它传给 --plugin-dir
 cd "$WORK" || exit 9
 export PATH=$(echo "$PATH" | tr ":" "\n" | grep -v "/.asdf/shims" | paste -sd: -)
 env -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MESSAGING_SOCKET \

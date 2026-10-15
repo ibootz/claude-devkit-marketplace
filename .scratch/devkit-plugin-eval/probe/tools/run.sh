@@ -5,6 +5,7 @@
 TAG=$1; shift
 ROOT=$1; shift
 OUT=$(cd "$(dirname "$0")/../out" 2>/dev/null && pwd) || { mkdir -p "$(dirname "$0")/../out"; OUT=$(cd "$(dirname "$0")/../out" && pwd); }
+ROOT=$(cd "$ROOT" && pwd) || exit 9   # 先转绝对路径：下面 cd 之后还要把它传给 eval
 cd "$ROOT" || exit 9
 # asdf shim 在 eval 的临时 HOME 下 exit 126 且 eval 不报错，必须让 PATH 直接命中真实 node
 export PATH=$(echo "$PATH" | tr ":" "\n" | grep -v "/.asdf/shims" | paste -sd: -)

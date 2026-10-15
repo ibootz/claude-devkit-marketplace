@@ -10,37 +10,40 @@ Claude Code 版本：2.1.300（各 `out/*.json` 的 `claudeVersion`）。
 
 | 问题 | 结论 | 一句话证据 |
 |---|---|---|
-| 1. 空桩插件跑 `--ablation none` | **可行**，等同「不装」 | eval 接受只有 `plugin.json` 的插件；空桩臂与 eval 自带 without 臂的工具、skill、slash 命令、agent、MCP 五项清单逐项相同，首请求输入 token 同为 10313–10319，计分 grader 结果相同（1/3） |
+| 1. 空桩插件跑 `--ablation none` | **可行**，等同「不装」 | eval 接受只有 `plugin.json` 的插件；空桩臂与 eval 自带 without 臂的工具、skill、slash 命令、agent、MCP 五项清单，排除两条与插件无关、随机出现的用量类 slash 命令后逐项相同；首请求输入 token 空桩臂 10313–10316，without 臂 10313–10412；计分 grader 结果相同（1/3） |
 | 2. 改用 `--ablation with-without` 取 `W/OUT` | 也可行，作备选 | 同一用例的 `W/OUT` 为 0.33×3，与空桩臂相同；回放用例必须显式带该参数（沿用票 19 结论） |
-| 3. 用例目录放 eval 不认识的附加文件 | **用例目录、evals 根目录可放；`graders/` 里不能放带 frontmatter 的非 grader 文件** | 4 种附加文件都被静默忽略；`graders/` 下无 frontmatter 的 md 也被忽略；`graders/` 下带 frontmatter 却无 `type:` 的 md 让整个用例加载失败 |
+| 3. 用例目录放 eval 不认识的附加文件 | **用例目录、evals 根目录可放；`graders/` 里不能放带 frontmatter 的非 grader 文件** | 4 种附加文件都被静默忽略；`graders/` 下无 frontmatter 的 md 也被忽略；`graders/` 下带 frontmatter 却无 `type:` 的 md 让该用例加载失败。混合套件里坏用例只跳过自己，但 `--json` 不记录它、`casesTotal` 也不计它 |
 | 4. skill 调起的 Python 拿不拿得到 `CLAUDE_PLUGIN_DATA` | **环境变量拿不到；SKILL.md 正文里写 `${CLAUDE_PLUGIN_DATA}` 会被替换成路径** | eval 沙箱与真实会话两处实测，`env.CLAUDE_PLUGIN_DATA=<unset>`，单引号参数 `'${CLAUDE_PLUGIN_DATA}'` 收到的是绝对路径 |
 | 5. `cleanupPeriodDays` 默认值 | **30 天**，最小 1，设 0 校验失败 | 官方文档 settings-reference 与 2.1.300 可执行文件里的 settings schema 两处一致 |
 
-**对 03 设计最要紧的一条新发现**：`--ablation none` 下，标了 `arm: with-only` 的 grader **计入分数**，不再是不计分的指示器。空桩臂因此得 0.2（5 个 grader 过 1 个），而不是 0.33（3 个计分 grader 过 1 个）。按臂跑 `--ablation none` 时，外围脚本要么不写 `with-only` grader，要么算分时自己剔除它们。见第六节第 1 条。
+**对 03 设计最要紧的一条新发现**：`--ablation none` 下，标了 `arm: with-only` 的 grader **计入分数**，不再是不计分的指示器。空桩臂因此得 0.2（5 个 grader 过 1 个），而不是 0.33（3 个计分 grader 过 1 个）。按臂跑 `--ablation none` 时，外围脚本要么不写 `with-only` grader，要么算分时自己剔除它们。逐 run 的 grader 结果在这种模式下标成 `withOnly:false, scored:true`，剔除依据只能取 `--json` 里 `cases[].graders[].config.arm`。见第六节第 1 条。
+
+**第二条要紧的发现**：加载失败的用例不进 `--json`，`casesTotal` 也不计它。只看 JSON 会把「少跑了用例」当成「全部通过」，唯一线索是 stderr 的 `failed to load` 与退出码 1。见第六节第 4 条。
 
 ## 一、命令
 
 所有 eval 都经 [tools/run.sh](vscode://file/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/devkit-plugin-eval/probe/tools/run.sh:1) 调用，跑法同 plugin-eval 的两轮实测：
 
-- 从 PATH 去掉 `~/.asdf/shims`，实际解析到的 node 写进 `out/<标签>.node`，7 次都是 `/opt/homebrew/bin/node`。本机 `which -a node` 第一个命中的是 `~/.asdf/shims/node`，不去掉就会出现 hook exit 126 而 eval 不报错。
+- 从 PATH 去掉 `~/.asdf/shims`，实际解析到的 node 写进 `out/<标签>.node`，8 次都是 `/opt/homebrew/bin/node`。本机 `which -a node` 第一个命中的是 `~/.asdf/shims/node`，不去掉就会出现 hook exit 126 而 eval 不报错。
 - 用 `env -u` 去掉父会话的一组 `CLAUDE_CODE_*` 环境变量。
-- 被测插件目录都先拷到仓外临时目录再跑，避免 eval 往仓内写 `evals/results/`。
+- 被测插件目录都先拷到仓外临时目录 `/Users/zhangq/.claude/jobs/7058cce7/tmp/p01/<名>/` 再跑，传给 run.sh 的是这个绝对路径，避免 eval 往仓内写 `evals/results/`。下表「目标插件」一列写的是拷贝来源。run.sh 已改为先把插件目录转成绝对路径再 `cd`，传相对路径也不会指错。
 
 公共参数：`--trust-plugin --no-publish --json out/<标签>.json --keep-temp`。
 
-| 标签 | 目标插件 | 额外参数 | 退出码 | 花费 | durationSeconds |
+| 标签 | 目标插件（拷贝来源） | 额外参数 | 退出码 | 花费 | durationSeconds |
 |---|---|---|---|---|---|
-| extras | `cases/extras`（x-casedir、x-graders-junk 两例） | `--ablation none --runs 1 -j 2` | 0 | $0.0831 | 4 |
+| extras | `cases/extras` 里的 x-casedir、x-graders-junk 两例 | `--ablation none --runs 1 -j 2` | 0 | $0.0831 | 4 |
 | envprobe | `cases/envprobe` | `--ablation none --runs 1 --allow-tools Bash` | 0 | $0.1453 | 13 |
 | stub-none | `cases/stub` | `--ablation none --runs 3 -j 3` | 1 | $0.4813 | 21 |
 | stub-ww | `cases/stub` | `--ablation with-without --runs 3 -j 3` | 1 | $0.8549 | 39 |
 | real-ww | devkit-discipline 4.1.0 副本 + `cases/stub/evals` | `--ablation with-without --runs 3 -j 3` | 0 | $1.1876 | 59 |
 | x-graders-fm | `cases/extras` 里的 x-graders-fm 单例 | `--ablation none --runs 1` | 1 | $0 | 0 |
 | x-prompt-fm-key | `cases/extras` 里的 x-prompt-fm-key 单例 | `--ablation none --runs 1` | 1 | $0 | 0 |
+| extras-mixed | `cases/extras` 整目录（4 例，即入库形态） | `--ablation none --runs 1 -j 2` | 1 | $0.0824 | 4 |
 
-- 退出码 1 的含义：stub-none 与 stub-ww 是有用例低于默认阈值 1.0，不是运行失败；两个 `x-*` 是用例加载失败，一个 run 都没跑。
-- 另有一次真实会话旁证（非 eval）：[tools/realsession.sh](vscode://file/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/devkit-plugin-eval/probe/tools/realsession.sh:1)，`claude -p --plugin-dir cases/envprobe --model sonnet`，加载本机全部用户配置与插件，退出码 0，输出在 `out/realsession.out`。
-- 花费合计 $2.7523（7 次 eval，标价估算；订阅用户，未设上限）。真实会话旁证的花费没有记录。
+- 退出码 1 的含义：stub-none 与 stub-ww 是有用例低于默认阈值 1.0，不是运行失败；两个 `x-*` 单例是用例加载失败，一个 run 都没跑；extras-mixed 是 2 例加载失败、另 2 例照常跑完且全过。
+- 另有一次真实会话旁证（非 eval）：[tools/realsession.sh](vscode://file/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/devkit-plugin-eval/probe/tools/realsession.sh:1)，`claude -p --plugin-dir <envprobe 拷贝的绝对路径> --model sonnet`，加载本机全部用户配置与插件，退出码 0，输出在 `out/realsession.out`。
+- 花费合计 $2.8347（8 次 eval，标价估算；订阅用户，未设上限），逐次见 `out/tabulate.txt`。真实会话旁证的花费没有记录。
 - 全部 run 的 `error` 为 null，无 partial，未撞订阅用量限制。
 
 ## 二、问题 1：空桩插件能否当「不装」臂
@@ -73,8 +76,9 @@ Claude Code 版本：2.1.300（各 `out/*.json` 的 `claudeVersion`）。
 
 [tools/compare-init.js](vscode://file/Users/zhangq/Workspace/mine/claude-devkit-marketplace/.scratch/devkit-plugin-eval/probe/tools/compare-init.js:1) 从每个 run 的 trace 里取 `system/init` 行，比对模型可见的五项清单（tools、skills、slash_commands、agents、mcp_servers），结果在 `out/compare-init.jsonl`：
 
-- 空桩臂 6 个 run 与两组 without 臂 6 个 run，五项清单逐项相同（工具都是 `Glob,Grep,Read,Skill,Task,TaskStop,ToolSearch`，skill 17 个，slash 命令 45 个）。
-- 唯一差别是 `init.plugins` 多出一项 `eval-noplugin-stub`；它不进模型上下文，首请求输入 token 与 without 臂落在同一区间可以佐证。
+- 空桩臂 6 个 run、stub-ww 的 without 臂 3 个 run、real-ww 的 without#1 与 #2，共 11 个 run，五项清单逐项相同（工具都是 `Glob,Grep,Read,Skill,Task,TaskStop,ToolSearch`，skill 17 个，slash 命令 45 个）。
+- real-ww 的 without#3 是例外：slash 命令 47 个，多出 `extra-usage`、`usage-credits` 两条，首请求输入 token 10412，比其余 without run 多约 96。这两条命令也出现在 real-ww 的 with#1、with#2 里，与臂无关，见第六节第 3 条；多出的 96 token 原因未查。排除这两条后它与上面 11 个 run 相同。
+- 空桩臂与 without 臂在 `init` 里的唯一稳定差别是 `init.plugins` 多出一项 `eval-noplugin-stub`；空桩臂首请求输入 token 10313–10316，落在 without 臂的常见值里，说明这一项不占模型上下文。
 - 空桩臂 trace 里 hook 事件行 0 条，子会话转录里 `hook_additional_context` 0 条；real-ww 的 with 臂分别是 2 条与 4–6 条，without 臂都是 0。
 - real-ww 的 with 臂多出 skill `devkit-discipline:zh-disambiguate`，首请求多约 6.6k token，这是被测插件真实带来的差。
 
@@ -95,9 +99,15 @@ Claude Code 版本：2.1.300（各 `out/*.json` 的 `claudeVersion`）。
 | `graders/` 下，有 frontmatter、无 `type:` | `clause-note.md` | **整个用例加载失败**，stderr：`graders/clause-note.md: frontmatter must include "type:" (regex \| tool_order \| tool_used \| file_exists \| llm \| baseline)`，`1 case file(s) failed to load`，退出码 1 |
 | `prompt.md` frontmatter 加未知键 | `clause: C-001` | **整个用例加载失败**，stderr：`prompt.md: unknown frontmatter key "clause" (expected one of: schema_version, name, description, tags, plugins, runs, expected_outcome, model, max_turns, timeout_seconds, allowed_tools, disallowed_tools, artifact_publish, growthbook_overrides, append_system_prompt, env)`，退出码 1 |
 
+**混合套件**（extras-mixed，入库的 `cases/extras` 整目录 4 例一起跑）：
+
+- 两个坑用例照上表加载失败，stderr 末行 `2 case file(s) failed to load`；另两例照常跑完、全过。坏用例只跳过它自己，不中止整个 suite。
+- `--json` 里 `cases` 只有跑了的 2 例，`aggregates` 是 `casesTotal: 2, casesPassed: 2, overallScore: 1`。顶层字段只有 `schemaVersion, claudeVersion, startedAt, durationSeconds, costUsd, partial, suite, cases, aggregates`，没有记录加载失败的字段。
+- 退出码 1。只看 JSON 会得出「全部通过」，用例少了两个却看不出来。
+
 结论：条款归属说明可以作为独立文件放在用例目录或 `evals/` 根目录，eval 不报错；不能写进 `prompt.md` 的 frontmatter，也不能以带 frontmatter 的 md 形式放进 `graders/`。spec 现有做法「条款归属先只用 `tags`」仍然成立；`tags` 接受自定义字符串值，extras 各用例的 `tags: [extras-probe]` 照常加载。
 
-证据：`out/extras.json`、`out/x-graders-fm.stderr`、`out/x-prompt-fm-key.stderr`；用例在 `cases/extras/evals/`。
+证据：`out/extras.json`、`out/x-graders-fm.stderr`、`out/x-prompt-fm-key.stderr`、`out/extras-mixed.{json,stderr,exit}`；用例在 `cases/extras/evals/`。
 
 ## 四、问题 4：skill 调起的 Python 进程与 `CLAUDE_PLUGIN_DATA`
 
@@ -148,10 +158,10 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/probe.py" --dq-data "${CLAUDE_PLUGIN_DATA}"
 
 ## 六、坑与意外发现
 
-1. **`--ablation none` 下 `arm: with-only` grader 计分**。stub-none 的 trace 显示两个标记 grader 都算进分数（summarize 输出里没有 `(unscored)`），stub-ww 里同样的 grader 标为 `(unscored)`。影响：按臂各跑 `--ablation none` 时，每个臂的分数都会被这些标记拉低或拉高；被测插件臂里标记命中会抬分，「不装」臂里必然不中会压分，臂间相减时这部分差不是被测行为带来的。03 的外围脚本应在算分时只取计分 grader，或者用例里不写 `with-only` 标记、注入核验改走 `--keep-temp` 转录。
+1. **`--ablation none` 下 `arm: with-only` grader 计分**。stub-none 的 trace 显示两个标记 grader 都算进分数（summarize 输出里没有 `(unscored)`），stub-ww 里同样的 grader 标为 `(unscored)`。影响：按臂各跑 `--ablation none` 时，每个臂的分数都会被这些标记拉低或拉高；被测插件臂里标记命中会抬分，「不装」臂里必然不中会压分，臂间相减时这部分差不是被测行为带来的。剔除依据：逐 run 的 `arms.with[].graders[]` 在 none 模式下标成 `withOnly:false, scored:true`，靠它分不出来；`--json` 里用例级的 `cases[].graders[].config.arm` 仍保留 `"with-only"`，按它剔除即可（stub-none.json 实查）。03 的外围脚本应按这个字段只取计分 grader，或者用例里不写 `with-only` 标记、注入核验改走 `--keep-temp` 转录。
 2. **eval 沙箱里每个臂都自带 3 个内置插件**：`init.plugins` 里两臂都有 `cc-plugin-agents-md`、`cc-plugin-plugin-authoring`、`cc-plugin-sec-default`。它们在所有臂里都一样，不影响臂间相减；但「不装」臂并非零插件，与真实用户环境也不同。
-3. **slash 命令清单有与插件无关的抖动**：`extra-usage`、`usage-credits` 两个命令在 real-ww 的 4 个 run 里出现、其余 run 没有，与臂无关。比对模型可见面时这两项要排除。按推断与账号用量状态有关，未核实。
-4. **用例加载失败时退出码同为 1**，与「有用例低于阈值」不可区分。外围脚本要看 `--json` 里的 `aggregates.casesTotal` 与 stderr 的 `failed to load`，不能只看退出码。
+3. **slash 命令清单有与插件无关的抖动**：`extra-usage`、`usage-credits` 两个命令只在 real-ww 的 with#1、with#2、without#3 三个 run 里出现，两臂都有，与臂无关；compare-init 覆盖的其余 12 个 run 都没有。real-ww 各 run 的 slash 数是 with 48 / 48 / 46、without 45 / 45 / 47，减去这两条与 with 臂的 `devkit-discipline:zh-disambiguate` 后都是 45。比对模型可见面时这两项要排除。推断与账号用量状态有关，未核实。
+4. **用例加载失败不进 JSON，退出码与「低于阈值」同为 1**。加载失败的用例不出现在 `cases` 里，`aggregates.casesTotal` 也不计它（extras-mixed 实测，见第三节）。外围脚本不能只看退出码，也不能只看 JSON：要么事先数好用例目录数、与 `casesTotal` 比对，要么解析 stderr 的 `N case file(s) failed to load`。按臂各跑一次时，空桩臂在默认阈值 1.0 下几乎必然退出码 1，退出码 1 不能当运行失败处理。
 
 ## 七、只是推断或未核实的结论
 
@@ -165,9 +175,9 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/probe.py" --dq-data "${CLAUDE_PLUGIN_DATA}"
 本目录 `.scratch/devkit-plugin-eval/probe/` 下：
 
 - `cases/`：`stub/`（空桩插件 + dispatch-model 用例）、`extras/`（附加文件探针，4 个用例）、`envprobe/`（`CLAUDE_PLUGIN_DATA` 探针 skill 与用例）。
-- `out/`：7 次 eval 的 `--json` 输出、stdout、stderr、exit、start、end、node、cmd；`compare-init.jsonl`（逐 run 结构比对）；`tabulate.txt`（花费与耗时汇总）；`realsession.out` / `realsession.exit`（真实会话旁证）。
+- `out/`：8 次 eval 的 `--json` 输出、stdout、stderr、exit、start、end、node、cmd；`compare-init.jsonl`（逐 run 结构比对）；`tabulate.txt`（花费与耗时汇总）；`realsession.out` / `realsession.exit`（真实会话旁证）。
 - `excerpts/`：`docs-quotes.md`（官方文档原文）、`cleanup-period-days-binary.txt`（可执行文件字符串摘录）。
-- `tools/`：`run.sh`、`realsession.sh`、`summarize.js`、`compare-init.js`、`tabulate.js`。
+- `tools/`：`run.sh`、`realsession.sh`、`summarize.js`（与 plugin-eval 下同名文件逐字相同，拷来是为了本目录自足）、`compare-init.js`（沙箱清掉后自动改读 `traces/` 本地副本）、`tabulate.js`。
 - `traces/`：19 个 run 的 trace.jsonl、子会话转录与 `source.txt`（原沙箱路径）。**未入库**：子会话转录含 eval 注入的账号邮箱，本仓公开，已加进仓根 `.gitignore`。
 
 仓外未清理：`/Users/zhangq/.claude/jobs/7058cce7/tmp/p01/`（插件副本与 `evals/results/` 下的 report.html）、`/private/tmp/e-*`（本轮 keep-temp 保留的 19 个沙箱，逐个路径见 `traces/*/*/source.txt`）、`/Users/zhangq/.claude/plugins/data/eval-envprobe-inline/`（真实会话旁证自动建的空目录）。
