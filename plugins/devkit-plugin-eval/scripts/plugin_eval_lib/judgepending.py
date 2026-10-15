@@ -109,7 +109,8 @@ def _apply(subject, item, code, now, source):
         if s.get('gold_id'):
             subject.stage_delete('../../%s/%s.json' % (judge.GOLD_DIR, s['gold_id']))
         s['gold_id'] = None
-    doc['scores'] = judge.compute_scores(samples)
+    # 回归守护用例（票 11）不计入评委的「当前版 − 不装」差，与对照收尾时 baseline.apply_to_record 同口径
+    doc['scores'] = judge.compute_scores(samples, exclude=((subject.rec.get('baseline') or {}).get('cases') or {}))
     subject.stage_json(judge.JUDGE_FILE, doc)
     subject.rec['judge'] = judge.summarize(doc)
     report = subject.read_text('report.md')

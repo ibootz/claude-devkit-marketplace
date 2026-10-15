@@ -575,13 +575,14 @@ pending.register_type(CASE_DRAFT)
 # ---------------- 命令行 ----------------
 
 def add_parser(sub):
-    p = sub.add_parser('drafts', help='用例草稿：write 让 AI 起草并出待审页；page 只出待审页；list 看草稿区；'
-                                      'sync 把退役条款的用例退回草稿区')
+    p = sub.add_parser('drafts', help='用例草稿：write 让 AI 起草并出待审页；page 只出待审页；list 只读地看草稿区；'
+                                      'sync 把退役条款的用例退回草稿区（write、page 也会先做这一步）')
     p.add_argument('action', choices=('write', 'page', 'list', 'sync'))
     p.add_argument('name')
     p.add_argument('--model', help='write：起草用的模型，缺省 %s' % 'claude-fable-5-1')
     p.add_argument('--limit', type=int, default=20, help='write：本次最多起草几个目标（条款 / skill / agent 的缺口），默认 20')
-    p.add_argument('--clauses', help='write：只起草这些条款，逗号分隔，如 C001,C007（含之前判为离线评不了的）')
+    p.add_argument('--clauses', help='write：只起草这些条款，逗号分隔，如 C001,C007（含之前判为离线评不了的）；'
+                                     '点名时已打回的草稿不算覆盖，会重写。不点名时打回的草稿仍算该条款已有草稿，不自动重写')
     p.add_argument('--no-page', action='store_true', help='write：只写草稿，不出待审页')
     return p
 
@@ -610,17 +611,18 @@ def main(args, data_dir):
         if args.action == 'write':
             from . import drafter
             return drafter.main(args, data_dir)
+        if args.action == 'list':
+            # 只读（审查 11 应修 3）：不退回退役用例、不清空目录。退回会把用例移出 evals/、改变 evals 指纹，
+            # 有对照在跑或待续跑时续跑会被拒；退回只在 sync / page / write 时做
+            cls = classify(repo, args.name, plugin_dir)
+            print('草稿区：%s' % drafts_root(repo, args.name))
+            _print_classes(cls)
+            return 0
         done = sync_rehang(repo, args.name, plugin_dir)
         if args.action == 'sync':
             print('退役条款的用例：处理 %d 条建议' % len(done))
             for case, res in done:
                 print('  %s：%s' % (case, res))
-            return 0
-        if args.action == 'list':
-            prune_empty(repo, args.name)
-            cls = classify(repo, args.name, plugin_dir)
-            print('草稿区：%s' % drafts_root(repo, args.name))
-            _print_classes(cls)
             return 0
         run_dir, page, cls = create_batch(data_dir, args.name)
         if page is None:

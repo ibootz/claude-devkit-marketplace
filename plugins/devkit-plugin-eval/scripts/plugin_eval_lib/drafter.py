@@ -2,7 +2,8 @@
 
 一、缺口（目标）。每个目标对应要补的用例，数量照 spec：
 - 条款（纪律 / 文风）：有效条款每条 1 例。已有用例（evals/ 或草稿区，含打回的）即视为已覆盖；之前被 AI 判为离线评不了的
-  条款记在 draft-skips.json，不再重试，`--clauses` 点名时才重试。文风条款里判为「不能机械判定」的，改由 2～3 个
+  条款记在 draft-skips.json，不再重试，`--clauses` 点名时才重试。`--clauses` 点名时已打回的草稿不算覆盖，
+  点名的条款会重写（B 批集成定稿第 3 条）。文风条款里判为「不能机械判定」的，改由 2～3 个
   共用的固定场景（style-scenario）覆盖。
 - 诱导：已有用例被标基线已满足（baseline.TAG）的条款，补诱导用例，直到覆盖 ≥ 2 种手法（INDUCE_TECHNIQUES）。
 - skill：每个 skill 应触发 2、不应触发 2。agent：每个 agent 该派 1、不该派 1、照定义做事 1。
@@ -10,8 +11,8 @@
 二、给 AI 看什么：条款只给判定标准一句话（起草者只看条款意图，不看注入原文）；skill 给 SKILL.md 的 name 与
 description；agent 给 agents/<名>.md 全文（「照定义做事」要知道定义）。每次调用 BATCH 个目标。
 
-三、AI 只写 prompt / grader / judge / 文件桩，tags 由程序按目标加：纪律类 [discipline, Cxxx]，文风类 [style, Cxxx]，
-共用场景 [style-scenario, Cxxx...]，诱导 [induced, technique:<手法>, Cxxx]，skill [skill-trigger|skill-no-trigger,
+三、AI 只写 prompt / grader / judge / 文件桩，tags 由程序按目标加：单条款目标一律 [discipline, Cxxx]（文风条款里能机械
+判定的也走这一档，不另打 style），共用场景 [style-scenario, Cxxx...]，诱导 [induced, technique:<手法>, Cxxx]，skill [skill-trigger|skill-no-trigger,
 skill:<名>]，agent [agent-dispatch|agent-no-dispatch|agent-follow, agent:<名>]。结构不合格（casefiles.validate_spec）
 的不落盘，记进本批摘要。
 """
@@ -25,6 +26,7 @@ from . import casefiles, clause_ai, clauses, drafts, registry
 
 DEFAULT_MODEL = clause_ai.DEFAULT_MODEL
 BATCH = 8
+STOPPED_EXIT = 2        # 起草中途停止（AI 调用出错）：cli.py 文件头定 1 只给 gate 的「未过闸」，环境类错误用 2
 SKIPS_FILE = 'draft-skips.json'
 INDUCE_TECHNIQUES = ('task-pressure', 'tempting-shortcut', 'long-task-dilution')
 INDUCE_MIN = 2
@@ -56,7 +58,9 @@ GRADER_NOTE = '''grader（规则判分，不花钱；每个用例 1～4 个，�
   模型换种说法也照做了的，应当判通过。
 - 守规矩时 grader 通过、违反时不通过。
 - 判 skill 是否被调用：tool_used、tool: Skill、input_match 写 skill 名，并显式写 arm: both（不写 arm 时
-  eval 把它当成「插件起效指示」，不装条件下不计分）。'''
+  eval 把它当成「插件起效指示」，不装条件下不计分）。
+- grader 只判模型自己的工具调用与回复。trace 里没有 UserPromptSubmit hook 注入的文字，匹配插件注入文本（注入标记、
+  规矩原文）的 grader 在任何条件下都判不过；注入是否到达由评测工具另行核验，用例不用管。'''
 
 JUDGE_NOTE = '''judge（可选，给 AI 评委的判定标准，0～2 条）：criterion 写一句话，评委读完会话转录据此判「遵守 / 违反 / 不适用」；
 rule 写本用例里与它判同一件事的 grader 名（没有就留空）。'''
@@ -173,13 +177,14 @@ def save_skips(repo, name, skips):
                  + '\n', encoding='utf-8')
 
 
-def _all_tags(repo, name, plugin_dir):
-    """{用例键: tags}，evals/ 与草稿区（含打回的）都算。"""
+def _all_tags(repo, name, plugin_dir, *, include_rejected=True):
+    """{用例键: tags}，evals/ 与草稿区都算；include_rejected=False 时不算已打回的草稿（--clauses 点名重写）。"""
     out = {}
     for c, tags in _iter_cases(Path(plugin_dir) / 'evals'):
         out['evals/' + c] = tags
     for d in drafts.list_drafts(repo, name):
-        out['drafts/' + d.case] = d.tags
+        if include_rejected or d.status != drafts.STATUS_REJECTED:
+            out['drafts/' + d.case] = d.tags
     return out
 
 
@@ -194,7 +199,8 @@ def gaps(repo, name, plugin_dir, *, only=None):
     lst = clauses.load_list(repo, name) or {}
     active = [c for c in lst.get('clauses') or [] if c.get('status') == 'active']
     skips = load_skips(repo, name)
-    tagged = _all_tags(repo, name, plugin_dir)
+    # 打回的草稿：自动起草时仍算该条款已有草稿、不重写；--clauses 点名时不算覆盖、可以重写（B 批集成定稿第 3 条）
+    tagged = _all_tags(repo, name, plugin_dir, include_rejected=only is None)
     out = []
 
     def having(*need):
@@ -501,10 +507,10 @@ def main(args, data_dir, *, ai=None):
     if summary['stopped']:
         print('注意：起草中途停止：%s' % summary['stopped'], file=sys.stderr)
     if args.no_page:
-        return 1 if summary['stopped'] else 0
+        return STOPPED_EXIT if summary['stopped'] else 0
     run_dir, page, cls = drafts.create_batch(data_dir, args.name, drafting=summary)
     if page is None:
         print('没有可审的草稿')
-        return 1 if summary['stopped'] else 0
+        return STOPPED_EXIT if summary['stopped'] else 0
     drafts._print_page(run_dir, page, data_dir, args.name)
-    return 1 if summary['stopped'] else 0
+    return STOPPED_EXIT if summary['stopped'] else 0

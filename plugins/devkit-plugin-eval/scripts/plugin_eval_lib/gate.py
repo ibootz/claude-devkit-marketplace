@@ -40,6 +40,7 @@ MAIN_REF_CANDIDATES = ('origin/main', 'main', 'origin/master', 'master')
 
 BASIS_COMPARE = 'compare'
 BASIS_GATE = 'gate'
+DEFAULT_THRESHOLD = 1.0       # --run-subset 的用例分阈值缺省值：每例全部 run 都过（B 批集成定稿第 1 条）
 SKIPPED_KINDS = ('clauses', 'drafts', 'baseline')   # 条款清单、用例草稿批次、基线判定（票 11）：不是评测结果，扫 runs/ 时跳过
 JUDGE_UNTRUSTED_NOTE = '本报告 AI 判分不采信，已审时由用户判断'
 DIRTY_BLOCKER = '插件目录有未提交改动（不含 evals/），先提交再跑 gate'
@@ -299,8 +300,10 @@ def assess_run(rec, *, version, plugin_fp, run_id='?'):
         if judge.get('trusted') is False:
             notes.append(JUDGE_UNTRUSTED_NOTE)
     elif kind == BASIS_GATE:
-        if rec.get('passed') is not True:
+        # 不完整的规则子集（含「没有可计分的规则 grader」）已由完整性一条排除；不再报「未通过」，免得读成插件退步
+        if rec.get('complete') is True and rec.get('passed') is not True:
             reasons.append('规则子集未通过（passed=%r）' % rec.get('passed'))
+        notes.append('规则子集 %s' % threshold_text(rec.get('threshold')))
         if mixed:
             reasons.append('Claude Code 版本混用（%s）：规则子集无人审阅，不作依据' % '、'.join(versions))
     return Assessment(run_id, kind, plugin.get('version'), not reasons, reasons, notes,
@@ -431,8 +434,9 @@ def skip_records(hists):
 
 
 def evaluate(plugin_dir, *, main_ref=None, since=None, platform=None, git=None, run_tests=True,
-             unit_runner=None, tmp_parent=None, env=None, now=None, capture=None):
-    """env：取注入文字时 hook 的环境（缺省本进程环境去掉 asdf shims）；now / capture 只给单测固定时刻、替换取注入文字。"""
+             unit_runner=None, tmp_parent=None, env=None, now=None, capture=None, threshold=DEFAULT_THRESHOLD):
+    """env：取注入文字时 hook 的环境（缺省本进程环境去掉 asdf shims）；now / capture 只给单测固定时刻、替换取注入文字。
+    threshold：--run-subset 用的用例分阈值，只写进输出（rule_subset_threshold），不影响对已有记录的判定。"""
     target = locate(plugin_dir)
     git = shutil.which('git') if git is None else git
     plugin_fp = fingerprint.plugin_fingerprint(target.plugin_dir, target.extra_exclude)
@@ -512,11 +516,18 @@ def evaluate(plugin_dir, *, main_ref=None, since=None, platform=None, git=None, 
 
     passed = (eval_ok or via_skip) and tests_ok and not blockers
 
-    # ---- 提示（票 15）：只提示，不影响是否过闸 ----
-    suggestion, hint_notes = gatehints.compare_suggestion(
-        target=target, runs=runs, plugin_fp=plugin_fp, git=git if top is not None else None, top=top, segs=segs,
-        env=evalrun.child_env(env), tmp_parent=tmp_parent, capture=capture)
-    reminder = reviewgap.reminder(target.runs_dir.parent / 'reviews', now=now)
+    # ---- 提示（票 15）：只提示，不影响是否过闸；算提示时出任何错只记一句，不中止闸门 ----
+    try:
+        suggestion, hint_notes = gatehints.compare_suggestion(
+            target=target, runs=runs, plugin_fp=plugin_fp, git=git if top is not None else None, top=top, segs=segs,
+            env=evalrun.child_env(env), tmp_parent=tmp_parent, capture=capture)
+    except Exception as e:   # noqa: BLE001 —— 提示不得改变闸门结论（B 批集成，审查 15 应修 1）
+        suggestion, hint_notes = None, ['提示计算出错：「建议跑对照」没算成（%s: %s）' % (type(e).__name__, e)]
+    try:
+        reminder = reviewgap.reminder(target.runs_dir.parent / 'reviews', now=now)
+    except Exception as e:   # noqa: BLE001
+        reminder = None
+        hint_notes = hint_notes + ['提示计算出错：距上次复盘的天数没算成（%s: %s）' % (type(e).__name__, e)]
     notes += hint_notes
     data = {
         'plugin': target.name, 'version': target.version, 'plugin_dir': str(target.plugin_dir),
@@ -531,13 +542,25 @@ def evaluate(plugin_dir, *, main_ref=None, since=None, platform=None, git=None, 
         'skip_records': skip_records(hists), 'main_ref': main_used, 'leaks': leaks,
         'notes': ([suggestion['line']] if suggestion else []) + ([reminder] if reminder else []) + notes + leak_notes,
         'compare_suggestion': suggestion, 'review_reminder': reminder,
-        'rule_subset_needed': subset_needed_reason(gated, eval_ok, skipped, blockers),
+        'rule_subset_needed': subset_needed_reason(gated, eval_ok, skipped, blockers, tests_ok=tests_ok,
+                                                   in_git=top is not None),
+        'rule_subset_threshold': threshold,
     }
     return GateResult(passed, data, render(data, target))
 
 
-def subset_needed_reason(gated, eval_ok, skipped, blockers):
-    """规则子集该不该跑：该跑返回 None，否则返回不跑的原因。"""
+def threshold_text(threshold):
+    """报告与 gate 输出里对 threshold 的一句话说明（B 批集成定稿第 1 条）。"""
+    if isinstance(threshold, (int, float)) and threshold >= 1.0:
+        return 'threshold=%s：每例全部 run 都过' % threshold
+    return 'threshold=%s：每例各 run 规则分的平均 ≥ threshold' % threshold
+
+
+def subset_needed_reason(gated, eval_ok, skipped, blockers, *, tests_ok=True, in_git=True):
+    """规则子集该不该跑：该跑返回 None，否则返回不跑的原因。
+
+    单测声明未通过、不在 git 仓时也不跑（审查 15 应修 2）：前者修好单测后插件内容指纹就变了，这次结果作废；
+    后者读不到 dirty，结果闸门不采信。两种情况跑了都白花钱。"""
     if gated:
         return '闸门内版本只认已审的离线对照，规则子集不作依据'
     if eval_ok:
@@ -546,6 +569,10 @@ def subset_needed_reason(gated, eval_ok, skipped, blockers):
         return '升版提交声明了 eval-skip:'
     if blockers:
         return '有与评测依据无关的未过闸原因（%s）：先处理；dirty 的结果不计入闸门' % '；'.join(blockers)
+    if not tests_ok:
+        return '单测声明未通过：先修单测（修完插件内容指纹会变，现在跑的规则子集会作废）'
+    if not in_git:
+        return '不在 git 仓里（或没有提交）：读不到工作区是否有未提交改动，规则子集的结果闸门不采信'
     return None
 
 
@@ -581,7 +608,8 @@ def render(d, target):
     else:
         lines.append('- 没有可采信的记录：需要%s' % ('已审的离线对照' if d['gated'] else '已审的离线对照，或通过的规则子集'))
         if d.get('rule_subset_needed') is None:
-            lines.append('  - 跑规则子集：gate <插件目录> --run-subset（要先登记；只跑当前版一臂、真跑模型、不调 AI 评委）')
+            lines.append('  - 跑规则子集：gate <插件目录> --run-subset（要先登记；只跑当前版一臂、真跑模型、不调 AI 评委；'
+                         '默认每例 3 次，%s）' % threshold_text(d.get('rule_subset_threshold', DEFAULT_THRESHOLD)))
     if d['rejected_same_version']:
         lines += ['', '同版本但未采信的记录：']
         for a in d['rejected_same_version']:
@@ -618,7 +646,8 @@ def render(d, target):
 
 def main(args):
     try:
-        res = evaluate(args.plugin_dir, main_ref=args.main_ref, since=args.since)
+        threshold = getattr(args, 'threshold', DEFAULT_THRESHOLD)
+        res = evaluate(args.plugin_dir, main_ref=args.main_ref, since=args.since, threshold=threshold)
         if getattr(args, 'run_subset', False):
             res = _run_subset(args, res)
     except GateError as e:
@@ -642,10 +671,12 @@ def _run_subset(args, res):
         data_dir = datadir.resolve_data_dir(args.data_dir)
         runner = evalrun.runner_with_timeout(args.eval_timeout * 60 if args.eval_timeout else None)
         sub = gaterun.run_subset(data_dir, res.data['plugin'], runs=args.runs, concurrency=args.concurrency,
-                                 model=args.model, runner=runner, plugin_dir=res.data['plugin_dir'])
+                                 model=args.model, runner=runner, plugin_dir=res.data['plugin_dir'],
+                                 threshold=res.data['rule_subset_threshold'])
     except (registry.RegistryError, datadir.DataDirError, evalrun.ClaudeNotFound, compare.CompareError,
             preflight.PreflightFailed, gaterun.GateRunError) as e:
         raise GateError('规则子集没跑成：%s' % e)
     for ln in gaterun.console_lines(sub):
         print(ln, file=sys.stderr)
-    return evaluate(args.plugin_dir, main_ref=args.main_ref, since=args.since)
+    return evaluate(args.plugin_dir, main_ref=args.main_ref, since=args.since,
+                    threshold=res.data['rule_subset_threshold'])

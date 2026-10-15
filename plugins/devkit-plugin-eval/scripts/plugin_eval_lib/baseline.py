@@ -159,10 +159,8 @@ def run_baseline(data_dir, name, *, cases=None, recheck=False, runs=RUNS, concur
     run_dir.mkdir(parents=True)
     work = Path(tempfile.mkdtemp(prefix='devkit-plugin-eval-baseline-', dir=tmp_parent))
     try:
-        subset = work / 'evals'
-        subset.mkdir()
-        for c in todo:      # 只拷要判的用例：eval 跑整个 evals/，其余用例不该花钱
-            arms.copy_tree(evals_src / c, subset / c)
+        # 只留要判的用例（eval 跑整个 evals/，其余用例不该花钱）；evals/ 根下的共用文件（mocks/ 等）照留，与对照、规则子集同口径
+        subset = resume._subset_evals(evals_src, set(todo), work / 'evals')
         spec = arms.ArmSpec('none', '不装', None)
         ctx = {
             'assembly_root': work / 'arms', 'evals_src': subset, 'extra_exclude': extra_exclude,
@@ -238,10 +236,17 @@ def _pass_count(case, threshold):
 
 
 def apply_to_record(rec, satisfied):
-    """compare.finalize_run 收尾用：带 TAG 的用例从「当前版 − 不装」的差里拿掉，改记回归结论。原地改 rec。"""
+    """compare.finalize_run 收尾用：带 TAG 的用例从「当前版 − 不装」的差里拿掉，改记回归结论。原地改 rec。
+
+    规则分的差（rec['delta']）与 AI 评委的差（rec['judge']['scores']）都剔除（B 批集成，审查 11 应修 2）；
+    所以要在 rec['judge'] 写好之后调。评委样本经待审页裁定后重算差时，judgepending 按 rec['baseline'] 同样剔除。"""
     satisfied = sorted(c for c in satisfied if c in (rec.get('delta') or {}).get('cases', {}))
     if not satisfied:
         return rec
+    j = rec.get('judge')
+    if isinstance(j, dict) and isinstance(j.get('scores'), dict):
+        from . import judge     # 延迟导入：judge 体量大，基线判定命令用不上
+        judge.delta_excluding(j['scores'], satisfied)
     d = rec['delta']
     cases = d.get('cases') or {}
     raw = {c: cases.get(c) for c in satisfied}
@@ -285,6 +290,8 @@ def report_sections(rec):
     lines = ['', '## 回归守护（基线已满足的用例）', '',
              '这些用例在不装插件时就能 ≥ 2/3 通过（`baseline` 判定，tag `%s`），不出「当前版 − 不装」的差，'
              '不计入总体差；只比上一版有没有退化（没有上一版臂时看当前版是否仍 ≥ 2/3 通过）。' % b['tag'], '',
+             '退化判据从严：当前版分低于上一版分就标退化。每臂 %s 次，单次波动也会标退化，请看 trace 判断。'
+             % ((rec.get('environment') or {}).get('runs_per_case') or 'N'), '',
              '| 用例 | 回归结论 | 当前版分 | 当前版通过 / 有效 run | 上一版分 | 不装分 |', '|---|---|---|---|---|---|']
     f = lambda x: '—' if x is None else '%.2f' % x
     for c, v in sorted(b['cases'].items()):

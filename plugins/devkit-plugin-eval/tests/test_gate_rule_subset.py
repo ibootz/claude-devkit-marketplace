@@ -376,6 +376,112 @@ class ReviewReminderTest(Base):
         self.assertIsNotNone(reviewgap.reminder(d, now=datetime(2026, 10, 22, 20, 0, tzinfo=timezone.utc), tz=tz8))
         self.assertIsNone(reviewgap.reminder(d, now=datetime(2026, 10, 22, 15, 0, tzinfo=timezone.utc), tz=tz8))
 
+    def test_never_reviewed_mentions_registry(self):
+        self.assertIn('未登记需先登记', self.gate().data['review_reminder'])
+
+
+# ---------------- B 批集成：审查 15 应修与定稿口径 ----------------
+
+def failing_tests(plugin_dir, platform=None):
+    return {'plugin': Path(plugin_dir).name, 'declaration': 'declared', 'errors': [], 'messages': [],
+            'tests': [{'index': 0, 'run': ['python3', '-m', 'unittest'], 'status': 'failed', 'code': 1, 'ms': 10,
+                       'output': 'FAILED'}]}
+
+
+class HintErrorsDoNotBreakGateTest(Base):
+    def test_corrupt_clause_list_gate_still_concludes(self):
+        """没有上次对照、clauses.json 损坏：「建议跑对照」算不成，gate 照常给结论（审查 15 应修 1）。"""
+        write(self.r.root / 'plugin-evals' / NAME / 'clauses.json', '{坏的 JSON')
+        res = self.gate(tmp_parent=self.asm)
+        self.assertFalse(res.passed)      # 缺依据：照常判未过闸
+        self.assertIsNone(res.data['compare_suggestion'])
+        self.assertTrue(any(n.startswith('提示计算出错') for n in res.data['notes']), res.data['notes'])
+        self.assertTrue(res.lines[-1].startswith('结论：未过闸'))
+
+    def test_reminder_error_recorded_in_notes(self):
+        with mock.patch.object(reviewgap, 'reminder', side_effect=OSError('读不了 reviews/')):
+            res = self.gate(tmp_parent=self.asm)
+        self.assertIsNone(res.data['review_reminder'])
+        self.assertTrue(any('距上次复盘的天数没算成' in n for n in res.data['notes']))
+
+    def test_cli_exit_code_unaffected(self):
+        write(self.r.root / 'plugin-evals' / NAME / 'clauses.json', '{坏的 JSON')
+        with mock.patch.object(gate.unittests, 'run_plugin', ok_tests), \
+                redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            code = cli.main(['gate', str(self.r.plugin)])
+        self.assertEqual(code, 1)         # 1 = 未过闸，不是崩溃
+
+
+class SubsetNeededReasonTest(Base):
+    def test_failing_unit_tests_do_not_run_subset(self):
+        res = self.gate(unit_runner=failing_tests)
+        self.assertIn('单测声明未通过', res.data['rule_subset_needed'])
+        self.assertFalse(any('--run-subset' in ln for ln in res.lines))
+
+    def test_cli_failing_tests_never_calls_run_subset(self):
+        err = io.StringIO()
+        with mock.patch.object(gaterun, 'run_subset', boom), \
+                mock.patch.object(gate.unittests, 'run_plugin', failing_tests), \
+                redirect_stdout(io.StringIO()), redirect_stderr(err):
+            code = cli.main(['--data-dir', str(self.data), 'gate', str(self.r.plugin), '--run-subset'])
+        self.assertEqual(code, 1)
+        self.assertIn('不跑规则子集：单测声明未通过', err.getvalue())
+
+    def test_not_in_git_does_not_run_subset(self):
+        res = self.gate(git='')           # 读不到 git：top=None
+        self.assertIn('不在 git 仓里', res.data['rule_subset_needed'])
+
+    def test_reason_order(self):
+        self.assertIsNone(gate.subset_needed_reason(False, False, [], [], tests_ok=True, in_git=True))
+        self.assertIn('单测', gate.subset_needed_reason(False, False, [], [], tests_ok=False, in_git=False))
+        self.assertIn('git', gate.subset_needed_reason(False, False, [], [], tests_ok=True, in_git=False))
+
+
+class ThresholdTest(Base):
+    def test_default_threshold_text_in_report_and_gate(self):
+        res = self.subset()
+        self.assertEqual(res.record['threshold'], 1.0)
+        self.assertIn('threshold=1.0：每例全部 run 都过', (res.run_dir / 'report.md').read_text(encoding='utf-8'))
+        g = self.gate()
+        self.assertTrue(g.passed)
+        self.assertIn('规则子集 threshold=1.0：每例全部 run 都过', '\n'.join(g.lines))
+        self.assertEqual(g.data['rule_subset_threshold'], 1.0)
+
+    def test_cli_threshold_passed_to_subset(self):
+        registry.register(self.data, NAME, self.r.root)
+        seen = {}
+
+        def spy(*a, **kw):
+            seen.update(kw)
+            raise gaterun.GateRunError('只看参数')
+        with mock.patch.object(gaterun, 'run_subset', spy), mock.patch.object(gate.unittests, 'run_plugin', ok_tests), \
+                redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            code = cli.main(['--data-dir', str(self.data), 'gate', str(self.r.plugin), '--run-subset',
+                             '--threshold', '0.5'])
+        self.assertEqual(code, 2)
+        self.assertEqual(seen['threshold'], 0.5)
+
+    def test_gate_hint_line_mentions_threshold(self):
+        self.assertTrue(any('threshold=1.0：每例全部 run 都过' in ln for ln in self.gate().lines))
+
+
+class NoScorableGraderTest(Base):
+    def test_no_scorable_rule_grader_is_incomplete_not_failed(self):
+        """定稿第 6 条：全部用例都没有可计分的规则 grader → complete=False；gate 不采信，也不报「规则子集未通过」。"""
+        unscored = {'score': None, 'cases': {'case-a': {'score': None, 'run_scores': [None, None],
+                                                        'excluded_graders': {}, 'no_scored_graders': True}},
+                    'invalid_run_count': 0}
+        with mock.patch.object(gaterun.scoring, 'score_arm', return_value=unscored):
+            res = self.subset()
+        self.assertFalse(res.record['complete'])
+        self.assertEqual(res.exit_code, 3)
+        self.assertIn(gaterun.NO_SCORABLE_REASON, res.record['incomplete_reasons'])
+        g = self.gate()
+        self.assertFalse(g.passed)
+        reasons = '；'.join(g.data['rejected_same_version'][0]['reasons'])
+        self.assertIn('没有可计分的规则 grader', reasons)
+        self.assertNotIn('规则子集未通过', reasons)
+
 
 if __name__ == '__main__':
     unittest.main()

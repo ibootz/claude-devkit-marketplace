@@ -1,7 +1,7 @@
 """命令行：register / list / check / compare / resume / pending / clauses / review / gate / drafts / baseline。
 
-退出码：0 成功；2 用法、登记、环境类错误（含未登记、前置检查硬项失败）；3 对照跑完但结果不完整（用例加载失败、run 出错等）。
-gate 另用 1 表示未过闸。
+退出码：0 成功；2 用法、登记、环境类错误（含未登记、前置检查硬项失败、drafts write 起草中途停止）；
+3 对照跑完但结果不完整（用例加载失败、run 出错等）。gate 另用 1 表示未过闸，1 只给 gate 用。
 """
 import argparse
 import json
@@ -74,6 +74,8 @@ def _parser():
     g.add_argument('-j', '--concurrency', type=int, default=3, help='同 --run-subset：eval 并发数，默认 3')
     g.add_argument('--model', help='同 --run-subset：覆盖被测模型（传给 eval --model）')
     g.add_argument('--eval-timeout', type=float, default=0, help='同 --run-subset：eval 超时（分钟），默认 0 不限时')
+    g.add_argument('--threshold', type=float, default=1.0,
+                   help='同 --run-subset：判「是否通过」的用例分阈值，默认 1.0，即每例全部 run 都过')
 
     clauses.add_parser(sub)
     review.add_parser(sub)

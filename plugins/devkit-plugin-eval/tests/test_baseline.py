@@ -2,6 +2,7 @@
 import io
 import json
 import unittest
+from unittest import mock
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
 from pathlib import Path
@@ -134,6 +135,37 @@ class RunBaselineTest(unittest.TestCase):
         self.assertIn('**低于基线**', report)
         self.assertIn('不含 1 个回归守护用例', report)
 
+    def test_subset_keeps_shared_files_under_evals_root(self):
+        """审查 11 应修 1：基线运行的 evals 子集保留 evals/ 根下的共用文件（mocks/ 等），与对照同口径。"""
+        write(self.plugin / 'evals' / 'mocks' / 'server.json', '{"tools": []}')
+        seen = []
+        inner = ScriptedEval(self.sandboxes, lambda *a: True)
+
+        def spy(cmd, cwd, env, log_dir):
+            seen.append((Path(cmd[3]) / 'evals' / 'mocks' / 'server.json').is_file())
+            return inner(cmd, cwd, env, log_dir)
+        baseline.run_baseline(self.data, NAME, runner=spy, claude='/fake/claude', tmp_parent=self.asm,
+                              sandbox_roots=[self.sandboxes], preflight_check=passing_preflight, log=SILENT,
+                              now=at(4), cases=['easy'])
+        self.assertEqual(seen, [True])
+        self.assertEqual([n for arm, n in inner.seen], [['easy', 'mocks']])   # 用例只有 easy；mocks/ 不是用例目录
+
+    def test_baseline_never_counts_with_only_graders(self):
+        """B 批集成第三节第 4 条：基线判据不传 count_with_only，不装臂里 with-only 的 grader 照旧剔除。"""
+        from plugin_eval_lib import scoring
+        calls = []
+        orig = scoring.score_arm
+
+        def spy(agg, *a, **kw):
+            calls.append(kw)
+            return orig(agg, *a, **kw)
+        with mock.patch.object(baseline.scoring, 'score_arm', spy):
+            _, (_, res) = self.run_bl(lambda arm, n, i: True, cases=['easy'])   # marker（with-only）在不装臂判不过
+        self.assertTrue(calls)
+        self.assertFalse(any(kw.get('count_with_only') for kw in calls))
+        self.assertEqual(res['easy']['run_scores'], [1.0, 1.0, 1.0])
+        self.assertEqual(res['easy']['verdict'], 'satisfied')
+
     def test_cli_baseline_subcommand_registered(self):
         args = cli._parser().parse_args(['baseline', NAME, '--case', 'easy', '--recheck'])
         self.assertEqual((args.cmd, args.case, args.recheck, args.runs), ('baseline', ['easy'], True, 3))
@@ -154,9 +186,43 @@ class ApplyToRecordTest(unittest.TestCase):
         self.assertEqual(rec['delta']['overall'], 0.5)
         self.assertEqual(rec['baseline']['regressed'], ['d', 'e'])
         self.assertIn('**退化**', '\n'.join(baseline.report_sections(rec)))
+        self.assertIn('单次波动也会标退化，请看 trace 判断', '\n'.join(baseline.report_sections(rec)))
         untouched = {'delta': {'cases': {'a': 0.0}, 'overall': 0.0}}
         baseline.apply_to_record(untouched, set())
         self.assertNotIn('baseline', untouched)
+
+
+class JudgeDeltaExcludesGuardedTest(unittest.TestCase):
+    """审查 11 应修 2：AI 评委的「当前版 − 不装」差同样不含回归守护用例，报告注明「不含 N 个」。"""
+
+    def rec(self):
+        return {'threshold': 1.0, 'delta': {'cases': {'a': 0.0, 'b': 1.0}, 'overall': 0.5},
+                'arms': {'current': {'cases': {'a': {'score': 1.0, 'run_scores': [1.0]},
+                                               'b': {'score': 1.0, 'run_scores': [1.0]}}},
+                         'none': {'cases': {'a': {'score': 1.0}, 'b': {'score': 0.0}}}},
+                'judge': {'samples': 4, 'agreed': 4, 'disagreements': 0, 'errors': 0, 'spot_checks': 0,
+                          'user_decided': 0, 'gold': {}, 'usage': {}, 'trusted': None, 'passes': 2,
+                          'scores': {'arms': {'current': {'score': 0.5, 'cases': {'a': 0.0, 'b': 1.0}},
+                                              'none': {'score': 0.5, 'cases': {'a': 1.0, 'b': 0.0}}},
+                                     'delta_current_vs_none': 0.0}}}
+
+    def test_apply_to_record_excludes_from_judge_delta(self):
+        from plugin_eval_lib import judgereport
+        rec = baseline.apply_to_record(self.rec(), {'a'})
+        sc = rec['judge']['scores']
+        self.assertEqual(sc['delta_current_vs_none'], 1.0)          # 只剩 b：1 − 0
+        self.assertEqual(sc['excluded_baseline_satisfied'], ['a'])
+        self.assertIn('差（当前版 − 不装，不含 1 个回归守护用例）：+1.00', judgereport.section_body(rec))
+
+    def test_compute_scores_after_reply_uses_same_exclusion(self):
+        from plugin_eval_lib import judge
+        samples = [{'arm': 'current', 'case': 'a', 'final_verdict': 'fail'},
+                   {'arm': 'none', 'case': 'a', 'final_verdict': 'pass'},
+                   {'arm': 'current', 'case': 'b', 'final_verdict': 'pass'},
+                   {'arm': 'none', 'case': 'b', 'final_verdict': 'fail'}]
+        self.assertEqual(judge.compute_scores(samples)['delta_current_vs_none'], 0.0)
+        sc = judge.compute_scores(samples, exclude={'a': {}})
+        self.assertEqual((sc['delta_current_vs_none'], sc['excluded_baseline_satisfied']), (1.0, ['a']))
 
 
 if __name__ == '__main__':

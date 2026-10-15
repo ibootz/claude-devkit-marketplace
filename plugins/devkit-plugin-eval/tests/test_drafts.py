@@ -129,6 +129,18 @@ class RehangTest(Base):
         self.assertTrue(any('baseline' in w for w in res.warnings))
 
 
+    def test_list_is_read_only(self):
+        """审查 11 应修 3：drafts list 不退回退役用例、不改 clause-rehang.json；page 才退回。"""
+        before = (self.root / clauses.REHANG_FILE).read_text(encoding='utf-8')
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(['--data-dir', str(self.data), 'drafts', 'list', NAME]), 0)
+        self.assertTrue((self.plugin / 'evals' / 'on-c002' / 'prompt.md').is_file())
+        self.assertEqual((self.root / clauses.REHANG_FILE).read_text(encoding='utf-8'), before)
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(['--data-dir', str(self.data), 'drafts', 'page', NAME]), 0)
+        self.assertFalse((self.plugin / 'evals' / 'on-c002').exists())
+
+
 class BatchTest(Base):
     def setUp(self):
         super().setUp()
@@ -261,6 +273,24 @@ class DrafterTest(Base):
         drafter.save_skips(self.repo, NAME, {'clause:C003': {'code': 'needs-user-reply', 'reason': 'r'}})
         self.assertNotIn('clause:C003', [x['key'] for x in drafter.gaps(self.repo, NAME, self.plugin)])
         self.assertEqual([x['key'] for x in drafter.gaps(self.repo, NAME, self.plugin, only={'C003'})], ['clause:C003'])
+
+    def test_rejected_draft_rewritten_only_when_clause_named(self):
+        """B 批集成定稿第 3 条：打回的草稿自动起草时算已覆盖；--clauses 点名时不算覆盖、可重写。"""
+        self.add_case('drafts', 'c001-rejected', ['discipline', 'C001'], meta={'status': drafts.STATUS_REJECTED})
+        self.assertNotIn('clause:C001', [x['key'] for x in drafter.gaps(self.repo, NAME, self.plugin)])
+        self.assertEqual([x['key'] for x in drafter.gaps(self.repo, NAME, self.plugin, only={'C001'})], ['clause:C001'])
+        self.add_case('drafts', 'c001-open', ['discipline', 'C001'], meta={})
+        self.assertEqual(drafter.gaps(self.repo, NAME, self.plugin, only={'C001'}), [])   # 有未打回的草稿仍算覆盖
+
+    def test_prompt_forbids_injection_text_graders(self):
+        p = drafter.build_prompt(NAME, drafter.gaps(self.repo, NAME, self.plugin)[:1])
+        self.assertIn('trace 里没有 UserPromptSubmit hook 注入的文字', p)
+
+    def test_cli_write_stopped_exit_code_is_2(self):
+        ai = FakeAI(clause_ai.ClauseAIError('撞订阅用量限制或限流：429'))
+        args = cli._parser().parse_args(['--data-dir', str(self.data), 'drafts', 'write', NAME, '--no-page'])
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.assertEqual(drafter.main(args, self.data, ai=ai), 2)
 
     def ai_case(self, target, slug, **kw):
         c = {'target': target, 'slug': slug, 'intent': '测 %s' % target, 'prompt': '请帮我做 %s' % slug,

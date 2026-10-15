@@ -47,7 +47,8 @@ def reminder(reviews_dir, *, now=None, tz=None, plugin=None):
     last = last_review_date([reviews_dir])
     who = '%s ' % plugin if plugin else ''
     if last is None:
-        return '%s还没有会话复盘记录（plugin-evals/<插件>/reviews/ 下没有结果）：建议先跑会话复盘（review）' % who
+        return ('%s还没有会话复盘记录（plugin-evals/<插件>/reviews/ 下没有结果）：建议先跑会话复盘（review）；'
+                '复盘只扫登记清单里的插件，未登记需先登记（register）' % who)
     gap = days_since(last, now, tz)
     if gap > REMIND_AFTER_DAYS:
         return ('%s距上次会话复盘（%s）已 %d 天，超过 %d 天：建议先跑会话复盘（review）'

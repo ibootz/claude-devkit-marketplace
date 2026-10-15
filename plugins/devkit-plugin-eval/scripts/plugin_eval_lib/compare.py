@@ -344,8 +344,6 @@ def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp,
                                              model=model, judge_opts=judge_opts, clause_model=clause_model),
     )
     rec.update(plan.record_fields(arm_records))
-    # 基线已满足的用例（票 11）：不出当前版 − 不装的差，改出回归结论
-    baseline.apply_to_record(rec, baseline.satisfied_cases(registry.plugin_dir(entry) / 'evals', cases))
     pre.add(preflight.check_version_model(preflight.previous_compare(Path(run_dir).parent, exclude=run_id),
                                           rec['claude_code_version'], rec['main_model']))
     rec['preflight'] = _merge_preflight(pre.to_dict(), prior_preflight)
@@ -356,6 +354,8 @@ def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp,
         rec.update(judge_model=judge_doc['model'], judge=judge.summarize(judge_doc))
     elif isinstance(judge_opts, dict) and judge_opts.get('enabled') is False:
         rec['judge'] = {'skipped': 'no-judge'}
+    # 基线已满足的用例（票 11）：规则分与 AI 评委的「当前版 − 不装」差都不含它们，改出回归结论；要在 judge 写好之后调
+    baseline.apply_to_record(rec, baseline.satisfied_cases(registry.plugin_dir(entry) / 'evals', cases))
     rec.update(clauses.record_fields(run_dir))
     if decorate:
         rec = decorate(rec)

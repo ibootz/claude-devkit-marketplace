@@ -123,8 +123,11 @@ def section_body(rec):
         for arm, a in scores.items():
             for case, sc in sorted(a['cases'].items()):
                 lines.append('| %s | %s | %s |' % (labels.get(arm) or arm, case, _f(sc)))
-        lines += ['', '差（当前版 − 不装）：%s' % ('—' if (j.get('scores') or {}).get('delta_current_vs_none') is None
-                                             else '%+.2f' % j['scores']['delta_current_vs_none']), '']
+        guarded = (j.get('scores') or {}).get('excluded_baseline_satisfied') or []
+        lines += ['', '差（当前版 − 不装%s）：%s' % (
+            '，不含 %d 个回归守护用例' % len(guarded) if guarded else '',
+            '—' if (j.get('scores') or {}).get('delta_current_vs_none') is None
+            else '%+.2f' % j['scores']['delta_current_vs_none']), '']
     flagged = j.get('flagged') or []
     if flagged:
         lines += ['### 分歧、抽检与出错的样本', '',

@@ -25,13 +25,14 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import (arms, compare, evalrun, fingerprint, gitstate, injection_check, preflight, record, resume, scoring)
+from . import (arms, compare, evalrun, fingerprint, gate, gitstate, injection_check, preflight, record, resume, scoring)
 
 KIND = 'gate'
 RUN_SUFFIX = '-gate'
 JUDGE_SKIPPED = 'gate-rule-subset'
 PASS_CRITERION = ('运行完整，且当前版每个有分用例的规则分都 ≥ threshold（规则子集：只跑当前版一臂，'
                   'with-only grader 照计分，付费 grader 不计）')
+NO_SCORABLE_REASON = '没有可计分的规则 grader'
 _TYPE_RE = re.compile(r'^type\s*:\s*["\']?([A-Za-z_]+)', re.MULTILINE)
 _YAML_GRADERS_RE = re.compile(r'^graders\s*:', re.MULTILINE)
 
@@ -171,6 +172,9 @@ def _finalize(arm, statics, meta, run_dir, data_dir, log):
     reasons += list(arm.get('load_issues') or [])
     if arm.get('invalid_run_count'):
         reasons.append('%d 个 run 出错，判无效不计分%s' % (arm['invalid_run_count'], resume.usage_limit_note(arm)))
+    if agg is not None and not any(c.get('score') is not None for c in (arm.get('cases') or {}).values()):
+        # B 批集成定稿第 6 条：全部用例都没有可计分的规则 grader 时记不完整，gate 不采信，也不报「规则子集未通过」
+        reasons.append(NO_SCORABLE_REASON)
     rec = _build(meta, {'current': arm}, reasons, _now_iso(datetime.now(timezone.utc)))
     pre = meta['pre']
     pre.add(preflight.check_version_model(preflight.previous_compare(Path(run_dir).parent),
@@ -199,8 +203,8 @@ def render_report(rec):
         '- Claude Code：%s；主力模型：%s' % (rec['claude_code_version'], rec['main_model']),
         '- 每例 %s 次' % (rec.get('environment') or {}).get('runs_per_case', '?'),
         '- 是否完整：%s' % ('是' if rec['complete'] else '**不完整**（规则子集不能续跑，重跑一次）'),
-        '- 是否通过：%s（口径：%s，threshold=%s）' % ('是' if rec['passed'] else '否', rec['pass_criterion'],
-                                              rec['threshold']),
+        '- 是否通过：%s（口径：%s；%s）' % ('是' if rec['passed'] else '否', rec['pass_criterion'],
+                                       gate.threshold_text(rec['threshold'])),
         '- 花费：$%.4f（%s）' % (u['cost_usd'], u['cost_basis']),
     ]
     pre = rec.get('preflight') or {}
@@ -237,6 +241,7 @@ def console_lines(res):
     out = ['规则子集运行目录：%s' % res.run_dir,
            '当前版规则分 %s；完整：%s；通过：%s；花费（标价估算）：$%.4f' % (
                _f(cur.get('score')), '是' if rec['complete'] else '否', '是' if rec['passed'] else '否',
-               rec['usage']['cost_usd'])]
+               rec['usage']['cost_usd']),
+           '口径：%s' % gate.threshold_text(rec['threshold'])]
     out += ['  不完整原因：%s' % r for r in rec['incomplete_reasons']]
     return out

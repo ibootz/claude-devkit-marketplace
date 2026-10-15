@@ -528,9 +528,10 @@ def final_verdict(sample):
     return None
 
 
-def compute_scores(samples):
+def compute_scores(samples, exclude=()):
     """AI 判分：样本通过记 1、不通过记 0；用例分 = 该臂该用例已定样本的均值；臂分 = 有分用例均值。
-    差 = 当前版 − 不装，只在两臂都有分的用例上算。只作信息，不改规则分与「是否通过」。"""
+    差 = 当前版 − 不装，只在两臂都有分的用例上算。只作信息，不改规则分与「是否通过」。
+    exclude：回归守护用例（基线已满足，票 11），不计入差（spec 2.3「不计相对不装的差」），见 delta_excluding。"""
     per = {}
     for s in samples:
         v = s.get('final_verdict')
@@ -541,10 +542,19 @@ def compute_scores(samples):
     for arm, cases in per.items():
         cs = {c: sum(xs) / len(xs) for c, xs in cases.items()}
         arms[arm] = {'score': sum(cs.values()) / len(cs), 'cases': cs}
+    return delta_excluding({'arms': arms}, exclude)
+
+
+def delta_excluding(scores, exclude=()):
+    """按 scores['arms'] 重算「当前版 − 不装」的差，跳过 exclude 里的用例；原地改并返回 scores。
+    excluded_baseline_satisfied 记实际被剔除的用例（两臂都有分、本该进差的那些），报告据此注明「不含 N 个」。"""
+    arms = scores.get('arms') or {}
     cur, none = (arms.get('current') or {}).get('cases') or {}, (arms.get('none') or {}).get('cases') or {}
-    common = sorted(set(cur) & set(none))
-    delta = (sum(cur[c] - none[c] for c in common) / len(common)) if common else None
-    return {'arms': arms, 'delta_current_vs_none': delta}
+    both = set(cur) & set(none)
+    common = sorted(both - set(exclude))
+    scores['delta_current_vs_none'] = (sum(cur[c] - none[c] for c in common) / len(common)) if common else None
+    scores['excluded_baseline_satisfied'] = sorted(both & set(exclude))
+    return scores
 
 
 def summarize(doc):
