@@ -50,3 +50,30 @@ Status: resolved
 - 续跑在检查点之间被杀：合并后的汇总先写、run.json 后写，最坏情况是该次续跑的 token 与花费没记进 run.json，分数不受影响。
 - Windows / Linux 未实测（超时整组终止在 Windows 走 `taskkill /T /F`，锁的存活判断走 `OpenProcess`）。
 - **给并行票的接线点**：续跑复用 `compare._arm_specs(plugin_dir)`、`compare._run_arm(spec, ctx=...)` 与 `compare.finalize_run(...)`。票 05 改 `_arm_specs` 签名、票 06 往 `_run_arm` 的 ctx 加键时，`resume.py` 的 `base_ctx`（`resume_run` 里）与 `_arm_specs` 调用要同步；上一版臂的快照目录续跑时要能重建。票 14 实现闸门时调 `completeness.gate_exclusion_reason`。
+
+### 2026-10-15 集成（票 04–08 合入集成分支，devkit-plugin-eval 0.2.0）
+
+**集成审查应修项（已修）**
+
+- B1：运行锁改用 `fcntl.flock`（Windows 走 `msvcrt.locking`），进程死了锁由系统释放，空锁文件被当成死锁接管、两进程同时接管的两个竞态都消失。锁文件不再删除，释放时清空内容。C3（Windows 存活判断）随之消失。单测：空锁文件仍被持有、`kill -9` 后自动释放。
+- B2：上面「已知缺口」第三条已修。`fingerprint.evals_fingerprint` 分「共享部分」与「逐用例」两层，记在 run.json 的 `plugin.evals_fingerprint`。续跑前重算，改过首跑用例就拒绝续跑；新增用例不影响。首跑没有这条记录的老运行，续跑时在 attempt 里记 warning。
+- B3：限时模式下主线程把 SIGTERM / SIGHUP 转成退出，`finally` 里按进程组杀掉 eval。单测：SIGTERM 后子进程被杀。去掉修复时这条单测失败，已反证。
+- C4：run.json 与检查点一律原子写（`resume.write_json_atomic`）；坏 JSON、缺字段转成 `ResumeError`。
+- 与票 05 衔接：上面「给并行票的接线点」已落地。`_arm_specs` 删除，臂清单取 `plan.specs`。续跑用 `armplan.rebuild_plan` 重建上一版快照，环境插件的版本与指纹、上一版重新认定的提交、快照指纹任一与首跑不同就拒绝续跑。首跑没有 `previous_arm` 键的老运行，按两臂续跑。
+- 与票 04 衔接：续跑拿锁前先重跑前置检查硬项，不过就中止。首跑的软项提示去重后排在前面，整份首跑结果另存在 run.json 的 `preflight.first_run`。
+- 与票 06 衔接：续跑后注入核验与常驻 token 照常产出，不会因 `_` 开头的键被剔除而静默跳过。
+- 与票 08 衔接：首跑生成过待审页的，续跑重写 run.json 时旧页作废（`pending.superseded_by_resume` 记第几次续跑，`history` 保留旧页），锁释放后自动重新生成一页。审阅状态随结果重算，回到「待审」。
+
+**主会话口径（集成简报第六节）**
+
+- 待拍板 2：`--eval-timeout` 默认 0（不限时），维持。前提是 B3 已修。
+- 待拍板 3：撞限后照跑后续臂，维持。
+
+**仍待用户拍板（保持现状）**：待拍板 1，续跑时 Claude Code 版本或主力模型与首跑不同怎么处理。现状只记 warning、照常合并。
+
+**已知缺口（来自集成审查，未修）**
+
+- C1：发 SIGTERM 后只要组长进程退出就返回，组里忽略 SIGTERM 的子进程不会再收到 SIGKILL。宜在宽限期过后无条件补一次 `killpg(SIGKILL)`。
+- C2：Windows 上 `taskkill /T /F` 失败时没有退回 `proc.kill()`，随后的 `proc.wait()` 可能一直等下去。
+- C5：`replaced_invalid_runs` 在补跑之前就登记。补跑一个汇总都没产出时，首跑出错的 run 仍会从磁盘汇总里删掉，报告却写「替换掉的无效 run N 个」。整次仍判不完整，但证据丢了、措辞也不实。
+- C6：`finalize_run` 不核对「每个用例的有效 run 数等于 `runs_per_case`」，完整与否靠退出码与 `partial` 间接保证。宜加成续跑完整性的硬判据。

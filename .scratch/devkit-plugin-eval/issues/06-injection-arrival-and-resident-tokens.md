@@ -51,10 +51,31 @@ Status: resolved
 
 **已知缺口**
 
-- 环境插件臂（票 05）里，若环境插件的 hook command 原文与被测插件完全相同，到达会误归因。
+- 环境插件臂（票 05）里的误归因（2026-10-15 集成审查 H 更正）：到达按内容标签认领，所以环境插件的 hook command 原文与被测插件相同时，只会把**失败**错算到被测插件头上（含条件注入的非零退出）；**到达**的误归因要内容标签相同才会发生。
 - SubagentStart 的 matcher 限定了 agent_type 时，没有对应子代理只判 not_triggered，不判丢失。
 - trace 的失败记录只有事件名没有 command，同一事件多条 hook 时只能整事件判失败。
 - 条件注入（PreToolUse 等）不计常驻、不核验到达，只报非零退出（退出码 2 是拦截，不报）。
 - 宽字符系数对日文、韩文未校准；Windows / Linux 未实测（hook 用 shell 执行，`${CLAUDE_PLUGIN_ROOT}` 做文字替换）。
 
 **扩展点**：票 04 的 hook 冒烟、票 10 的注入文本指纹可复用 `injection.load_hook_specs` / `injection.run_hook`。
+
+### 2026-10-15 集成（票 04–08 合入集成分支，devkit-plugin-eval 0.2.0）
+
+**集成审查应修项（已修）**
+
+- A：校准原始数据落进 [calibration-06-resident-tokens.md](../calibration-06-resident-tokens.md)，含两个校准点的宽 / 窄字符数、首请求实测值、1370 的推算过程、skill 列表约 215 的来源（推算过程没留存，按同式重算约 193）、同插件两次复测。`METHOD.calibration` 改为「两点拟合（中文为主），残差 ≤3%；英文为主的文本未验证」，上面待拍板 1 里「误差约 ±5%」以此为准。
+- B：`static_profile` 逐条 hook 兜异常，记进 `errors` 继续算其余 hook；静态画像挪到 eval 开跑前算，同一来源只算一次。单测：`test_one_hook_raising_does_not_sink_profile`。
+- D：先判 hook 本次该不该触发，再看 trace 的失败记录。别的插件同事件失败，不再把本不触发的 hook 判成 failed。上面「已知缺口」第三条（整事件判失败）对本该触发的 hook 仍成立。
+- E：with 臂 0 个 run 可核验时记 problem，`injection_check.ok=false`。
+- H：已在上面「已知缺口」第一条就地更正。
+- 与票 07 的衔接：续跑后 `_runs` 按各臂汇总重建，注入核验与常驻 token 照常产出。单测在 `test_compare_injection.py`。
+
+**主会话口径（集成简报第六节）**：静态执行用真实 HOME，维持（spec 第 2 步原文如此）。
+
+**仍待用户拍板（保持现状）**：待拍板 1（常驻 token 用字符估算还是 count_tokens）；待拍板 2（注入未到达是否挡闸门，只影响票 14）。
+
+**已知缺口（来自集成审查，未修）**
+
+- C：标签只取正文第一个非空行做子串匹配。首行含日期、cwd 等动态内容时误报 missing（会响亮报出）；首行太通用（`---`、`# Rules`）时，环境插件臂里别的插件的注入可能被认成被测插件的。
+- F：超时只杀 shell，孙进程（如 node）会成孤儿，并且是在真实 HOME 下继续跑；Windows 上 `communicate()` 可能被孙进程占着管道卡住。
+- G：`observe_run` 收集的 `obs['successes']` 没有任何地方用到。

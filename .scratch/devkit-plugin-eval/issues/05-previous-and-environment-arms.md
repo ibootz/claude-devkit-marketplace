@@ -68,3 +68,30 @@ Status: resolved
 - `git log --follow` 靠内容相似度认改名：plugin.json 改名时内容变动超过一半（如单行 JSON 同时改 name 与 version）就追不过改名，上一版会在新路径的历史里找，可能误判为退化。本仓插件 `plugin.json` 是多行的，实测能追过去。
 - `git archive` 不带被 git 忽略的文件，spec 残余风险第 7 条已记。
 - Windows / Linux 未实测。
+
+### 2026-10-15 集成（票 04–08 合入集成分支，devkit-plugin-eval 0.2.0）
+
+**集成审查应修项（已修）**
+
+- (a)：上一版臂的 run.json 记录显式写 `head_sha=null`、`dirty=null`，提交号只看它自己的 `commit`。快照来自 git 历史，没有 dirty 一说。
+- (b)：plugin.json 没写 version 时按原值 `None` 与历史比（不再拿占位的 `'noversion'` 去比）。上一版取历史里最近写过的版本；从没写过 version 时退化，原因写「没写 version」。
+- (c)：传了 `--base`，但没有 git、插件不在 git 仓、或仓里没有提交时，抛 `BaseNotFound` 中止，与「--base 解析不到」一致。
+- (d)：被测插件顶层已有 `_plugin_eval_env/` 时，前置检查硬项 `env_plugins_contained` 判失败，开跑前就拦下，不再到第 4 臂才报错。
+- (e)：`plan_arms` 之后紧跟 `try/finally`，前置检查失败、`run_dir.mkdir` 出错时快照临时目录照样清理。
+- 原「已知缺口」第一条已接线：快照与环境插件经 `Plan.preflight_targets()` 进票 04 的冒烟与 validate；`armplan` 不再自己跑 validate。`check --base / --env-plugin` 也走同一份臂计划。
+
+**主会话口径（集成简报第六节）**
+
+- 待拍板 2：跨改名不可比的用例不计入总体差，维持。
+- 待拍板 4：上一版快照没过 validate 时整次对照中止，维持。记作残余风险：旧版本的 plugin.json 不合当前 validate 规则时，这一版永远当不了上一版，只能用 `--base` 指别的版本。
+
+**仍待用户拍板（保持现状）**：待拍板 1（新插件首评是否标「退化」、闸门是否按 `reason_kind` 区分）；待拍板 3（`--base` 解析不到时中止还是退化，现状中止，(c) 让无仓情形也一致中止）。
+
+**集成新增行为**
+
+- run.json 的 `env_plugins[]` 加 `fingerprint`（环境插件内容指纹）。续跑时核对环境插件的版本与指纹、上一版重新认定的提交、快照指纹，任一不符就拒绝续跑。
+
+**已知缺口（来自集成审查，未修）**
+
+- (f)：`envplugins._git_head` 用 `text=True`，没有显式 UTF-8。输出是 ASCII 的 sha，实际不会出错。
+- (g)：退化原因里的插件绝对路径、path 形式环境插件的 `path` 字段会进入库的 run.json / report.md。家目录下的路径由 `scrub_home` 换成 `~`，家目录以外的路径原样入库。宜与票 04「只记仓内相对路径」统一口径。

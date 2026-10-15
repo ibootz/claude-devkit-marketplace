@@ -59,3 +59,26 @@ Status: resolved
 - 单跑 `check` 时 dirty 在写 `.gitignore` 之前取；compare 在写之后取。插件在仓根、第一次对照时两者可能不一致。dirty 口径由票 14 统一。
 - hook 命令的枚举与票 06 的 `injection.load_hook_specs` 功能重叠，合并后可收敛为一份。
 - 冒烟的 stdin 是样例，对输入敏感的 hook 可能给出非零码，所以非零码只作提示，见 spec 残余风险第 3 条。Windows 上 `shell=True` 走 cmd.exe，Windows / Linux 未实测。
+
+### 2026-10-15 集成（票 04–08 合入集成分支，devkit-plugin-eval 0.2.0）
+
+**集成审查应修项（已修）**
+
+- 冒烟改在插件副本里跑：拷贝时跳过顶层 `.git`、`evals`、`plugin-evals` 与各级 `__pycache__`，`${CLAUDE_PLUGIN_ROOT}` 指向副本，并设 `PYTHONDONTWRITEBYTECODE=1`。冒烟不再往用户工作树写文件，也不再让 dirty 被误判。单测：`test_python_hook_leaves_no_pycache_in_plugin_dir`。
+- 版本与模型软项：任一方取不到值时判 skip 并写明是哪个字段、哪一方缺；`check` 子命令只比版本，不拿 `--model` 别名去比完整模型 id，同时固定提示「主力模型要跑完才知道」。
+- 冒烟失败提示里的副本路径换回 `${CLAUDE_PLUGIN_ROOT}`，原审查可留项 7 一并修了。
+- hook 枚举与票 06 合并：`collect_hook_commands` 改用 `injection.load_hook_specs`，冒烟复用 `injection.run_hook`。缺省 `type` 按 command 收（Claude Code 同此）；PreToolUse / PostToolUse / PermissionRequest 的样例输入带 `tool_name`、`tool_input`。
+- 原「已知缺口」第一条已接线：compare 与 `check` 共用 `compare.load_target` / `plan_for`，上一版快照（`--base` 或自动认定）与 `--env-plugin` 一并冒烟、validate、查 containment。
+
+**主会话口径（集成简报第六节）**
+
+- ①：`evalrun.child_env` 仍去掉 `~/.asdf/shims`；找 claude 改用本进程的完整 PATH，与 compare、resume 一致。这是 spec 的一处例外，由主会话在 spec Comments 补记。单测：`test_claude_resolved_from_full_path_not_child_env`。
+- ②：不在 git 仓时 `dirty=null`，记 warn，维持现状。票 14 的判据须写 `dirty is False`，已追加到票 14 Comments。
+- ③：「上次对照」优先取最近一次 `complete=true` 的记录，一条完整的都没有才取最新一条。单测：`test_previous_compare_prefers_latest_complete_run`。
+
+**已知缺口（来自集成审查，未修）**
+
+- Windows 上 cmd.exe「命令找不到」的退出码是 9009，不是 127，只会落成提示。这是规格空白，等首次 Windows 实测时补。
+- 超时只杀 shell，孙进程会成孤儿。冒烟与票 06 的静态执行共用 `injection.run_hook`，这一条与票 06 F 是同一处。
+- 通过时「N 条 command 已执行」把超时未判定的条目也算进去了。
+- 参数特性探测只查 `--help` 文本里有没有出现参数名：参数被移除、说明文字仍提到它时会漏判。
