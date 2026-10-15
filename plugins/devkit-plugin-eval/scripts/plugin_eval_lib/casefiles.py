@@ -110,10 +110,15 @@ def render_case(spec):
         out['graders/%s.md' % g['name']] = render_grader(g)
     for j in spec.get('judge') or []:
         out['judge/%s.md' % j['id']] = render_judge(j)
+    ctx = []
     if spec.get('scaffold_files'):
         out[SCAFFOLD_FILE] = render_scaffold(spec['scaffold_files'])
-        out['case.yaml'] = 'schema_version: "1.1"\nname: %s\ncontext:\n  scaffold_script: %s\n' % (
-            spec['slug'], SCAFFOLD_FILE)
+        ctx.append('  scaffold_script: %s' % SCAFFOLD_FILE)
+    if spec.get('history_file'):              # 票 13：回放用例的合成历史（设计票 19），history_text 是 jsonl 原文
+        out[spec['history_file']] = spec['history_text']
+        ctx.append('  history_file: %s' % spec['history_file'])
+    if ctx:
+        out['case.yaml'] = 'schema_version: "1.1"\nname: %s\ncontext:\n%s\n' % (spec['slug'], '\n'.join(ctx))
     return out
 
 
@@ -253,6 +258,14 @@ def check_case_dir(case_dir):
         m = re.search(r'scaffold_script\s*:\s*(\S+)', yaml.read_text(encoding='utf-8'))
         if m and not (case_dir / m.group(1).strip('\'"')).is_file():
             p.append('case.yaml 的 scaffold_script 指向的 %s 不存在' % m.group(1))
+        h = re.search(r'^\s*history_file\s*:\s*(\S+)', yaml.read_text(encoding='utf-8'), re.M)
+        if h:
+            rel = h.group(1).strip('\'"')
+            hp = case_dir / rel
+            if not _safe_rel(rel) or not hp.is_file() or hp.is_symlink():
+                p.append('case.yaml 的 history_file 应指向用例目录内的普通文件，%s 不是' % rel)
+            if not prompt.is_file():
+                p.append('配了 history_file 就要有被测 prompt（prompt.md）')
     return p
 
 

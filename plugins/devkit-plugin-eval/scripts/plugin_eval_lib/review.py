@@ -266,6 +266,8 @@ def carry_earlier(rec, earlier):
                 src = hit.get('carried_from') or {'date': d, 'run_id': review_id(d), 'decided_at': hit.get('decided_at'),
                                                    'plugin_version': version}
                 c['selection'], c['decided_at'], c['carried_from'] = hit['selection'], hit.get('decided_at'), src
+                if (hit.get('conversion') or {}).get('status') == 'drafted':     # 已改写成草稿的不再改写（票 13）
+                    c['conversion'] = hit['conversion']
             break           # 只看最近一次出现过裁定的日期：那次版本不同就不再往前找
     return rec
 
@@ -279,6 +281,8 @@ def merge_previous(rec, old):
         if c['id'] in done:
             c['selection'], c['decided_at'] = done[c['id']]['selection'], done[c['id']].get('decided_at')
             c['carried_from'] = done[c['id']].get('carried_from')
+            if done[c['id']].get('conversion'):         # 票 13 转草稿的结果（drafted / void / …）同一天重跑照带
+                c['conversion'] = done[c['id']]['conversion']
     oh, nh = old.get('compare_hint') or {}, rec['compare_hint']
     if oh.get('acknowledged_at') and oh.get('diffs') == nh.get('diffs'):
         nh['acknowledged_at'] = oh['acknowledged_at']

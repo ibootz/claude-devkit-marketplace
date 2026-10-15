@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "case": "compact-c002",
+  "source": "compact-replay",
+  "category": "compact-replay",
+  "clauses": [],
+  "clause_intent": "核对整份规范或协议时一次整读全文，不分片读取。",
+  "clause_hint": "demo-10 条款清单（.scratch/devkit-plugin-eval/demo-10/clauses.json）里的 C002；仓库生成正式清单后由 drafts write 的挂条款步骤重挂",
+  "intent": "compact 之后（长历史稀释）仍遵守：核对实现是否符合协议规范时，模型一次整读规范全文，而不是用 offset/limit 分片读取。",
+  "target": "compact:C002",
+  "created_at": "2026-10-15T17:23:53Z",
+  "exported_from": "demo-13 演示克隆：drafts compact 生成、待审页（AI 代答的演示裁定）通过后拷回，见 .scratch/devkit-plugin-eval/demo-13/README.md",
+  "created_by": {
+    "model": "claude-fable-5-1"
+  },
+  "status": "open",
+  "replay": {
+    "base_case": null,
+    "summary_template": "compact-summary-v1",
+    "tail_turns": 2,
+    "history_file": "history.jsonl",
+    "history_session_id": "6b85bff5-6bc9-52ee-97c9-e1d8bdb5ad69",
+    "injection_overlap_chars": 20,
+    "injection_hits": 0,
+    "selection_reasons": [
+      "SessionStart 注入（长会话里不再重注）"
+    ]
+  }
+}
