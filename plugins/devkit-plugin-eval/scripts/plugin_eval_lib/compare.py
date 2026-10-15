@@ -1,7 +1,7 @@
 """离线对照（compare）编排：查登记 → 组装各臂 → 每臂跑 eval → 规则判分 → 落盘 → 清理。
 
 本版只有「不装」与「当前版」两臂。扩展点：
-- 前置检查（票 04）插在 run_compare 开头、lookup 之后；
+- 前置检查（票 04，已接入 preflight.py）在 run_compare 开头、lookup 之后；
 - 上一版 / 环境插件臂（票 05）往 _arm_specs 里加 ArmSpec；
 - 注入到达核验（票 06）在 _run_arm 里搬 trace 之前读转录；
 - AI 评委（票 09）在所有臂跑完、写 run.json 之前。
@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import arms, evalrun, fingerprint, record, registry, scoring, traces
+from . import arms, evalrun, fingerprint, preflight, record, registry, scoring, traces
 
 
 # eval 正常跑完的退出码：0 全过、1 有用例低于 --threshold（判分我们自己重算，不看它）。其余（如 2）是中途中止。
@@ -146,7 +146,7 @@ def _score_arms(arm_records, log):
 
 def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=1.0, claude=None,
                 runner=evalrun.run_eval, env=None, tmp_parent=None, sandbox_roots=None,
-                keep_assembly=False, log=None, now=None):
+                keep_assembly=False, log=None, now=None, preflight_check=None):
     log = log or (lambda msg: print(msg, file=sys.stderr))
     data_dir = Path(data_dir)
     entry = registry.lookup(data_dir, name)          # 未登记即抛 NotRegistered
@@ -166,10 +166,18 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
         raise CompareError('%s 下没有用例（含 prompt.md 或 case.yaml 的目录）' % evals_src)
 
     extra_exclude = ('.git', 'plugin-evals') if entry['plugin_path'] == '.' else ()
-    claude = claude or evalrun.resolve_claude()
+    # 前置检查（票 04）：硬项在任何写入之前查，失败即中止；软项 dirty 在取 git 状态后补，版本与模型跑完后补。
+    # 上一版快照 / 环境插件（票 05）经 others / env_plugins / containment_root 传入
+    pre = (preflight_check or preflight.check_compare)(
+        data_dir=data_dir, name=name, env=evalrun.child_env(env), claude=claude, model=model, tmp_parent=tmp_parent)
+    if not pre.passed:
+        raise preflight.PreflightFailed(pre)
+    claude = claude or pre.claude or evalrun.resolve_claude()
     # 插件在仓根时 .gitignore 就在插件目录里：先写它，再取 git 状态与指纹，否则指纹一跑完就对不上
     ensure_gitignore(repo, entry['plugin_path'])
     head_sha, dirty = git_state(repo, entry['plugin_path'])
+    pre.dirty = dirty
+    pre.add(preflight.check_dirty(head_sha, dirty))
     plugin_fp = fingerprint.plugin_fingerprint(plugin_dir, extra_exclude)
     child_env = evalrun.child_env(env)
 
@@ -219,6 +227,9 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
                      'runs_per_case': runs, 'concurrency': concurrency, 'model_override': model,
                      'platform': sys.platform},
     )
+    pre.add(preflight.check_version_model(preflight.previous_compare(run_dir.parent, exclude=run_id),
+                                          rec['claude_code_version'], rec['main_model']))
+    rec['preflight'] = pre.to_dict()
     rec = record.scrub_home(rec)   # 产物会入库：本机家目录前缀换成 ~
     (run_dir / 'run.json').write_text(json.dumps(rec, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     (run_dir / 'report.md').write_text(record.render_report(rec), encoding='utf-8')

@@ -134,6 +134,10 @@ def render_report(rec):
             u['cost_usd'], u['cost_basis'], u['input_tokens'], u['output_tokens'],
             u['cache_read_input_tokens'], u['cache_creation_input_tokens']),
     ]
+    pre = rec.get('preflight') or {}
+    if pre.get('warnings'):   # 软项照跑，标在首段（票 04）
+        lines += ['', '> **前置检查软项**（照跑；审阅时据此判断结果能否采信）：', '>']
+        lines += ['> - %s' % w for w in pre['warnings']]
     if rec['incomplete_reasons']:
         lines += ['', '## 不完整的原因', '']
         lines += ['- %s' % r for r in rec['incomplete_reasons']]
@@ -182,6 +186,11 @@ def render_report(rec):
         for name in sorted(excluded):
             lines.append('- %s：%s' % (name, '、'.join('`%s`（%s）' % (g, why) for g, why in sorted(excluded[name].items()))))
 
+    notes = [h for h in pre.get('hook_smoke') or [] if h.get('note')]
+    if notes:
+        lines += ['', '## 前置检查提示', '', 'hook 冒烟里退出码非 0（126 / 127 以外）或超时的命令，只作提示、未中止：', '']
+        lines += ['- [%s] `%s`：%s' % (h['plugin'], h['command'], h['note']) for h in notes]
+
     lines += ['', '## 本报告未覆盖', '',
-              '前置检查、上一版臂、注入到达核验、AI 评委、常驻 token 尚未接入，run.json 里对应字段为 null。', '']
+              '上一版臂、注入到达核验、AI 评委、常驻 token 尚未接入，run.json 里对应字段为 null。', '']
     return '\n'.join(lines)

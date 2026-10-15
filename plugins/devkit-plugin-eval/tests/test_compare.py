@@ -11,9 +11,14 @@ from pathlib import Path
 
 import _support
 from _support import tmpdir, aggregate, grader, make_plugin, make_sandbox, run_result
-from plugin_eval_lib import cli, compare, fingerprint, registry
+from plugin_eval_lib import cli, compare, fingerprint, preflight, registry
 
 GRADERS = [grader('rule'), grader('marker', 'regex', arm='with-only')]
+def passing_preflight(**kw):
+    """前置检查的真身要调 claude，这里的用例只测编排；前置检查本身见 test_preflight.py。"""
+    return preflight.Report('compare')
+
+
 MOCK_GRADER = {'name': 'mock-hit', 'type': 'regex', 'weight': 1,
                'config': {'target': 'mock_calls', 'pattern': 'x', 'flags': '', 'match': 'contains'}}
 
@@ -73,7 +78,7 @@ class CompareTest(unittest.TestCase):
         return compare.run_compare(
             self.data, 'demo-plugin', runs=2, concurrency=2, claude='/fake/claude', runner=fake,
             env={'PATH': '/usr/bin'}, tmp_parent=self.assembly_parent, sandbox_roots=[self.sandboxes],
-            log=lambda *a: None, **kw)
+            log=lambda *a: None, preflight_check=passing_preflight, **kw)
 
     def test_unregistered_plugin_rejected(self):
         with self.assertRaises(registry.NotRegistered):
@@ -171,7 +176,7 @@ class CompareTest(unittest.TestCase):
             self.data, 'demo-plugin', runs=1, concurrency=1, claude=claude,
             runner=FakeEval(self.sandboxes, {'none': False, 'current': True}),
             env={'PATH': '/usr/bin'}, tmp_parent=self.assembly_parent, sandbox_roots=[self.sandboxes],
-            log=lambda *a: None)
+            log=lambda *a: None, preflight_check=passing_preflight)
         text = (res.run_dir / 'run.json').read_text(encoding='utf-8')
         self.assertEqual(json.loads(text)['environment']['claude_path'], '~/.local/bin/claude')
         self.assertNotIn(str(Path.home()) + '/', text)
