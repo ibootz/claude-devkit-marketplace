@@ -287,16 +287,18 @@ def _tags_from_text(text):
 
 
 def case_tags(case_dir):
+    """case.yaml 与 prompt.md frontmatter 两处的 tags 取并集（票 11：用例同时有两份文件时 tags 常写在 prompt.md）。"""
     case_dir = Path(case_dir)
+    out = []
     yaml = case_dir / 'case.yaml'
     if yaml.is_file():
-        return _tags_from_text(yaml.read_text(encoding='utf-8'))
+        out += _tags_from_text(yaml.read_text(encoding='utf-8'))
     prompt = case_dir / 'prompt.md'
     if prompt.is_file():
         text = prompt.read_text(encoding='utf-8')
         m = re.match(r'^---\s*\n(.*?)\n---\s*(\n|$)', text, re.DOTALL)
-        return _tags_from_text(m.group(1)) if m else []
-    return []
+        out += _tags_from_text(m.group(1)) if m else []
+    return list(dict.fromkeys(out))
 
 
 def coverage(plugin_dir, cases=None):

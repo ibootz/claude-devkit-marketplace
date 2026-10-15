@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "plugin": "devkit-discipline",
+  "suggestions": [
+    {
+      "case": "evals/inflight-cap",
+      "retired_id": "C007",
+      "reason": "criterion-changed",
+      "replaced_by": [
+        "C100"
+      ],
+      "suggestion": "改挂到 C100",
+      "ai_hint": "上限由 16 改为 8，用例改挂 C100 并把 grader 上限同步改为 8",
+      "from_run": "20261015T123944Z-4.1.0-compare",
+      "created_at": "2026-10-15T12:41:15Z",
+      "status": "moved",
+      "handled_at": "2026-10-15T15:34:42Z",
+      "draft": "drafts/inflight-cap"
+    }
+  ]
+}

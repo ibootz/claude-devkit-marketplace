@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "case": "inflight-cap",
+  "source": "rehang",
+  "created_at": "2026-10-15T15:34:42Z",
+  "status": "rejected",
+  "category": "discipline",
+  "clauses": [
+    "C100"
+  ],
+  "rehang": [
+    {
+      "retired_id": "C007",
+      "reason": "criterion-changed",
+      "replaced_by": [
+        "C100"
+      ],
+      "suggestion": "改挂到 C100",
+      "ai_hint": "上限由 16 改为 8，用例改挂 C100 并把 grader 上限同步改为 8",
+      "from_run": "20261015T123944Z-4.1.0-compare",
+      "action": "retag",
+      "target": "C100",
+      "tags_before": [
+        "discipline",
+        "C007"
+      ],
+      "tags_after": [
+        "discipline",
+        "C100"
+      ],
+      "returned_from": "evals",
+      "at": "2026-10-15T15:34:42Z"
+    }
+  ],
+  "rejected_at": "2026-10-15T15:39:59Z",
+  "rejected_in_run": "20261015T153942Z-4.1.0-drafts"
+}

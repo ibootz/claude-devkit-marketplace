@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "kind": "drafts",
+  "run_id": "20261015T154630Z-4.1.0-drafts",
+  "started_at": "2026-10-15T15:46:30Z",
+  "finished_at": "2026-10-15T15:46:30Z",
+  "plugin": {
+    "name": "devkit-discipline",
+    "version": "4.1.0",
+    "path_in_repo": "plugins/devkit-discipline"
+  },
+  "clause_list_fingerprint": "sha256:c5f787a7f61cd1eb915ff81f858b689acefeb25c94df8fada32de3590513aa27",
+  "priority_rule": "1 已证明有差的条款；2 复盘已命中的条款；3 退役条款的用例退回改挂；4 其余；同档按条款号、用例名",
+  "batch": [
+    {
+      "case": "zh-audit-executor",
+      "tier": 4,
+      "reasons": [],
+      "source": "history",
+      "category": "skill-trigger",
+      "clauses": [],
+      "type": "case-draft",
+      "decision": null
+    },
+    {
+      "case": "zh-audit-scope",
+      "tier": 4,
+      "reasons": [],
+      "source": "history",
+      "category": "skill-trigger",
+      "clauses": [],
+      "type": "case-draft",
+      "decision": null
+    },
+    {
+      "case": "zh-rewrite-keeps-meaning",
+      "tier": 4,
+      "reasons": [],
+      "source": "history",
+      "category": "skill-trigger",
+      "clauses": [],
+      "type": "case-draft",
+      "decision": null
+    }
+  ],
+  "not_on_page": {
+    "ready_beyond_limit": [],
+    "needs_link": [],
+    "broken": [
+      {
+        "case": "spec-read-whole-not-chunked",
+        "problems": [
+          "graders/spec-not-chunked.md 只写了 max: 0 没写 min（eval 的 min 缺省为 1，恒不通过）"
+        ]
+      }
+    ],
+    "on_earlier_page": [],
+    "rejected": [
+      "dispatch-marks-layer2-no-nesting",
+      "inflight-cap"
+    ]
+  },
+  "drafting": null,
+  "pending": {
+    "page_id": "2886b484",
+    "generated_at": "2026-10-15T15:46:30Z",
+    "limit": 10,
+    "total": 3,
+    "sampled": false,
+    "sampling_rule": null,
+    "items": [
+      {
+        "no": 1,
+        "id": "case-draft:zh-audit-executor",
+        "type": "case-draft",
+        "title": "zh-audit-executor：应触发 zh-disambiguate；回复指出执行者不明，以及重试的条件与执行者不明",
+        "payload": {
+          "case": "zh-audit-executor"
+        }
+      },
+      {
+        "no": 2,
+        "id": "case-draft:zh-audit-scope",
+        "type": "case-draft",
+        "title": "zh-audit-scope：应触发 zh-disambiguate；回复逐句覆盖三句权限说明（「自己的」与「只能」的范围、未完成任务谁能删、「不必关闭全部」）",
+        "payload": {
+          "case": "zh-audit-scope"
+        }
+      },
+      {
+        "no": 3,
+        "id": "case-draft:zh-rewrite-keeps-meaning",
+        "type": "case-draft",
+        "title": "zh-rewrite-keeps-meaning：应触发 zh-disambiguate；改写稿保留两种可能原因与「通常」这一限定",
+        "payload": {
+          "case": "zh-rewrite-keeps-meaning"
+        }
+      }
+    ],
+    "sampled_out": [],
+    "applied_at": null,
+    "decisions": null,
+    "history": []
+  }
+}

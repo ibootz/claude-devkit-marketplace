@@ -39,7 +39,7 @@ from typing import Callable, Optional
 from . import record, registry
 
 PAGE_LIMIT = 10
-RUN_KINDS = ('compare', 'clauses')   # runs/ 下有待审项的结果种类；不带 --run 时在这两类里挑
+RUN_KINDS = ('compare', 'clauses', 'drafts')   # runs/ 下有待审项的结果种类；不带 --run 时在这几类里挑（drafts：票 11 用例草稿）
 REPLY_PREFIX = 'PE1'
 REVIEW_DONE = '已审'
 SAMPLING_HEADING = '## 待审页抽样'

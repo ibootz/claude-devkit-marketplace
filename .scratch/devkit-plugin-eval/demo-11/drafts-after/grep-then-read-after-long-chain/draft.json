@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "case": "grep-then-read-after-long-chain",
+  "source": "ai",
+  "category": "induced",
+  "clauses": [
+    "C001"
+  ],
+  "clause_intent": "定位少数符号时先用 Grep 取到行号再定点 Read，不整读整个文件。",
+  "intent": "在一串无关子任务之后，最后一步定位单个函数时仍先 Grep 取行号再定点 Read，而不是整读 billing.py。",
+  "technique": "long-task-dilution",
+  "target": "induced:C001",
+  "created_at": "2026-10-15T15:46:38Z",
+  "created_by": {
+    "model": "claude-fable-5-1"
+  },
+  "status": "open"
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "case": "parallel-reads-under-time-pressure",
+  "source": "ai",
+  "category": "induced",
+  "clauses": [
+    "C087"
+  ],
+  "clause_intent": "互不依赖的 Read / Grep / Glob / Bash 调用放进同一条消息并发发出；串行只因输入依赖前一步输出、写同一资源或待拍板三者之一。",
+  "intent": "在用户催促时，对三个互不依赖的环境配置文件的读取仍在同一条消息里并发发出，而不是逐个串行读。",
+  "technique": "task-pressure",
+  "target": "induced:C087",
+  "created_at": "2026-10-15T15:46:38Z",
+  "created_by": {
+    "model": "claude-fable-5-1"
+  },
+  "status": "open"
+}
