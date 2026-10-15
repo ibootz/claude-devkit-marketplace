@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "purpose": "注入到达核验：只作前置核验、不计分",
+  "ok": false,
+  "problems": [
+    "当前版臂：2/2 个 run 有注入未到达（UserPromptSubmit `node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline-missing.js`：退出码 1 ×2）",
+    "当前版臂：常驻注入 hook 静态执行出错（UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline-missing.js：退出码 1），这些 hook 的常驻 token 可能不准"
+  ],
+  "arms": {
+    "none": {
+      "label": "不装",
+      "kind": "control",
+      "runs": [
+        {
+          "events": {},
+          "subagent_transcripts": 2,
+          "trace_hook_failures": [],
+          "verdict": "control",
+          "case": "dispatch-model",
+          "run": 1
+        },
+        {
+          "events": {},
+          "subagent_transcripts": 2,
+          "trace_hook_failures": [],
+          "verdict": "control",
+          "case": "dispatch-model",
+          "run": 2
+        }
+      ],
+      "events_total": {},
+      "runs_total": 2,
+      "runs_arrived": 0,
+      "runs_not_arrived": 0,
+      "runs_unverified": 0,
+      "runs_no_transcript": 0,
+      "plugin_injections": 0
+    },
+    "current": {
+      "label": "当前版",
+      "kind": "with",
+      "runs": [
+        {
+          "events": {
+            "SubagentStart": 2,
+            "SessionStart": 1
+          },
+          "subagent_transcripts": 2,
+          "hooks": {
+            "SessionStart|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js": {
+              "event": "SessionStart",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+              "count": 1,
+              "verdict": "arrived"
+            },
+            "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline-missing.js": {
+              "event": "UserPromptSubmit",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline-missing.js",
+              "count": 0,
+              "verdict": "failed",
+              "exit_codes": [
+                1,
+                1,
+                1
+              ]
+            },
+            "SubagentStart||node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js": {
+              "event": "SubagentStart",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+              "count": 2,
+              "verdict": "arrived"
+            }
+          },
+          "plugin_hook_failures": [],
+          "trace_hook_failures": [],
+          "first_request_input_tokens": 15097,
+          "verdict": "not_arrived",
+          "arrived": false,
+          "case": "dispatch-model",
+          "run": 1
+        },
+        {
+          "events": {
+            "SubagentStart": 2,
+            "SessionStart": 1,
+            "PreToolUse": 2
+          },
+          "subagent_transcripts": 2,
+          "hooks": {
+            "SessionStart|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js": {
+              "event": "SessionStart",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+              "count": 1,
+              "verdict": "arrived"
+            },
+            "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline-missing.js": {
+              "event": "UserPromptSubmit",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline-missing.js",
+              "count": 0,
+              "verdict": "failed",
+              "exit_codes": [
+                1
+              ]
+            },
+            "SubagentStart||node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js": {
+              "event": "SubagentStart",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+              "count": 2,
+              "verdict": "arrived"
+            }
+          },
+          "plugin_hook_failures": [],
+          "trace_hook_failures": [],
+          "first_request_input_tokens": 15091,
+          "verdict": "not_arrived",
+          "arrived": false,
+          "case": "dispatch-model",
+          "run": 2
+        }
+      ],
+      "events_total": {
+        "SubagentStart": 4,
+        "SessionStart": 2,
+        "PreToolUse": 2
+      },
+      "runs_total": 2,
+      "runs_arrived": 0,
+      "runs_not_arrived": 2,
+      "runs_unverified": 0,
+      "runs_no_transcript": 0,
+      "plugin_injections": 6,
+      "expected_hooks": [
+        {
+          "key": "SessionStart|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+          "label": "# AI 工作纪律（会话级常驻，auto-compact 后自动重新注入）"
+        },
+        {
+          "key": "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline-missing.js",
+          "label": null
+        },
+        {
+          "key": "SubagentStart||node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+          "label": "# AI 工作纪律（子代理版）"
+        }
+      ]
+    }
+  }
+}
