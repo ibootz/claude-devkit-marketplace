@@ -9,6 +9,7 @@
   finalize_run 从那里补进 run.json，续跑因此不重抽也不丢；
 - AI 评委（票 09，judge.py）在 finalize_run 里、规则判分之前（要读汇总里的 rule grader 结果），写 judge.json；
   待审页的分歧样本与抽检两类项在 judgepending.py，import 即注册。
+- 距上次复盘超 7 天（票 15，reviewgap.py）：登记查完即在日志里提醒先复盘，不中止。
 不完整与续跑（票 07）：每跑完一臂写一次检查点 run.json（complete=false），中途退出也留得下；
 收尾在 finalize_run，续跑（resume.py）复用它与 _run_arm，所以这两处的扩展续跑自动带上。
 """
@@ -22,7 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import (armplan, arms, clauses, envplugins, evalrun, fingerprint, gitstate, injection, injection_check,  # noqa: F401
-               judge, judgepending, preflight, record, registry, resume, sandbox_sweep, scoring, traces)
+               judge, judgepending, preflight, record, registry, resume, reviewgap, sandbox_sweep, scoring, traces)
 
 
 # eval 正常跑完的退出码：0 全过、1 有用例低于 --threshold（判分我们自己重算，不看它）。其余（如 2）是中途中止。
@@ -215,6 +216,9 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
     data_dir = Path(data_dir)
     entry, plugin_dir, manifest, evals_src, cases, extra_exclude = load_target(data_dir, name)  # 未登记即抛 NotRegistered
     repo = Path(entry['repo'])
+    gap = reviewgap.reminder(repo / 'plugin-evals' / name / 'reviews', now=now() if now else None)   # 票 15
+    if gap:
+        log('[提示] %s' % gap)
     judge_opts = {'enabled': bool(use_judge), 'model': judge_model, 'runner': judge_runner}
     if use_judge:   # --no-judge 时不读 judge-config.json；评委配置与判定标准写错要在开跑前报，免得各臂白跑
         try:

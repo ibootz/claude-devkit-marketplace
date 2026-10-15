@@ -1,0 +1,31 @@
+闸门检查：devkit-discipline 4.1.0
+- 插件目录：<worktree>/plugins/devkit-discipline（仓内路径 plugins/devkit-discipline）
+- 插件内容指纹：sha256:f2303f89385098b0e9bb687836a96da985bbfbbde162f41b9cd8ee38b88e8655（排除 evals/）
+- 覆盖：闸门外（非 major、未声明 eval-required:）；须有已审的离线对照，或通过的规则子集
+
+## 未过闸原因（与评测依据无关）
+- 插件目录有未提交改动（不含 evals/），先提交再跑 gate
+
+## 评测依据
+- 没有可采信的记录：需要已审的离线对照，或通过的规则子集
+
+同版本但未采信的记录：
+- runs/20261015T152421Z-4.1.0-gate（gate）：插件内容指纹与当前不一致（评测之后改过 evals/ 以外的内容）：sha256:c06cf79180afb51c6a65152eb28ff0f1d4177a9ea324c5b8871341770e1d9524 → 当前 sha256:f2303f89385098b0e9bb687836a96da985bbfbbde162f41b9cd8ee38b88e8655；规则子集未通过（passed=False）
+- runs/20261015T152828Z-4.1.0-gate（gate）：插件内容指纹与当前不一致（评测之后改过 evals/ 以外的内容）：sha256:c06cf79180afb51c6a65152eb28ff0f1d4177a9ea324c5b8871341770e1d9524 → 当前 sha256:f2303f89385098b0e9bb687836a96da985bbfbbde162f41b9cd8ee38b88e8655
+
+## 单测声明
+- 通过 tests[0] node test/guard-verify.js（4.1s）
+- 通过 tests[1] node test/probe-throttle-verify.js（0.7s）
+
+## 跳过记录（eval-skip:，全部版本）
+- 无
+
+## 漏检（闸门内版本推到 main 时既无已审报告、也无 eval-skip:）
+- 无
+
+## 说明
+- 建议跑对照（会先更新条款清单）：注入文本指纹相对条款清单 clauses.json 变了（sha256:86d5057dad37 → sha256:ce1397ecceec）
+- 还没有会话复盘记录（plugin-evals/<插件>/reviews/ 下没有结果）：建议先跑会话复盘（review）
+- origin/main 上还没有入库过 plugin-evals/devkit-discipline/：漏检从首份评测记录入库起算，本次不查
+
+结论：未过闸（插件目录有未提交改动（不含 evals/），先提交再跑 gate、缺可采信的评测依据）

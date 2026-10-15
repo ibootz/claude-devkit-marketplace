@@ -24,10 +24,10 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import arms, envplugins, evalrun, injection, registry
+from . import arms, envplugins, evalrun, injection, registry, reviewgap
 
 HARD, SOFT = 'hard', 'soft'
 OK, FAIL, SKIP, WARN = 'ok', 'fail', 'skip', 'warn'
@@ -456,21 +456,9 @@ def _has_jsonl(root):
 
 
 def _last_review(plugins):
-    """各仓 plugin-evals/<plugin>/reviews/ 下文件名以 YYYY-MM-DD 开头的最大日期。"""
-    best = None
-    for name, entry in plugins.items():
-        d = Path(entry['repo']) / 'plugin-evals' / name / 'reviews'
-        if not d.is_dir():
-            continue
-        for f in d.iterdir():
-            m = re.match(r'(\d{4}-\d{2}-\d{2})', f.name)
-            if m:
-                try:
-                    day = datetime.strptime(m.group(1), '%Y-%m-%d').replace(tzinfo=timezone.utc)
-                except ValueError:
-                    continue
-                best = day if best is None or day > best else best
-    return best
+    """各仓 plugin-evals/<plugin>/reviews/ 下文件名以 YYYY-MM-DD 开头的最大日期（本机本地日期，date）。"""
+    return reviewgap.last_review_date(Path(entry['repo']) / 'plugin-evals' / name / 'reviews'
+                                      for name, entry in plugins.items())
 
 
 def check_review(*, data_dir, env, need_judge=False, claude=None, run=None, now=None):
@@ -517,12 +505,13 @@ def check_review(*, data_dir, env, need_judge=False, claude=None, run=None, now=
     if last is None:
         rep.add(Item('review_gap', label, SOFT, OK, '无上次复盘记录；会话保留 %d 天（%s）' % (days, origin)))
     else:
-        gap = (now - last).days
+        today = reviewgap.today_local(now)      # 复盘文件名是本机本地日期，「今天」同样取本地日期再相减（票 15 对齐）
+        gap = (today - last).days
         if gap > days:
             rep.add(Item('review_gap', label, SOFT, WARN,
                          '上次复盘 %s，距今 %d 天，超过会话保留期 %d 天（%s）：%s 至 %s 之间的会话已被清理，本次复盘未覆盖'
                          % (last.strftime('%Y-%m-%d'), gap, days, origin, last.strftime('%Y-%m-%d'),
-                            datetime.fromtimestamp(now.timestamp() - days * 86400, timezone.utc).strftime('%Y-%m-%d'))))
+                            (today - timedelta(days=days)).strftime('%Y-%m-%d'))))
         else:
             rep.add(Item('review_gap', label, SOFT, OK, '上次复盘 %s，距今 %d 天；保留期 %d 天（%s）'
                          % (last.strftime('%Y-%m-%d'), gap, days, origin)))

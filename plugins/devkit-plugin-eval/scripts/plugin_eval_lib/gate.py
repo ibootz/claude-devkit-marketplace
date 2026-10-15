@@ -12,7 +12,10 @@
    major 升版、或当前版本的升版提交带 `eval-required:` trailer 的版本（闸门内）只认已审的离线对照。
 3. 跳过：当前版本的升版提交带 `eval-skip:` trailer 时第 2 块放行，并在输出里列出。
 
-每次运行另输出：历史里全部 `eval-skip:` 版本；漏检——闸门内版本推到 main 时既无已审报告、也无 `eval-skip:`。
+每次运行另输出：历史里全部 `eval-skip:` 版本；漏检——闸门内版本推到 main 时既无已审报告、也无 `eval-skip:`；
+「建议跑对照（会先更新条款清单）」（gatehints.py，票 15）；距上次复盘超 7 天的提醒（reviewgap.py，票 15）。
+两条提示都进 notes 的最前面，并另记在 compare_suggestion / review_reminder 字段。
+规则子集（kind=gate 的运行）由 gaterun.py 跑：`gate --run-subset` 在闸门外、缺依据、无其它未过闸原因时开跑，跑完重判。
 
 trailer 归属：plugin.json 的提交历史（沿 HEAD，`git log --follow` 跨改名）里，版本号为 V 的那一段连续提交
 （含引入 V 的升版提交）上写的 trailer，都算 V 的声明。
@@ -27,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
-from . import completeness, fingerprint, gitstate, previous, unittests
+from . import completeness, evalrun, fingerprint, gatehints, gitstate, previous, reviewgap, unittests
 from .pending import REVIEW_DONE
 
 MANIFEST_REL = '.claude-plugin/plugin.json'
@@ -428,14 +431,15 @@ def skip_records(hists):
 
 
 def evaluate(plugin_dir, *, main_ref=None, since=None, platform=None, git=None, run_tests=True,
-             unit_runner=None, tmp_parent=None):
+             unit_runner=None, tmp_parent=None, env=None, now=None, capture=None):
+    """env：取注入文字时 hook 的环境（缺省本进程环境去掉 asdf shims）；now / capture 只给单测固定时刻、替换取注入文字。"""
     target = locate(plugin_dir)
     git = shutil.which('git') if git is None else git
     plugin_fp = fingerprint.plugin_fingerprint(target.plugin_dir, target.extra_exclude)
     notes, blockers = [], []      # blockers：与评测依据无关、单独判未过闸的原因
 
     # ---- git：当前版本的升版 trailer、上一版本号、跳过记录、漏检 ----
-    top, hist_head, cur_commits, prev_version, main_used = None, [], [], None, None
+    top, hist_head, cur_commits, prev_version, main_used, segs = None, [], [], None, None, []
     leaks, leak_notes, hists = [], [], []
     if git:
         proc = _git(git, target.repo, 'rev-parse', '--show-toplevel')
@@ -507,6 +511,13 @@ def evaluate(plugin_dir, *, main_ref=None, since=None, platform=None, git=None, 
         ut_result, tests_ok, test_lines = None, True, ['本次未跑（run_tests=False，只供单测用）']
 
     passed = (eval_ok or via_skip) and tests_ok and not blockers
+
+    # ---- 提示（票 15）：只提示，不影响是否过闸 ----
+    suggestion, hint_notes = gatehints.compare_suggestion(
+        target=target, runs=runs, plugin_fp=plugin_fp, git=git if top is not None else None, top=top, segs=segs,
+        env=evalrun.child_env(env), tmp_parent=tmp_parent, capture=capture)
+    reminder = reviewgap.reminder(target.runs_dir.parent / 'reviews', now=now)
+    notes += hint_notes
     data = {
         'plugin': target.name, 'version': target.version, 'plugin_dir': str(target.plugin_dir),
         'fingerprint': plugin_fp, 'passed': passed, 'blockers': blockers,
@@ -518,9 +529,24 @@ def evaluate(plugin_dir, *, main_ref=None, since=None, platform=None, git=None, 
         'other_runs': sum(1 for a in assessments if not a.accepted and a.version != target.version),
         'unit_tests': {'ok': tests_ok, 'result': _strip_output(ut_result), 'lines': test_lines},
         'skip_records': skip_records(hists), 'main_ref': main_used, 'leaks': leaks,
-        'notes': notes + leak_notes,
+        'notes': ([suggestion['line']] if suggestion else []) + ([reminder] if reminder else []) + notes + leak_notes,
+        'compare_suggestion': suggestion, 'review_reminder': reminder,
+        'rule_subset_needed': subset_needed_reason(gated, eval_ok, skipped, blockers),
     }
     return GateResult(passed, data, render(data, target))
+
+
+def subset_needed_reason(gated, eval_ok, skipped, blockers):
+    """规则子集该不该跑：该跑返回 None，否则返回不跑的原因。"""
+    if gated:
+        return '闸门内版本只认已审的离线对照，规则子集不作依据'
+    if eval_ok:
+        return '已有可采信的评测依据'
+    if skipped:
+        return '升版提交声明了 eval-skip:'
+    if blockers:
+        return '有与评测依据无关的未过闸原因（%s）：先处理；dirty 的结果不计入闸门' % '；'.join(blockers)
+    return None
 
 
 def _strip_output(result):
@@ -554,6 +580,8 @@ def render(d, target):
                      % '；'.join(d['eval_skip']))
     else:
         lines.append('- 没有可采信的记录：需要%s' % ('已审的离线对照' if d['gated'] else '已审的离线对照，或通过的规则子集'))
+        if d.get('rule_subset_needed') is None:
+            lines.append('  - 跑规则子集：gate <插件目录> --run-subset（要先登记；只跑当前版一臂、真跑模型、不调 AI 评委）')
     if d['rejected_same_version']:
         lines += ['', '同版本但未采信的记录：']
         for a in d['rejected_same_version']:
@@ -591,6 +619,8 @@ def render(d, target):
 def main(args):
     try:
         res = evaluate(args.plugin_dir, main_ref=args.main_ref, since=args.since)
+        if getattr(args, 'run_subset', False):
+            res = _run_subset(args, res)
     except GateError as e:
         print('错误：%s' % e, file=sys.stderr)
         return 2
@@ -599,3 +629,23 @@ def main(args):
     else:
         print('\n'.join(res.lines))
     return 0 if res.passed else 1
+
+
+def _run_subset(args, res):
+    """gate --run-subset：闸门外、缺依据、无其它未过闸原因时跑一次规则子集，再重判。进度与结果写 stderr。"""
+    from . import compare, datadir, gaterun, preflight, registry   # 延迟导入：只读判定用不上这些
+    why = res.data['rule_subset_needed']
+    if why:
+        print('不跑规则子集：%s' % why, file=sys.stderr)
+        return res
+    try:
+        data_dir = datadir.resolve_data_dir(args.data_dir)
+        runner = evalrun.runner_with_timeout(args.eval_timeout * 60 if args.eval_timeout else None)
+        sub = gaterun.run_subset(data_dir, res.data['plugin'], runs=args.runs, concurrency=args.concurrency,
+                                 model=args.model, runner=runner, plugin_dir=res.data['plugin_dir'])
+    except (registry.RegistryError, datadir.DataDirError, evalrun.ClaudeNotFound, compare.CompareError,
+            preflight.PreflightFailed, gaterun.GateRunError) as e:
+        raise GateError('规则子集没跑成：%s' % e)
+    for ln in gaterun.console_lines(sub):
+        print(ln, file=sys.stderr)
+    return evaluate(args.plugin_dir, main_ref=args.main_ref, since=args.since)

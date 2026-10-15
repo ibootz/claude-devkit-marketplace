@@ -54,11 +54,14 @@ def mock_with_only_cases(agg):
 _detect_mock_with_only = mock_with_only_cases   # score_arm 的同名参数会遮住函数名
 
 
-def score_case(case, mock_with_only=False):
+def score_case(case, mock_with_only=False, count_with_only=False):
+    """count_with_only=True（规则子集只跑当前版一臂、不比臂，票 15）：with-only 的 grader 照计分，只剔除付费类型。"""
     excluded = {}
     weights = {}
     for g in case.get('graders', []):
         reason = _exclusion_reason(g, mock_with_only)
+        if reason and count_with_only and reason.startswith('with-only') and g.get('type') in RULE_GRADER_TYPES:
+            reason = None
         if reason:
             excluded[g['name']] = reason
         else:
@@ -84,7 +87,7 @@ def score_case(case, mock_with_only=False):
     }
 
 
-def score_arm(agg, mock_with_only_cases=None):
+def score_arm(agg, mock_with_only_cases=None, count_with_only=False):
     """按用例目录（去掉 evals/）建键：frontmatter name 可以重名，按 name 建键会互相覆盖。
     mock_with_only_cases 缺省时从本臂自己的 run 推（只对装了插件的臂成立）。"""
     if mock_with_only_cases is None:
@@ -92,7 +95,7 @@ def score_arm(agg, mock_with_only_cases=None):
     cases = {}
     for c in agg.get('cases', []):
         key = _case_rel_dir(c)
-        cases[key] = score_case(c, key in mock_with_only_cases)
+        cases[key] = score_case(c, key in mock_with_only_cases, count_with_only)
     return {
         'score': _mean(c['score'] for c in cases.values()),
         'cases': cases,
