@@ -1,4 +1,4 @@
-"""命令行：register / list / compare。
+"""命令行：register / list / compare / pending。
 
 退出码：0 成功；2 用法、登记、环境类错误（含未登记）；3 对照跑完但结果不完整（用例加载失败、run 出错等）。
 """
@@ -7,6 +7,7 @@ import json
 import sys
 
 from . import compare, datadir, evalrun, registry
+from . import pending
 
 
 def _utf8_stdio():
@@ -34,6 +35,7 @@ def _parser():
     c.add_argument('--model', help='覆盖被测模型（传给 eval --model）')
     c.add_argument('--threshold', type=float, default=1.0, help='判「是否通过」的用例分阈值，默认 1.0')
     c.add_argument('--keep-assembly', action='store_true', help='保留臂组装目录（排查用）')
+    pending.add_parser(sub)
     return p
 
 
@@ -51,6 +53,8 @@ def main(argv=None):
         if args.cmd == 'list':
             print(json.dumps(registry.load(data_dir)['plugins'], ensure_ascii=False, indent=2))
             return 0
+        if args.cmd == 'pending':
+            return pending.main(args, data_dir)
         res = compare.run_compare(data_dir, args.name, runs=args.runs, concurrency=args.concurrency,
                                   model=args.model, threshold=args.threshold, keep_assembly=args.keep_assembly)
     except (registry.RegistryError, datadir.DataDirError, evalrun.ClaudeNotFound, compare.CompareError) as e:

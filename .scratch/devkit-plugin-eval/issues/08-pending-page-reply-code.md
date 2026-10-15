@@ -1,6 +1,6 @@
 # 08 — 待审页与回复码
 
-Status: ready-for-agent
+Status: resolved
 
 **What to build:**
 
@@ -11,12 +11,42 @@ Status: ready-for-agent
 **Blocked by:** 03
 
 
-- [ ] 对一次对照生成待审页，页上能看到报告摘要并勾选「已审」；贴回回复码后 `run.json` 变为已审并带审阅时间
-- [ ] 回复码格式错误或对不上该次运行时，CLI 报错且不改任何文件
-- [ ] 构造超过 10 个待判项时页上只出 10 项，报告写明抽样规则与被抽中的项
-- [ ] 新增一种待审项类型只需注册类型与写回逻辑，不改页面框架（以一个示例类型证明）
-- [ ] 改插件文件前按仓根 CLAUDE.md 先读规定的技能
+- [x] 对一次对照生成待审页，页上能看到报告摘要并勾选「已审」；贴回回复码后 `run.json` 变为已审并带审阅时间
+- [x] 回复码格式错误或对不上该次运行时，CLI 报错且不改任何文件
+- [x] 构造超过 10 个待判项时页上只出 10 项，报告写明抽样规则与被抽中的项
+- [x] 新增一种待审项类型只需注册类型与写回逻辑，不改页面框架（以一个示例类型证明）
+- [x] 改插件文件前按仓根 CLAUDE.md 先读规定的技能
 
 **参考：** [spec](../../plugin-eval/spec.md) 的「2.4 判分与人工介入」后半；[11](../../plugin-eval/issues/11-judging-and-human-checkpoints.md) 第 5、7 条；[13](../../plugin-eval/issues/13-result-layout.md) 第 4 条
 
 ## Comments
+
+### 2026-10-15 实现完成
+
+在 worktree 分支 `worktree-agent-a1d5116362e7a7318` 上提交，未合并 main、未推送、未改版本号（仍 0.1.0）。动 `plugins/**` 前已用 Skill 读过 `mattpocock-skills:writing-for-agents`、`skill-creator:skill-creator`（本票只写 `scripts/` 与 `tests/`，不碰 skills / hooks / plugin.json，无追加技能）。
+
+**实现摘要**
+
+- 新模块 `scripts/plugin_eval_lib/pending.py`；CLI 新增子命令 `pending <插件名> [--run <运行 id>] [--reply '<回复码>']`。不带 `--reply` 生成待审页，带 `--reply` 写回。
+- 待审页写在用户级数据目录 `<数据目录>/pending/<插件>/<run_id>.html`，不进被测仓，自然不入库。页面自包含（内联 CSS / JS，无外部资源），每项显示类型、标题、摘要表、正文（转义后放 `<pre>`）、选项单选（默认「暂不裁定」，不进回复码）；页底实时拼回复码并提供「复制回复码」。
+- 回复码：`PE1 <run_id> <page_id> <序号><选项码> ...`，如 `PE1 20261015T084918Z-4.1.0-compare 6911e07e 1A`。容忍多余空白与大小写。`page_id` 每次生成页时重算（含随机数），记进 `run.json` 的 `pending.page_id`。
+- 报错且不改任何文件的情形：格式不对、前缀不是 `PE1`、run_id 在该插件下找不到、`--run` 与回复码的 run_id 不一致、`page_id` 不是最新一页、序号不在页上、选项码不属于该类型、同一序号出现两次、没有任何裁定、这一页已写回过、某一项的写回逻辑抛错。做法是先全部校验，再让各类型把改动暂存在内存（`Subject.stage_*`），全部成功后才统一落盘，`run.json` 最后写。
+- 写回「报告审阅」：`run.json` 的 `review` 改为 `{"status": "已审", "reviewed_at": "<UTC>"}`；`report.md` 的状态行改为「状态：**已审**（审阅时间 …，UTC）」；另在 `run.json` 记 `pending.applied_at` 与 `pending.decisions`。
+- 抽样：每页最多 10 项（`PAGE_LIMIT`）。规则：`always=True` 的类型（报告审阅）必上页；其余按类型 `priority` 由小到大依次装入，装不下的那一档以 run_id 为种子随机抽取（重复生成结果不变），上页的项保持原顺序。抽样时 `run.json` 的 `pending` 记 `sampled`、`sampling_rule`、`items`、`sampled_out`，`report.md` 追加或替换「## 待审页抽样」一节，列出规则、页上的项与没上页的项；之后再生成不需抽样时删掉这一节。
+- 扩展方式：构造 `ItemType(key, label, options, collect, apply, priority, always, hint)` 后 `register_type`，页面框架、回复码、抽样、写回事务都不用改。单测里的示例类型 `demo-note`（读写运行目录下的 `demo-notes.json`）证明了这一点。
+- 单测 23 个（`tests/test_pending.py`），全量 107 个通过。
+
+**演示（本机，未入库）**：把 demo-03 的运行目录拷到 `/tmp` 下的假仓，登记后生成待审页；用 agent-browser 无头打开，勾「已审」后页上回复码为 `PE1 20261015T084918Z-4.1.0-compare 6911e07e 1A`，「复制回复码」后提示已复制；先贴错 page_id 的回复码，退出码 2、未改文件；再贴正确回复码，`run.json` 的 review 变为已审并带审阅时间，`report.md` 状态行同步改写；再生成页提示「没有待审项」。因为这次「已审」是 AI 演示，不是用户审阅，所以不建 demo-08 目录，免得仓里留一份没人审过却标「已审」的报告。
+
+**待拍板**
+
+1. 超过 10 项时谁先上页：本票暂定「报告审阅必上页，其余按类型优先级装，最后一档随机抽」。各类型的优先级（分歧样本、抽检、条款清单变更、用例草稿、复盘候选谁先）留给 09–12 注册时定，spec 只说「超出时自动抽样」，没规定类型间的先后。
+2. 不带 `--run` 时取最新一次离线对照。如果最新那次已审、较早那次还待审，会提示「没有待审项」，要用 `--run` 指定。要不要改成默认取「最新一次还有待判项的运行」？
+
+**已知缺口与扩展点**
+
+- 「每次复盘一页」（票 12）：`Subject` 现在只指向 `runs/<run_id>/run.json`，复盘页要让它也能指向 `reviews/<日期>.json`。
+- 写回 `judge.json` 等文件由 09 起各类型的 `apply` 用 `subject.stage_json` 完成。多文件落盘按文件逐个原子替换，不是跨文件事务。
+- 别的票重新渲染 `report.md` 时（如票 07 续跑），「待审页抽样」一节会丢，重新生成待审页即可补回。
+- `record.render_report` 的状态行没写审阅时间：审阅时间只在 `pending` 写回 `report.md` 时补上。
+- Windows / Linux 未实测。
