@@ -148,7 +148,7 @@ eval 承担的部分：
 
 **来源与先后**：冷启动由 AI 按条款清单起草为主；会话复盘的候选逐步补充、替换编出来的用例。**所有来源一律先进 `drafts/`，用户勾选通过才跑**（[11](issues/11-judging-and-human-checkpoints.md) 第 4 条）。
 
-**复盘候选 → 草稿**：候选只存指针与信号（会话 id、`uuid`、时间、插件版本、命中条款 id、是否在 compact 之后），不存原文。转草稿时 AI 现读本机 jsonl，改写成合成 prompt：保留触发违规的结构，换掉项目名、路径与业务内容；上下文裁到触发轮之前 ≤ 2 轮作 `history_file`。原文过了本机保留期（90 天）的候选作废。
+**复盘候选 → 草稿**：候选只存指针与信号（会话 id、`uuid`、时间、插件版本、命中条款 id、是否在 compact 之后），不存原文。转草稿时 AI 现读本机 jsonl，改写成合成 prompt：保留触发违规的结构，换掉项目名、路径与业务内容；上下文裁到触发轮之前 ≤ 2 轮作 `history_file`。先试读原文，读得到就照常改写；读不到的候选作废，并按指针时间区分原因：早于 Claude Code 的 `cleanupPeriodDays`（缺省 30 天）记「过了保留期」，否则记文件或记录不在（2026-10-16 C 批定稿 3）。
 
 **compact 之后**：合成回放会话（模板化 compact 摘要 + 1～2 轮尾巴 + 被测 prompt）；每个注入插件只挑 ≤ 3 条高风险条款做 compact 版。离线回放测的是「长历史稀释」，测不到注入丢失；「注入在 compact 后是否重新到达」归会话复盘（查 `compact_boundary` 之后有无该插件注入）加静态查 hook matcher。
 
@@ -310,6 +310,8 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
   clause-rehang.json                         # 条款退役后用例改挂建议（票 11 消费）
   judge-config.json                          # AI 评委配置（可选）
   drafts/<case>/                             # 用例草稿：eval 原生用例目录 + draft.json
+    history.jsonl                            # 回放用例的合成历史（compact 回放、复盘改写；0.5.0）
+    .gitignore                               # 只在复盘候选改写的草稿里，内容 *（0.5.0）
   draft-skips.json                           # AI 起草时判「不宜起草」的目标与原因
   baseline.json                              # 各用例的基线判定结果
   runs/<时间>-<版本>-<compare|gate|clauses|drafts|baseline>/
@@ -327,6 +329,7 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
 <repo>/plugins/<plugin>/evals/<case>/judge/<id>.md   # 用例声明的 AI 评委判定标准（在 evals/ 下，不进插件内容指纹）
 ~/.claude/plugins/data/devkit-plugin-eval-<marketplace>/
   registry.json                              # 被测插件登记清单（插件名 + 仓路径）
+  private-terms.txt                          # 用户自配的私有词表（可选，0.5.0），不进任何仓库
   traces/                                    # 全量 trace 本机缓存，留 90 天
 ```
 
@@ -371,6 +374,21 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
   - **`gate --json` 新增**：`compare_suggestion`（建议跑对照的提示，null 为不提示）、`review_reminder`（距上次复盘的提醒）、`rule_subset_needed`（null 表示该跑规则子集；否则是不跑的原因，如已有可采信依据、单测声明未通过、不在 git 仓）、`rule_subset_threshold`。
   - **`gate --threshold`**：同 `--run-subset` 用，判「是否通过」的用例分阈值，取值 (0, 1]，越界报参数错误、退出码 2；默认 1.0，即每例全部 run 都过。gate 采信规则子集时 `basis[]` 多一个 `threshold`（该记录所用阈值）；低于 1.0 时「评测依据」那一行显式标出。
   - **终端摘要**：compare / resume 收尾打印的规则差、AI 评委差，剔除了回归守护用例时都注明「不含 N 个回归守护用例」，N=0 不写。各臂总分含回归守护用例，只在差那一行剔除。
+- devkit-plugin-eval 0.5.0 起（2026-10-16 集成 C 批 13 / 16 时登记）：
+  - **新子命令**：`drafts compact <插件>`（compact 后回放用例，每插件合计 ≤ 3 个，含已打回的；`--clauses` 点名时已打回的不算覆盖）、`drafts from-review <插件>`（复盘候选转草稿；`--date YYYY-MM-DD` 指定复盘日期，缺省最新）。两者都产出 `kind=drafts` 的运行与待审页。
+  - **compare 收尾**：完整时最后打印一行 `下一步：生成待审页 → "<python>" "<plugin_eval.py 完整路径>" --data-dir "<数据目录>" pending <插件> --run <run_id>`；不完整时照旧只给续跑命令。
+  - **用例文件**：`case.yaml` 的 `context.history_file` 指向用例目录内的 `history.jsonl`（合成的 Claude Code 会话 jsonl：可带 `compact_boundary` + 摘要 + 1～2 轮尾巴，uuid 用 uuid5，不带 cwd）。只许用例目录内的普通文件，`..` 与软链接不过。
+  - **`draft.json` 新增**：
+    - `source` 新值 `compact-replay`；复盘改写沿用 `review-candidate`。`category` 新值 `compact-replay`（要挂条款）、`review-replay`（不挂条款也能上页）。
+    - `replay`：`base_case`、`summary_template`、`tail_turns`、`history_file`、`history_session_id`、`injection_overlap_chars`、`injection_hits`、`selection_reasons`；复盘改写的草稿取其中 `history_file`、`history_session_id`，另有 `history_turns`、`compact`。
+    - `review_candidate`：`review_date`、`candidate_id`、`kind`、`rule`、`after_compact`。
+    - `clause_reason`：改写 AI 给的挂条款理由（一句话，不引用原文）。
+    - `injection_checked`：复盘改写时是否拿到注入文字、做了注入核对；false 时待审页事实栏写「未做注入核对」。
+    - `clause_hint`、`exported_from`：只出现在本仓入库的 3 个演示草稿（`plugin-evals/devkit-discipline/drafts/compact-*`）里，前者记 demo-10 清单里的条款号，后者记出处。
+  - **复盘改写草稿目录的 `.gitignore`**：内容 `*`，整个草稿目录不进 `git status`；待审页通过、移进 `evals/` 时与 `draft.json` 一起删掉、不随搬。drafts 的识别规则：只认草稿目录顶层、内容恰为 `*` 的 `.gitignore`。
+  - **`reviews/<日期>.json` 的 `candidates[].conversion`**：`{status, code?, draft?, clauses?, findings?, problems?, at}`。`status` 取 `drafted` / `void` / `skipped`（终态）与 `privacy-rejected` / `invalid` / `error`（下次 `from-review` 重试）。`void` 的 `code` 取 `past-retention` / `file-gone` / `record-gone` / `no-pointer`；`skipped` 只记枚举码；`findings` 只记命中类别与个数。同一天重跑带上 conversion；跨日期只沿用 `drafted` 与 `skipped`，`void` 不沿用。
+  - **私有词**：环境变量 `PLUGIN_EVAL_PRIVATE_TERMS`（逗号分隔）与数据目录下的 `private-terms.txt`（每行一个或逗号分隔，`#` 起注释）取并集，不区分大小写；≤ 3 字的按整词匹配。两处都为空时，`from-review` 在 stderr 与摘要各打一行「未配置私有词，只能靠会话推断与形态检测」。
+  - **`from-review` 隐私自检**：路径与邮箱形态、会话推断的私有词（cwd 各段与主机名、包名标签 ≥ 3 字，分支名 ≥ 4 字，通用词除外）、用户私有词、与原文片段（除 compact 边界标记外的全部片段，含工具输出）去空白后逐字重合 ≥ 24 字。重合窗口出现在 Claude Code 固定文案或被测插件自己的文本文件里的不算（暂定口径，见票 13）。输出与待审页写明「由本机真实会话改写，通过前逐字审隐私」。
 
 ## 不做的
 
@@ -463,3 +481,11 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
   6. 规则子集里全部选中用例都没有可计分的规则 grader 时，运行记不完整（`complete=false`），原因写「没有可计分的规则 grader」；gate 不采信这次结果，也不报「规则子集未通过」。
   - 两票其余自报暂定口径（11 的 8 条、15 的 9 条）照现状保留，票内标题改为「已定（2026-10-16 主会话复核）」。
   - 集成审查（结论「修后合并」）后另定：各臂总分含回归守护用例，只在差那一行剔除并注明（报告与终端都注明）；`gate --threshold` 限定 (0, 1]。修订明细见票 11、15 的「集成审查修订」一段。
+- 2026-10-16 C 批（13/16）集成定稿（集成分支 `worktree-agent-a8d415191cb4959db`，devkit-plugin-eval 0.5.0；主会话与 jev 复核定稿，用户授权「不用停下确认」；字段见上文「四、目录布局与状态文件」0.5.0 一条）：
+  1. from-review 草稿防误提交：每个复盘改写的草稿目录放内容为 `*` 的 `.gitignore`；待审页通过、移进 `evals/` 时删掉；`from-review` 输出与待审页该项写明「由本机真实会话改写，通过前逐字审隐私」。
+  2. 私有词两个入口取并集：环境变量 `PLUGIN_EVAL_PRIVATE_TERMS` 与数据目录下的 `private-terms.txt`（文件名由集成者定）；都为空时 stderr 与摘要各给一行「未配置私有词，只能靠会话推断与形态检测」。
+  3. 原文保留期：先试读会话，读得到就照常改写；读不到再按时间区分 `past-retention` / `file-gone` / `record-gone` 记作废。2.3 原句「90 天」改为「Claude Code 的 `cleanupPeriodDays`（缺省 30 天）」，已修订。
+  4. `drafts compact --clauses Cxxx` 点名时，已打回的回放草稿不算覆盖、可重写；不点名时仍算覆盖。与 B 批定稿第 3 条一致。
+  5. run-eval 覆盖面保持合并：对照、复盘、闸门、起草、基线、首次抽条款都归 run-eval，整个插件仍只有两个 skill。理由：没有 skill 加载时 AI 拿不到 CLI 路径；票 17 也要求由 skill 引导走到复盘与闸门。
+  6. 两票其余自报暂定口径（13 的 11 条、16 的 8 条）里审查判「合理」的照现状保留；13 的第 2、10 条按本节第 4、3 条改写。票内标题改为「已定（2026-10-16 主会话复核）」。
+  - 集成时另定（暂定，待主会话复核，明细见票 13「C 批集成」一节）：逐字重合检查豁免 Claude Code 固定文案与被测插件自己的文本文件；compare 只在完整时打印下一步命令。

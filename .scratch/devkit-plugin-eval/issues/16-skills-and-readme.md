@@ -63,7 +63,9 @@ Status: resolved
 5. 动笔前用 Skill 工具读了 `mattpocock-skills:writing-for-agents`、`skill-creator:skill-creator`、`plugin-dev:skill-development`、`plugin-dev:plugin-structure`，另读了仓规 `plugin-description-length.md`。
 - 另：`claude plugin validate plugins/devkit-plugin-eval` 通过；插件单测 531 个全过（本票没改代码，只确认没碰坏）。
 
-**暂定口径（待主会话复核）**
+**已定（2026-10-16 主会话复核）**
+
+8 条照原样保留。第 2 条按 C 批定稿 5 维持合并；第 4 条因 CLI 缺口 1 已修，改为照 compare 打印的下一步命令执行，见下方「C 批集成」一节。
 
 1. skill 名：`run-eval`（跑评测）、`handle-pending`（处理待审）。备选：`offline-compare` + `pending-review`（review 与会话复盘子命令撞词）、`compare` + `pending`（与子命令同名，第一个 skill 覆盖面比 compare 宽）。理由：名字要容纳第 2 条的覆盖范围。用户可见（skill 全名）。Jev 同选，置信 0.92。
 2. 会话复盘、发版闸门、起草用例、基线判定、首次抽条款并入 `run-eval` 的「其余跑动作」表，description 加「发版前过一下闸门」「跑会话复盘」两个触发短语；仍是两个 skill、两个决策时刻。备选：`run-eval` 只管 compare / resume，其余只写进 README。理由：票 17 要求「按 skill 引导完整走一遍：登记 → … → 会话复盘 → 闸门检查」；只写 README 时用户说「跑会话复盘」，AI 没有 skill 可加载。用户可见（触发范围）。
@@ -78,7 +80,8 @@ Status: resolved
 **CLI 缺口（本票不改代码，交集成或后续票）**
 
 1. compare 收尾不生成待审页，终端也不提示下一步跑 `pending`；resume 收尾会自动生成。两者不一致，skill 补了一步。
-2. 输出里给的下一步命令写成 `python3 plugin_eval.py --data-dir '…'`（`pending` 生成页、`review`、`drafts`、`resume_hint`）：脚本名不是完整路径，复制即跑不起来；单引号在 Windows cmd 下不成立（票 08 L4 已知）。skill 里要求 AI 换成完整路径。
+2. 输出里给的下一步命令写成 `python3 plugin_eval.py --data-dir '…'`（`pending` 生成页 `pending.py:677`、`review` `review.py:464`、`drafts` `drafts.py:627`、`clauses` `clauses.py:809`、`register` `registry.py:100`）：脚本名不是完整路径，复制即跑不起来；单引号在 Windows cmd 下不成立（票 08 L4 已知）。skill 里要求 AI 换成完整路径。
+   - C 批集成更正（2026-10-16）：原文把 `resume_hint` 列进来是错的，它一直用 `sys.executable` 加脚本完整路径；原文漏了 `clauses.py:809`。行号按集成分支。compare 收尾新增的下一步行同样是完整命令。
 3. `pending --reply` 必须给插件名，回复码里却没有插件名。用户只贴回复码时 AI 要猜插件名；建议 CLI 在只登记了一个插件、或 run_id 只在一个登记仓里找得到时允许省略插件名。
 4. `drafts write|page|list|sync --help` 打印的是同一份 `drafts` 帮助（子动作是位置参数），各子动作的参数归属只能从帮助文字里的「write：」前缀看出。
 5. `baseline` 的 `--concurrency`、`--model` 没有帮助文字；`compare --threshold` 仍不校验范围（票 15 已知缺口）。
@@ -87,7 +90,7 @@ Status: resolved
 **已知缺口**
 
 - 触发测试的隔离环境里没有 skill-creator、plugin-dev 等相邻插件，测不到与它们抢触发时谁赢；只测了第一跳是否加载 skill，加载后是否照做归票 17。
-- README 只覆盖 0.4.0 的子命令；票 13 新增的子命令或参数由集成方补进 README 第五节与 run-eval 的「其余跑动作」表。
+- ~~README 只覆盖 0.4.0 的子命令~~：C 批集成已补票 13 的子命令与参数。
 - README 链到仓内 `.scratch/plugin-eval/spec.md`，插件单独分发时这条链接失效（GitHub 上浏览仓库时有效）。
 - Windows / Linux 未实测。
 
@@ -96,3 +99,28 @@ Status: resolved
 - 真评时直接对 AI 说「评一下 devkit-discipline」「发版前过一下闸门」触发 `run-eval`，贴回复码触发 `handle-pending`；每页用户耗时由票 17 记录。
 - 首评顺序写在 README「五、首次评测一个插件的顺序」与 `run-eval` 第 2 步。
 - 触发测试用例 `demo-16/trigger-cases/` 可直接作为本插件 skill 类用例的草稿来源（需经待审页勾选才进 `evals/`）。
+
+### 2026-10-16 C 批集成（集成分支 `worktree-agent-a8d415191cb4959db`，devkit-plugin-eval 0.5.0）
+
+审查原文结论「修后合并」。各条修法如下：
+
+- **应修 1 / S6**：
+  - run-eval：「复盘候选转草稿」改指向 `drafts from-review <插件>`（带 `--date`），表里补 `drafts compact` 一行；放后台的清单加上这两个子命令；「原样转述的提示」加上 from-review 的隐私提醒与「未配置私有词」提示。
+  - README：第五节子命令表补 `drafts compact`、`drafts from-review`（含 `--date`）；第六节加「复盘候选转草稿的隐私防护」一小节，写明私有词两个入口与 `.gitignore`；第七节目录布局补 `drafts/<case>/history.jsonl`、`.gitignore` 与数据目录的 `private-terms.txt`。
+- **应修 2 / CLI 缺口 1**：compare 完整时最后打印 `下一步：生成待审页 → "<sys.executable>" "<脚本完整路径>" --data-dir "<数据目录>" pending <插件> --run <run_id>`，不完整时只给续跑命令（`resume.pending_hint`；单测 `test_compare.py` 的 `CompareNextStepTest.test_complete_prints_full_pending_command`、`test_incomplete_gives_resume_not_pending`）。run-eval 第 6 步与 README 首评顺序第 5 步改为照这条命令执行。真跑验证见 [demo-integ-C](../demo-integ-C/README.md) 第 3 节。
+- **应修 3**：「建议跑对照」按代码实际输出分三处原样列出：
+  - gate：「建议跑对照（会先更新条款清单）」；
+  - review 终端：行末「；建议跑对照」；
+  - 复盘待审页：「建议跑对照：Claude Code 版本或主力模型与上次离线对照不同」。
+  复盘提醒的两种措辞也照代码原文写。
+- **应修 4**：改为「勾选『通过』的草稿在写回时自动移进 `evals/`」，run-eval 与 README 都改了。
+- **应修 5**：handle-pending 与 README 第六节改为：回复码不合法时什么都不写；落盘途中出错时，报错会列出「已写成」的文件，`run.json` 保持旧状态，排除问题后用同一回复码重试。依据是 `pending.py` 里 `commit` 的报错文案。
+- **一并做的**：
+  - 删掉 run-eval 第 2 步「且插件有常驻注入」，改写成：没有常驻注入时 `clauses` 输出「不需要条款清单」、退出码 0；
+  - 改正上文 CLI 缺口 2 的两处事实错误；
+  - `pending --run` 的帮助文字改为「默认取最新一次对照 / 条款 / 草稿运行」；
+  - handle-pending 加一条：页上的 `review-*` 草稿带隐私行，通过前逐字审。
+- **触发测试补例**：新增 `r5-session-review`（「跑会话复盘」类，提问里不出现「复盘」）与 `r6-draft-cases`（「起草用例」类），每例 3 次，6/6 有效且全对，实际加载的都是 `devkit-plugin-eval:run-eval`，花费 $1.2906。明细见 [demo-16](../demo-16/README.md) 的「C 批集成补例」一节。
+- description 没改，仍符合 `plugin-description-length.md` 的上限。
+
+**CLI 缺口现状**：第 1 条已修；第 2 条仍在，除 compare / resume 外，其余输出仍是短命令，skill 已写明换成完整路径；第 3～6 条未动。

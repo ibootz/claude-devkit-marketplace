@@ -36,6 +36,17 @@
 
 「有效/对」：有效 run 数 / 两个 grader 都通过的 run 数。花费（eval 报的标价估算）：第一轮 $5.06，第二轮 $5.33。
 
+## C 批集成补例（2026-10-16）
+
+补两例应触发 `run-eval` 的提问（同时是 `handle-pending` 的不应触发例），跑法同第二轮（`max_turns: 10`、每例 3 次、`--keep-temp` 核对实际加载的 skill）：
+
+| 用例 | 提问（摘要） | 期望 | 有效/对 | 实际加载 |
+|---|---|---|---|---|
+| r5-session-review | 扫本机最近会话，看某插件实际触发、拦截与 hook 报错（不出现「复盘」二字） | run-eval | 3/3 | `devkit-plugin-eval:run-eval` ×3 |
+| r6-draft-cases | 条款清单已确认、还没有用例，让 AI 起草用例草稿 | run-eval | 3/3 | `run-eval` ×3 |
+
+花费 $1.2906。明细见 [../demo-integ-C/README.md](../demo-integ-C/README.md)。
+
 ## 局限
 
 - 隔离环境里没有 skill-creator、plugin-dev 等相邻插件，n1、n4 测的是本插件 description 不过度触发，测不到与那些 skill 抢触发时谁赢。

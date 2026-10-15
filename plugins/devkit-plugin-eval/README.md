@@ -77,9 +77,11 @@ python3 plugin_eval.py list
 | `check <插件>` | 单跑前置检查：hook 解释器可达、`claude` 与 eval 参数、登录态、`claude plugin validate`、已登记等硬项，工作区未提交改动等软项。`--review` 查复盘前的各项。硬项失败退出码 2 | 否 |
 | `clauses <插件>` | 首次抽**条款清单**（从注入文字拆出可单独判定的条款）。只在插件尚无 `clauses.json` 时执行；之后清单过期由 `compare` 第一步增量重抽 | 是 |
 | `drafts write <插件>` | AI 按条款清单的缺口起草**用例草稿**，出待审页。`--clauses C001,C007` 只起草点名的条款（点名时已打回的草稿会重写） | 是 |
+| `drafts compact <插件>` | 起草 **compact 回放用例**：合成一段对话历史，先 compact 再追问，测压缩后是否仍守条款。每插件合计 ≤ 3 个（含已打回的）；`--clauses` 点名时已打回的不算覆盖、会重写 | 是 |
+| `drafts from-review <插件>` | 把复盘待审页里选了「转草稿」的候选改写成用例草稿，出待审页。`--date` 指定哪天的复盘，缺省最新。隐私防护见第六节 | 是 |
 | `drafts page` / `list` / `sync` | 只出草稿待审页 / 只读地列草稿区 / 把退役条款的用例退回草稿区并附改挂建议 | 否 |
 | `baseline <插件>` | 新用例在「不装」臂跑 3 次，≥ 2/3 通过的打 `baseline-satisfied` 标记，只作**回归守护用例**（比上一版不退化，不计相对不装的差） | 是 |
-| `compare <插件>` | 跑一次离线对照。`--base` 指定上一版，`--env-plugin` 加环境插件臂，`--no-judge` 不调 AI 评委 | 是 |
+| `compare <插件>` | 跑一次离线对照。`--base` 指定上一版，`--env-plugin` 加环境插件臂，`--no-judge` 不调 AI 评委。完整时终端最后一行给出生成本次待审页的完整命令（带 `--run`） | 是 |
 | `resume <运行目录>` | 续跑不完整的对照：已完成的 run 不重跑，只补判无效与未跑的 run；收尾自动重新生成待审页 | 是 |
 | `pending <插件>` | 生成待审页（缺省取最新一次对照、条款或草稿运行；`--run` 指定；`--review` 出复盘页）；`--reply '<回复码>'` 写回 | 否 |
 | `review` | 会话复盘：读本机会话记录，给每个已登记插件写 `reviews/<日期>.json`。`--days` 往回看几天 | 否 |
@@ -90,10 +92,10 @@ python3 plugin_eval.py list
 ### 首次评测一个插件的顺序
 
 1. `register` 登记。
-2. 插件有常驻注入时 `clauses` 抽条款清单，在待审页确认。
-3. `drafts write` 起草用例，在待审页勾选；通过的草稿移进 `plugins/<插件>/evals/`。
+2. `clauses` 抽条款清单，在待审页确认。插件没有常驻注入时它输出「不需要条款清单」、退出码 0，直接下一步。
+3. `drafts write` 起草用例，在待审页勾选；通过的草稿在写回时自动移进 `plugins/<插件>/evals/`。
 4. `baseline` 判基线。
-5. `compare` 跑对照，`pending` 出页，审报告。
+5. `compare` 跑对照，照终端最后一行的命令（`pending <插件> --run <运行目录名>`）出页，审报告。
 6. 发版前 `gate`。
 
 ### 不完整与续跑
@@ -108,13 +110,22 @@ python3 plugin_eval.py list
 
 1. `pending <插件>` 生成页，输出页路径与浏览器链接。
 2. 你在页上逐项选，页底拼出回复码，形如 `PE1 <run_id> <page_id> 1A 2B ...`，点「复制回复码」。
-3. 把回复码贴回对话（或自己执行 `pending <插件> --reply '<回复码>'`）。全部项写成功才落盘，任一项出错什么都不写。
+3. 把回复码贴回对话（或自己执行 `pending <插件> --reply '<回复码>'`）。回复码不合法（页已作废、已写回过、序号或选项码不对）时退出码 2，什么都不写；落盘途中出错时报错列出「已写成」的文件、`run.json` 保持旧状态，排除问题后用同一回复码重试即可补齐。
 
 规则：
 
 - 每页 ≤ 10 项。报告审阅与条款清单变更必上页；其余按「分歧样本 > 抽检 > 用例草稿 > 复盘候选」装入，装不下的随机抽，抽样规则写进报告。没上页的项留到下一页。
 - 只认最新一页，且只能写回一次。重新生成页会让旧页作废。
 - **待审报告不能作为改插件或发版的依据。** 你审过、写回成「已审」才算数。
+
+### 复盘候选转草稿的隐私防护
+
+`drafts from-review` 读本机真实会话，把选中的候选改写成用例。产出是**由本机真实会话改写**的，通过前要逐字审隐私（prompt、对话历史、grader、文件桩都要看）。防护有四层：
+
+- 原文片段只在内存里交给 AI 改写，不落盘。写盘前对改写结果自检：路径与邮箱形态；从这次会话推断出的私有词（项目目录名、家目录用户名、git 分支名、出现过的主机名与包名里的非通用段）；与原文片段逐字重合 24 字以上。任一命中整条不写，结果记 `privacy-rejected`。
+- 私有词表可补两处，取并集：环境变量 `PLUGIN_EVAL_PRIVATE_TERMS`（逗号分隔），以及数据目录下的 `private-terms.txt`（每行一个或逗号分隔，`#` 起注释）。写公司名、项目代号、客户名；这份词表只在本机，不进任何仓库。两处都为空时输出「未配置私有词，只能靠会话推断与形态检测」。3 个字母及以下的词按整词匹配。
+- 每个草稿目录自带内容为 `*` 的 `.gitignore`，通过前 `git add -A` 也带不走它；通过写回时这个文件与 `draft.json` 一起删掉、不进 `evals/`。
+- 待审页上这类草稿带「隐私：由本机真实会话改写，通过前逐字审隐私」一行；没拿到注入文字、没做注入核对的另有一行说明。
 
 ## 七、目录布局
 
@@ -127,6 +138,8 @@ python3 plugin_eval.py list
   clause-rehang.json                         # 条款退役后用例改挂建议
   judge-config.json                          # AI 评委配置（可选）
   drafts/<case>/                             # 用例草稿：eval 原生用例目录 + draft.json
+    history.jsonl                            # compact 回放用例的合成对话历史（case.yaml 的 context.history_file）
+    .gitignore                               # 只在复盘候选转来的草稿里有，内容 *
   draft-skips.json  baseline.json            # 不宜起草的目标；各用例的基线判定
   runs/<时间>-<版本>-<compare|gate|clauses|drafts|baseline>/
     run.json                                 # 唯一真源
@@ -136,6 +149,7 @@ python3 plugin_eval.py list
   gold/<id>.json                             # 金标样本（你在待审页裁定过的分歧与抽检）
 ~/.claude/plugins/data/devkit-plugin-eval-<市场名>/
   registry.json                              # 登记清单
+  private-terms.txt                          # 私有词表（可选，你自己建），见第六节
   pending/<plugin>/<run_id>.html             # 待审页，不入库
   traces/                                    # 全量 trace 本机缓存
 ```
