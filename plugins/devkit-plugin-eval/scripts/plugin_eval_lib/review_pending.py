@@ -63,7 +63,7 @@ def _candidate_apply(subject, item, code, now):
 REVIEW_CANDIDATE = pending.ItemType(
     key='review-candidate', label='复盘候选',
     options=(('A', '转用例草稿（由 AI 现读本机会话改写成合成用例，进 drafts/ 再审）'), ('B', '不转')),
-    collect=_candidate_collect, apply=_candidate_apply, priority=CANDIDATE_PRIORITY,
+    collect=_candidate_collect, apply=_candidate_apply, priority=CANDIDATE_PRIORITY, kinds=frozenset({review.KIND}),
     hint='会话复盘发现的一类违规或现象。只列信号与定位指针，不含对话原文；转草稿时才现读本机会话，原文过了保留期即作废。')
 
 
@@ -88,7 +88,7 @@ def _hint_apply(subject, item, code, now):
 
 COMPARE_HINT = pending.ItemType(
     key='review-compare-hint', label='建议跑对照', options=(('A', '知道了（之后去跑 compare）'),),
-    collect=_hint_collect, apply=_hint_apply, always=True,
+    collect=_hint_collect, apply=_hint_apply, always=True, kinds=frozenset({review.KIND}),
     hint='上次离线对照的结果与现在的运行环境不可直接比。选「知道了」只记已读，不会自动跑对照。')
 
 pending.register_type(COMPARE_HINT)       # 先注册：页上排在复盘候选前面

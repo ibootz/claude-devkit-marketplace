@@ -10,6 +10,8 @@
   stage_delete 暂存。全部项都写回成功才统一落盘，任一项抛错则什么都不写。
 - options：((选项码, 页上文字), ...)，选项码是单个大写字母；页上另有「暂不裁定」，不进回复码。
 - always=True 的类型必上页；其余按 priority（小者先）装满 PAGE_LIMIT，装不下的那一档以 run_id 为种子随机抽取。
+- kinds：适用于哪类结果（结果文件的 kind：compare / clauses / review）。生成页只跑 kind 匹配的类型的 collect，
+  复盘页（kind=review，run_dir 是 reviews/）不会去跑离线对照那几类的 collect，反之亦然。缺省只适用于 compare。
 
 内置类型只有「报告审阅」（本票）。后续：分歧样本与抽检（票 09）、条款清单变更（票 10）、用例草稿（票 11）、
 复盘候选与「建议跑对照」（票 12，见 review_pending：每个插件每次复盘一页，Subject 指向 reviews/<日期>.json，
@@ -37,6 +39,7 @@ from typing import Callable, Optional
 from . import record, registry
 
 PAGE_LIMIT = 10
+RUN_KINDS = ('compare', 'clauses')   # runs/ 下有待审项的结果种类；不带 --run 时在这两类里挑
 REPLY_PREFIX = 'PE1'
 REVIEW_DONE = '已审'
 SAMPLING_HEADING = '## 待审页抽样'
@@ -80,6 +83,7 @@ class ItemType:
     priority: int = 100
     always: bool = False
     hint: str = ''                # 页上该类型项的说明
+    kinds: frozenset = frozenset({'compare'})   # 适用于哪类结果（rec['kind']）
 
 
 class TypeRegistry(object):
@@ -100,6 +104,10 @@ class TypeRegistry(object):
 
     def all(self):
         return list(self._types.values())
+
+    def for_kind(self, kind):
+        """适用于这类结果的类型（按注册顺序）。"""
+        return [t for t in self._types.values() if kind in t.kinds]
 
     def as_dict(self):
         return dict(self._types)
@@ -229,7 +237,7 @@ def _review_apply(subject, item, code, now):
 
 REPORT_REVIEW = ItemType(
     key='report-review', label='报告审阅', options=(('A', '已审：读完报告，可作改插件或发版的依据'),),
-    collect=_review_collect, apply=_review_apply, always=True,
+    collect=_review_collect, apply=_review_apply, always=True, kinds=frozenset({'compare'}),
     hint='待审报告不能作为改插件或发版的依据。读完下面的报告后选「已审」；没读完就选「暂不裁定」。')
 
 
@@ -329,13 +337,14 @@ def _find_run(data_dir, name, run_id, err=PendingError):
                 recs[c] = _load_run(runs / c)
             except PendingError as e:      # 坏的历史记录不挡别的运行；只有 --run 指定它时才报错
                 print('注意：跳过 %s' % e, file=sys.stderr)
-        cands = [c for c in cands if isinstance(recs.get(c), dict) and recs[c].get('kind') == 'compare']
+        # 单跑 clauses 的运行（kind=clauses）也有待审项（条款清单变更），与离线对照同样默认选中、同样列进较早待审
+        cands = [c for c in cands if isinstance(recs.get(c), dict) and recs[c].get('kind') in RUN_KINDS]
         if not cands:
-            raise NothingPending('%s 下没有离线对照的运行记录' % runs)
+            raise NothingPending('%s 下没有离线对照或条款清单的运行记录' % runs)
         # 跳过未结束的运行（锁被占用或检查点）：它们的 run.json 还会被改写
         done = [c for c in cands if not resume.RunLock(data_dir, c).busy() and not _unfinished(recs[c])]
         if not done:
-            raise NothingPending('%s 下的离线对照都还没结束（进行中或中途退出待续跑）：%s' % (runs, '、'.join(cands)))
+            raise NothingPending('%s 下的运行都还没结束（进行中或中途退出待续跑）：%s' % (runs, '、'.join(cands)))
         run_id = done[-1]
     if not _RUN_ID_RE.match(run_id) or not (runs / run_id / 'run.json').is_file():
         raise err('插件 %s 下没有运行 %r（找的是 %s/%s/run.json）' % (name, run_id, runs, run_id))
@@ -373,18 +382,18 @@ def generate(data_dir, name, run_id=None, *, now=None, types=None):
 
 
 def _earlier_with_items(data_dir, repo, latest_dir, types):
-    """比 latest_dir 早、已结束、仍有待判项的离线对照：[(run_id, 项数)]，按时间先后。只读，不改任何文件。"""
+    """比 latest_dir 早、已结束、仍有待判项的运行（离线对照或单跑条款清单）：[(run_id, 项数)]，按时间先后。只读。"""
     out = []
     for d in sorted(latest_dir.parent.iterdir()):
         if d.name >= latest_dir.name or not (d / 'run.json').is_file():
             continue
         try:
             rec = _load_run(d)
-            if not isinstance(rec, dict) or rec.get('kind') != 'compare' or _unfinished(rec) \
+            if not isinstance(rec, dict) or rec.get('kind') not in RUN_KINDS or _unfinished(rec) \
                     or resume.RunLock(data_dir, d.name).busy():
                 continue
             subject = Subject(repo, d, rec)
-            n = sum(len(list(t.collect(subject) or [])) for t in types.all())
+            n = sum(len(list(t.collect(subject) or [])) for t in types.for_kind(rec.get('kind')))
         except Exception:  # noqa: BLE001 —— 只是提示，坏记录或收集出错的运行不列
             continue
         if n:
@@ -419,7 +428,7 @@ def _generate(data_dir, name, repo, run_dir, now, types, subject=None):
 
     collected = []
     by_key = types.as_dict()
-    for t in types.all():
+    for t in types.for_kind(rec.get('kind')):   # 只跑适用于这类结果的类型：复盘页不跑离线对照的 collect，反之亦然
         try:
             items = list(t.collect(subject) or [])
         except Exception as ex:  # noqa: BLE001 —— 收集逻辑由各类型提供，出错时给出类型名，不打 traceback
@@ -513,7 +522,8 @@ def render_page(rec, page_id, entries, *, total, sampled_out):
              '<h1>待审页：%s %s</h1>' % (e(str(p.get('name'))), e(str(p.get('version')))),
              '<p class="meta">运行 <code>%s</code> · 页 <code>%s</code> · 本页 %d 项' % (e(str(run_id)), e(page_id), len(entries))]
     if sampled_out:
-        parts.append('（共 %d 项待判，已按规则抽样，%d 项没上页，见 report.md「待审页抽样」）' % (total, len(sampled_out)))
+        where = ('复盘结果的 pending.sampled_out' if rec.get('kind') == 'review' else 'report.md「待审页抽样」')
+        parts.append('（共 %d 项待判，已按规则抽样，%d 项没上页，名单见 %s）' % (total, len(sampled_out), where))
     parts.append('</p><p class="hint">逐项选择后，点页底的「复制回复码」，把回复码贴回对话。'
                  '这一页只认最新生成的那份回复码，且只能写回一次。</p>')
     for t, no, it in entries:

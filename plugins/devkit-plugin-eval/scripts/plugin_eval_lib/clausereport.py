@@ -11,9 +11,24 @@ def _esc(text):
     return str(text or '').replace('|', '\\|').replace('\n', ' ')
 
 
+def _status(cc):
+    """裁定后 status 已改写成 confirmed / rejected；旧记录只写了 decision，按 decision 补判。"""
+    st = cc.get('status')
+    dec = (cc.get('decision') or {}).get('status')
+    if st == 'pending-confirmation' and dec in ('confirmed', 'rejected'):
+        return dec
+    return st
+
+
 def banner_lines(rec):
     cc = rec.get('clause_check') or {}
-    st = cc.get('status')
+    st = _status(cc)
+    at = (cc.get('decision') or {}).get('at')
+    if st == 'confirmed':
+        return ['', '> **条款清单变更已确认**（%s，UTC）：已写入 `plugin-evals/%s/clauses.json`；本报告的逐条款覆盖仍按确认前的清单计。'
+                % (at, (rec.get('plugin') or {}).get('name'))]
+    if st == 'rejected':
+        return ['', '> **条款清单变更已打回**（%s，UTC）：清单未改；下次对照会重新抽取。' % at]
     if st == 'pending-confirmation':
         n = cc.get('proposal_counts') or {}
         what = ('尚无条款清单，本次已整份抽取 %d 条' % n.get('added', 0) if cc.get('proposal_kind') == 'extract'
@@ -34,10 +49,11 @@ def banner_lines(rec):
 
 def section_lines(rec):
     cc = rec.get('clause_check') or {}
-    st = cc.get('status')
+    st = _status(cc)
     if not st or st == 'no-injection':
         return []
     label = {'up-to-date': '未过期（注入文本指纹与清单一致，未重抽）', 'pending-confirmation': '待确认',
+             'confirmed': '清单变更已在待审页确认', 'rejected': '清单变更已在待审页打回（清单未改，下次对照重抽）',
              'ai-error': '已过期，重抽失败', 'unreliable': '本次未判', 'error': '出错'}.get(st, st)
     lines = ['', '## 条款清单', '',
              '- 状态：%s' % label,
@@ -58,7 +74,8 @@ def section_lines(rec):
         lines += ['', '| 条款 | 判定标准 | 用例 |', '|---|---|---|']
         for r in rows:
             if r.get('status') == 'proposed':
-                cases = '无用例（新条款，清单待确认）'
+                cases = {'confirmed': '无用例（新条款，已确认入清单）',
+                         'rejected': '提案已打回，未入清单'}.get(st, '无用例（新条款，清单待确认）')
             elif r.get('status') == 'retired':
                 cases = '退役（%s）→ %s%s' % (r.get('retire_reason'), '、'.join(r.get('replaced_by') or []) or '无替代',
                                            '；仍挂 %d 个用例，待改挂' % len(r['cases']) if r.get('cases') else '')

@@ -109,13 +109,13 @@ def _apply(subject, item, code, now, source):
 
 
 DISAGREEMENT = pending.ItemType(
-    key='judge-disagreement', label='分歧样本', options=OPTIONS, priority=10,
+    key='judge-disagreement', label='分歧样本', options=OPTIONS, priority=10, kinds=frozenset({'compare'}),
     collect=_collect_disagreements, apply=lambda sub, it, code, now: _apply(sub, it, code, now, 'disagreement'),
     hint='AI 评委两遍判法不同、两遍都判不了，或与规则 grader 相反。读判定标准与转录，给出你自己的判法；'
          '通过 / 不通过会存为金标样本，下次对照先拿它校准评委。')
 
 SPOT_CHECK = pending.ItemType(
-    key='judge-spot-check', label='抽检', options=OPTIONS, priority=20,
+    key='judge-spot-check', label='抽检', options=OPTIONS, priority=20, kinds=frozenset({'compare'}),
     collect=_collect_spot_checks, apply=lambda sub, it, code, now: _apply(sub, it, code, now, 'spot-check'),
     hint='评委两遍判法一致的样本里随机抽的，防评委稳定地判错。读判定标准与转录，给出你自己的判法；'
          '通过 / 不通过会存为金标样本。')

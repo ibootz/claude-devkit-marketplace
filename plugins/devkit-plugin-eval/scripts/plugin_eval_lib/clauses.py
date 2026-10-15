@@ -55,6 +55,8 @@ STATUS_NO_INJECTION = 'no-injection'
 STATUS_UNRELIABLE = 'unreliable'
 STATUS_AI_ERROR = 'ai-error'
 STATUS_ERROR = 'error'
+STATUS_CONFIRMED = 'confirmed'     # 待审页上确认后由 _apply 改写（decision 同时记下）
+STATUS_REJECTED = 'rejected'       # 待审页上打回后由 _apply 改写；同一组（基线清单指纹、新指纹）的提案此后不再复用
 
 # 易变内容归一化：按顺序替换，先长后短（日期时间先于日期、日期先于时刻）
 _VOLATILE = (
@@ -160,7 +162,9 @@ def capture_injection(plugin_dir, *, env=None, tmp_parent=None, repeat=2, home=N
                     cap.failed.append('%s（%s: %s）' % (spec.key, type(e).__name__, e))
                     outs = None
                     break
-                if r['timed_out'] or r['exit_code'] != 0:
+                # 与 injection.run_hook 同一口径：退出码非 0 但有输出仍算注入（Claude Code 照样注入），
+                # 只有超时与退出码 2（阻断）算失败
+                if r['timed_out'] or r['exit_code'] == injection.BLOCKING_EXIT_CODE:
                     cap.failed.append('%s（%s）' % (spec.key, '超时' if r['timed_out'] else '退出码 %s' % r['exit_code']))
                     outs = None
                     break
@@ -234,8 +238,12 @@ def used_ids(repo, name):
     """清单与所有运行目录里的提案出现过的 id：分配新 id 时一律避开（含退役的、被打回的提案用过的）。"""
     root = evals_root(repo, name)
     ids = set()
-    lst = _read_json(root / LIST_FILE) if (root / LIST_FILE).is_file() else None
-    ids.update(c.get('id') for c in (lst or {}).get('clauses') or [])
+    try:
+        lst = _read_json(root / LIST_FILE)
+    except (OSError, ValueError):
+        lst = None      # 清单损坏：只按各运行的提案避让（损坏的清单由对照的出错分支报出）
+    if isinstance(lst, dict):
+        ids.update(c.get('id') for c in lst.get('clauses') or [] if isinstance(c, dict))
     runs = root / 'runs'
     if runs.is_dir():
         for d in runs.iterdir():
@@ -414,10 +422,12 @@ def _iso(dt):
 
 
 def find_reusable(repo, name, base_fp, new_fp, exclude=None):
-    """最近一份还没裁定、基于同一份清单、指向同一个新指纹的提案所在运行目录；没有返回 None。"""
+    """最近一份还没裁定、基于同一份清单、指向同一个新指纹的提案所在运行目录；没有返回 None。
+    任一运行对同一组（基线清单指纹、新指纹）记过打回，就不再复用这一组的任何提案（打回 = 下次重抽）。"""
     runs = evals_root(repo, name) / 'runs'
     if not runs.is_dir():
         return None
+    found = []
     for d in sorted((p for p in runs.iterdir() if p.is_dir()), key=lambda p: p.name, reverse=True):
         if d.name == exclude or not (d / CHECK_FILE).is_file() or not (d / PROPOSAL_FILE).is_file():
             continue
@@ -426,9 +436,14 @@ def find_reusable(repo, name, base_fp, new_fp, exclude=None):
             prop = json.loads((d / PROPOSAL_FILE).read_text(encoding='utf-8'))
         except ValueError:
             continue
-        if cc.get('status') == STATUS_PENDING and not cc.get('decision') \
-                and prop.get('base_list_fingerprint') == base_fp and prop.get('new_injection_fingerprint') == new_fp \
-                and (d / RUN_SNAPSHOT_FILE).is_file():
+        if not isinstance(cc, dict) or not isinstance(prop, dict) \
+                or prop.get('base_list_fingerprint') != base_fp or prop.get('new_injection_fingerprint') != new_fp:
+            continue
+        if (cc.get('decision') or {}).get('status') == STATUS_REJECTED or cc.get('status') == STATUS_REJECTED:
+            return None
+        found.append((d, cc))
+    for d, cc in found:
+        if cc.get('status') == STATUS_PENDING and not cc.get('decision') and (d / RUN_SNAPSHOT_FILE).is_file():
             return d
     return None
 
@@ -531,9 +546,10 @@ def check_for_run(*, run_dir, log=None, **kw):
         step = evaluate(log=log, **kw)
     except Exception as e:  # noqa: BLE001 —— spec：条款清单这一步出问题时对照照跑，报告标出
         log('[条款清单] 出错，本次未判是否过期：%s: %s' % (type(e).__name__, e))
+        # 出错分支不再读清单：清单损坏正是常见的出错原因，再读一次会把同一个异常抛出去、中止对照
         step = ClauseStep({'schema_version': SCHEMA_VERSION, 'status': STATUS_ERROR, 'stale': None,
                            'errors': ['%s: %s' % (type(e).__name__, e)], 'rows': [], 'decision': None,
-                           'list_fingerprint': list_fingerprint(load_list(kw['repo'], kw['name']))})
+                           'list_fingerprint': None})
     write_step(run_dir, step)
     return step.check
 
@@ -641,8 +657,9 @@ def _apply(subject, item, code, now):
             name = prop.get('plugin') or p.get('name')
             sugg = rehang_suggestions(prop, cov, _draft_coverage(subject.repo, name),
                                       run_id=subject.rec.get('run_id'), now=now)
-            cc['decision'] = {'code': 'A', 'status': 'confirmed', 'at': ts, 'list_fingerprint': new_fp,
+            cc['decision'] = {'code': 'A', 'status': STATUS_CONFIRMED, 'at': ts, 'list_fingerprint': new_fp,
                               'rehang_suggestions': len(sugg)}
+            cc['status'] = STATUS_CONFIRMED
             subject.stage_json(CHECK_FILE, cc)          # 先记裁定：中途失败重试时据此判已落盘的部分
             subject.stage_text(SNAPSHOT_REL, snap)
             if sugg:
@@ -660,7 +677,8 @@ def _apply(subject, item, code, now):
         banner = '> **条款清单变更已确认**（%s，UTC）：已写入 `plugin-evals/%s/%s`；本报告的逐条款覆盖仍按确认前的清单计。' % (
             ts, prop.get('plugin'), LIST_FILE)
     else:
-        cc['decision'] = {'code': code, 'status': 'rejected', 'at': ts}
+        cc['decision'] = {'code': code, 'status': STATUS_REJECTED, 'at': ts}
+        cc['status'] = STATUS_REJECTED
         subject.stage_json(CHECK_FILE, cc)
         banner = '> **条款清单变更已打回**（%s，UTC）：清单未改；下次对照会重新抽取。' % ts
     if isinstance(subject.rec.get('clause_check'), dict) or 'clause_check' in subject.rec:
@@ -675,7 +693,7 @@ def _apply(subject, item, code, now):
 CLAUSE_LIST = pending.ItemType(
     key='clause-list', label='条款清单变更',
     options=(('A', '确认：按这份变更更新条款清单'), ('B', '打回：不采纳，清单不改，下次对照重抽')),
-    collect=_collect, apply=_apply, always=True,
+    collect=_collect, apply=_apply, always=True, kinds=frozenset({'compare', 'clauses'}),
     hint='条款 = 可单独判定是否遵守的一条行为要求；id 绑判定标准，改措辞保留 id，判定标准变了、拆分、合并都退役旧 id 换新 id。'
          '确认后清单落盘，退役条款上的用例出改挂建议、金标停止参与校准。')
 pending.register_type(CLAUSE_LIST)
@@ -683,14 +701,19 @@ pending.register_type(CLAUSE_LIST)
 
 # ---------------- 单跑：clauses 子命令 ----------------
 
+EXISTING_LIST_MSG = '已有条款清单，重抽是跑对照的第一步，请改跑 compare'
+
 def run_clauses(data_dir, name, *, ai=None, model=None, env=None, tmp_parent=None, now=None, log=None, home=None):
     """不跑对照、只做第 2 步（冷启动：还没有用例时也能先抽清单）。有变更时建 runs/<时间>-<版本>-clauses/ 并出待审页。
+    只在该插件尚无 clauses.json 时执行：已有清单时抛 ClauseError（重抽是对照的第一步，改跑 compare），不调 AI。
     返回 (状态, 运行目录或 None, 待审页或 None)。"""
     log = log or (lambda msg: print(msg, file=sys.stderr))
     now = (now or (lambda: datetime.now(timezone.utc)))()
     data_dir = Path(data_dir)
     entry = registry.lookup(data_dir, name)
     repo = Path(entry['repo'])
+    if (evals_root(repo, name) / LIST_FILE).exists():
+        raise ClauseError(EXISTING_LIST_MSG)
     plugin_dir = registry.plugin_dir(entry)
     manifest_path = plugin_dir / '.claude-plugin' / 'plugin.json'
     if not manifest_path.is_file():
@@ -724,7 +747,8 @@ def run_clauses(data_dir, name, *, ai=None, model=None, env=None, tmp_parent=Non
 
 
 def add_parser(sub):
-    p = sub.add_parser('clauses', help='只做条款清单这一步：比注入文本指纹，过期或没有清单时调 AI 出清单变更并生成待审页')
+    p = sub.add_parser('clauses', help='首次抽条款清单：只在插件尚无 clauses.json 时执行（调 AI 整份抽取并生成待审页）；'
+                                       '已有清单时拒绝，重抽请改跑 compare')
     p.add_argument('name')
     p.add_argument('--model', help='抽取用的模型，缺省 %s' % clause_ai.DEFAULT_MODEL)
     return p

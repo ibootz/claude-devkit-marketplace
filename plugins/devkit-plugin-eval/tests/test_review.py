@@ -375,6 +375,23 @@ class ReviewPendingTest(unittest.TestCase):
                 pending.apply_reply(self.fx.data, 'demo-guard', code, now=lambda: NOW)
         self.assertEqual(path.read_text(encoding='utf-8'), before)
 
+    def test_review_page_skips_compare_kind_collectors(self):
+        """待审项类型按 kinds 过滤：复盘页不调用只适用于 compare 的类型的 collect。"""
+        self.fx.run()
+        calls = []
+        spy = pending.ItemType(key='spy-compare', label='探针', options=(('A', '甲'),),
+                               collect=lambda sub: calls.append(sub.rec.get('kind')) or [], apply=lambda *a: None)
+        reg = pending.TypeRegistry()
+        for t in pending._REGISTRY.all() + [spy]:
+            reg.register(t)
+        page = review_pending.generate(self.fx.data, 'demo-guard', now=lambda: NOW, types=reg)
+        self.assertEqual(calls, [])
+        self.assertTrue(page.items)
+        self.assertTrue(all(i['type'].startswith('review-') for i in page.items))
+        self.assertEqual({t.key for t in reg.for_kind('review')}, {'review-candidate', 'review-compare-hint'})
+        self.assertNotIn('report-review', {t.key for t in reg.for_kind('review')})
+        self.assertIn('clause-list', {t.key for t in reg.for_kind('clauses')})
+
     def test_quiet_plugin_has_nothing_pending(self):
         self.fx.run()
         with self.assertRaises(pending.NothingPending):

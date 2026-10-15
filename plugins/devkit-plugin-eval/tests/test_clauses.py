@@ -114,12 +114,23 @@ class NormalizationTest(unittest.TestCase):
         self.assertIn('lucky.py', cap.unstable[0])
 
     def test_failing_hook_marks_unreliable(self):
+        """与 injection.run_hook 同口径：只有超时与退出码 2 算失败。"""
         plugin = make_inject_plugin(self.tmp / 'p')
         write(plugin / 'hooks' / 'hooks.json', json.dumps({'hooks': {'SessionStart': [
-            {'hooks': [{'type': 'command', 'command': 'exit 1'}]}]}}))
+            {'hooks': [{'type': 'command', 'command': 'exit 2'}]}]}}))
         cap = clauses.capture_injection(plugin, tmp_parent=self.tmp)
         self.assertFalse(cap.reliable)
-        self.assertIn('退出码 1', cap.failed[0])
+        self.assertIn('退出码 2', cap.failed[0])
+
+    def test_nonzero_exit_with_output_still_counts_as_injection(self):
+        plugin = make_inject_plugin(self.tmp / 'p')
+        write(plugin / 'hooks' / 'fail1.py', 'import sys\nsys.stdin.read()\nprint("规则：退出码 1 也注入")\nsys.exit(1)\n')
+        write(plugin / 'hooks' / 'hooks.json', json.dumps({'hooks': {'SessionStart': [
+            {'hooks': [{'type': 'command', 'command': py_cmd('fail1.py')}]}]}}))
+        cap = clauses.capture_injection(plugin, tmp_parent=self.tmp)
+        self.assertTrue(cap.reliable, cap.summary())
+        self.assertEqual(cap.failed, [])
+        self.assertIn('退出码 1 也注入', cap.text)
 
     def test_normalize_text_rules(self):
         s = clauses.normalize_text('a  \r\n2026-10-15T08:01:02.5Z 2026年10月15日 1760515200 1760515200123 '
@@ -251,11 +262,20 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual(rec['kind'], 'clauses')
         self.assertEqual(rec['clause_check']['decision']['status'], 'confirmed')
         self.assertIn('条款清单变更已确认', (run_dir / 'report.md').read_text(encoding='utf-8'))
-        # 单跑：指纹未变时不建运行目录
+        # 单跑只在尚无清单时执行：已有清单时拒绝，不调 AI、不建运行目录（重抽是对照的第一步）
         ai = FakeAI()
-        cc, run_dir2, page = clauses.run_clauses(self.data, 'demo-plugin', ai=ai, tmp_parent=self.assembly,
-                                                 now=at(1), log=lambda *a: None)
-        self.assertEqual((cc['status'], run_dir2, page, ai.calls), (clauses.STATUS_UP_TO_DATE, None, None, []))
+        before = sorted(p.name for p in (self.root / 'runs').iterdir())
+        with self.assertRaises(clauses.ClauseError) as cm:
+            clauses.run_clauses(self.data, 'demo-plugin', ai=ai, tmp_parent=self.assembly, now=at(1),
+                                log=lambda *a: None)
+        self.assertIn('已有条款清单，重抽是跑对照的第一步，请改跑 compare', str(cm.exception))
+        self.assertEqual(ai.calls, [])
+        self.assertEqual(sorted(p.name for p in (self.root / 'runs').iterdir()), before)
+        # 确认后 clause-check.json 的 status 同步改成 confirmed
+        cc = json.loads((run_dir / clauses.CHECK_FILE).read_text(encoding='utf-8'))
+        self.assertEqual(cc['status'], clauses.STATUS_CONFIRMED)
+        self.assertEqual(rec['clause_check']['status'], clauses.STATUS_CONFIRMED)
+        self.assertIn('清单变更已在待审页确认', '\n'.join(clausereport.section_lines(rec)))
 
     def test_unchanged_text_compare_does_not_reextract_or_add_pending_item(self):
         self.extract_and_confirm()
@@ -360,11 +380,61 @@ class LifecycleTest(unittest.TestCase):
         self.reply(page, ['%dB' % self.clause_no(page)[0]])
         self.assertEqual(self.load_list(), before)
         self.assertIn('条款清单变更已打回', (res.run_dir / 'report.md').read_text(encoding='utf-8'))
+        cc = json.loads((res.run_dir / clauses.CHECK_FILE).read_text(encoding='utf-8'))
+        self.assertEqual(cc['status'], clauses.STATUS_REJECTED)
+        rec = json.loads((res.run_dir / 'run.json').read_text(encoding='utf-8'))
+        self.assertIn('条款清单变更已打回', '\n'.join(clausereport.banner_lines(rec)))
+        self.assertIn('提案已打回，未入清单', '\n'.join(clausereport.section_lines(rec)))
         ai = FakeAI(delta)
         res2 = self.compare(ai, 11)
         self.assertEqual(len(ai.calls), 1)                       # 打回的不复用，重新抽
         prop = json.loads((res2.run_dir / clauses.PROPOSAL_FILE).read_text(encoding='utf-8'))
         self.assertEqual([a['id'] for a in prop['added']], ['C004'])   # 被打回提案用过的 C003 也不再分配
+
+    def test_pending_without_run_picks_clauses_run_and_lists_it_as_earlier(self):
+        """pending 不带 --run 时也认 kind=clauses 的运行；较早仍有待判项的 clauses 运行列进「较早待审」。"""
+        _, run_dir, _ = clauses.run_clauses(self.data, 'demo-plugin', ai=FakeAI(EXTRACT), tmp_parent=self.assembly,
+                                            now=at(0), log=lambda *a: None)
+        page = pending.generate(self.data, 'demo-plugin', now=at(59))
+        self.assertEqual(page.run_id, run_dir.name)
+        self.assertEqual([it['type'] for it in page.items], ['clause-list'])
+        res = self.compare(FakeAI(), 10)        # 清单未确认：对照沿用这份提案，不重抽
+        earlier = pending._earlier_with_items(self.data, self.repo, res.run_dir, pending._REGISTRY)
+        self.assertIn(run_dir.name, [rid for rid, _ in earlier])
+
+    def test_rejected_pair_is_never_reused_even_if_another_run_has_it_pending(self):
+        """两次对照产出同一组（基线清单、新指纹）的提案：在其中一份上打回后，另一份未裁定的也不再复用。"""
+        self.extract_and_confirm()
+        write(self.plugin / 'rules.txt', RULES + '3. 结论先行。\n')
+        delta = {'added': [{'ref': 'N1', 'criterion': '回复先给结论', 'events': ['SessionStart']}],
+                 'rewritten': [], 'retired': []}
+        first = self.compare(FakeAI(delta), 10)
+        # 构造：第二个运行独立抽出同一组提案（不复用第一份）
+        orig = clauses.find_reusable
+        clauses.find_reusable = lambda *a, **kw: None
+        try:
+            second = self.compare(FakeAI(delta), 11)
+        finally:
+            clauses.find_reusable = orig
+        p1 = self.page(first.run_dir.name)
+        self.reply(p1, ['%dB' % self.clause_no(p1)[0]])          # 在较早那份上打回
+        ai = FakeAI(delta)
+        third = self.compare(ai, 12)
+        self.assertEqual(len(ai.calls), 1)                       # 不复用第二份（同一组已被打回），重新抽
+        self.assertIsNone(third.record['clause_check']['reused_from'])
+        self.assertNotEqual(second.run_dir, third.run_dir)
+
+    def test_corrupt_list_does_not_abort_compare(self):
+        self.extract_and_confirm()
+        write(self.root / clauses.LIST_FILE, '{坏的 JSON')
+        res = self.compare(FakeAI(), 10)
+        self.assertTrue(res.record['complete'])
+        cc = res.record['clause_check']
+        self.assertEqual(cc['status'], clauses.STATUS_ERROR)
+        self.assertIsNone(cc['list_fingerprint'])
+        self.assertIsNone(res.record['clause_list_fingerprint'])
+        self.assertIn('条款清单这一步出错', (res.run_dir / 'report.md').read_text(encoding='utf-8'))
+        self.assertEqual(clauses.used_ids(self.repo, 'demo-plugin'), {'C001', 'C002'})   # 清单损坏时 used_ids 不抛，按提案避让
 
     def test_ai_failure_does_not_abort_compare(self):
         self.extract_and_confirm()
