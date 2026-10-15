@@ -1,4 +1,4 @@
-"""命令行：register / list / check / compare / resume / pending。
+"""命令行：register / list / check / compare / resume / pending / clauses。
 
 退出码：0 成功；2 用法、登记、环境类错误（含未登记、前置检查硬项失败）；3 对照跑完但结果不完整（用例加载失败、run 出错等）。
 """
@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 
-from . import armplan, compare, datadir, evalrun, pending, preflight, registry, resume
+from . import armplan, clauses, compare, datadir, evalrun, pending, preflight, registry, resume
 
 
 def _utf8_stdio():
@@ -48,6 +48,7 @@ def _parser():
     c.add_argument('--env-plugin', action='append', default=[], metavar='插件名@市场|路径',
                    help='加一个「当前版+环境插件」臂；可重复，多个环境插件同装在这一个臂里')
     c.add_argument('--eval-timeout', type=float, default=0, help='每次调 eval 的超时（分钟），超时终止并记为不完整、可续跑；默认 0 不限时')
+    c.add_argument('--clause-model', help='条款清单过期时抽取用的模型，缺省 %s' % clauses.clause_ai.DEFAULT_MODEL)
 
     rs = sub.add_parser('resume', help='续跑一次不完整的对照：已完成的 run 不重跑，只补跑判无效与未跑的 run')
     rs.add_argument('run_dir', help='运行目录：<仓>/plugin-evals/<插件>/runs/<run_id>')
@@ -55,6 +56,7 @@ def _parser():
     rs.add_argument('--eval-timeout', type=float, default=0, help='同 compare --eval-timeout')
 
     pending.add_parser(sub)
+    clauses.add_parser(sub)
     return p
 
 
@@ -122,13 +124,16 @@ def main(argv=None):
             return _check(args, data_dir)
         if args.cmd == 'pending':
             return pending.main(args, data_dir)
+        if args.cmd == 'clauses':
+            return clauses.main(args, data_dir)
         runner = evalrun.runner_with_timeout(args.eval_timeout * 60 if args.eval_timeout else None)
         if args.cmd == 'resume':
             res = resume.resume_run(data_dir, args.run_dir, runner=runner, keep_assembly=args.keep_assembly)
         else:
             res = compare.run_compare(data_dir, args.name, runs=args.runs, concurrency=args.concurrency,
                                       model=args.model, threshold=args.threshold, keep_assembly=args.keep_assembly,
-                                      base=args.base, env_plugins=args.env_plugin, runner=runner)
+                                      base=args.base, env_plugins=args.env_plugin, runner=runner,
+                                      clause_model=args.clause_model)
     except (registry.RegistryError, datadir.DataDirError, evalrun.ClaudeNotFound, compare.CompareError,
             armplan.ArmSourceError, preflight.PreflightFailed, resume.ResumeError) as e:
         print('错误：%s' % e, file=sys.stderr)

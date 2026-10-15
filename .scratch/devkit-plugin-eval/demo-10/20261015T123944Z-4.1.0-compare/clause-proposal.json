@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "plugin": "devkit-discipline",
+  "created_in_run": "20261015T123944Z-4.1.0-compare",
+  "created_at": "2026-10-15T12:39:44Z",
+  "base_list_fingerprint": "sha256:f2182d2322aec5a722b39d5efe9a25933b2f1057f1de00081ecfe0162f9e7dd7",
+  "old_injection_fingerprint": "sha256:86d5057dad37398fce49d3440fe51ad2460f48f8f3d19ad40e00b3627d6c1bb1",
+  "new_injection_fingerprint": "sha256:36b0fa5f5a1cc79686fd3f94a89684e546bc33df1af20428431c5f31d1973b9f",
+  "kind": "delta",
+  "ai": {
+    "model": "claude-fable-5-1",
+    "cost_usd": 0.28978,
+    "duration_ms": 5728,
+    "usage": {
+      "input_tokens": 2,
+      "output_tokens": 380,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 13538
+    },
+    "cost_basis": "按标价（list price）估算，订阅用户只作信息",
+    "old_snapshot_found": true
+  },
+  "added": [
+    {
+      "id": "C100",
+      "criterion": "派发子代理前盘点「在飞 + 拟派」总数，不超过 8 个（用户当场放宽除外）。",
+      "events": [
+        "SessionStart",
+        "SubagentStart"
+      ],
+      "ai_ref": "N1"
+    }
+  ],
+  "rewritten": [],
+  "retired": [
+    {
+      "id": "C007",
+      "reason": "criterion-changed",
+      "replaced_by": [
+        "C100"
+      ],
+      "rehang_hint": "改挂到 N1：在飞上限由 16 降为 8，判定阈值变了，原按 16 判「遵守」的用例（如 9~16 个在飞）在新条款下应判「违反」，需逐条复核后再挂。",
+      "old_criterion": "派发子代理前盘点「在飞 + 拟派」总数，不超过 16 个（用户当场放宽除外）。"
+    }
+  ]
+}

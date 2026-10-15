@@ -5,6 +5,8 @@
 - 上一版 / 环境插件臂（票 05）由 armplan.plan_arms 定，臂清单在 plan.specs；
 - 注入到达核验（票 06）：静态画像在 eval 开跑前按臂算好；_run_arm 把逐 run 搬出的转录目录写进汇总
   （devkitTraceDir），finalize_run 据此重建清单交 injection_check.build；
+- 条款清单（票 10，clauses.py）：第 2 步，在第一次写检查点之后、组装各臂之前；结论写运行目录的 clause-check.json，
+  finalize_run 从那里补进 run.json，续跑因此不重抽也不丢；
 - AI 评委（票 09）在所有臂跑完、写 run.json 之前。
 不完整与续跑（票 07）：每跑完一臂写一次检查点 run.json（complete=false），中途退出也留得下；
 收尾在 finalize_run，续跑（resume.py）复用它与 _run_arm，所以这两处的扩展续跑自动带上。
@@ -19,8 +21,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import (armplan, arms, envplugins, evalrun, fingerprint, injection, injection_check, preflight, record,
-               registry, resume, sandbox_sweep, scoring, traces)
+from . import (armplan, arms, clauses, envplugins, evalrun, fingerprint, injection, injection_check, preflight,
+               record, registry, resume, sandbox_sweep, scoring, traces)
 
 
 # eval 正常跑完的退出码：0 全过、1 有用例低于 --threshold（判分我们自己重算，不看它）。其余（如 2）是中途中止。
@@ -214,7 +216,8 @@ def plan_for(plugin_dir, name, manifest, cases, evals_src, extra_exclude, *, bas
 
 def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=1.0, claude=None,
                 runner=evalrun.run_eval, env=None, tmp_parent=None, sandbox_roots=None,
-                keep_assembly=False, log=None, now=None, base=None, env_plugins=(), preflight_check=None):
+                keep_assembly=False, log=None, now=None, base=None, env_plugins=(), preflight_check=None,
+                clause_ai=None, clause_model=None):
     log = log or (lambda msg: print(msg, file=sys.stderr))
     data_dir = Path(data_dir)
     entry, plugin_dir, manifest, evals_src, cases, extra_exclude = load_target(data_dir, name)  # 未登记即抛 NotRegistered
@@ -256,6 +259,10 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
         lock.acquire()
         try:
             resume.write_checkpoint(meta, arm_records)
+            # 第 2 步：条款清单过期检查与增量重抽（票 10）；出错或待确认都不中止对照
+            clauses.check_for_run(repo=repo, name=name, plugin_dir=plugin_dir, run_dir=run_dir, run_id=run_id,
+                                  env=child_env, cases=cases, ai=clause_ai, model=clause_model, claude=claude,
+                                  tmp_parent=tmp_parent, now=started, log=log)
             meta['statics'] = static_profiles(plan.specs, child_env, tmp_parent)
             assembly_root = Path(tempfile.mkdtemp(prefix='devkit-plugin-eval-', dir=tmp_parent))
             ctx = {
@@ -322,6 +329,7 @@ def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp,
                                           rec['claude_code_version'], rec['main_model']))
     rec['preflight'] = _merge_preflight(pre.to_dict(), prior_preflight)
     rec.update(injection_check=injection_check.summary(inj_check), resident_tokens=resident)
+    rec.update(clauses.record_fields(run_dir))
     if decorate:
         rec = decorate(rec)
     rec = record.scrub_home(rec)   # 产物会入库：本机家目录前缀换成 ~
