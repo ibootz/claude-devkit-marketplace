@@ -387,3 +387,4 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
 
 - 2026-10-15 提交安排（用户选 a）：用户审完本 spec 后再提交，只提交 `.scratch/plugin-eval/` 与 `CONTEXT.md`，用窄 pathspec，不带工作区里他人对 devkit-tool 的未提交改动（6.25.1→6.26.0）。Jev 选「暂不提交」（置信 0.89），未采纳。
 - 2026-10-15 用户审过本 spec（原话「spec 已经审核」），Status 改为 `ready-for-agent`。入库时排除 `probe/traces/`：子会话转录里有 eval 注入的账号邮箱，本仓公开，只留本机，已加进仓根 `.gitignore`。
+- 2026-10-15 拆为 17 张实施票（用户确认粒度、阻塞关系，无合并或再拆），写在 `.scratch/devkit-plugin-eval/issues/`。

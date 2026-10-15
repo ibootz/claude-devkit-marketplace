@@ -1,0 +1,28 @@
+# 14 — 闸门判定
+
+Status: ready-for-agent
+
+**What to build:**
+
+`gate` 子命令（入参为插件目录）判当前版本能否发布：
+
+- **插件内容指纹**：算整个插件目录、排除 `evals/`。
+- **判据**：扫 `runs/*/run.json`；过闸 = 存在同版本、指纹一致、不是 dirty / 不完整的记录，且为二者之一：已审的离线对照，或通过的规则子集。major 升版与提交信息 trailer 写了 `eval-required:` 的版本只认前者。指纹不一致视为未过闸。
+- **单测声明**：Python 实现读 `unit-tests.json` 逐条跑，任一失败判失败；未声明只提示「未声明单测」；声明不合法判失败；解释器解析不到判失败。用 02 的共用样例集与 JS 实现对齐。
+- **跳过与漏检**：`eval-skip:` 的版本放行并列出全部跳过记录；闸门内版本推到 main 时既无已审报告、也无 `eval-skip:` 的，列为漏检。
+- 本仓不接 git hook，用户发版前手动跑。
+
+**Blocked by:** 02, 03
+
+
+- [ ] 对一个有已审对照、指纹一致的版本，`gate` 判通过
+- [ ] 审后改一个文件（`evals/` 外）不升版，`gate` 判未过闸；只补 `evals/` 用例不影响判定
+- [ ] dirty 或不完整的 `run.json` 不被采信
+- [ ] 提交信息带 `eval-skip:` 时放行，并在输出里列出全部跳过版本
+- [ ] 构造一个闸门内版本无报告、无跳过标记地出现在 main，输出列为漏检
+- [ ] 02 的共用声明样例在本票 Python 实现下判定结果与 JS 实现一致
+- [ ] 改插件文件前按仓根 CLAUDE.md 先读规定的技能
+
+**参考：** [spec](../../plugin-eval/spec.md) 的spec「2.8 发版闸门（gate）」「2.7 确定性单测」；[12](../../plugin-eval/issues/12-release-gate-coverage.md)、[13](../../plugin-eval/issues/13-result-layout.md) 第 7 条、[18](../../plugin-eval/issues/18-unit-test-declaration.md)
+
+## Comments
