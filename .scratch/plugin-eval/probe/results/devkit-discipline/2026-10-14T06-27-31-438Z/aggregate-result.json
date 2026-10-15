@@ -1,0 +1,979 @@
+{
+  "schemaVersion": 1,
+  "claudeVersion": "2.1.299",
+  "startedAt": "2026-10-14T06:27:31.438Z",
+  "durationSeconds": 146,
+  "costUsd": 2.5470217,
+  "partial": false,
+  "suite": {
+    "root": "/private/tmp/plugin-eval-probe/devkit-discipline",
+    "ablation": "with-without",
+    "threshold": 1,
+    "concurrency": 3,
+    "plugins": [
+      {
+        "name": "devkit-discipline",
+        "version": "4.1.0",
+        "path": "/private/tmp/plugin-eval-probe/devkit-discipline"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "decision-no-ask",
+      "dir": "evals/decision-no-ask",
+      "source": "prose",
+      "promptMarkdown": "我们的 Spring Boot 订单服务（日均 50 万单，商品详情接口 P99 已到 800ms）要不要加缓存、加哪种，我还没想好。候选有三种：Redis 集中缓存、Caffeine 本地缓存、暂时不加。这件事需要我来拍板，请把需要我决定的问题提给我，让我来选。",
+      "runsPerCase": 3,
+      "timeoutSeconds": 300,
+      "maxTurns": 8,
+      "graders": [
+        {
+          "name": "four-elements",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "last_message",
+            "pattern": "起源[\\s\\S]*差距[\\s\\S]*影响范围[\\s\\S]*现场证据",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "marker-sessionstart",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律（会话级常驻",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "marker-userpromptsubmit",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律 · 每轮要点",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "no-ask-user-question",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "AskUserQuestion",
+            "min": 0,
+            "max": 0
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 3,
+            "costUsd": 0.2566928,
+            "judgeCostUsd": 0,
+            "durationSeconds": 87,
+            "startedAt": "2026-10-14T06:27:31.469Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-vWIhub/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "four-elements",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched 起源[\\s\\S]*差距[\\s\\S]*影响范围[\\s\\S]*现场证据",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched AI 工作纪律（会话级常驻",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "no-ask-user-question",
+                "passed": true,
+                "weight": 1,
+                "explanation": "AskUserQuestion called 0x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 0.5,
+            "passed": false,
+            "turns": 1,
+            "costUsd": 0.0951068,
+            "judgeCostUsd": 0,
+            "durationSeconds": 4,
+            "startedAt": "2026-10-14T06:27:31.469Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-bRK3PQ/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "four-elements",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in last_message",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched AI 工作纪律（会话级常驻",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "no-ask-user-question",
+                "passed": true,
+                "weight": 1,
+                "explanation": "AskUserQuestion called 0x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 3,
+            "costUsd": 0.1891254,
+            "judgeCostUsd": 0,
+            "durationSeconds": 56,
+            "startedAt": "2026-10-14T06:27:31.469Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-mgDOi3/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "four-elements",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched 起源[\\s\\S]*差距[\\s\\S]*影响范围[\\s\\S]*现场证据",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched AI 工作纪律（会话级常驻",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "no-ask-user-question",
+                "passed": true,
+                "weight": 1,
+                "explanation": "AskUserQuestion called 0x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ],
+        "without": [
+          {
+            "score": 0.5,
+            "passed": false,
+            "turns": 2,
+            "costUsd": 0.0859956,
+            "judgeCostUsd": 0,
+            "durationSeconds": 27,
+            "startedAt": "2026-10-14T06:27:35.013Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-G1z0nx/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "four-elements",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in last_message",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-ask-user-question",
+                "passed": true,
+                "weight": 1,
+                "explanation": "AskUserQuestion called 0x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 0.5,
+            "passed": false,
+            "turns": 2,
+            "costUsd": 0.0888196,
+            "judgeCostUsd": 0,
+            "durationSeconds": 29,
+            "startedAt": "2026-10-14T06:28:01.914Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-k2FxLu/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "four-elements",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in last_message",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-ask-user-question",
+                "passed": true,
+                "weight": 1,
+                "explanation": "AskUserQuestion called 0x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 0.5,
+            "passed": false,
+            "turns": 2,
+            "costUsd": 0.0891676,
+            "judgeCostUsd": 0,
+            "durationSeconds": 28,
+            "startedAt": "2026-10-14T06:28:27.758Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-VbFE3m/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "four-elements",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in last_message",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-ask-user-question",
+                "passed": true,
+                "weight": 1,
+                "explanation": "AskUserQuestion called 0x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 0.8333333333333334,
+        "passRate": 0.6666666666666666,
+        "scoreWithout": 0.5,
+        "passRateWithout": 0,
+        "delta": 0.33333333333333337
+      }
+    },
+    {
+      "name": "dispatch-model",
+      "dir": "evals/dispatch-model",
+      "source": "prose",
+      "promptMarkdown": "我想同时弄清两件互不相关的事，请分别派一个子代理去查，最后汇总给我：\n1. 用三句话解释 TCP 三次握手为什么不是两次；\n2. 用三句话解释 HTTP 方法的幂等性，并说明 POST 为什么通常不幂等。\n不需要读任何文件。",
+      "runsPerCase": 3,
+      "timeoutSeconds": 300,
+      "maxTurns": 12,
+      "graders": [
+        {
+          "name": "agent-dispatched",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Agent",
+            "min": 2
+          }
+        },
+        {
+          "name": "agent-has-model",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Agent",
+            "input_match": "\"model\"\\s*:\\s*\"",
+            "min": 2
+          }
+        },
+        {
+          "name": "agent-missing-model-zero",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Agent",
+            "input_match": "^(?![\\s\\S]*\"model\"\\s*:)",
+            "min": 0,
+            "max": 0
+          }
+        },
+        {
+          "name": "marker-sessionstart",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律（会话级常驻",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "marker-userpromptsubmit",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律 · 每轮要点",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 1,
+            "costUsd": 0.31107949999999995,
+            "judgeCostUsd": 0,
+            "durationSeconds": 38,
+            "startedAt": "2026-10-14T06:28:30.766Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-wU0nUh/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched AI 工作纪律（会话级常驻",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              }
+            ]
+          },
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 3,
+            "costUsd": 0.198059,
+            "judgeCostUsd": 0,
+            "durationSeconds": 25,
+            "startedAt": "2026-10-14T06:28:55.602Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-MbW1Z4/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched AI 工作纪律（会话级常驻",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              }
+            ]
+          },
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 1,
+            "costUsd": 0.25792119999999996,
+            "judgeCostUsd": 0,
+            "durationSeconds": 28,
+            "startedAt": "2026-10-14T06:28:58.129Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-03bjLz/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched AI 工作纪律（会话级常驻",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              }
+            ]
+          }
+        ],
+        "without": [
+          {
+            "score": 0.3333333333333333,
+            "passed": false,
+            "turns": 1,
+            "costUsd": 0.1667906,
+            "judgeCostUsd": 0,
+            "durationSeconds": 17,
+            "startedAt": "2026-10-14T06:29:08.652Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-r02lsW/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 0.3333333333333333,
+            "passed": false,
+            "turns": 1,
+            "costUsd": 0.1405678,
+            "judgeCostUsd": 0,
+            "durationSeconds": 19,
+            "startedAt": "2026-10-14T06:29:20.869Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-gCZlnE/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 0.3333333333333333,
+            "passed": false,
+            "turns": 1,
+            "costUsd": 0.147566,
+            "judgeCostUsd": 0,
+            "durationSeconds": 19,
+            "startedAt": "2026-10-14T06:29:25.727Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-6WsyNi/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 1,
+        "passRate": 1,
+        "scoreWithout": 0.3333333333333333,
+        "passRateWithout": 0,
+        "delta": 0.6666666666666667
+      }
+    },
+    {
+      "name": "parallel-lookup",
+      "dir": "evals/parallel-lookup",
+      "source": "mixed",
+      "promptMarkdown": "当前目录下有三个子目录 billing、auth、report，各有一个同名的 .py 文件（billing/billing.py、auth/auth.py、report/report.py）。请把这三个文件都完整读一遍，分别用一句话概括每个文件做什么，并给出其中常量的值。",
+      "runsPerCase": 3,
+      "timeoutSeconds": 300,
+      "maxTurns": 10,
+      "graders": [
+        {
+          "name": "answer-correct",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "last_message",
+            "pattern": "^(?=[\\s\\S]*0\\.137)(?=[\\s\\S]*2719)(?=[\\s\\S]*83)",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "marker-sessionstart",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律（会话级常驻",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "marker-userpromptsubmit",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律 · 每轮要点",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "parallel-tool-calls",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "\"id\":\"(msg_[A-Za-z0-9]+)\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"[\\s\\S]*?\\n[^\\n]*\"id\":\"\\1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"",
+            "flags": "",
+            "match": "contains"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 4,
+            "costUsd": 0.1164052,
+            "judgeCostUsd": 0,
+            "durationSeconds": 11,
+            "startedAt": "2026-10-14T06:29:26.487Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-ivUjLW/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "answer-correct",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched ^(?=[\\s\\S]*0\\.137)(?=[\\s\\S]*2719)(?=[\\s\\S]*83)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched AI 工作纪律（会话级常驻",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "parallel-tool-calls",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \"id\":\"(msg_[A-Za-z0-9]+)\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"[\\s\\S]*?\\n[^\\n]*\"id\":\"\\1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 4,
+            "costUsd": 0.1147692,
+            "judgeCostUsd": 0,
+            "durationSeconds": 9,
+            "startedAt": "2026-10-14T06:29:37.177Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-U6j8vL/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "answer-correct",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched ^(?=[\\s\\S]*0\\.137)(?=[\\s\\S]*2719)(?=[\\s\\S]*83)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched AI 工作纪律（会话级常驻",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "parallel-tool-calls",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \"id\":\"(msg_[A-Za-z0-9]+)\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"[\\s\\S]*?\\n[^\\n]*\"id\":\"\\1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 4,
+            "costUsd": 0.1143132,
+            "judgeCostUsd": 0,
+            "durationSeconds": 11,
+            "startedAt": "2026-10-14T06:29:39.569Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-BDn3zR/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "answer-correct",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched ^(?=[\\s\\S]*0\\.137)(?=[\\s\\S]*2719)(?=[\\s\\S]*83)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched AI 工作纪律（会话级常驻",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "parallel-tool-calls",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \"id\":\"(msg_[A-Za-z0-9]+)\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"[\\s\\S]*?\\n[^\\n]*\"id\":\"\\1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ],
+        "without": [
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 4,
+            "costUsd": 0.0589388,
+            "judgeCostUsd": 0,
+            "durationSeconds": 8,
+            "startedAt": "2026-10-14T06:29:44.368Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-9VHexV/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "answer-correct",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched ^(?=[\\s\\S]*0\\.137)(?=[\\s\\S]*2719)(?=[\\s\\S]*83)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "parallel-tool-calls",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \"id\":\"(msg_[A-Za-z0-9]+)\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"[\\s\\S]*?\\n[^\\n]*\"id\":\"\\1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 4,
+            "costUsd": 0.057627399999999995,
+            "judgeCostUsd": 0,
+            "durationSeconds": 8,
+            "startedAt": "2026-10-14T06:29:46.312Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-jfvWCx/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "answer-correct",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched ^(?=[\\s\\S]*0\\.137)(?=[\\s\\S]*2719)(?=[\\s\\S]*83)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "parallel-tool-calls",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \"id\":\"(msg_[A-Za-z0-9]+)\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"[\\s\\S]*?\\n[^\\n]*\"id\":\"\\1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 4,
+            "costUsd": 0.058076,
+            "judgeCostUsd": 0,
+            "durationSeconds": 8,
+            "startedAt": "2026-10-14T06:29:50.291Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-RV0jJ2/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "answer-correct",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched ^(?=[\\s\\S]*0\\.137)(?=[\\s\\S]*2719)(?=[\\s\\S]*83)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "parallel-tool-calls",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \"id\":\"(msg_[A-Za-z0-9]+)\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"[\\s\\S]*?\\n[^\\n]*\"id\":\"\\1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 1,
+        "passRate": 1,
+        "scoreWithout": 1,
+        "passRateWithout": 1,
+        "delta": 0
+      }
+    }
+  ],
+  "aggregates": {
+    "casesTotal": 3,
+    "casesPassed": 2,
+    "overallScore": 0.9444444444444445,
+    "overallPassRate": 0.8888888888888888,
+    "meanDelta": 0.3333333333333333
+  }
+}

@@ -1,0 +1,10 @@
+# smoke-dm with 臂（e-kkRO73）第一个 API 请求：tail 消息序列（api-request.tail 的 hash 对应 api-request-blob）
+# MISSING = 该 hash 的 blob 不在本文件（原因未查）
+
+user [["text", "This session is being continued from a previous conversation that ran out of context. The summary below covers the earli"], ["text", "好，CSV 导入先放一放，等我确认银行导出的列顺序再说。"]]
+system []
+MISSING 56806c24c3e0
+MISSING 98163aa5ca96
+MISSING eaaba0444190
+user [["text", "<system-reminder> As you answer the user's questions, you can use the following context: # userEmail The user's email ad"], ["text", "我想同时弄清两件互不相关的事，请分别派一个子代理去查，最后汇总给我： 1. 用三句话解释 TCP 三次握手为什么不是两次； 2. 用三句话解释 HTTP 方法的幂等性，并说明 POST 为什么通常不幂等。 不需要读任何文件。"]]
+system [["text", "SessionStart hook additional context: # AI 工作纪律（会话级常驻，auto-compact 后自动重新注入）  一～七章全程有效，后续轮次不再重复全文；零章、派发字段判据与每轮自查另行每轮注入。  "]]

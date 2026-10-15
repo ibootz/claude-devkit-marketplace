@@ -1,0 +1,11 @@
+# formal-compact with#1 与 formal-base with#1 的 trace.jsonl 头 3 行（每行截 300 字）
+
+## formal-compact /private/tmp/e-i9L7wh/out/trace.jsonl
+1 {"type": "system", "subtype": "hook_started", "hook_id": "ba62b21c-6eee-4758-bede-355892aafd9f", "hook_name": "SessionStart:resume", "hook_event": "SessionStart", "uuid": "b9499bd8-8a3c-4e2d-a7a9-8f43e118c70a", "session_id": "6ff0984b-88a4-4f56-92f8-a1950405528b"}
+2 {"type": "system", "subtype": "hook_response", "hook_id": "ba62b21c-6eee-4758-bede-355892aafd9f", "hook_name": "SessionStart:resume", "hook_event": "SessionStart", "stderr": "", "exit_code": 0, "outcome": "success", "uuid": "62f98504-d12e-45af-b483-a1badfb85ca4", "session_id": "6ff0984b-88a4-4f56-92
+3 {"type": "system", "subtype": "init", "cwd": "/private/tmp/e-i9L7wh/home/cwd", "session_id": "5f0c1e2a-7b3d-4c11-9a8e-2d6b0f4e7a10", "model": "claude-opus-5-5", "permissionMode": "dontAsk", "terminal_slash_commands": ["doctor", "color", "focus", "reload-plugins"], "apiKeySource": "none", "claude_cod
+
+## formal-base /private/tmp/e-3ATZIS/out/trace.jsonl
+1 {"type": "system", "subtype": "hook_started", "hook_id": "5384cc45-43ed-4915-ac84-4749fe7af12b", "hook_name": "SessionStart:startup", "hook_event": "SessionStart", "uuid": "ae97cf10-d6a9-4df6-937f-553918406df5", "session_id": "1b2e8098-d735-4d2c-acf8-5cdd1f866af0"}
+2 {"type": "system", "subtype": "hook_response", "hook_id": "5384cc45-43ed-4915-ac84-4749fe7af12b", "hook_name": "SessionStart:startup", "hook_event": "SessionStart", "stderr": "", "exit_code": 0, "outcome": "success", "uuid": "b060950c-6da2-46ce-873c-aa830ed8ce07", "session_id": "1b2e8098-d735-4d2c-a
+3 {"type": "system", "subtype": "init", "cwd": "/private/tmp/e-3ATZIS/home/cwd", "session_id": "1b2e8098-d735-4d2c-acf8-5cdd1f866af0", "model": "claude-opus-5-5", "permissionMode": "dontAsk", "terminal_slash_commands": ["doctor", "color", "focus", "reload-plugins"], "apiKeySource": "none", "claude_cod

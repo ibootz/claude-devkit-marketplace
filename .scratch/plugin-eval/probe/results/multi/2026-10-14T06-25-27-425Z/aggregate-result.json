@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "claudeVersion": "2.1.299",
+  "startedAt": "2026-10-14T06:25:27.425Z",
+  "durationSeconds": 7,
+  "costUsd": 0.1628948,
+  "partial": false,
+  "suite": {
+    "root": "/private/tmp/plugin-eval-probe/multi",
+    "ablation": "with-without",
+    "threshold": 1,
+    "concurrency": 2,
+    "plugins": [
+      {
+        "name": "devkit-discipline",
+        "version": "4.1.0",
+        "path": "/private/tmp/plugin-eval-probe/multi/devkit-discipline"
+      },
+      {
+        "name": "devkit-clickable-paths",
+        "version": "2.0.0",
+        "path": "/private/tmp/plugin-eval-probe/multi/devkit-clickable-paths"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "multi-plugin",
+      "dir": "evals/multi-plugin",
+      "source": "mixed",
+      "promptMarkdown": "当前目录的 notes.md 里哪一行写了 TODO？告诉我文件和行号。",
+      "runsPerCase": 3,
+      "timeoutSeconds": 240,
+      "maxTurns": 6,
+      "graders": [
+        {
+          "name": "clickable-link-in-reply",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "last_message",
+            "pattern": "\\]\\((file|vscode)://[^)\\s]*notes\\.md[#:]4",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "marker-clickable",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "文件路径写成可点击链接（devkit-clickable-paths）",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "marker-sessionstart",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律（会话级常驻",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "marker-userpromptsubmit",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律 · 每轮要点",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 2,
+            "costUsd": 0.11457579999999999,
+            "judgeCostUsd": 0,
+            "durationSeconds": 7,
+            "startedAt": "2026-10-14T06:25:27.460Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-8L4kS7/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "clickable-link-in-reply",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\]\\((file|vscode)://[^)\\s]*notes\\.md[#:]4",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-clickable",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched AI 工作纪律（会话级常驻",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              }
+            ]
+          }
+        ],
+        "without": [
+          {
+            "score": 0,
+            "passed": false,
+            "turns": 2,
+            "costUsd": 0.048319,
+            "judgeCostUsd": 0,
+            "durationSeconds": 5,
+            "startedAt": "2026-10-14T06:25:27.460Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-Rjjr0O/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "clickable-link-in-reply",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in last_message",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 1,
+        "passRate": 1,
+        "scoreWithout": 0,
+        "passRateWithout": 0,
+        "delta": 1
+      }
+    }
+  ],
+  "aggregates": {
+    "casesTotal": 1,
+    "casesPassed": 1,
+    "overallScore": 1,
+    "overallPassRate": 1,
+    "meanDelta": 1
+  }
+}

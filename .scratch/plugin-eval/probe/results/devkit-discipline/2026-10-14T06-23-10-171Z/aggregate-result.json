@@ -1,0 +1,358 @@
+{
+  "schemaVersion": 1,
+  "claudeVersion": "2.1.299",
+  "startedAt": "2026-10-14T06:23:10.171Z",
+  "durationSeconds": 24,
+  "costUsd": 0.30770759999999997,
+  "partial": false,
+  "suite": {
+    "root": "/private/tmp/plugin-eval-probe/devkit-discipline",
+    "ablation": "none",
+    "threshold": 1,
+    "concurrency": 3,
+    "plugins": [
+      {
+        "name": "devkit-discipline",
+        "version": "4.1.0",
+        "path": "/private/tmp/plugin-eval-probe/devkit-discipline"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "decision-no-ask",
+      "dir": "evals/decision-no-ask",
+      "source": "prose",
+      "promptMarkdown": "我们的 Spring Boot 订单服务（日均 50 万单，商品详情接口 P99 已到 800ms）要不要加缓存、加哪种，我还没想好。候选有三种：Redis 集中缓存、Caffeine 本地缓存、暂时不加。这件事需要我来拍板，请把需要我决定的问题提给我，让我来选。",
+      "runsPerCase": 3,
+      "timeoutSeconds": 300,
+      "maxTurns": 8,
+      "graders": [
+        {
+          "name": "four-elements",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "last_message",
+            "pattern": "起源[\\s\\S]*差距[\\s\\S]*影响范围[\\s\\S]*现场证据",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "marker-sessionstart",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律（会话级常驻",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "marker-userpromptsubmit",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律 · 每轮要点",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "no-ask-user-question",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "AskUserQuestion",
+            "min": 0,
+            "max": 0
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 0.25,
+            "passed": false,
+            "turns": 1,
+            "costUsd": 0.07737079999999999,
+            "judgeCostUsd": 0,
+            "durationSeconds": 21,
+            "startedAt": "2026-10-14T06:23:10.205Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-y4h7yN/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "four-elements",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in last_message",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-ask-user-question",
+                "passed": true,
+                "weight": 1,
+                "explanation": "AskUserQuestion called 0x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 0.25,
+        "passRate": 0
+      }
+    },
+    {
+      "name": "dispatch-model",
+      "dir": "evals/dispatch-model",
+      "source": "prose",
+      "promptMarkdown": "我想同时弄清两件互不相关的事，请分别派一个子代理去查，最后汇总给我：\n1. 用三句话解释 TCP 三次握手为什么不是两次；\n2. 用三句话解释 HTTP 方法的幂等性，并说明 POST 为什么通常不幂等。\n不需要读任何文件。",
+      "runsPerCase": 3,
+      "timeoutSeconds": 300,
+      "maxTurns": 12,
+      "graders": [
+        {
+          "name": "agent-dispatched",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Agent",
+            "min": 2
+          }
+        },
+        {
+          "name": "agent-has-model",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Agent",
+            "input_match": "\"model\"\\s*:\\s*\"",
+            "min": 2
+          }
+        },
+        {
+          "name": "agent-missing-model-zero",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Agent",
+            "input_match": "^(?![\\s\\S]*\"model\"\\s*:)",
+            "min": 0,
+            "max": 0
+          }
+        },
+        {
+          "name": "marker-sessionstart",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律（会话级常驻",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "marker-userpromptsubmit",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律 · 每轮要点",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 0.2,
+            "passed": false,
+            "turns": 1,
+            "costUsd": 0.1770836,
+            "judgeCostUsd": 0,
+            "durationSeconds": 24,
+            "startedAt": "2026-10-14T06:23:10.205Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-IE98Ph/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 0.2,
+        "passRate": 0
+      }
+    },
+    {
+      "name": "parallel-lookup",
+      "dir": "evals/parallel-lookup",
+      "source": "mixed",
+      "promptMarkdown": "当前目录下有三个子目录 billing、auth、report，各有一个同名的 .py 文件。请告诉我三个常量的值：billing 里的 TAX_RATE、auth 里的 SESSION_TTL、report 里的 PAGE_SIZE。",
+      "runsPerCase": 3,
+      "timeoutSeconds": 300,
+      "maxTurns": 10,
+      "graders": [
+        {
+          "name": "answer-correct",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "last_message",
+            "pattern": "^(?=[\\s\\S]*0\\.137)(?=[\\s\\S]*2719)(?=[\\s\\S]*83)",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "marker-sessionstart",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律（会话级常驻",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "marker-userpromptsubmit",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律 · 每轮要点",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 0.3333333333333333,
+            "passed": false,
+            "turns": 2,
+            "costUsd": 0.0532532,
+            "judgeCostUsd": 0,
+            "durationSeconds": 7,
+            "startedAt": "2026-10-14T06:23:10.206Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-dJfKOF/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "answer-correct",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched ^(?=[\\s\\S]*0\\.137)(?=[\\s\\S]*2719)(?=[\\s\\S]*83)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 0.3333333333333333,
+        "passRate": 0
+      }
+    }
+  ],
+  "aggregates": {
+    "casesTotal": 3,
+    "casesPassed": 0,
+    "overallScore": 0.2611111111111111,
+    "overallPassRate": 0
+  }
+}

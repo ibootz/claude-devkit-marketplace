@@ -65,3 +65,5 @@ zcode-sync-checklist.md
 .scratch/*/eval/runs/
 .scratch/*/eval/probe/
 .scratch/*/workspace/
+# plugin-eval 探针的全量 trace 与子会话转录：含账号邮箱，本仓公开，只留本机
+.scratch/plugin-eval/probe/traces/

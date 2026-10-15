@@ -1,0 +1,21 @@
+# 每个 run：分数、花费、沙箱号、首个 API 请求输入 token（input+cache_creation+cache_read）、trace 里的 hook 事件、子会话转录里的注入计数
+# 生成：tools/inspect.py <eval json> <子会话转录...>；回放用例的转录取自用例目录 <sessionId>.jsonl，无历史用例取自 keep-temp 沙箱 config/projects/*/*.jsonl
+
+dispatch-model with#1 score=1.00 cost=0.2656 sandbox=e-3ATZIS first_req_input_tokens=16937 trace_hooks=['SessionStart:startup exit=0'] transcript_inj={'ok:SessionStart:startup': 1, 'SessionStart': 1, 'UserPromptSubmit': 3}
+dispatch-model with#2 score=1.00 cost=0.2768 sandbox=e-xuxQzt first_req_input_tokens=16937 trace_hooks=['SessionStart:startup exit=0'] transcript_inj={'ok:SessionStart:startup': 1, 'SessionStart': 1, 'UserPromptSubmit': 3, 'ok:PreToolUse:Agent': 2, 'PreToolUse:Agent': 2}
+dispatch-model with#3 score=1.00 cost=0.1987 sandbox=e-wuB4LD first_req_input_tokens=16844 trace_hooks=['SessionStart:startup exit=0'] transcript_inj={'ok:SessionStart:startup': 1, 'SessionStart': 1, 'UserPromptSubmit': 1, 'ok:PreToolUse:Agent': 2, 'PreToolUse:Agent': 2}
+dispatch-model without#1 score=0.33 cost=0.1454 sandbox=e-QZZGKy first_req_input_tokens=10316 trace_hooks=[] transcript_inj={}
+dispatch-model without#2 score=0.33 cost=0.1426 sandbox=e-rDGBlU first_req_input_tokens=10409 trace_hooks=[] transcript_inj={}
+dispatch-model without#3 score=0.33 cost=0.1437 sandbox=e-k44Wm4 first_req_input_tokens=10316 trace_hooks=[] transcript_inj={}
+dm-h-compact with#1 score=1.00 cost=0.2897 sandbox=e-i9L7wh first_req_input_tokens=19851 trace_hooks=['SessionStart:resume exit=0'] transcript_inj={'ok:SessionStart:resume': 1, 'SessionStart': 1, 'UserPromptSubmit': 3, 'ok:PreToolUse:Agent': 2, 'PreToolUse:Agent': 2}
+dm-h-compact with#2 score=1.00 cost=0.2808 sandbox=e-aGAIX0 first_req_input_tokens=19851 trace_hooks=['SessionStart:resume exit=0'] transcript_inj={'ok:SessionStart:resume': 1, 'SessionStart': 1, 'UserPromptSubmit': 3}
+dm-h-compact with#3 score=1.00 cost=0.2895 sandbox=e-dPZx85 first_req_input_tokens=19848 trace_hooks=['SessionStart:resume exit=0'] transcript_inj={'ok:SessionStart:resume': 1, 'SessionStart': 1, 'UserPromptSubmit': 3, 'ok:PreToolUse:Agent': 2, 'PreToolUse:Agent': 2}
+dm-h-compact without#1 score=0.33 cost=0.1694 sandbox=e-jgNi4C first_req_input_tokens=13230 trace_hooks=[] transcript_inj={}
+dm-h-compact without#2 score=0.33 cost=0.1721 sandbox=e-3EjwLm first_req_input_tokens=13323 trace_hooks=[] transcript_inj={}
+dm-h-compact without#3 score=0.33 cost=0.1638 sandbox=e-eFO1TE first_req_input_tokens=13323 trace_hooks=[] transcript_inj={}
+dm-h-long with#1 score=1.00 cost=0.4365 sandbox=e-rlpUnF first_req_input_tokens=36630 trace_hooks=['SessionStart:resume exit=0'] transcript_inj={'ok:SessionStart:resume': 1, 'SessionStart': 1, 'UserPromptSubmit': 3, 'ok:PreToolUse:Agent': 2, 'PreToolUse:Agent': 2}
+dm-h-long with#2 score=1.00 cost=0.4409 sandbox=e-E8rIMy first_req_input_tokens=36630 trace_hooks=['SessionStart:resume exit=0'] transcript_inj={'ok:SessionStart:resume': 1, 'SessionStart': 1, 'UserPromptSubmit': 3, 'ok:PreToolUse:Agent': 2, 'PreToolUse:Agent': 2}
+dm-h-long without#1 score=0.33 cost=0.3172 sandbox=e-BiKE7J first_req_input_tokens=30102 trace_hooks=[] transcript_inj={}
+dm-h-long without#2 score=0.33 cost=0.3197 sandbox=e-ah61M3 first_req_input_tokens=30192 trace_hooks=[] transcript_inj={}
+dm-h-compact with#1 score=1.00 cost=0.2822 sandbox=e-kkRO73 first_req_input_tokens=19848 trace_hooks=['SessionStart:resume exit=0'] transcript_inj={'ok:SessionStart:resume': 1, 'SessionStart': 1, 'UserPromptSubmit': 3, 'ok:PreToolUse:Agent': 2, 'PreToolUse:Agent': 2}
+dm-h-compact without#1 score=0.33 cost=0.1892 sandbox=e-eWMGbR first_req_input_tokens=13323 trace_hooks=[] transcript_inj={}

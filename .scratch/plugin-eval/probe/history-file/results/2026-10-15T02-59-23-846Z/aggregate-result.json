@@ -1,0 +1,269 @@
+{
+  "schemaVersion": 1,
+  "claudeVersion": "2.1.300",
+  "startedAt": "2026-10-15T02:59:23.846Z",
+  "durationSeconds": 13,
+  "costUsd": 0.33187120000000003,
+  "partial": false,
+  "suite": {
+    "root": "/Users/zhangq/.claude/jobs/d1a1f6eb/tmp/history-probe/devkit-discipline",
+    "ablation": "with-without",
+    "caseFilter": "recall-*",
+    "threshold": 1,
+    "concurrency": 4,
+    "plugins": [
+      {
+        "name": "devkit-discipline",
+        "version": "4.1.0",
+        "path": "/Users/zhangq/.claude/jobs/d1a1f6eb/tmp/history-probe/devkit-discipline"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "recall-compact",
+      "dir": "evals/recall-compact",
+      "source": "mixed",
+      "promptMarkdown": "先不做新功能，也不要读任何文件。用一句话回答：我们这个项目叫什么名字？金额在数据库里以什么单位存？",
+      "runsPerCase": 3,
+      "timeoutSeconds": 120,
+      "maxTurns": 3,
+      "graders": [
+        {
+          "name": "marker-sessionstart",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律（会话级常驻",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "marker-userpromptsubmit",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律 · 每轮要点",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "recall-name",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "last_message",
+            "pattern": "^(?=[\\s\\S]*tally)",
+            "flags": "i",
+            "match": "contains"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 1,
+            "costUsd": 0.1204948,
+            "judgeCostUsd": 0,
+            "durationSeconds": 8,
+            "startedAt": "2026-10-15T02:59:23.883Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-WbYzab/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "marker-sessionstart",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched AI 工作纪律（会话级常驻",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "recall-name",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched ^(?=[\\s\\S]*tally)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ],
+        "without": [
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 1,
+            "costUsd": 0.06565080000000001,
+            "judgeCostUsd": 0,
+            "durationSeconds": 13,
+            "startedAt": "2026-10-15T02:59:23.883Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-JGBMsL/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "recall-name",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched ^(?=[\\s\\S]*tally)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 1,
+        "passRate": 1,
+        "scoreWithout": 1,
+        "passRateWithout": 1,
+        "delta": 0
+      }
+    },
+    {
+      "name": "recall-min",
+      "dir": "evals/recall-min",
+      "source": "mixed",
+      "promptMarkdown": "先不做新功能，也不要读任何文件。用一句话回答：我们这个项目叫什么名字？金额在数据库里以什么单位存？",
+      "runsPerCase": 3,
+      "timeoutSeconds": 120,
+      "maxTurns": 3,
+      "graders": [
+        {
+          "name": "marker-sessionstart",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律（会话级常驻",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "marker-userpromptsubmit",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律 · 每轮要点",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "recall-name",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "last_message",
+            "pattern": "^(?=[\\s\\S]*tally)",
+            "flags": "i",
+            "match": "contains"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 1,
+            "costUsd": 0.0974188,
+            "judgeCostUsd": 0,
+            "durationSeconds": 7,
+            "startedAt": "2026-10-15T02:59:23.883Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-PZ6oQo/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "marker-sessionstart",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched AI 工作纪律（会话级常驻",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "recall-name",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched ^(?=[\\s\\S]*tally)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ],
+        "without": [
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 1,
+            "costUsd": 0.0483068,
+            "judgeCostUsd": 0,
+            "durationSeconds": 7,
+            "startedAt": "2026-10-15T02:59:23.883Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-knAQPB/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "recall-name",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched ^(?=[\\s\\S]*tally)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 1,
+        "passRate": 1,
+        "scoreWithout": 1,
+        "passRateWithout": 1,
+        "delta": 0
+      }
+    }
+  ],
+  "aggregates": {
+    "casesTotal": 2,
+    "casesPassed": 2,
+    "overallScore": 1,
+    "overallPassRate": 1,
+    "meanDelta": 0
+  }
+}

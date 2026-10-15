@@ -1,0 +1,66 @@
+# claude 2.1.300 可执行文件字符串摘录
+# 来源：strings -n 6 /Users/zhangq/.local/share/claude/versions/2.1.300 > all.txt；offset 为 all.txt 内的字符偏移；每段截 ±若干字符
+
+## case.yaml schema（context.history_file 是字符串）
+offset=53467113
+context:bt({scaffold_script:ge().optional(),history_file:ge().optional(),add_dirs:or(ge()).default([])}).default({add_dirs:[]}),execution:bt({prompt:ge().optional(),max_turns:gn().int().positive().max(200).default(10),timeout_seconds:gn().int().positive().max(3600).default(300),model:ge().optional(),allowed_tools:or(ge()).default(
+
+## history_file 必须配 execution.prompt
+offset=11470803
+Claude Code (this binary supports up to 
+invalid case.yaml:
+context.history_file requires execution.prompt (the resumed session needs a next turn)
+execution.prompt is required (a prompt.md body, or execution.prompt in case.yaml)
+" line wit
+
+## history_file 原样作为 --resume 传给子 claude
+offset=53571782
+ush(...Mi(r,s)),y.push(`--disallowed-tools=${P.join(",")}`),e.context.history_file)y.push("--resume",await Co(e,e.context.history_file,"history_file"));if(e.execution.append_system_prompt)y.push(`--append-system-prompt=$
+
+## history_file 路径校验：须在用例目录或被测插件内、普通单链接文件
+offset=53622152
+async function Co(e,n,r){let s=await Oo(e,n),i=await Al(e),h=await st(s).catch(()=>null);if(!i.some((w)=>Ee(w,s))||h===null||!h.isFile()||h.nlink>1)throw new x(`case "${e.name}": ${r} "${n}" resolves (through a link) outside the case directory and the plugin under test, or is not a plain single-link file`,"eval case file escapes suite via link");return s}async function Al(e){return Promise.all([e.caseDir,...e.pluginDirsUnderTest].map((n)=>St(n).catch(()=>n)))}
+
+## 从 history 的 cost-state 读已花费（restoredCostUsd）
+offset=53566181
+async function cf(e){try{return(await i3e(e)).costState?.totalCostUSD??0}catch{return 0}}async function uf(e,n,r,s,i,{addDirs:h,readScope:w,restoredCostUsd:b}){let{case_:y,san
+
+## 臂选择：ablation=auto 时回放用例只跑 with 臂
+offset=53726343
+function os(e,n,r){if(n!=="with-without"||e.pluginDirs.length===0)return["with"];if(r&&e.context.history_file)return["with"];return["with","without"]}function vg(e){if(e.mockSetupFailure==="registration")m("cli
+
+## auto 模式下对回放用例的提示文案
+offset=53699001
+single-arm (no \u0394) \u2014 no plugin to strip, or a replay case whose history carries the plugin into both arms: ${K.map((ie)=>ie.name).join(", ")}`)}if(r.ablation==="with-without"){let K=F.filter((ie)=>ie.pluginDirs.length===0);for(let ie of K){let ye="ablation 
+
+## arms 计数调用：os(ye,M,r.ablation==="auto")
+offset=53705832
+)r.onNotice(`\u26A0 case "${K.name}": ${ye.text}`)}}if(M==="with-without"){let K=F.reduce((ie,ye)=>ie+(r.runs??ye.runs)*os(ye,M,r.ablation==="auto").length,0);r.onLine(`Ablation: 2 arms \xD7 ${F.length} ${I(F
+
+## --resume 的 .jsonl 路径走会话转录加载器；.json 走 256MB 上限的 JSON 数组加载
+offset=22393448
+async function i3e(e,n){let r=G()&&n!==void 0?Fp(e,n):void 0;if(r===void 0&&me())throw Xbt(e);if(e.endsWith(".jsonl")){let w=r?void 0:await DS(e),M=await VQ(e,r&&{storageV5:r});if(M.servedBy==="absent")throw Xbt(e);let{messages:q,summaries:V,customTitles:Q,endedSessions:ye,aiTitles:Se,tags:be,relocatedCwds:Te,fileHis
+
+## JSON 形态的上限与报错
+offset=22395470
+if(s.size>268435456)throw new kRe(`Transcript file too large to load as JSON (${s.size} bytes)`,"too_large");let h=await wI(e,{encoding:"utf-8"}),y;try{y=Y(h)}catch(w){throw new kRe(`Invalid JSON in transcript file: ${w}`,"invalid_json")}let b;if(Array.isArray(y))b=y;else if(y&&typeof y==="object"&&"messages"in y){if(!Array.isArray(y.messages))throw new kRe("Transcript messages must be an array","bad_shape");b=y.messages}else throw new kRe("Transcript must be an array of messages or an object with a messages array","bad_shape");if(b.length===0)throw new kRe("No messages found in JSON file","no_messages");return JDe(b,0,void 0,void 0,void 0,void 0,e)}function Xbt(e){return Object.assign(new x(`ENOENT: no such file or directory, stat '${e}'`,"ENOENT: no such file or d
+
+## jsonl 形态的报错：无消息 / 无有效对话链
+offset=22394241
+if(q.size===0)throw new kRe("No messages found in JSONL file","no_messages");let Kt=yN(q.values(),(to)=>Oe.has(to.uuid))??(Oe.size===0&&!Gn?yN(q.values(),(to)=>!to.isSidechain):void 0);if(!Kt){if(Gn){let to=w?.mtime??new Date(M.v5Read?.mtimeMs??0);return cLe(M,{date:to.toISOString(),fullPath:e,created:to,modified:to})}throw new kRe("No valid conversation chain found in JSONL file","no_chain")}let Vn=xxt(q,Kt);llo(q,Vn,Kt.sessionId);let Fn=V.get(Kt.uuid),pn=Q.get(Kt.sessio
+
+## --resume 参数是 .jsonl 时：文件名 stem 若是 UUID 则当 sessionId
+offset=32450159
+if(Y0e(e.resume)){let U=Vt(Oi(e.resume,".jsonl"));if(U&&!e.forkSession){let q=await Z7(U,P);if(q){let z=await NXn({holder:q,entrypoint:"cli",prompt:ge,storageV5:P});return await ne(x,Che({holder:q,canFork:!0,handoff:z}))}}let V="load_error";try{let 
+
+## 转录读取常量 MAX_TRANSCRIPT_READ_BYTES（DMn，50MB；用途未追）
+offset=22297915
+var DMn=52428800,Gqs=256,zqs=4096,Vqs=1024,qqs=64;function sLe(e){return Rg(e).replace(/\.jsonl$
+
+## 1MB 上限只作用于 prose .md（prompt.md / graders）
+offset=53473426
+async function Os(e){return en(e,Xc,"prose .md")}async function eu(e){let n;try{await Db(it.dirname(e),it.bas
+
+## Xc 定义
+offset=53469313
+var Xc=1048576,Ts=new Set(["schema_version","name","de

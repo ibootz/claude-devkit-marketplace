@@ -1,0 +1,21 @@
+# 各 run 的被测 prompt 在转录里的祖先链（沿 parentUuid 回溯）。* = 该记录的 cwd 属于另一个沙箱
+# 读法：带 * 的祖先只有回放历史本身（compact_boundary/摘要/尾巴），是第一个 run 把历史拷进转录时写下的副本；没有任何 run 的祖先里出现别的 run 的 prompt、tool_use 或回复
+
+## formal-compact
+  e-i9L7wh n_ancestors=8 foreign_turns=0  att:hook_additional_context:SessionStart <- att:hook_success:SessionStart:resume <- assistant:text ... user:This session [isCompactSummary] <- system:compact_boundary
+  e-dPZx85 n_ancestors=8 foreign_turns=0  att:hook_additional_context:SessionStart <- att:hook_success:SessionStart:resume <- *assistant:text ... *user:This session [isCompactSummary] <- *system:compact_boundary
+  e-aGAIX0 n_ancestors=8 foreign_turns=0  att:hook_additional_context:SessionStart <- att:hook_success:SessionStart:resume <- *assistant:text ... *user:This session [isCompactSummary] <- *system:compact_boundary
+  e-3EjwLm n_ancestors=6 foreign_turns=0  *assistant:text <- *user:顺便问一句，报表里的金额 <- *assistant:text ... *user:This session [isCompactSummary] <- *system:compact_boundary
+  e-eFO1TE n_ancestors=6 foreign_turns=0  *assistant:text <- *user:顺便问一句，报表里的金额 <- *assistant:text ... *user:This session [isCompactSummary] <- *system:compact_boundary
+  e-jgNi4C n_ancestors=6 foreign_turns=0  *assistant:text <- *user:顺便问一句，报表里的金额 <- *assistant:text ... *user:This session [isCompactSummary] <- *system:compact_boundary
+## formal-long
+  e-rlpUnF n_ancestors=56 foreign_turns=0  att:hook_additional_context:SessionStart <- att:hook_success:SessionStart:resume <- *assistant:text ... *user:This session [isCompactSummary] <- *system:compact_boundary
+  e-E8rIMy n_ancestors=56 foreign_turns=0  att:hook_additional_context:SessionStart <- att:hook_success:SessionStart:resume <- assistant:text ... user:This session [isCompactSummary] <- system:compact_boundary
+  e-BiKE7J n_ancestors=54 foreign_turns=0  *assistant:text <- *user:顺便问一句，报表里的金额 <- *assistant:text ... *user:This session [isCompactSummary] <- *system:compact_boundary
+  e-ah61M3 n_ancestors=54 foreign_turns=0  *assistant:text <- *user:顺便问一句，报表里的金额 <- *assistant:text ... *user:This session [isCompactSummary] <- *system:compact_boundary
+
+# recall 用例（smoke-recall）的最终回复：证明模型读到了回放历史，且只读到历史里有的内容
+recall-compact with :: 项目叫 tally，金额在 SQLite 里按整数「分」存（`INTEGER` 列 `amount_cents`），展示时再由 `money.cents_to_display()` 转成元。
+recall-compact without :: 项目叫 tally，金额在数据库里以整数“分”为单位存储，存在 `entries.amount_cents INTEGER` 列。
+recall-min with :: 项目叫 tally；金额在数据库里用什么单位存，你还没告诉过我，我也没读代码，所以现在不知道。
+recall-min without :: 项目叫 tally，但你还没告诉过我金额在数据库里用什么单位存（比如元还是分），我不读文件就没法确认，能告诉我吗？

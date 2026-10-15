@@ -1,0 +1,116 @@
+# smoke-dm：dm-h-compact 两臂（e-kkRO73=with，e-eWMGbR=without）共写一份转录
+# 源文件（回放子会话转录，eval 写进用例目录的 <sessionId>.jsonl；已从用例目录移出保存）：/Users/zhangq/.claude/jobs/d1a1f6eb/tmp/history-probe/artifacts/smoke/dm-h-compact/5f0c1e2a-7b3d-4c11-9a8e-2d6b0f4e7a10.jsonl
+# 列：行号 type uuid前8 <- parentUuid前8 沙箱号 摘要（正文只截 40 字）
+
+1 atis-latch  <-   
+2 queue-operation  <-   
+3 queue-operation  <-   
+4 system 3a95f4f4 <-  e-kkRO73 compact_boundary
+5 user 346061ff <- 3a95f4f4 e-kkRO73 [isCompactSummary] str:This session is being continued from a p
+6 user c5457c55 <- 346061ff e-kkRO73 str:好，CSV 导入先放一放，等我确认银行导出的列顺序再说。
+7 assistant 88fdad78 <- c5457c55 e-kkRO73 text
+8 user 14821175 <- 88fdad78 e-kkRO73 str:顺便问一句，报表里的金额现在是四舍五入到分吗？
+9 assistant 269a377a <- 14821175 e-kkRO73 text
+10 attachment 55ec9a85 <- 269a377a e-kkRO73 hook_success SessionStart:resume
+11 attachment 326b4bdf <- 55ec9a85 e-kkRO73 hook_additional_context SessionStart :: # AI 工作纪律（会话级常驻，auto-compact 后自动重新注入）  一
+12 user 5df10fa3 <- 326b4bdf e-kkRO73 str:我想同时弄清两件互不相关的事，请分别派一个子代理去查，最后汇总给我： 1. 用三
+13 attachment 22aa7b15 <- 5df10fa3 e-kkRO73 environment 
+14 attachment 77871aed <- 22aa7b15 e-kkRO73 model 
+15 attachment ef5f8f22 <- 77871aed e-kkRO73 deferred_tools_delta 
+16 attachment 295aef9f <- ef5f8f22 e-kkRO73 agent_listing_delta 
+17 attachment 268bca79 <- 295aef9f e-kkRO73 skill_listing 
+18 attachment b5fa4d7f <- 268bca79 e-kkRO73 total_tokens_reminder 
+19 attachment 5389fe47 <- b5fa4d7f e-kkRO73 hook_additional_context UserPromptSubmit :: # AI 工作纪律 · 每轮要点（一～七章已在会话开始注入，仍然有效）  ## 
+20 attachment f226e8b8 <- 5389fe47 e-kkRO73 session_context 
+21 attachment 2605bdd7 <- f226e8b8 e-kkRO73 date 
+22 attachment c4af0b21 <- 2605bdd7 e-kkRO73 prompt_snapshot 
+23 api-request-shape  <-   
+24 api-request-blob  <-   
+25 api-request-blob  <-   
+26 api-request-blob  <-   
+27 api-request-blob  <-   
+28 api-request  <-   
+29 last-prompt  <-   
+30 mode  <-   
+31 atis-latch  <-   
+32 queue-operation  <-   
+33 queue-operation  <-   
+34 user b863469e <- 269a377a e-eWMGbR str:我想同时弄清两件互不相关的事，请分别派一个子代理去查，最后汇总给我： 1. 用三
+35 attachment a0096a66 <- b863469e e-eWMGbR environment 
+36 attachment 91e52de1 <- a0096a66 e-eWMGbR model 
+37 attachment 5e644897 <- 91e52de1 e-eWMGbR deferred_tools_delta 
+38 attachment 5ee5e8fb <- 5e644897 e-eWMGbR agent_listing_delta 
+39 attachment 4aff1a5f <- 5ee5e8fb e-eWMGbR skill_listing 
+40 attachment 4402f9dd <- 4aff1a5f e-eWMGbR total_tokens_reminder 
+41 attachment e97369f6 <- 4402f9dd e-eWMGbR session_context 
+42 attachment f5459049 <- e97369f6 e-eWMGbR date 
+43 attachment 2f2e02a8 <- f5459049 e-eWMGbR prompt_snapshot 
+44 api-request-shape  <-   
+45 api-request-blob  <-   
+46 api-request  <-   
+47 last-prompt  <-   
+48 mode  <-   
+49 atis-latch  <-   
+50 assistant 89481e68 <- 2f2e02a8 e-eWMGbR tool_use
+51 user 0c3f6857 <- 89481e68 e-eWMGbR tool_result
+52 assistant 8a75b6ff <- 0c3f6857 e-eWMGbR tool_use
+53 user ba2a36a9 <- 8a75b6ff e-eWMGbR tool_result
+54 attachment 8f59580f <- ba2a36a9 e-eWMGbR prompt_snapshot 
+55 attachment fc3bd900 <- 8f59580f e-eWMGbR total_tokens_reminder 
+56 api-request-blob  <-   
+57 api-request-blob  <-   
+58 api-request-blob  <-   
+59 api-request  <-   
+60 last-prompt  <-   
+61 mode  <-   
+62 atis-latch  <-   
+63 assistant 9bcae8a9 <- c4af0b21 e-kkRO73 thinking
+64 assistant 16d87c6c <- 9bcae8a9 e-kkRO73 tool_use
+65 attachment 16aa2fba <- 16d87c6c e-kkRO73 hook_success PreToolUse:Agent
+66 attachment 25f6356f <- 16aa2fba e-kkRO73 hook_additional_context PreToolUse:Agent :: [agent-dispatch] 本次派发没给 name（Agent 工具的 J
+67 user af90b696 <- 16d87c6c e-kkRO73 tool_result
+68 assistant b6fa36ed <- af90b696 e-kkRO73 tool_use
+69 attachment e2a3cf27 <- b6fa36ed e-kkRO73 hook_success PreToolUse:Agent
+70 attachment 5f062f0a <- e2a3cf27 e-kkRO73 hook_additional_context PreToolUse:Agent :: [agent-dispatch] 本次派发没给 name（Agent 工具的 J
+71 user 7385825e <- b6fa36ed e-kkRO73 tool_result
+72 attachment 1ae7d6bd <- 7385825e e-kkRO73 prompt_snapshot 
+73 attachment 28c1f5c4 <- 1ae7d6bd e-kkRO73 total_tokens_reminder 
+74 api-request-blob  <-   
+75 api-request-blob  <-   
+76 api-request-blob  <-   
+77 api-request  <-   
+78 last-prompt  <-   
+79 mode  <-   
+80 atis-latch  <-   
+81 queue-operation  <-   
+82 queue-operation  <-   
+83 queue-operation  <-   
+84 queue-operation  <-   
+85 assistant 95551aaf <- fc3bd900 e-eWMGbR text
+86 queue-operation  <-   
+87 user 052698e1 <- 95551aaf e-eWMGbR str:<task-notification> <task-id>a7697cfc9f9
+88 queue-operation  <-   
+89 user 0deb6006 <- 052698e1 e-eWMGbR str:<task-notification> <task-id>a0491f8cf03
+90 api-request-blob  <-   
+91 api-request  <-   
+92 assistant 48d99b73 <- 28c1f5c4 e-kkRO73 text
+93 queue-operation  <-   
+94 user c77af0c5 <- 48d99b73 e-kkRO73 str:<task-notification> <task-id>af861737ede
+95 attachment 92c3150d <- c77af0c5 e-kkRO73 hook_additional_context UserPromptSubmit :: # AI 工作纪律 · 每轮要点（一～七章已在会话开始注入，仍然有效）  ## 
+96 queue-operation  <-   
+97 user e367b4af <- 92c3150d e-kkRO73 str:<task-notification> <task-id>a2ab1693b8e
+98 attachment 3e87a916 <- e367b4af e-kkRO73 hook_additional_context UserPromptSubmit :: # AI 工作纪律 · 每轮要点（一～七章已在会话开始注入，仍然有效）  ## 
+99 api-request-blob  <-   
+100 api-request-blob  <-   
+101 api-request  <-   
+102 last-prompt  <-   
+103 mode  <-   
+104 atis-latch  <-   
+105 assistant 587b8217 <- 0deb6006 e-eWMGbR thinking
+106 assistant 9b595950 <- 587b8217 e-eWMGbR text
+107 last-prompt  <-   
+108 cost-state  <-   
+109 assistant 0fde3c89 <- 3e87a916 e-kkRO73 thinking
+110 assistant a2b64056 <- 0fde3c89 e-kkRO73 text
+111 last-prompt  <-   
+112 cost-state  <-   
