@@ -2,13 +2,14 @@
 
 run.json 字段按 spec「四、目录布局与状态文件」列：本版能填的照填，后续票才填的留键位、值为 null：
 clause_list_fingerprint（条款清单，票 10）、judge_model / judge（AI 评委，票 09）、
-injection_check（注入到达核验，票 06）、resident_tokens（常驻 token，票 06）、preflight（前置检查，票 04）、
+preflight（前置检查，票 04）、
 arms.previous / arms.current_with_env（上一版与环境插件臂，票 05）。
 """
 import os
 import re
 from collections import Counter
 
+from . import injection_check
 from .registry import TRUST_SCOPE
 
 SCHEMA_VERSION = 1
@@ -123,6 +124,7 @@ def render_report(rec):
         '> 状态：**%s**。待审报告不能作为改插件或发版的依据；用户审过后改为「已审」。' % rec['review']['status'],
         '',
         '> 信任范围：%s' % TRUST_SCOPE,
+        *injection_check.report_banner(rec),
         '',
         '- 运行：`%s`，%s 至 %s（UTC）' % (rec['run_id'], rec['started_at'], rec['finished_at']),
         '- 插件内容指纹：`%s`' % p['fingerprint'],
@@ -182,6 +184,7 @@ def render_report(rec):
         for name in sorted(excluded):
             lines.append('- %s：%s' % (name, '、'.join('`%s`（%s）' % (g, why) for g, why in sorted(excluded[name].items()))))
 
+    lines += injection_check.report_sections(rec)
     lines += ['', '## 本报告未覆盖', '',
-              '前置检查、上一版臂、注入到达核验、AI 评委、常驻 token 尚未接入，run.json 里对应字段为 null。', '']
+              '前置检查、上一版臂、AI 评委尚未接入，run.json 里对应字段为 null。', '']
     return '\n'.join(lines)

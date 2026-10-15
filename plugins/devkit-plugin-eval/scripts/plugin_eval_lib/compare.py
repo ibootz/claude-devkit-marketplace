@@ -3,7 +3,7 @@
 本版只有「不装」与「当前版」两臂。扩展点：
 - 前置检查（票 04）插在 run_compare 开头、lookup 之后；
 - 上一版 / 环境插件臂（票 05）往 _arm_specs 里加 ArmSpec；
-- 注入到达核验（票 06）在 _run_arm 里搬 trace 之前读转录；
+- 注入到达核验（票 06）：_run_arm 记下静态画像与逐 run 转录位置，所有臂跑完后 injection_check.build 读搬出的转录；
 - AI 评委（票 09）在所有臂跑完、写 run.json 之前。
 """
 import json
@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import arms, evalrun, fingerprint, record, registry, scoring, traces
+from . import arms, evalrun, fingerprint, injection, injection_check, record, registry, scoring, traces
 
 
 # eval 正常跑完的退出码：0 全过、1 有用例低于 --threshold（判分我们自己重算，不看它）。其余（如 2）是中途中止。
@@ -89,6 +89,9 @@ def _run_arm(spec, *, ctx):
         'eval_exit_code': exit_code,
         'trace_dir': 'traces/%s/%s' % (ctx['run_id'], spec.key),
         'cleanup_warnings': [],
+        # 注入到达核验（票 06）：常驻注入的静态画像与逐 run 转录位置，injection_check.build 取走
+        '_static': injection.static_profile(spec.source, env=ctx['env']) if spec.source is not None else None,
+        '_runs': [],
     }
     if spec.source is None:
         rec.update(stub_name=arms.STUB_NAME, version=None)
@@ -116,8 +119,9 @@ def _run_arm(spec, *, ctx):
             usages.append(s['usage'])
             if s['main_model']:
                 models[s['main_model']] += 1
-            rec['cleanup_warnings'] += traces.harvest_sandbox(
-                tp, log_dir / ('%s-%d' % (_case_slug(case), i)), ctx['sandbox_roots'])
+            run_trace_dir = log_dir / ('%s-%d' % (_case_slug(case), i))
+            rec['cleanup_warnings'] += traces.harvest_sandbox(tp, run_trace_dir, ctx['sandbox_roots'])
+            rec['_runs'].append({'case': scoring._case_rel_dir(case), 'run': i, 'dir': run_trace_dir, 'trace_path': tp})
 
     rec.update(
         aggregate_result='arms/%s/aggregate-result.json' % spec.key,
@@ -196,6 +200,9 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
         if not keep_assembly:
             shutil.rmtree(assembly_root, ignore_errors=True)
     _score_arms(arm_records, log)
+    inj_check, resident = injection_check.build(arm_records)
+    for problem in inj_check['problems']:
+        log('[注入核验] %s' % problem)
     for spec in _arm_specs(plugin_dir):
         rec = arm_records[spec.key]
         if rec['eval_exit_code'] not in EVAL_OK_EXIT_CODES:
@@ -219,7 +226,10 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
                      'runs_per_case': runs, 'concurrency': concurrency, 'model_override': model,
                      'platform': sys.platform},
     )
+    rec.update(injection_check=injection_check.summary(inj_check), resident_tokens=resident)
     rec = record.scrub_home(rec)   # 产物会入库：本机家目录前缀换成 ~
+    (run_dir / 'injection-check.json').write_text(
+        json.dumps(record.scrub_home(inj_check), ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     (run_dir / 'run.json').write_text(json.dumps(rec, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     (run_dir / 'report.md').write_text(record.render_report(rec), encoding='utf-8')
     return CompareResult(run_dir, rec, 0 if rec['complete'] else 3)
