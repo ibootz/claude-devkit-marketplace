@@ -1,6 +1,6 @@
 {
   "name": "devkit-plugin-eval",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "插件评测 - 登记被测插件，用 claude plugin eval 跑「不装 / 当前版」离线对照，落盘待审报告（Python 命令行，无 hook）",
   "author": {
     "name": "zhangq"
