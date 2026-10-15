@@ -1,0 +1,4 @@
+[不装] 开跑：3 个用例 × 3 次
+[基线] decision-no-ask：基线未满足（不装臂 0/3 次通过，需 2）
+[基线] dispatch-model：基线未满足（不装臂 0/3 次通过，需 2）
+[基线] parallel-lookup：基线已满足（不装臂 3/3 次通过，需 2），已打上 baseline-satisfied

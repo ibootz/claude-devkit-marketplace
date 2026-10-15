@@ -309,8 +309,10 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
   clauses-injection.txt                      # 清单对应的注入文本快照（增量重抽做差异用）
   clause-rehang.json                         # 条款退役后用例改挂建议（票 11 消费）
   judge-config.json                          # AI 评委配置（可选）
-  drafts/<case>/                             # 用例草稿
-  runs/<时间>-<版本>-<compare|gate|clauses>/
+  drafts/<case>/                             # 用例草稿：eval 原生用例目录 + draft.json
+  draft-skips.json                           # AI 起草时判「不宜起草」的目标与原因
+  baseline.json                              # 各用例的基线判定结果
+  runs/<时间>-<版本>-<compare|gate|clauses|drafts|baseline>/
     run.json                                 # 唯一真源
     arms/<臂>/aggregate-result.json
     injection-check.json                     # 注入到达核验
@@ -330,7 +332,7 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
 
 - 草稿必须在 `evals/` 之外：eval 递归扫描 `<eval dir>/**`，放进去会被当正式用例跑。
 - `<plugin>/evals/results/` 加进 `.gitignore`；外围脚本跑完把 eval 写进去的产物搬到 `runs/`。插件目录就是仓根时，产物仍会分发，接受这个例外。
-- `run.json` 字段：插件名、版本、插件内容指纹、条款清单指纹、各臂（上一版的提交 sha、版本号、取得方式、是否退化及原因、是否跨改名；当前版 `HEAD` sha 与 dirty 标记；每个环境插件的来源、版本号与 `gitCommitSha`）、Claude Code 版本、主力模型、AI 评委模型、token 与标价估算、`kind`（`compare` / `gate`）、是否完整、是否通过、审阅状态（待审 / 已审）与审阅时间。
+- `run.json` 字段：插件名、版本、插件内容指纹、条款清单指纹、各臂（上一版的提交 sha、版本号、取得方式、是否退化及原因、是否跨改名；当前版 `HEAD` sha 与 dirty 标记；每个环境插件的来源、版本号与 `gitCommitSha`）、Claude Code 版本、主力模型、AI 评委模型、token 与标价估算、`kind`（`compare` / `gate` / `clauses` / `drafts` / `baseline`，各自含义见下文 0.3.0、0.4.0 两条）、是否完整、是否通过、审阅状态（待审 / 已审）与审阅时间。
 - 入库：结构化结果、两遍判分、注入核验、报告，加用户看过的样本 trace（分歧、抽检、金标），压缩存放。全量 trace 只留本机 90 天（放宽了「原始运行数据要入库」，已在地图 Notes 标注）。
 - 上次复盘时间、上次对照的 Claude Code 版本与模型**不另存**，从各仓 `reviews/` 与 `run.json` 现算。
 - HTML 待审页在本机生成，不入库。
@@ -353,6 +355,21 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
   - **run.json 新增**：`clause_check`（clause-check.json 原样搬入）与 `clause_list_fingerprint`；`judge_model`（评委实际所用模型）；`judge`（judge.json 的摘要：`model`、`model_source`、`passes`、`trusted` 三态 true / false / null、`untrusted_reason`、`complete`、样本计数、`gold` 摘要、`warnings`、`scores`、`usage`、`flagged`；`--no-judge` 时为 `{"skipped": "no-judge"}`；评委这一步整体抛异常时为 `{"failed": "<异常类型>: <信息>"}`，同时记一条不完整原因，续跑时重判）；`environment.judge`（`{enabled, model}`，续跑沿用首跑的 `--no-judge` / `--judge-model`）与 `environment.clause_model`。
   - **`reviews/<日期>.json`**：`kind=review`、`run_id`（`review-<日期>`）、`date`、`date_basis`（local）、`tz_offset`、`generated_at`（UTC）、`plugin`（`name`、`version`、`installed`）、`window`、`scan`、`environment`（`claude_code_version`、本插件的 `main_model`、`co_loaded_plugins`、`co_loaded_unregistered_count`）、`signals`（`skills`、`blocks`、`hook_errors`、`permission_decisions`、`injections`、`hook_latency`、`compact`）、`candidates[]`（`id`、`kind`、`rule`、`count`、`subagent_count`、`after_compact`、`clause_ids`、`clause_mapping`、`plugin_versions`、`pointers`、`selection`、`decided_at`、`carried_from`）、`clause_list_note`、`compare_hint`、`pending`。
   - **`gate --json` 输出**：`plugin`、`version`、`plugin_dir`、`fingerprint`、`passed`、`blockers`（与评测依据无关的未过闸原因，如工作区未提交）、`judge_untrusted`、`gated`、`gated_by`、`previous_version`、`eval_ok`、`eval_skip`、`passed_via_skip`、`basis`、`rejected_same_version`、`other_runs`、`unit_tests`、`skip_records`、`main_ref`、`leaks`、`notes`。不落盘。
+- devkit-plugin-eval 0.4.0 起（2026-10-16 集成 B 批 11 / 15 时登记）：
+  - **运行种类补全**：`kind` 共五种，`compare` / `gate` / `clauses` / `drafts` / `baseline`，目录后缀同名。
+    - `kind=gate`：`gate --run-subset` 跑的规则子集，只跑当前版一臂。`delta`、`review` 为 null，`judge` 为 `{"skipped": "gate-rule-subset"}`，另记 `pass_criterion`（判据原文）与 `rule_subset`（见下）。全部选中用例都没有可计分的规则 grader 时 `complete=false`，不完整原因写「没有可计分的规则 grader」。
+    - `kind=drafts`：一批 AI 起草，run.json 记 `batch[]`（本批草稿）、`not_on_page`（没上待审页的草稿）、`drafting`（起草过程与结果）、`priority_rule`、`clause_list_fingerprint`。
+    - `kind=baseline`：`baseline` 子命令的基线判定，只跑「不装」一臂。run.json 记 `cases`、`threshold`、`runs_per_case`、`rule`（判据原文）、`arms.none`、`verdicts`（同 `baseline.json` 的逐用例结构）、`preflight`、`usage`。
+    - 闸门不读 `clauses` / `drafts` / `baseline` 三种运行。
+  - **`drafts/<case>/`**：每例是 eval 原生用例目录，加一个 `draft.json`。字段：`schema_version`、`case`、`source`（`ai` / `history` / `rehang` / `review-candidate`）、`category`、`clauses`、`clause_intent`、`skill`、`agent`、`intent`、`technique`、`target`、`created_at`、`created_by`（`{model}`）、`status`（`open` / `rejected`）、`rejected_at`、`rejected_in_run`、`rehang[]`（改挂记录：`retired_id`、`reason`、`replaced_by`、`suggestion`、`ai_hint`、`from_run`、`action`、`target`、`tags_before`、`tags_after`、`returned_from`、`at`）、`linked[]`、`evidence`。审过的草稿搬进 `plugins/<plugin>/evals/<case>/`，`draft.json` 不随搬。
+  - **`draft-skips.json`**：`{schema_version, plugin, skipped: {目标键: {code, reason, model, at}}}`。`code` 取 `needs-user-reply` / `not-observable-offline` / `needs-write-tools` / `style-not-mechanical`。
+  - **`baseline.json`**：`{schema_version, plugin, cases: {用例: {verdict, passes, invalid, valid, need, run_scores, threshold, runs, run_id, at, tag_changed, case_fingerprint}}}`。`verdict` 取 `satisfied` / `not-satisfied` / `undecided`；判 `satisfied` 的用例在用例的 `tags` 里打上 `baseline-satisfied`，判 `not-satisfied` 时去掉。
+  - **run.json 新增**：
+    - `baseline`（离线对照里有回归守护用例时）：`{tag, cases: {用例: {status, current_score, current_passes, current_valid_runs, previous_score, none_score, raw_delta}}, rule, regressed}`。`status` 取 `held` / `regressed` / `no-previous` / `below-baseline` / `no-score`。
+    - `delta.excluded_baseline_satisfied`：从「当前版 − 不装」规则分差里剔除的回归守护用例。`judge.scores.excluded_baseline_satisfied` 同义，管 AI 评委的差。
+    - `rule_subset`（只在 `kind=gate`）：`{cases, excluded_cases, count_with_only}`。`excluded_cases` 是「不跑的用例 → 原因」；`count_with_only=true` 表示 `arm: with-only` 的 grader 计分。
+  - **`gate --json` 新增**：`compare_suggestion`（建议跑对照的提示，null 为不提示）、`review_reminder`（距上次复盘的提醒）、`rule_subset_needed`（null 表示该跑规则子集；否则是不跑的原因，如已有可采信依据、单测声明未通过、不在 git 仓）、`rule_subset_threshold`。
+  - **`gate --threshold`**：同 `--run-subset` 用，判「是否通过」的用例分阈值，默认 1.0，即每例全部 run 都过。
 
 ## 不做的
 
@@ -436,3 +453,11 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
   7. 复盘日期用本机本地日期命名 `reviews/<日期>.json`，结果里另记时区偏移 `tz_offset`。
   - 另登记：AI 评委两遍都判「判不了」算分歧、交用户裁定，任一遍出错算不完整（票 09 已定口径 3）；`--no-judge` 跳过评委，run.json 记 `{"skipped": "no-judge"}`。
   - 2.6 字面要求 `gate` 开跑前跑前置检查；票 14 的 gate 只读记录、不调模型，暂不跑，等票 15 规则子集真跑模型时再接（已写进票 15 Comments）。
+- 2026-10-16 B 批（11/15）集成定稿（集成分支 `worktree-agent-a8eba54acc263c023`，devkit-plugin-eval 0.4.0；主会话与 jev 复核定稿，用户授权「不用停下确认」；字段见上文「四、目录布局与状态文件」0.4.0 一条）：
+  1. 规则子集默认每例 3 次，threshold=1.0，即每例全部 run 都过才算过。`gate` 加 `--threshold`，默认 1.0。报告与 gate 输出写明「threshold=1.0：每例全部 run 都过」。
+  2. description 与 agent 定义的比较基线取上一版本号的最后一个提交，贴 2.8「升版改动」字面。对照跑完后又改了无关文件、该提示再次出现，属已知噪音，记进票 15 已知缺口，不修。
+  3. 打回的草稿：自动起草仍算该条款已有草稿，不重写；显式 `drafts write --clauses Cxxx` 点名时，已打回的草稿不算覆盖，会重写。帮助文字写明。
+  4. 回归守护的退化判据保持严格：当前版通过率低于上一版就标「退化」，3/3→2/3 也报。离线对照报告的回归守护一节写明「每臂 N 次，单次波动也会标退化，请看 trace 判断」。
+  5. probe 用例删掉 `marker-userpromptsubmit` grader（`.scratch/plugin-eval/probe/cases/` 下 4 个）。约束：**eval trace 不收 UserPromptSubmit 注入，不要写判 UserPromptSubmit 注入文字的规则 grader**；注入是否到达由 `injection_check` 核验。起草 prompt 已加同一条约束。
+  6. 规则子集里全部选中用例都没有可计分的规则 grader 时，运行记不完整（`complete=false`），原因写「没有可计分的规则 grader」；gate 不采信这次结果，也不报「规则子集未通过」。
+  - 两票其余自报暂定口径（11 的 8 条、15 的 9 条）照现状保留，票内标题改为「已定（2026-10-16 主会话复核）」。

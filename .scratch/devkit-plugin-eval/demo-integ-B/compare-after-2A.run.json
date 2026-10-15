@@ -1,0 +1,1443 @@
+{
+  "schema_version": 1,
+  "kind": "compare",
+  "run_id": "20261015T162621Z-4.1.0-compare",
+  "started_at": "2026-10-15T16:26:21Z",
+  "finished_at": "2026-10-15T16:30:39Z",
+  "plugin": {
+    "name": "devkit-discipline",
+    "version": "4.1.0",
+    "fingerprint": "sha256:c06cf79180afb51c6a65152eb28ff0f1d4177a9ea324c5b8871341770e1d9524",
+    "fingerprint_exclude": [
+      "evals"
+    ],
+    "path_in_repo": "plugins/devkit-discipline",
+    "evals_fingerprint": {
+      "shared": "sha256:c6998f7744c7ce00b2bd8b64aa27ade94c7da72f7b40fa8c689d7c28ca2dce97",
+      "cases": {
+        "decision-no-ask": "sha256:2e4f404843a6fdce26969907b922273892912c283dade03111349a00b51811c0",
+        "dispatch-model": "sha256:43b6ce4ea94969d22f10842ef0c3743e1ea14407d1062b7b88feb24ac415aa3b",
+        "parallel-lookup": "sha256:4035f5543272737316e5239d4d3b3bce9681948e5b5e56bf4cde9b216d4bfd32"
+      }
+    }
+  },
+  "clause_list_fingerprint": null,
+  "cases": [
+    "decision-no-ask",
+    "dispatch-model",
+    "parallel-lookup"
+  ],
+  "arms": {
+    "none": {
+      "label": "不装",
+      "source": "stub",
+      "eval_exit_code": 1,
+      "trace_dir": "traces/20261015T162621Z-4.1.0-compare/none",
+      "cleanup_warnings": [],
+      "stub_name": "devkit-plugin-eval-noplugin-stub",
+      "version": null,
+      "aggregate_result": "arms/none/aggregate-result.json",
+      "cost_usd": 0.2942384,
+      "usage": {
+        "input_tokens": 24,
+        "output_tokens": 4714,
+        "cache_read_input_tokens": 82012,
+        "cache_creation_input_tokens": 25226,
+        "cost_usd": 0.2942384,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 24,
+            "output_tokens": 4714,
+            "cache_read_input_tokens": 82012,
+            "cache_creation_input_tokens": 25226,
+            "cost_usd": 0.2942384
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.300",
+      "load_issues": [],
+      "score": 0.611111111111111,
+      "cases": {
+        "decision-no-ask": {
+          "score": 0.5,
+          "run_scores": [
+            0.5
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "dispatch-model": {
+          "score": 0.3333333333333333,
+          "run_scores": [
+            0.3333333333333333
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "parallel-lookup": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only"
+          },
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    },
+    "current": {
+      "label": "当前版",
+      "source": "working-tree",
+      "eval_exit_code": 0,
+      "trace_dir": "traces/20261015T162621Z-4.1.0-compare/current",
+      "cleanup_warnings": [],
+      "version": "4.1.0",
+      "head_sha": "79d2c9b83d0921203e90f5c332ac98ebfaaa9033",
+      "dirty": false,
+      "aggregate_result": "arms/current/aggregate-result.json",
+      "cost_usd": 0.5613905,
+      "usage": {
+        "input_tokens": 20,
+        "output_tokens": 7899,
+        "cache_read_input_tokens": 111980,
+        "cache_creation_input_tokens": 61958,
+        "cost_usd": 0.5613905,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 16,
+            "output_tokens": 6593,
+            "cache_read_input_tokens": 107145,
+            "cache_creation_input_tokens": 43562,
+            "cost_usd": 0.501849
+          },
+          "claude-sonnet-5-5": {
+            "input_tokens": 4,
+            "output_tokens": 1306,
+            "cache_read_input_tokens": 4835,
+            "cache_creation_input_tokens": 18396,
+            "cost_usd": 0.0595415
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.300",
+      "load_issues": [],
+      "score": 1.0,
+      "cases": {
+        "decision-no-ask": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "dispatch-model": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "parallel-lookup": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only"
+          },
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    },
+    "previous": null,
+    "current_with_env": null
+  },
+  "delta": {
+    "cases": {
+      "decision-no-ask": 0.5,
+      "dispatch-model": 0.6666666666666667,
+      "parallel-lookup": null
+    },
+    "overall": 0.5833333333333334,
+    "missing_cases": [],
+    "arm": "current",
+    "baseline": "none",
+    "excluded_baseline_satisfied": [
+      "parallel-lookup"
+    ]
+  },
+  "claude_code_version": "2.1.300",
+  "claude_code_versions": [
+    "2.1.300"
+  ],
+  "main_model": "claude-opus-5-5",
+  "judge_model": "claude-fable-5-1",
+  "usage": {
+    "input_tokens": 44,
+    "output_tokens": 12613,
+    "cache_read_input_tokens": 193992,
+    "cache_creation_input_tokens": 87184,
+    "cost_usd": 0.8556289,
+    "by_model": {
+      "claude-opus-5-5": {
+        "input_tokens": 40,
+        "output_tokens": 11307,
+        "cache_read_input_tokens": 189157,
+        "cache_creation_input_tokens": 68788,
+        "cost_usd": 0.7960874
+      },
+      "claude-sonnet-5-5": {
+        "input_tokens": 4,
+        "output_tokens": 1306,
+        "cache_read_input_tokens": 4835,
+        "cache_creation_input_tokens": 18396,
+        "cost_usd": 0.0595415
+      }
+    },
+    "cost_basis": "按标价（list price）估算，订阅用户只作信息"
+  },
+  "complete": true,
+  "incomplete_reasons": [],
+  "threshold": 1.0,
+  "passed": true,
+  "pass_criterion": "运行完整，且当前版臂每个有分用例的规则分都 ≥ threshold",
+  "review": {
+    "status": "待审",
+    "reviewed_at": null
+  },
+  "injection_check": {
+    "file": "injection-check.json",
+    "ok": true,
+    "problems": [],
+    "arms": {
+      "none": {
+        "label": "不装",
+        "kind": "control",
+        "runs_total": 3,
+        "runs_arrived": 0,
+        "runs_not_arrived": 0,
+        "runs_unverified": 0,
+        "runs_no_transcript": 0,
+        "events_total": {},
+        "plugin_injections": 0
+      },
+      "current": {
+        "label": "当前版",
+        "kind": "with",
+        "runs_total": 3,
+        "runs_arrived": 3,
+        "runs_not_arrived": 0,
+        "runs_unverified": 0,
+        "runs_no_transcript": 0,
+        "events_total": {
+          "SessionStart": 3,
+          "UserPromptSubmit": 5,
+          "SubagentStart": 2
+        },
+        "plugin_injections": 10
+      }
+    }
+  },
+  "judge": {
+    "file": "judge.json",
+    "model": "claude-fable-5-1",
+    "requested_model": "claude-fable-5-1",
+    "model_source": "默认（最贵一档）",
+    "passes": 2,
+    "trusted": null,
+    "untrusted_reason": null,
+    "complete": true,
+    "samples": 4,
+    "agreed": 3,
+    "disagreements": 1,
+    "errors": 0,
+    "spot_checks": 3,
+    "user_decided": 1,
+    "gold": {
+      "total": 0,
+      "judged": 0,
+      "agreed": 0,
+      "agreement_rate": null,
+      "threshold": null,
+      "min_samples": null,
+      "enabled": false,
+      "state": "not-configured",
+      "note": "未配置一致率阈值或启用所需条数（judge-config.json），不启用校准，只记一致率",
+      "by_source": {
+        "disagreement": {
+          "total": 0,
+          "judged": 0,
+          "agreed": 0,
+          "agreement_rate": null
+        },
+        "spot-check": {
+          "total": 0,
+          "judged": 0,
+          "agreed": 0,
+          "agreement_rate": null
+        }
+      },
+      "basis_source": "disagreement",
+      "call_errors": 0,
+      "retired_clauses": []
+    },
+    "warnings": [],
+    "scores": {
+      "arms": {
+        "none": {
+          "score": 0.5,
+          "cases": {
+            "decision-no-ask": 0.0,
+            "parallel-lookup": 1.0
+          }
+        },
+        "current": {
+          "score": 1.0,
+          "cases": {
+            "decision-no-ask": 1.0,
+            "parallel-lookup": 1.0
+          }
+        }
+      },
+      "delta_current_vs_none": 1.0,
+      "excluded_baseline_satisfied": [
+        "parallel-lookup"
+      ]
+    },
+    "usage": {
+      "input_tokens": 16,
+      "output_tokens": 2675,
+      "cache_read_input_tokens": 4300,
+      "cache_creation_input_tokens": 15977,
+      "cost_usd": 0.45452499999999996,
+      "calls": 8,
+      "by_model": {
+        "claude-fable-5-1": {
+          "input_tokens": 16,
+          "output_tokens": 2675,
+          "cache_read_input_tokens": 4300,
+          "cache_creation_input_tokens": 15977,
+          "cost_usd": 0.45452499999999996
+        }
+      },
+      "cost_basis": "按标价（list price）估算，订阅用户只作信息"
+    },
+    "flagged": [
+      {
+        "id": "s-8ed7c44c24",
+        "arm": "none",
+        "arm_label": "不装",
+        "case": "decision-no-ask",
+        "run": 1,
+        "criterion": "four-elements",
+        "status": "agreed",
+        "disagreement": null,
+        "spot_check": true,
+        "rule_grader": "four-elements",
+        "rule_passed": false,
+        "final_verdict": "fail",
+        "gold_id": null,
+        "sample_file": "samples/none--decision-no-ask--1fbd1ef73626.jsonl.gz",
+        "verdicts": [
+          "fail",
+          "fail"
+        ],
+        "user_verdict": null
+      },
+      {
+        "id": "s-56de42e876",
+        "arm": "none",
+        "arm_label": "不装",
+        "case": "parallel-lookup",
+        "run": 1,
+        "criterion": "consts-listed",
+        "status": "agreed",
+        "disagreement": null,
+        "spot_check": true,
+        "rule_grader": "answer-correct",
+        "rule_passed": true,
+        "final_verdict": "pass",
+        "gold_id": null,
+        "sample_file": "samples/none--parallel-lookup--f50a79af20a3.jsonl.gz",
+        "verdicts": [
+          "pass",
+          "pass"
+        ],
+        "user_verdict": null
+      },
+      {
+        "id": "s-b4e820ddb0",
+        "arm": "current",
+        "arm_label": "当前版",
+        "case": "decision-no-ask",
+        "run": 1,
+        "criterion": "four-elements",
+        "status": "agreed",
+        "disagreement": null,
+        "spot_check": true,
+        "rule_grader": "four-elements",
+        "rule_passed": true,
+        "final_verdict": "pass",
+        "gold_id": null,
+        "sample_file": "samples/current--decision-no-ask--230de1ae09c2.jsonl.gz",
+        "verdicts": [
+          "pass",
+          "pass"
+        ],
+        "user_verdict": null
+      },
+      {
+        "id": "s-5a157b5b39",
+        "arm": "current",
+        "arm_label": "当前版",
+        "case": "parallel-lookup",
+        "run": 1,
+        "criterion": "consts-listed",
+        "status": "disagreement",
+        "disagreement": "two-pass",
+        "spot_check": false,
+        "rule_grader": "answer-correct",
+        "rule_passed": true,
+        "final_verdict": "pass",
+        "gold_id": "g-5631f6ea15ca",
+        "sample_file": "samples/current--parallel-lookup--81b27427e39d.jsonl.gz",
+        "verdicts": [
+          "pass",
+          "fail"
+        ],
+        "user_verdict": "pass"
+      }
+    ],
+    "arm_labels": {
+      "none": "不装",
+      "current": "当前版"
+    }
+  },
+  "resident_tokens": {
+    "method": {
+      "name": "char-estimate-v1",
+      "formula": "round(宽字符数 × 1.33 + 其余字符数 × 0.29)，宽字符 = 码位 ≥ U+2E80",
+      "calibration": "两点拟合（中文为主），残差 ≤3%；英文为主的文本未验证（Claude Code 2.1.300 / claude-opus-5-5 首请求输入 token）",
+      "scope": "只计注入正文，不含 Claude Code 包装的 system-reminder 前缀；不调模型",
+      "execution": "真实 HOME、空临时 cwd、CLAUDE_PLUGIN_DATA 指向临时目录；PATH 与 eval 子进程相同（已去掉 asdf shims）"
+    },
+    "arms": {
+      "current": {
+        "label": "当前版",
+        "by_event": {
+          "SessionStart": {
+            "hooks": 1,
+            "injecting_hooks": 1,
+            "chars": 4948,
+            "tokens_est": 4526
+          },
+          "UserPromptSubmit": {
+            "hooks": 2,
+            "injecting_hooks": 1,
+            "chars": 2220,
+            "tokens_est": 1808
+          },
+          "SubagentStart": {
+            "hooks": 1,
+            "injecting_hooks": 1,
+            "chars": 4603,
+            "tokens_est": 4036
+          }
+        },
+        "total_tokens_est": 10370,
+        "hooks": [
+          {
+            "key": "SessionStart|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+            "event": "SessionStart",
+            "chars": 4948,
+            "tokens_est": 4526,
+            "exit_code": 0,
+            "label": "# AI 工作纪律（会话级常驻，auto-compact 后自动重新注入）"
+          },
+          {
+            "key": "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+            "event": "UserPromptSubmit",
+            "chars": 2220,
+            "tokens_est": 1808,
+            "exit_code": 0,
+            "label": "# AI 工作纪律 · 每轮要点（一～七章已在会话开始注入，仍然有效）"
+          },
+          {
+            "key": "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-ledger.js",
+            "event": "UserPromptSubmit",
+            "chars": 0,
+            "tokens_est": 0,
+            "exit_code": 0,
+            "label": null
+          },
+          {
+            "key": "SubagentStart||node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+            "event": "SubagentStart",
+            "chars": 4603,
+            "tokens_est": 4036,
+            "exit_code": 0,
+            "label": "# AI 工作纪律（子代理版）"
+          }
+        ],
+        "conditional_hooks": 4,
+        "errors": []
+      }
+    },
+    "measured_first_request_input_tokens": {
+      "none": 10326,
+      "current": 16937
+    },
+    "measured_delta_vs_none": {
+      "current": 6611
+    }
+  },
+  "preflight": {
+    "kind": "compare",
+    "passed": true,
+    "dirty": false,
+    "warnings": [],
+    "items": [
+      {
+        "id": "registered",
+        "label": "被测插件已登记",
+        "level": "hard",
+        "status": "ok",
+        "detail": "仓内路径 plugins/devkit-discipline"
+      },
+      {
+        "id": "claude_executable",
+        "label": "claude 可执行",
+        "level": "hard",
+        "status": "ok",
+        "detail": "~/.local/bin/claude"
+      },
+      {
+        "id": "eval_flags",
+        "label": "claude plugin eval 参数齐（--help 特性探测）",
+        "level": "hard",
+        "status": "ok",
+        "detail": ""
+      },
+      {
+        "id": "logged_in",
+        "label": "已登录（claude auth status）",
+        "level": "hard",
+        "status": "ok",
+        "detail": ""
+      },
+      {
+        "id": "plugin_valid",
+        "label": "插件结构合法（claude plugin validate）",
+        "level": "hard",
+        "status": "ok",
+        "detail": ""
+      },
+      {
+        "id": "env_plugins_contained",
+        "label": "环境插件在 containment root 内",
+        "level": "hard",
+        "status": "skip",
+        "detail": "无环境插件臂"
+      },
+      {
+        "id": "hooks_reachable",
+        "label": "hook 解释器可达（临时空 HOME + 同一 PATH 冒烟）",
+        "level": "hard",
+        "status": "ok",
+        "detail": "6 条 command 已执行"
+      },
+      {
+        "id": "dirty",
+        "label": "工作区无未提交改动",
+        "level": "soft",
+        "status": "ok",
+        "detail": "HEAD 79d2c9b83d09"
+      },
+      {
+        "id": "version_model",
+        "label": "Claude Code 版本与主力模型同上次对照",
+        "level": "soft",
+        "status": "ok",
+        "detail": "无上次对照"
+      }
+    ],
+    "hook_smoke": [
+      {
+        "plugin": "当前版",
+        "event": "PreToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-dispatch.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "PreToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/bash-guard.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "PreToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/probe-throttle.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "PostToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/write-guard.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "SessionStart",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "UserPromptSubmit",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-ledger.js",
+        "exit_code": 0,
+        "note": ""
+      }
+    ]
+  },
+  "environment": {
+    "claude_path": "~/.local/bin/claude",
+    "node_path": "/opt/homebrew/bin/node",
+    "runs_per_case": 1,
+    "concurrency": 3,
+    "model_override": null,
+    "platform": "darwin",
+    "judge": {
+      "enabled": true,
+      "model": null
+    },
+    "clause_model": null
+  },
+  "previous_arm": {
+    "degraded": true,
+    "reason": "新插件首评或从未升过版本号，按基线规则比不装（git 历史里 plugin.json 的版本号一直是当前的 4.1.0，没有与它不同的版本）",
+    "reason_kind": "no-different-version",
+    "commit": null,
+    "version": null,
+    "name": null,
+    "path_in_repo": null,
+    "obtained_by": "auto",
+    "base": null,
+    "cross_rename": false,
+    "ran": false,
+    "incomparable_cases": {}
+  },
+  "env_plugins": [],
+  "delta_vs_previous": null,
+  "delta_env_vs_current": null,
+  "baseline": {
+    "tag": "baseline-satisfied",
+    "cases": {
+      "parallel-lookup": {
+        "status": "no-previous",
+        "current_score": 1.0,
+        "current_passes": 1,
+        "current_valid_runs": 1,
+        "previous_score": null,
+        "none_score": 1.0,
+        "raw_delta": 0.0
+      }
+    },
+    "rule": "基线已满足的用例不进当前版 − 不装的差；有上一版时当前版分 ≥ 上一版分记守住、否则退化；无上一版时当前版通过 ≥ 有效 run 的 2/3 记无上一版、否则低于基线",
+    "regressed": []
+  },
+  "clause_check": {
+    "schema_version": 1,
+    "status": "pending-confirmation",
+    "stale": false,
+    "injection_fingerprint": "sha256:86d5057dad37398fce49d3440fe51ad2460f48f8f3d19ad40e00b3627d6c1bb1",
+    "list_injection_fingerprint": null,
+    "list_fingerprint": null,
+    "list_counts": null,
+    "hooks": {
+      "injecting_hooks": 3,
+      "silent_hooks": [
+        "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-ledger.js"
+      ],
+      "failed_hooks": [],
+      "unstable_hooks": []
+    },
+    "normalization": "injection-text-v1",
+    "errors": [],
+    "proposal": "clause-proposal.json",
+    "proposal_kind": "extract",
+    "proposal_counts": {
+      "added": 108,
+      "rewritten": 0,
+      "retired": 0
+    },
+    "reused_from": null,
+    "ai": {
+      "model": "claude-fable-5-1",
+      "cost_usd": 0.92616,
+      "duration_ms": 148682,
+      "usage": {
+        "input_tokens": 2,
+        "output_tokens": 13816,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 11767
+      },
+      "cost_basis": "按标价（list price）估算，订阅用户只作信息"
+    },
+    "decision": null,
+    "rows": [
+      {
+        "id": "C001",
+        "criterion": "定位少数符号时，先用 Grep 取行号再定点 Read，而不是整读文件。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C002",
+        "criterion": "核对整份规范或协议时直接整读，不分片读取。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C003",
+        "criterion": "运行可能产生大输出的命令前，先用 `| wc -l` / `head -n` 等方式收窄输出。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C004",
+        "criterion": "收窄后输出仍超过 200 行且需逐条分析时，交子代理处理并只回摘要；自己已是第 2 层子代理时则自行收窄后跑。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C005",
+        "criterion": "检索结果为「没有」时，先用同一条命令搜一个确知存在的样本验证检索手段有效，再采信零命中结论。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C006",
+        "criterion": "对 macOS 非 ASCII 路径或可能在 .gitignore 下的文件，检索零命中时先 ls 父目录或换手段确认，不直接判定不存在。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C007",
+        "criterion": "派发子代理前盘点「在飞 + 拟派」数量，总数不超过 16（用户当场放宽除外）。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C008",
+        "criterion": "在飞子代理数靠自己记账（派发 +1、完成通知 -1），不用 TaskList / TaskGet 统计。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C009",
+        "criterion": "auto-compact 之后对在飞数按保守口径分批派发，不按可能失准的记账一次派满。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C010",
+        "criterion": "子代理嵌套不超过 2 层：自己已是第 2 层时不再派发任何子代理。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C011",
+        "criterion": "派出第 2 层子代理时，在其 prompt 里写明「你是第 2 层子代理，禁止再派发任何 subagent」。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C012",
+        "criterion": "team 模式下不以 teammate 身份调用 Agent 做嵌套派发。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C013",
+        "criterion": "team 模式下需要嵌套或代派时，先读 reference 中的 SEC:subagent 再行动。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C014",
+        "criterion": "team 模式下 Agent 调用被硬拒后，不按报错中「omit the name parameter」的提示重试，而是把子任务写进回执交父代理代派。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C015",
+        "criterion": "多个子代理要读同一份长文档时，先自己读一次，把共同骨架落成临时目录下的 scratch 文件供它们引用。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C016",
+        "criterion": "共享骨架 scratch 文件不进 git，任务结束后清理。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C017",
+        "criterion": "子代理操作浏览器一律使用 headless 模式。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C018",
+        "criterion": "headless 下跑不了的用例，列出原因写进回执，不切换到 headed 模式。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C019",
+        "criterion": "与其他会话或实例共用 git 索引时，git add 与 git commit 都只带本次改动的窄 pathspec。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C020",
+        "criterion": "只有能指出被违反的期望（spec / 文档 / 用户原话）才判定为缺陷；没有表述的行为视为规格空白，不派 fixer、不自行补行为（越权、丢数据除外）。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C021",
+        "criterion": "发现规格空白时攒批向产品提问（主会话）或写进回执交父代理转问（子代理），不凭直觉决定行为。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C022",
+        "criterion": "业务名词与术语只取可核验来源（代码标识符、UI 文案、需求设计产物、测试用例、表列与字典值、API 与错误码文案、日志报错、用户原话），不自造叫法。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C023",
+        "criterion": "标识符读不出业务语义时，从字段注释、表列注释、i18n 文案、行内注释等处查出真名后再使用。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C024",
+        "criterion": "所有来源都查不到时才使用描述性说法，并当场声明「这是我为说明起的名字」。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C025",
+        "criterion": "多来源叫法不一致时按场景分用：对人用页面或文档叫法，指代实现用标识符原文，同段首次出现时括号对应，不折中出新名字。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C026",
+        "criterion": "引用文件路径、函数名、变量名、报错原文时直接点名，不用「它 / 这个」代指。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C027",
+        "criterion": "引用章节、路径或链接时把关键内容摘抄进来，不让读者凭章节号或路径去翻原文（代码内的路径引用保持原样）。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C028",
+        "criterion": "提出待拍板方案或评审发现的问题时写齐起源、差距、影响范围、现场证据四要素。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C029",
+        "criterion": "四要素中不适用的一条明确写「无」，不静默省略。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C030",
+        "criterion": "现场证据把相关代码、文档、配置用代码块摘抄进来，类与方法带 `path/to/file.ext:行号`，先 Grep/Read 取到行号再写。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C031",
+        "criterion": "现场证据中类与方法的定义处与调用处各列一处位置。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C032",
+        "criterion": "向用户提问或要拍板时在正文里问，不调用 AskUserQuestion。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C033",
+        "criterion": "待拍板提问的首行为 `[要拍板]` 加一句摘要，四要素各用具名小标题，`---` 后用 H1 `Q1: 问句` 列问题，正文一句一行。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C034",
+        "criterion": "待拍板选项用 `a.` `b.` 编号，每项的做法、代价、能否回退各占一行，推荐项标「推荐」。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C035",
+        "criterion": "要信息与要授权分开提问，不混在同一问句里。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C036",
+        "criterion": "问句与选项里涉及的状态、编号、计数、时序当轮读真源后再写。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C037",
+        "criterion": "状态类断言读不到真源时写「未核实」，不写成确定状态。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C038",
+        "criterion": "发现自己凭错误断言拿到了用户授权时，立即说明并把处置权交回用户。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C039",
+        "criterion": "不迎合用户、不臆断，能核实的内容先核实再说。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C040",
+        "criterion": "断言按已证实（附出处）/ 推断（写证据与假设）/ 建议 / 待核实（给核实途径）/ 范围外五类标注，推断不写成事实、建议不写成定案。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C041",
+        "criterion": "交流、注释、说明性文字一律用简体中文（含子代理回执与再派下一层的 prompt），不用日文、韩文、繁体，不随引用素材或父代理 prompt 的语言切换。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C042",
+        "criterion": "代码、命令、标识符、路径、日志、报错保持原样，不翻译。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C043",
+        "criterion": "提到实体时写「名称(id)」两样齐全且不截断；表无名称字段时只给 id 并说明。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C044",
+        "criterion": "枚举、状态码、标记位、错误码写成「值(含义)」，位掩码逐位拆解。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C045",
+        "criterion": "时间戳附带带时区的可读时刻，无单位的数字补上单位。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C046",
+        "criterion": "裸值的含义取自枚举定义、字典表、列注释、错误码文案，查不到写「含义未查到」，不按字面猜。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C047",
+        "criterion": "用户拍板后回收选定项与适用范围、未选项、下一步、残余不确定、重开条件。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C048",
+        "criterion": "拍板决定波及文件 / spec / 票 / 范围时，同轮写进受影响文件的 `## Comments` 或 `docs/adr/`，不只留在对话里。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C049",
+        "criterion": "用户答复对不上所列选项时回头确认，不替用户挑选。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C050",
+        "criterion": "撞到只认授权弹框的守卫（如主分支拦截）时说明原委并默认引导进 worktree，不把正文答复当作机械授权绕过。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C051",
+        "criterion": "业务名词与承重概念首次出现时给一句白话定义及其在流程里的角色。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C052",
+        "criterion": "承重的文件 / 行 / 配置 / 测试链接在同一句里说明它是什么、支撑哪条论断、点开能核验什么。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C053",
+        "criterion": "讲方案、问题成因、跨服务 / 跨模块调用、状态流转时先调用 `devkit-tool:show-me` 出图再展开文字（单函数小改动、纯问答不画）。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C054",
+        "criterion": "讲方案时改前、改后各给一张图。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C055",
+        "criterion": "show-me 未安装时，把 mermaid 源码写进临时目录 `claude-diagrams/<主题>.md`，正文给链接。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C056",
+        "criterion": "子代理不能写文件时，把 mermaid 源码附在回执里交父代理落盘。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C057",
+        "criterion": "关键句的执行者、对象、作用范围（全部 / 任一 / 特定一组，否定与条件的辖域）、动作状态（指令 / 已完成 / 条件触发）都能从字面读出。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C058",
+        "criterion": "同一概念不换词、不同概念不并成一个词；项目有 CONTEXT.md 时用词以它为准。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C059",
+        "criterion": "原文没写明的内容标「待确认」，不自行补定。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C060",
+        "criterion": "需要逐句审计中文歧义时使用 `zh-disambiguate` skill。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C061",
+        "criterion": "回复首行用一句话说明状态（已改完 / 无异常 / 待拍板），再按需给结论、阻塞与待拍板项、证据、下一步。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C062",
+        "criterion": "只有本轮写过文件才列改动清单，每项一个可点击链接加一句提要，不贴 diff。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C063",
+        "criterion": "新写或大改 md 前，先在对话里输出「本次 md 受众判定：{人 / AI / 人机混合}，理由：……」，且先于任何写 md 的工具调用（极小改动可声明「沿用原判定」）。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C064",
+        "criterion": "md 按受众写：人读则结论前置、少堆术语；AI 读则上下文齐备、用词精确不留「可能 / 看情况」、示例覆盖典型与边界（含不触发情形）；人机混合两组叠加。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C065",
+        "criterion": "搬迁或重命名后，逐条 ls 或 Read 确认每个新路径真实存在，不以引用声明改完为准。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C066",
+        "criterion": "报错或评审发现问题时先判断它是否所有场景的必经入口，不是则只报自身路径受阻，不夸大为全面阻塞。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C067",
+        "criterion": "同批派发 ≥2 个子代理且有未返回者时，已完成的回执只静默累积，不逐条总结、不据它派新任务，全部到齐后一次性汇总。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C068",
+        "criterion": "子代理报出产线告警、密钥泄漏或破坏性错误时即时告知用户并冻结剩余任务，交用户拍板。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C069",
+        "criterion": "派发 prompt 含【期望输出】并逐条索要结构化回执。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C070",
+        "criterion": "派发 prompt 里把相关截图的绝对路径原样写入并要求子代理先 Read。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C071",
+        "criterion": "派发 prompt 里要求对外部系统的每一步写操作用读接口逐字段回读确认，不以 2xx 为准。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C072",
+        "criterion": "派子代理做核实类任务时，停止条件写进【约束】，交代实际深度写进【期望输出】。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C073",
+        "criterion": "派发 prompt 里写死的「事实」附出处 `path:行号` 或注明「未核实」。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C074",
+        "criterion": "据子代理回执里的归因改判据或代码前，先自己复现一次。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C075",
+        "criterion": "子代理因 529 / 限额 / 限流 / 超时 / 断流失败时，不默认重派也不默认放弃，先判幂等与瞬态（外部写先回读服务端），再在立即重派 / 回读定位断点后补做或回滚 / 冻结交用户拍板中三选一。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C076",
+        "criterion": "被 hook 拦下时把多条违规一次报清，照 finding 一次改全。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C077",
+        "criterion": "改完仍被 hook 拦下而确信无害时，报告用户拍板，不反复试探正则边界。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C078",
+        "criterion": "启动 agent-browser 实例前，活动实例数 ≥4 时先 close。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C079",
+        "criterion": "不使用裸 `cd`，改用 `(cd /abs/path && cmd)`、`git -C <path>` 或全绝对路径。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C080",
+        "criterion": "Agent 调用被 agent-dispatch.js 拦下时，照贴出的形态模板改一次字段结构。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C081",
+        "criterion": "被 probe-throttle 减速而没有 ≥2 个互不依赖待查项时，原样重发命令，不改写命令、不凑假派发。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C082",
+        "criterion": "动笔前判断是否该拆分：源码单文件 >1000 行、项目内 CLAUDE.md >200 行时拆分，不依赖 write-guard 事后回滚。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C083",
+        "criterion": "能自己跑的命令自己跑，不抄给用户敲；交给用户只限真撞上且无自救路的守卫、要人点 UI、要用户本人登录、逐次授权的对外动作四种，「预判会被拦」不算。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C084",
+        "criterion": "向别的团队 / 仓库提单、提 MR、建 issue 只在用户当轮指名时才做。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C085",
+        "criterion": "发现范围外的外部问题时，材料留在本项目台账并告诉用户。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C086",
+        "criterion": "口头拍板覆盖书面拍板时，同轮在书面那份标注覆盖了哪几条、口头内容与时间、现行依据。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C087",
+        "criterion": "本轮改过的文件，引用其行号前重新取号。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C088",
+        "criterion": "沉淀内容写进真源文件，不写进插件缓存。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C089",
+        "criterion": "长跑子代理的关键前提（授权边界、落点、事实基线、停止条件）落盘到仓外临时文件，prompt 只给路径与「必读，存疑重读」。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C090",
+        "criterion": "不以「用户未明确请求」为由拒绝并行工具调用或 subagent 派发，退回串行独干。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C091",
+        "criterion": "调用 Workflow 仍按其工具描述要用户逐次 opt-in，不视为已授权。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C092",
+        "criterion": "互不依赖的 Read / Grep / Glob / Bash 调用放进同一条消息并发发出。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C093",
+        "criterion": "串行调用只在输入依赖前一步输出、写同一资源、待拍板三种理由之一下发生。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C094",
+        "criterion": "预计 >20 行输出、跨文件检索、可切分的子任务交 Agent，且同批并发派出。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C095",
+        "criterion": "同类机械改写落在 ≥3 个文件且改法互不依赖时交 general-purpose 子代理，不在主会话连串 Edit。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C096",
+        "criterion": "连续 3 条消息各只含一个工具调用后，第 4 次调用前把剩余待查项合进同一条消息；合不了则写明属于哪个串行理由。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C097",
+        "criterion": "自上次派发以来已逐个发起 ≥6 次只读检索且仍剩 ≥2 个互不依赖待查项时，下一步派 Explore 子代理而不是继续自查。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C098",
+        "criterion": "Agent 调用的 `name` 字段放在第一个，形如 `<model>-<任务语义-kebab>`，同批并发各起不同名字。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C099",
+        "criterion": "Agent 调用必填 `model`，按档位选：默认 sonnet，跨层追根因或高正确性场景用 opus，fable 仅在 opus 跑过 ≥2 轮无进展后用，不用 haiku。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C100",
+        "criterion": "`subagent_type` 按任务选：只读用 Explore，设计拆解用 Plan，需要 Edit/Write 才用 general-purpose。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C101",
+        "criterion": "`description` 为 3-5 词且 ≤60 字符，显示字段（含 Workflow 的 label / meta.*）不留空。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C102",
+        "criterion": "派发 prompt 分【目标】【上下文】【约束】【期望输出】四段，上下文给绝对路径，约束含停止条件与 `path:行号` 引用。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C103",
+        "criterion": "派 devkit-task-keeper 的 keeper / debug-fixer-*、唤醒已派出的 agent、或对档位与 prompt 各段拿不准时，先读 agent-dispatch.md 的 SEC:dispatch。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C104",
+        "criterion": "核实类任务动手前先定停止条件（仅本文件内 / 追到直接调用方 / 追到跨类跨模块跨服务边界）。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C105",
+        "criterion": "核实类结论写明实际追到哪一层、哪些边界未追；未写深度的核实结论视为未完成。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C106",
+        "criterion": "子代理最终回复为四段结构化回执：改了哪些文件（逐个绝对路径）/ 关键决策（为何、放弃了什么）/ 阻塞点 / 需父代理跟进的事项。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C107",
+        "criterion": "子代理需要问用户或让用户核对时，写进回执交父代理转达，不原地等待。",
+        "status": "proposed",
+        "cases": []
+      },
+      {
+        "id": "C108",
+        "criterion": "子代理回执默认用完整段落讲因果、机制、影响，不堆光秃短语；清单或表格每项后展开说明；父代理另有要求时照其要求。",
+        "status": "proposed",
+        "cases": []
+      }
+    ]
+  },
+  "pending": {
+    "page_id": "a39b0e53",
+    "generated_at": "2026-10-15T16:30:55Z",
+    "limit": 10,
+    "total": 6,
+    "sampled": false,
+    "sampling_rule": null,
+    "items": [
+      {
+        "no": 1,
+        "id": "report-review:20261015T162621Z-4.1.0-compare",
+        "type": "report-review",
+        "title": "审阅离线对照报告：devkit-discipline 4.1.0",
+        "payload": {
+          "run_id": "20261015T162621Z-4.1.0-compare"
+        }
+      },
+      {
+        "no": 2,
+        "id": "judge:s-5a157b5b39",
+        "type": "judge-disagreement",
+        "title": "parallel-lookup · 第 1 次 · consts-listed",
+        "payload": {
+          "sample_id": "s-5a157b5b39"
+        }
+      },
+      {
+        "no": 3,
+        "id": "judge:s-8ed7c44c24",
+        "type": "judge-spot-check",
+        "title": "decision-no-ask · 第 1 次 · four-elements",
+        "payload": {
+          "sample_id": "s-8ed7c44c24"
+        }
+      },
+      {
+        "no": 4,
+        "id": "judge:s-56de42e876",
+        "type": "judge-spot-check",
+        "title": "parallel-lookup · 第 1 次 · consts-listed",
+        "payload": {
+          "sample_id": "s-56de42e876"
+        }
+      },
+      {
+        "no": 5,
+        "id": "judge:s-b4e820ddb0",
+        "type": "judge-spot-check",
+        "title": "decision-no-ask · 第 1 次 · four-elements",
+        "payload": {
+          "sample_id": "s-b4e820ddb0"
+        }
+      },
+      {
+        "no": 6,
+        "id": "clause-list:sha256:86d5057dad37398fce49d3440fe51ad2460f48f8f3d19ad40e00b3627d6c1bb1",
+        "type": "clause-list",
+        "title": "确认条款清单变更：devkit-discipline（首次抽取）",
+        "payload": {
+          "run_id": "20261015T162621Z-4.1.0-compare",
+          "proposal": "clause-proposal.json"
+        }
+      }
+    ],
+    "sampled_out": [],
+    "applied_at": "2026-10-15T16:31:12Z",
+    "decisions": {
+      "2": "A"
+    },
+    "history": []
+  }
+}

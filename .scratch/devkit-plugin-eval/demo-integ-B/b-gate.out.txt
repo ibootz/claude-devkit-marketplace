@@ -1,0 +1,24 @@
+闸门检查：devkit-discipline 4.1.0
+- 插件目录：<sandbox>/repo/plugins/devkit-discipline（仓内路径 plugins/devkit-discipline）
+- 插件内容指纹：sha256:9e874d6baafa86750a4a23c21b51bcf93fc2fbccb2fe5babbb0b8bd769f9e715（排除 evals/）
+- 覆盖：闸门外（非 major、未声明 eval-required:）；须有已审的离线对照，或通过的规则子集
+
+## 评测依据
+- 没有可采信的记录：需要已审的离线对照，或通过的规则子集
+
+## 单测声明
+- 失败 tests[0] node -e process.exit(1)：退出码 1
+
+## 跳过记录（eval-skip:，全部版本）
+- 无
+
+## 漏检（闸门内版本推到 main 时既无已审报告、也无 eval-skip:）
+- 无
+
+## 说明
+- 还没有会话复盘记录（plugin-evals/<插件>/reviews/ 下没有结果）：建议先跑会话复盘（review）；复盘只扫登记清单里的插件，未登记需先登记（register）
+- 新插件首个版本（历史上没有更早的版本号）：不按 major 升版判闸门内
+- 没有上次对照或条款清单记下的注入文本指纹：本次不比较注入文本
+- main 上还没有入库过 plugin-evals/devkit-discipline/：漏检从首份评测记录入库起算，本次不查
+
+结论：未过闸（缺可采信的评测依据、单测未通过）

@@ -69,16 +69,42 @@ Status: resolved
 
 演示中查出并修掉的 eval 行为：`tool_used` 的 `min` 缺省为 1，只写 `max: 0` 时显示「expected 1..0」，永远不通过。现在校验、加载前检查、起草三处都要求同时写 `min: 0`。
 
-### 暂定口径（待主会话复核）
+### 已定（2026-10-16 主会话复核）
+
+审查判「合理」的照现状保留；第 2、4 条按 B 批集成定稿补了内容（见各条末尾与下一节）。
 
 1. 用例草稿待审项优先级取 300。备选：与条款清单同档。理由：派发约定。用户可见：待审页排序。
-2. 打回的草稿留在草稿区（`draft.json` 标 rejected），它挂的条款视为已有草稿，不再起草、不再上页。备选：打回后重新起草。理由：避免同一条款反复花钱起草同类用例。用户可见：报告里该条款仍列「无用例」。
+2. 打回的草稿留在草稿区（`draft.json` 标 rejected），它挂的条款视为已有草稿，不再起草、不再上页。备选：打回后重新起草。理由：避免同一条款反复花钱起草同类用例。用户可见：报告里该条款仍列「无用例」。B 批集成定稿第 3 条补出口：显式 `--clauses Cxxx` 时，已打回的草稿不算覆盖，点名的条款会重写；`drafts --help` 写明这一点。
 3. 判为离线评不了的条款记进 `draft-skips.json`，之后不再重试；条款文字变了（换 id）才会重新进缺口。备选：每次都重试。理由：省钱，这类判断与模型无关。用户可见：`drafts list` 能看到。
-4. 回归守护判据：有上一版臂时当前版分 ≥ 上一版分算「守住」；没有上一版臂时看当前版是否仍 ≥ 2/3 通过（「低于基线」）。备选：只看当前版是否 ≥ 2/3。理由：票原文「只比上一版不退化」。用户可见：报告回归守护一节。
+4. 回归守护判据：有上一版臂时当前版分 ≥ 上一版分算「守住」；没有上一版臂时看当前版是否仍 ≥ 2/3 通过（「低于基线」）。备选：只看当前版是否 ≥ 2/3。理由：票原文「只比上一版不退化」。用户可见：报告回归守护一节。B 批集成定稿第 4 条：判据保持严格，3/3→2/3 也报退化，报告回归守护一节加一句「每臂 N 次，单次波动也会标退化，请看 trace 判断」。
 5. skill 触发类 grader 写 `tool_used: Skill` 时显式加 `arm: both`（不写会被 eval 剔除不计分）。用户可见：用例文件。
 6. 文风规则被起草者判为不能机械判定时，不单独起草，归入共用场景（2～3 个）。用户可见：草稿列表。
 7. tags 由程序写入：类别 + 条款 id（skill / agent 用例写 skill / agent 名），起草者不自己写 tags。用户可见：用例文件。
 8. 草稿运行（kind=drafts）与基线运行（kind=baseline）是独立运行种类，门禁跳过它们。用户可见：`runs/` 目录名后缀。
+
+### 2026-10-16 B 批（11/15）集成修订（集成分支 worktree-agent-a8eba54acc263c023，devkit-plugin-eval 0.4.0）
+
+**审查应修（都已修）**
+
+1. 基线运行保留 `evals/` 根下的共用文件：`baseline.run_baseline` 拷子集改用 `resume._subset_evals(evals_src, set(todo), …)`，与对照、规则子集同口径，`mocks/` 等共用件照留。单测 `test_subset_keeps_shared_files_under_evals_root`。
+2. AI 评委的「当前版 − 不装」差同样剔除回归守护用例（spec 2.3「只作回归守护用例（比上一版不退化，不计相对不装的差）」）。改了三处：
+   - 新增 `judge.delta_excluding(scores, exclude)`，它按 `scores['arms']` 重算差，并记下 `excluded_baseline_satisfied`；
+   - `baseline.apply_to_record` 在规则分之外也改 `rec['judge']['scores']`；`compare.finalize_run` 改成在写好 `rec['judge']` 之后再调它；
+   - 待审页裁定评委样本后，`judgepending` 重算分数时按 `rec['baseline']` 同样剔除。
+   报告「AI 评委判分」一节的差那一行写「差（当前版 − 不装，不含 N 个回归守护用例）」。单测 `JudgeDeltaExcludesGuardedTest`。
+3. `drafts list` 改为只读：不调 `sync_rehang`，也不清空目录（`prune_empty`）。退回动作只在 `sync`、`page`、`write` 时做。单测 `test_list_is_read_only`。
+4. 打回的草稿：见上面已定第 2 条。单测 `test_rejected_draft_rewritten_only_when_clause_named`。
+5. demo-11 补了 [README.md](../demo-11/README.md)：演示里的勾选与回复码是 AI 代给的，`evals-approved/` 只是演示目录名。
+
+**顺手修**
+
+- `drafter.py` 文件头的 tags 说明改成与 `_tags_for` 一致：单条款目标一律 `[discipline, Cxxx]`，能机械判定的文风条款也走这一档，不另打 `style`。
+- `drafts write` 起草中途停止（AI 调用出错）时退出码由 1 改为 2（`drafter.STOPPED_EXIT`）。cli.py 文件头规定 1 只给 gate 的「未过闸」用，环境类错误用 2，文件头同步写明。单测 `test_cli_write_stopped_exit_code_is_2`。
+- 起草约束加一条：grader 只判模型自己的工具调用与回复。trace 里没有 UserPromptSubmit hook 注入的文字，匹配注入文本的 grader 在任何条件下都判不过。单测 `test_prompt_forbids_injection_text_graders`。
+
+**集成接线**：`scoring.score_arm` 的 `count_with_only`（票 15）默认 False，`baseline.py` 不传它，基线判据在不装臂里照旧剔除 with-only grader。单测 `test_baseline_never_counts_with_only_graders` 钉住这一点。
+
+**集成真跑**：见 [demo-integ-B](../demo-integ-B/README.md)。
 
 ### 已知缺口
 
@@ -87,6 +113,14 @@ Status: resolved
 - 演示待审页的裁定由 AI 代给，草稿内容未经用户审阅；演示仓的改动不入库，仓内 `evals/` 未新增正式用例。
 - parallel-lookup 的 grader 用正则匹配 trace 文本，依赖 eval 当前 trace 格式。
 - 诱导起草本次只出了两种手法（tempting-shortcut 未被选用），满足每条款 ≥ 2 种，但三种手法的分布未做约束。
+- 以下几条是 B 批审查列的「可留后续」，本批不修：
+  - mock 判定口径不一致：基线用 `score_arm(agg)` 从不装臂自己推断 mock 是否视同 with-only，对照按当前版臂的结论。对带 MCP shadow mock 的插件，基线可能把对照里不计分的 grader 计进去。
+  - tags 写一处、读两处：`casefiles.set_tags` 只改一个文件，`clauses.case_tags` 取 case.yaml 与 prompt.md 的并集。两处都写了 tags 的用例，去 tag 或改挂不生效；仓内目前没有这种用例。
+  - 回归守护名单在收尾时从实时 `evals/` 读：续跑期间跑过 `baseline`，读到的是新 tag。
+  - 有「退役用例删除」项时，待审页先按类型分组再编号，report.md 的「序」列与页上序号可能对不上。
+  - 「已证明有差」门槛偏低：任何一次对照差 > 0 都算，含不完整或未审的运行。
+  - skill、agent 的跳过记录只能手改 `draft-skips.json` 重试，`--clauses` 管不到。
+  - 回归守护的退化判据从严（B 批集成定稿第 4 条），每臂 3 次时单次波动也会标退化，报告提示看 trace。
 
 ### 留给 13 / 16 / 17 的接口
 

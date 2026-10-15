@@ -1,0 +1,5 @@
+运行目录：<sandbox>/repo/plugin-evals/devkit-discipline/runs/20261015T162411Z-4.1.0-baseline
+  decision-no-ask：基线未满足（0/3）
+  dispatch-model：基线未满足（0/3）
+  parallel-lookup：基线已满足（3/3）
+exit=0
