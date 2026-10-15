@@ -93,6 +93,26 @@ class LoadHookSpecsTest(unittest.TestCase):
         write(root / '.claude-plugin' / 'plugin.json', json.dumps({'name': 'x'}))
         self.assertEqual(injection.load_hook_specs(root), [])
 
+    def test_missing_type_is_command_and_bad_timeout_dropped(self):
+        """集成第四节 8：缺省 type 按 command 收（Claude Code 同此）；timeout 非正数或非数字视为未写。"""
+        root = tmpdir(self) / 'p'
+        write(root / '.claude-plugin' / 'plugin.json', json.dumps({'name': 'x', 'hooks': {'Stop': [{'hooks': [
+            {'command': 'echo a', 'timeout': 0}, {'type': 'command', 'command': 'echo b', 'timeout': 'x'},
+            {'type': 'command', 'command': 'echo c', 'timeout': 7}]}]}}))
+        self.assertEqual([(s.command, s.timeout) for s in injection.load_hook_specs(root)],
+                         [('echo a', None), ('echo b', None), ('echo c', 7)])
+
+    def test_errors_list_collects_and_keeps_readable_sources(self):
+        root = make_hook_plugin(tmpdir(self) / 'p', {'Stop': [{'hooks': [{'type': 'command', 'command': 'echo a'}]}]})
+        write(root / 'hooks' / 'hooks.json', '{oops')
+        with self.assertRaises(Exception):
+            injection.load_hook_specs(root)
+        errors = []
+        specs = injection.load_hook_specs(root, errors=errors)
+        self.assertEqual([s.command for s in specs], ['echo a'])
+        self.assertEqual(len(errors), 1)
+        self.assertIn('hooks.json', errors[0])
+
     def test_key_is_event_matcher_command(self):
         spec = injection.HookSpec('PreToolUse', 'Agent', 'node ${CLAUDE_PLUGIN_ROOT}/hooks/a.js', None)
         self.assertEqual(spec.key, 'PreToolUse|Agent|node ${CLAUDE_PLUGIN_ROOT}/hooks/a.js')
@@ -141,6 +161,18 @@ class RunHookTest(unittest.TestCase):
         self.assertNotEqual(os.path.realpath(out['data']), os.path.realpath(str(root)))
         self.assertEqual(os.path.realpath(out['cwd']), os.path.realpath(out['ev']['cwd']))
         self.assertFalse((tmp / 'work').exists() and any((tmp / 'work').iterdir()))   # 临时目录已清理
+
+    def test_tool_events_payload_carries_tool_fields(self):
+        """PreToolUse / PostToolUse 的样例输入带 tool_name、tool_input，读这些字段的 hook 不会因 KeyError 误判失败。"""
+        tmp = tmpdir(self)
+        root = make_hook_plugin(tmp / 'p', {}, files={'echo.py': ECHO_ENV_SRC})
+        for event in ('PreToolUse', 'PostToolUse'):
+            spec = injection.HookSpec(event, 'Bash', hook_cmd('echo.py'), None)
+            res = injection.run_hook(spec, root, env=dict(os.environ), work_parent=tmp / 'work')
+            out = json.loads(res['raw_text'])
+            self.assertEqual(out['ev']['hook_event_name'], event)
+            self.assertIn('tool_name', out['ev'])
+            self.assertIn('tool_input', out['ev'])
 
     def test_sessionstart_source_follows_matcher(self):
         tmp = tmpdir(self)
@@ -232,6 +264,24 @@ class StaticProfileTest(unittest.TestCase):
         prof = injection.static_profile(root, env=dict(os.environ))
         self.assertEqual(prof['hooks'], [])
         self.assertIn('读 hook 声明失败', prof['errors'][0])
+
+    def test_one_hook_raising_does_not_sink_profile(self):
+        """票 06 审查 B：单条 hook 起不来（如 command 含 NUL 时 subprocess 抛 ValueError）记进 errors，其余照算。"""
+        root = make_hook_plugin(tmpdir(self) / 'p', std_hooks())
+        real = injection.run_hook
+
+        def flaky(spec, *a, **kw):
+            if spec.event == 'UserPromptSubmit':
+                raise ValueError('embedded null byte')
+            return real(spec, *a, **kw)
+        from unittest import mock
+        with mock.patch.object(injection, 'run_hook', side_effect=flaky):
+            prof = injection.static_profile(root, env=dict(os.environ))
+        self.assertTrue(any('ValueError' in e for e in prof['errors']), prof['errors'])
+        ups = [h for h in prof['hooks'] if h['event'] == 'UserPromptSubmit']
+        self.assertEqual(ups[0]['exit_code'], None)
+        self.assertTrue(ups[0]['expected'])
+        self.assertGreater(prof['by_event']['SessionStart']['chars'], 0)
 
     def test_no_hooks_profile(self):
         root = tmpdir(self) / 'p'

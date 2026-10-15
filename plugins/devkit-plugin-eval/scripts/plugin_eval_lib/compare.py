@@ -179,13 +179,10 @@ def _score_arms(arm_records, log):
             rec['label'], '—' if rec['score'] is None else '%.2f' % rec['score'], rec['eval_exit_code']))
 
 
-def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=1.0, claude=None,
-                runner=evalrun.run_eval, env=None, tmp_parent=None, sandbox_roots=None,
-                keep_assembly=False, log=None, now=None, base=None, env_plugins=(), preflight_check=None):
-    log = log or (lambda msg: print(msg, file=sys.stderr))
-    data_dir = Path(data_dir)
-    entry = registry.lookup(data_dir, name)          # 未登记即抛 NotRegistered
-    repo = Path(entry['repo'])
+def load_target(data_dir, name):
+    """读登记与被测插件：返回 (entry, plugin_dir, manifest, evals_src, cases, extra_exclude)。
+    未登记抛 registry.NotRegistered；plugin.json 缺失、name 不符或没有用例抛 CompareError。compare 与 check 共用。"""
+    entry = registry.lookup(Path(data_dir), name)
     plugin_dir = registry.plugin_dir(entry)
     manifest_path = plugin_dir / '.claude-plugin' / 'plugin.json'
     if not manifest_path.is_file():
@@ -193,19 +190,33 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
     manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     if manifest.get('name') != name:
         raise CompareError('%s 的 name 是 %r，与登记名 %r 不一致，请重新登记' % (manifest_path, manifest.get('name'), name))
-    version = manifest.get('version') or 'noversion'
-
     evals_src = plugin_dir / 'evals'
     cases = arms.discover_cases(evals_src)
     if not cases:
         raise CompareError('%s 下没有用例（含 prompt.md 或 case.yaml 的目录）' % evals_src)
-
     extra_exclude = ('.git', 'plugin-evals') if entry['plugin_path'] == '.' else ()
-    # 臂计划先定：只往临时目录解快照、不碰仓库，前置检查要拿快照与环境插件去冒烟、validate。
-    # 版本号用 plugin.json 原值（没写为 None），别拿占位的 'noversion' 去和历史比。
-    plan = armplan.plan_arms(
+    return entry, plugin_dir, manifest, evals_src, cases, extra_exclude
+
+
+def plan_for(plugin_dir, name, manifest, cases, evals_src, extra_exclude, *, base=None, env_plugins=(),
+             tmp_parent=None, env=None, log=None):
+    """臂计划：只往临时目录解快照、不碰仓库。版本号用 plugin.json 原值（没写为 None），别拿占位的 'noversion' 去和历史比。"""
+    return armplan.plan_arms(
         plugin_dir=plugin_dir, name=name, version=manifest.get('version'), cases=cases, evals_src=evals_src,
         base=base, env_specs=env_plugins, tmp_parent=tmp_parent, extra_exclude=extra_exclude, env=env, log=log)
+
+
+def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=1.0, claude=None,
+                runner=evalrun.run_eval, env=None, tmp_parent=None, sandbox_roots=None,
+                keep_assembly=False, log=None, now=None, base=None, env_plugins=(), preflight_check=None):
+    log = log or (lambda msg: print(msg, file=sys.stderr))
+    data_dir = Path(data_dir)
+    entry, plugin_dir, manifest, evals_src, cases, extra_exclude = load_target(data_dir, name)  # 未登记即抛 NotRegistered
+    repo = Path(entry['repo'])
+    version = manifest.get('version') or 'noversion'
+    # 臂计划先定：前置检查要拿快照与环境插件去冒烟、validate。
+    plan = plan_for(plugin_dir, name, manifest, cases, evals_src, extra_exclude, base=base, env_plugins=env_plugins,
+                    tmp_parent=tmp_parent, env=env, log=log)
     try:
         # 前置检查（票 04）：硬项在任何仓库写入之前查，失败即中止；软项 dirty 在取 git 状态后补，版本与模型跑完后补
         pre = (preflight_check or preflight.check_compare)(

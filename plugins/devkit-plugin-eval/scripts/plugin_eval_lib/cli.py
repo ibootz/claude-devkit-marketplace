@@ -72,14 +72,31 @@ def _print_extra_arms(rec, fmt):
         print('当前版+环境插件（%s）%s' % ('、'.join(e['name'] for e in env.get('env_plugins', [])), fmt(env['score'])))
 
 
+def _check_compare(args, data_dir):
+    """与 compare 开跑前同一套臂计划：上一版快照（--base 或自动认定）与 --env-plugin 都进冒烟、validate、containment。
+    未登记时不建计划，交给 check_compare 报「已登记」不通过；其余目标错误（无用例、--base 解析不到等）照 compare 中止。"""
+    log = lambda msg: print(msg, file=sys.stderr)
+    try:
+        entry, plugin_dir, manifest, evals_src, cases, extra_exclude = compare.load_target(data_dir, args.name)
+    except registry.NotRegistered:
+        return preflight.check_compare(data_dir=data_dir, name=args.name, env=evalrun.child_env(),
+                                       model=args.model, soft=True)
+    plan = compare.plan_for(plugin_dir, args.name, manifest, cases, evals_src, extra_exclude, base=args.base,
+                            env_plugins=args.env_plugin, log=log)
+    try:
+        return preflight.check_compare(data_dir=data_dir, name=args.name, env=evalrun.child_env(), model=args.model,
+                                       others=plan.preflight_targets(), env_plugins=plan.env_plugins, soft=True)
+    finally:
+        plan.cleanup()
+
+
 def _check(args, data_dir):
     if not args.name and not args.review:
         print('错误：check 要给被测插件名（查离线对照前的各项），或 --review（查会话复盘前的各项）', file=sys.stderr)
         return 2
     reports = []
     if args.name:
-        reports.append(preflight.check_compare(data_dir=data_dir, name=args.name, env=evalrun.child_env(),
-                                               model=args.model, soft=True))
+        reports.append(_check_compare(args, data_dir))
     if args.review:
         reports.append(preflight.check_review(data_dir=data_dir, env=evalrun.child_env(), need_judge=args.judge))
     for rep in reports:

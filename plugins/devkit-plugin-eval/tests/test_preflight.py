@@ -91,9 +91,11 @@ class HookCollectTest(Base):
                   event='UserPromptSubmit', where='manifest')
         specs, errors = preflight.collect_hook_commands(self.plugin)
         self.assertEqual(errors, [])
-        self.assertEqual([s['command'] for s in specs],
-                         ['node ${CLAUDE_PLUGIN_ROOT}/a.js', 'node ${CLAUDE_PLUGIN_ROOT}/b.js',
-                          'node ${CLAUDE_PLUGIN_ROOT}/c.js'])
+        # 与注入核验同一套枚举（injection.load_hook_specs）：plugin.json 声明在前，hooks/hooks.json 在后
+        self.assertEqual([s.command for s in specs],
+                         ['node ${CLAUDE_PLUGIN_ROOT}/a.js', 'node ${CLAUDE_PLUGIN_ROOT}/c.js',
+                          'node ${CLAUDE_PLUGIN_ROOT}/b.js'])
+        self.assertEqual(specs[0].event, 'UserPromptSubmit')
 
     def test_manifest_hooks_as_path_and_non_command_types_skipped(self):
         write(self.plugin / 'extra' / 'more.json', json.dumps({'hooks': {'Stop': [{'hooks': [
@@ -103,7 +105,15 @@ class HookCollectTest(Base):
         data['hooks'] = './extra/more.json'
         manifest.write_text(json.dumps(data), encoding='utf-8')
         specs, errors = preflight.collect_hook_commands(self.plugin)
-        self.assertEqual([(s['event'], s['command']) for s in specs], [('Stop', 'echo x')])
+        self.assertEqual([(s.event, s.command) for s in specs], [('Stop', 'echo x')])
+
+    def test_missing_type_counts_as_command(self):
+        """Claude Code 对缺省 type 的 hook 按 command 执行；冒烟与注入核验都要收进来（审查 04 第四节 8）。"""
+        write(self.plugin / 'hooks' / 'hooks.json', json.dumps({'hooks': {'Stop': [{'hooks': [
+            {'command': 'echo untyped'}]}]}}))
+        specs, errors = preflight.collect_hook_commands(self.plugin)
+        self.assertEqual(errors, [])
+        self.assertEqual([s.command for s in specs], ['echo untyped'])
 
     def test_broken_hooks_json_reported(self):
         write(self.plugin / 'hooks' / 'hooks.json', '{oops')
@@ -166,9 +176,30 @@ class HookSmokeTest(Base):
         seen = json.loads(out.read_text(encoding='utf-8'))
         self.assertNotEqual(Path(seen['home']).resolve(), Path.home().resolve())
         self.assertFalse(Path(seen['home']).exists())   # 临时 HOME 用完即删
-        self.assertEqual(Path(seen['root']).resolve(), self.plugin.resolve())
+        # 在插件副本里跑：${CLAUDE_PLUGIN_ROOT} 指向副本，不指向用户工作区
+        self.assertNotEqual(Path(seen['root']).resolve(), self.plugin.resolve())
         self.assertEqual(seen['path'], self.env['PATH'])
         self.assertEqual(seen['stdin']['hook_event_name'], 'PreToolUse')
+        self.assertIn('tool_name', seen['stdin'])   # PreToolUse 样例输入带工具名，hook 不会因缺字段崩
+
+    def test_python_hook_leaves_no_pycache_in_plugin_dir(self):
+        write(self.plugin / 'hooks' / 'helper.py', 'X = 1\n')
+        write(self.plugin / 'hooks' / 'main.py', 'import sys; sys.path.insert(0, sys.argv[1]); import helper\n')
+        set_hooks(self.plugin, ['%s "${CLAUDE_PLUGIN_ROOT}/hooks/main.py" "${CLAUDE_PLUGIN_ROOT}/hooks"' % PY])
+        rep = self.check()
+        self.assertTrue(rep.passed, rep.render())
+        self.assertEqual([r['exit_code'] for r in rep.hook_runs], [0])
+        self.assertEqual(list(self.plugin.rglob('__pycache__')), [])
+
+    def test_failure_detail_shows_plugin_root_placeholder_not_temp_copy(self):
+        set_hooks(self.plugin, ['%s "${CLAUDE_PLUGIN_ROOT}/hooks/missing.py"' % PY])
+        rep = self.check()
+        runs = rep.hook_runs
+        self.assertEqual(len(runs), 1)
+        self.assertNotEqual(runs[0]['exit_code'], 0)
+        text = json.dumps(runs, ensure_ascii=False) + rep.render()
+        self.assertIn('${CLAUDE_PLUGIN_ROOT}', text)
+        self.assertNotIn(str(self.tmp), text)
 
     def test_no_hooks_is_ok(self):
         rep = self.check()
@@ -188,6 +219,14 @@ class ClaudeItemsTest(Base):
         for i in ('registered', 'claude_executable', 'eval_flags', 'logged_in', 'plugin_valid', 'hooks_reachable'):
             self.assertEqual(item(rep, i).status, preflight.OK, i)
         self.assertEqual(item(rep, 'env_plugins_contained').status, preflight.SKIP)
+
+    def test_claude_resolved_from_full_path_not_child_env(self):
+        """票 04 审查①：eval 子进程环境的 PATH 去掉了 asdf shims，claude 自己可能就在 shim 后面；找 claude 用本进程完整 PATH。"""
+        self.env = {'PATH': ''}
+        with mock.patch.object(preflight.evalrun, 'resolve_claude', return_value='/fake/claude') as rc:
+            rep = self.check(claude=None)
+        self.assertEqual(item(rep, 'claude_executable').status, preflight.OK, rep.render())
+        self.assertEqual(rc.call_args.kwargs.get('path'), None)
 
     def test_claude_not_found_aborts_and_skips_dependents(self):
         with mock.patch.object(preflight.evalrun, 'resolve_claude', side_effect=preflight.evalrun.ClaudeNotFound('无')):
@@ -270,6 +309,31 @@ class SoftItemsTest(unittest.TestCase):
         self.assertIn('2.1.299', w.detail)
         w = preflight.check_version_model(dict(prev, claude_code_version='2.1.300'), '2.1.300', 'claude-sonnet-5-5')
         self.assertIn('claude-sonnet-5-5', w.detail)
+
+    def test_version_model_unknown_values_are_skipped_not_passed(self):
+        """票 04 审查：任一方取不到值时判 skip 并写明，不静默判通过。"""
+        prev = {'run_id': 'r0', 'claude_code_version': '2.1.299', 'main_model': 'claude-opus-5-5'}
+        s = preflight.check_version_model(prev, None, 'claude-opus-5-5')
+        self.assertEqual(s.status, preflight.SKIP)
+        self.assertIn('这次取不到', s.detail)
+        s = preflight.check_version_model({'run_id': 'r0', 'claude_code_version': '2.1.299'}, '2.1.299', 'm')
+        self.assertEqual(s.status, preflight.SKIP)
+        self.assertIn('上次没记', s.detail)
+        w = preflight.check_version_model(prev, '2.1.300', None)
+        self.assertEqual(w.status, preflight.WARN)
+        self.assertIn('未比较', w.detail)
+        # 只比版本（check 子命令）：模型不参与
+        ok = preflight.check_version_model(prev, '2.1.299', None, compare_model=False)
+        self.assertEqual(ok.status, preflight.OK)
+
+    def test_previous_compare_prefers_latest_complete_run(self):
+        """票 04 审查③：最近一次是不完整运行时，「上次对照」取最近一次完整的；一次完整的都没有才取最新。"""
+        tmp = tmpdir(self)
+        for rid, complete in (('20261001T000000Z-1.0.0-compare', True), ('20261002T000000Z-1.0.0-compare', False)):
+            write(tmp / rid / 'run.json', json.dumps({'run_id': rid, 'kind': 'compare', 'complete': complete}))
+        self.assertEqual(preflight.previous_compare(tmp)['run_id'], '20261001T000000Z-1.0.0-compare')
+        self.assertEqual(preflight.previous_compare(tmp, exclude='20261001T000000Z-1.0.0-compare')['run_id'],
+                         '20261002T000000Z-1.0.0-compare')
 
     def test_previous_compare_picks_latest_other_compare_run(self):
         tmp = tmpdir(self)
@@ -380,6 +444,27 @@ class CheckCliTest(Base):
         code, text = self.run_cli('demo-plugin')
         self.assertEqual(code, 0)
         self.assertIn('2.1.200', text)
+
+    def test_check_covers_env_plugins_like_compare(self):
+        """票 04 审查：check --env-plugin 与 compare 用同一份臂计划，环境插件的 hook 也冒烟。"""
+        env = make_plugin(self.tmp / 'envsrc' / 'env-a', name='env-a')
+        set_hooks(env, ['exit 127'])
+        code, text = self.run_cli('demo-plugin')
+        self.assertEqual(code, 0, text)
+        code, text = self.run_cli('demo-plugin', '--env-plugin', str(env))
+        self.assertEqual(code, 2, text)
+        self.assertIn('env-a', text)
+        self.assertIn('127', text)
+
+    def test_check_base_unresolvable_aborts_like_compare(self):
+        code, text = self.run_cli('demo-plugin', '--base', '0.0.1')
+        self.assertEqual(code, 2)
+        self.assertIn('--base 0.0.1', text)
+
+    def test_check_unregistered_reports_registered_item(self):
+        code, text = self.run_cli('nobody-plugin')
+        self.assertEqual(code, 2)
+        self.assertIn('nobody-plugin', text)
 
     def test_check_needs_name_or_review(self):
         code, _ = self.run_cli()

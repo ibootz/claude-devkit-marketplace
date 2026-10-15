@@ -10,7 +10,8 @@
 会话复盘前（check_review）：会话目录可定位可读非空、登记清单非空且各仓可写（硬）；距上次复盘天数超过
   cleanupPeriodDays（软）；要调 AI 评委时查登录态（硬）。
 
-hook 冒烟：临时空 HOME + 与 eval 子进程相同的 PATH，把每条 hooks 配置里的 command 经 shell 真执行一次。
+hook 冒烟：临时空 HOME + 与 eval 子进程相同的 PATH，在插件副本里把每条 hooks 配置里的 command 经 shell 真执行一次
+（CLAUDE_PLUGIN_ROOT 指向副本，带 PYTHONDONTWRITEBYTECODE=1，不往用户工作区写东西）。
 exit 126 / 127 判不可达（版本管理器 shim 在空 HOME 下取不到版本即 126，解释器不在 PATH 上即 127）；
 其它非零码、超时只记提示，不中止——冒烟的 stdin 样例与 eval 实际传给 hook 的不同，hook 对输入敏感时会误报。
 检查逻辑不认任何 shim 名字；平台差异只在三处：配置目录定位（config_dir）、Python 解释器解析（本模块不需要，
@@ -26,7 +27,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import envplugins, evalrun, registry
+from . import envplugins, evalrun, injection, registry
 
 HARD, SOFT = 'hard', 'soft'
 OK, FAIL, SKIP, WARN = 'ok', 'fail', 'skip', 'warn'
@@ -135,117 +136,74 @@ def _load_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8'))
 
 
-def _event_map(obj):
-    """hooks.json 外层是 {"hooks": {事件: [...]}}；plugin.json 内联的 hooks 直接是 {事件: [...]}。"""
-    if isinstance(obj, dict) and isinstance(obj.get('hooks'), dict):
-        return obj['hooks']
-    return obj if isinstance(obj, dict) else {}
-
-
 def collect_hook_commands(plugin_dir):
-    """返回 (specs, errors)。specs 每项 {event, matcher, command, timeout, source}，按 command 去重、保序。
+    """返回 (specs, errors)。specs 是 injection.HookSpec 列表，按 command 去重、保序。
 
-    来源：默认的 hooks/hooks.json，加 plugin.json 的 hooks 字段（对象内联，或相对插件根的路径 / 路径数组）。
-    只收 type 为 command 的条目；prompt / agent 类型不起进程，不在冒烟范围。
+    与注入核验共用 injection.load_hook_specs：来源是 plugin.json 的 hooks 字段（内联对象，或相对插件根的路径 /
+    路径数组）与默认的 hooks/hooks.json，只收 command 型；prompt / agent 类型不起进程，不在冒烟范围。
     """
-    root = Path(plugin_dir)
-    sources, errors = [], []
-    default = root / 'hooks' / 'hooks.json'
-    if default.is_file():
-        sources.append(('hooks/hooks.json', default))
-    manifest = root / '.claude-plugin' / 'plugin.json'
-    declared = None
-    if manifest.is_file():
-        try:
-            declared = _load_json(manifest).get('hooks')
-        except (ValueError, OSError) as e:
-            errors.append('.claude-plugin/plugin.json 读不出：%s' % e)
-    if isinstance(declared, dict):
-        sources.append(('plugin.json', declared))
-    else:
-        for rel in ([declared] if isinstance(declared, str) else declared or []):
-            p = (root / rel).resolve()
-            if p == default.resolve():
-                continue
-            sources.append((rel, p))
-
-    specs, seen = [], set()
-    for label, src in sources:
-        if isinstance(src, Path):
-            try:
-                src = _load_json(src)
-            except (ValueError, OSError) as e:
-                errors.append('%s 读不出：%s' % (label, _short(str(e))))
-                continue
-        for event, groups in _event_map(src).items():
-            for group in groups if isinstance(groups, list) else []:
-                for h in (group or {}).get('hooks', []) if isinstance(group, dict) else []:
-                    cmd = h.get('command') if isinstance(h, dict) and h.get('type', 'command') == 'command' else None
-                    if not cmd or cmd in seen:
-                        continue
-                    seen.add(cmd)
-                    specs.append({'event': event, 'matcher': group.get('matcher'), 'command': cmd,
-                                  'timeout': h.get('timeout'), 'source': label})
+    errors, specs, seen = [], [], set()
+    for spec in injection.load_hook_specs(plugin_dir, errors=errors):
+        if spec.command not in seen:
+            seen.add(spec.command)
+            specs.append(spec)
     return specs, errors
 
 
-def _sample_input(event, matcher, cwd):
-    """冒烟用的 stdin。只求让 hook 跑到解释器那一步，字段取官方 hook 输入的公共部分加各事件最常用的一两个。"""
-    data = {'session_id': 'devkit-plugin-eval-preflight', 'transcript_path': str(Path(cwd) / 'transcript.jsonl'),
-            'cwd': str(cwd), 'hook_event_name': event, 'permission_mode': 'default'}
-    tool = 'Bash'
-    if matcher and re.fullmatch(r'[A-Za-z_][\w|]*', matcher):
-        tool = matcher.split('|')[0]
-    if event in ('PreToolUse', 'PostToolUse', 'PermissionRequest'):
-        data.update(tool_name=tool, tool_input={'command': 'true'})
-        if event == 'PostToolUse':
-            data['tool_response'] = {}
-    elif event == 'UserPromptSubmit':
-        data['prompt'] = 'hello'
-    elif event == 'SessionStart':
-        data['source'] = 'startup'
-    elif event == 'SubagentStart':
-        data.update(agent_id='preflight', agent_type='general-purpose')
-    return json.dumps(data)
+_COPY_SKIP_TOP = ('.git', 'evals', 'plugin-evals')
+
+
+def _plugin_copy(plugin_dir, dest):
+    """冒烟在插件副本里跑：hook 往 ${CLAUDE_PLUGIN_ROOT} 写的东西（如 __pycache__）不落进用户工作区、不让它显示 dirty。"""
+    src = Path(plugin_dir)
+
+    def ignore(dirpath, names):
+        top = [n for n in names if Path(dirpath) == src and n in _COPY_SKIP_TOP]
+        return top + [n for n in names if n == '__pycache__']
+    shutil.copytree(src, dest, symlinks=True, ignore=ignore)
+    return dest
 
 
 def smoke_hooks(plugins, env, tmp_parent=None):
-    """plugins: [(标签, 插件目录)]。返回 (Item, runs)。runs 每项记 plugin / event / command / exit_code / note。"""
+    """plugins: [(标签, 插件目录)]。返回 (Item, runs)。runs 每项记 plugin / event / command / exit_code / note。
+
+    每个插件拷一份副本，CLAUDE_PLUGIN_ROOT 指向副本；执行走 injection.run_hook（与常驻 token 静态执行同一入口，
+    带 PYTHONDONTWRITEBYTECODE=1）。报错里的临时路径换回 <临时HOME> / ${CLAUDE_PLUGIN_ROOT}。
+    """
     runs, unreachable, errors = [], [], []
     home = Path(tempfile.mkdtemp(prefix='devkit-plugin-eval-home-', dir=tmp_parent))
     try:
-        cwd = home / 'cwd'
-        cwd.mkdir()
-        for label, plugin_dir in plugins:
+        hook_env = dict(env)
+        hook_env.update(HOME=str(home), USERPROFILE=str(home))
+        hook_env.pop('CLAUDE_CONFIG_DIR', None)
+        for n, (label, plugin_dir) in enumerate(plugins):
             plugin_dir = Path(plugin_dir).resolve()
             specs, errs = collect_hook_commands(plugin_dir)
             errors += ['%s：%s' % (label, e) for e in errs]
-            data_dir = home / 'plugin-data' / re.sub(r'[^\w-]', '-', label)
-            data_dir.mkdir(parents=True, exist_ok=True)
-            hook_env = dict(env)
-            hook_env.update(HOME=str(home), USERPROFILE=str(home), CLAUDE_PLUGIN_ROOT=str(plugin_dir),
-                            CLAUDE_PLUGIN_DATA=str(data_dir), CLAUDE_PROJECT_DIR=str(cwd))
-            hook_env.pop('CLAUDE_CONFIG_DIR', None)
+            if not specs:
+                continue
+            try:
+                copy = _plugin_copy(plugin_dir, home / 'plugins' / str(n))
+            except (OSError, shutil.Error) as e:
+                errors.append('%s：拷插件副本失败，未冒烟：%s' % (label, _short(str(e))))
+                continue
+
+            def clean(text, copy=copy):
+                return (text or '').replace(str(copy), '${CLAUDE_PLUGIN_ROOT}').replace(str(home), '<临时HOME>')
             for s in specs:
-                cmd = (s['command'].replace('${CLAUDE_PLUGIN_ROOT}', str(plugin_dir))
-                       .replace('${CLAUDE_PLUGIN_DATA}', str(data_dir)))
-                timeout = s['timeout'] if isinstance(s['timeout'], (int, float)) and s['timeout'] > 0 else HOOK_TIMEOUT_SEC
-                rec = {'plugin': label, 'event': s['event'], 'command': s['command'], 'exit_code': None, 'note': ''}
-                try:
-                    p = subprocess.run(cmd, shell=True, cwd=str(cwd), env=hook_env, capture_output=True,
-                                       input=_sample_input(s['event'], s['matcher'], cwd).encode('utf-8'),
-                                       timeout=min(timeout, HOOK_TIMEOUT_SEC))
-                    rec['exit_code'] = p.returncode
-                    stderr = p.stderr.decode('utf-8', errors='replace').replace(str(home), '<临时HOME>')
-                    first = next((ln.strip() for ln in stderr.splitlines() if ln.strip()), '')
-                    if p.returncode in UNREACHABLE_EXIT_CODES:
+                rec = {'plugin': label, 'event': s.event, 'command': s.command, 'exit_code': None, 'note': ''}
+                r = injection.run_hook(s, copy, env=hook_env, work_parent=home / 'work', max_timeout=HOOK_TIMEOUT_SEC)
+                first = clean(r['stderr_first'])
+                if r['timed_out']:
+                    rec['note'] = '超时（%s 秒），未判定可达性' % r['timeout']
+                else:
+                    rec['exit_code'] = r['exit_code']
+                    if r['exit_code'] in UNREACHABLE_EXIT_CODES:
                         unreachable.append('[%s] `%s`（%s）退出码 %d%s' % (
-                            label, s['command'], s['event'], p.returncode, '：' + _short(first, 160) if first else ''))
-                    elif p.returncode != 0:
+                            label, s.command, s.event, r['exit_code'], '：' + _short(first, 160) if first else ''))
+                    elif r['exit_code'] != 0:
                         rec['note'] = '退出码 %d（只作提示：冒烟输入与真实输入不同）%s' % (
-                            p.returncode, '：' + _short(first, 160) if first else '')
-                except subprocess.TimeoutExpired:
-                    rec['note'] = '超时（%s 秒），未判定可达性' % min(timeout, HOOK_TIMEOUT_SEC)
+                            r['exit_code'], '：' + _short(first, 160) if first else '')
                 runs.append(rec)
     finally:
         shutil.rmtree(home, ignore_errors=True)
@@ -360,10 +318,12 @@ def check_dirty(head_sha, dirty):
 
 
 def previous_compare(runs_dir, exclude=None):
-    """runs/ 下最近一次离线对照的 run.json（按运行目录名排序，目录名以 UTC 时间开头）。没有则 None。"""
+    """runs/ 下的「上次对照」run.json：优先取最近一次完整（complete=true）的离线对照，一次完整的都没有才取最近一次
+    （按运行目录名排序，目录名以 UTC 时间开头）。没有则 None。"""
     runs_dir = Path(runs_dir)
     if not runs_dir.is_dir():
         return None
+    latest = None
     for d in sorted((p for p in runs_dir.iterdir() if p.is_dir()), key=lambda p: p.name, reverse=True):
         if d.name == exclude or not (d / 'run.json').is_file():
             continue
@@ -371,24 +331,31 @@ def previous_compare(runs_dir, exclude=None):
             rec = json.loads((d / 'run.json').read_text(encoding='utf-8'))
         except (ValueError, OSError):
             continue
-        if rec.get('kind') == 'compare':
+        if not isinstance(rec, dict) or rec.get('kind') != 'compare':
+            continue
+        if rec.get('complete') is True:
             return rec
-    return None
+        latest = latest or rec
+    return latest
 
 
-def check_version_model(prev, claude_version, main_model):
-    label = 'Claude Code 版本与主力模型同上次对照'
+def check_version_model(prev, claude_version, main_model, *, compare_model=True):
+    """compare_model=False 时只比版本（check 子命令：主力模型要跑完才知道，--model 传的别名也不能拿来比完整 id）。
+    任一方取不到值的字段不比，判 skip 并写明，不静默判通过。"""
+    label = 'Claude Code 版本与主力模型同上次对照' if compare_model else 'Claude Code 版本同上次对照'
     if not prev:
         return Item('version_model', label, SOFT, OK, '无上次对照')
-    diffs = []
-    pv, pm = prev.get('claude_code_version'), prev.get('main_model')
-    if pv and claude_version and pv != claude_version:
-        diffs.append('Claude Code 版本 %s → %s' % (pv, claude_version))
-    if pm and main_model and pm != main_model:
-        diffs.append('主力模型 %s → %s' % (pm, main_model))
+    fields = [('Claude Code 版本', prev.get('claude_code_version'), claude_version)]
+    if compare_model:
+        fields.append(('主力模型', prev.get('main_model'), main_model))
+    diffs = ['%s %s → %s' % (n, old, new) for n, old, new in fields if old and new and old != new]
+    unknown = ['%s（%s）' % (n, '上次没记' if not old else '这次取不到') for n, old, new in fields if not (old and new)]
     if diffs:
-        return Item('version_model', label, SOFT, WARN, '与上次对照（%s）相比：%s；照跑，与上次结果不可直接比'
-                    % (prev.get('run_id'), '，'.join(diffs)))
+        return Item('version_model', label, SOFT, WARN, '与上次对照（%s）相比：%s；照跑，与上次结果不可直接比%s'
+                    % (prev.get('run_id'), '，'.join(diffs), '；未比较：%s' % '、'.join(unknown) if unknown else ''))
+    if unknown:
+        return Item('version_model', label, SOFT, SKIP, '与上次对照（%s）相比：%s，未比较'
+                    % (prev.get('run_id'), '、'.join(unknown)))
     return Item('version_model', label, SOFT, OK, '上次对照 %s' % prev.get('run_id'))
 
 
@@ -406,6 +373,8 @@ def check_compare(*, data_dir, name, env, claude=None, model=None, others=(), en
 
     others：除被测插件外也要 validate 与冒烟的插件 [(标签, 目录)]，如上一版快照、环境插件。
     env_plugins / containment_root：有环境插件臂时传，查它们是否在臂组装目录内。
+    claude 用本进程的完整 PATH 找（同 compare / resume）：env 是 eval 子进程的环境（已去掉 asdf shims），
+    claude 本身可能装在 shim 后面，拿 env 的 PATH 找会误报「找不到 claude」（集成口径 04①）。
     compare 自己算软项：dirty 在写 .gitignore 之后取，版本与模型在跑完后用实际值比。
     """
     run = _runner(run)
@@ -420,7 +389,7 @@ def check_compare(*, data_dir, name, env, claude=None, model=None, others=(), en
         rep.add(Item('registered', '被测插件已登记', HARD, FAIL, str(e)))
 
     try:
-        claude = claude or evalrun.resolve_claude(path=env.get('PATH'))
+        claude = claude or evalrun.resolve_claude()
         rep.claude = claude
         rep.add(Item('claude_executable', 'claude 可执行', HARD, OK, str(claude)))
     except evalrun.ClaudeNotFound as e:
@@ -457,8 +426,8 @@ def check_compare(*, data_dir, name, env, claude=None, model=None, others=(), en
         rep.add(check_dirty(head, dirty))
         prev = previous_compare(Path(entry['repo']) / 'plugin-evals' / name / 'runs')
         cur_version = claude_version(claude, env, run) if claude else None
-        item = rep.add(check_version_model(prev, cur_version, model))
-        if item.status == OK and prev and not model:
+        item = rep.add(check_version_model(prev, cur_version, None, compare_model=False))
+        if prev:
             item.detail += '；主力模型要跑完才知道，compare 跑完后再比一次'
     return rep
 
@@ -562,7 +531,7 @@ def check_review(*, data_dir, env, need_judge=False, claude=None, run=None, now=
         rep.add(Item('judge_logged_in', label, HARD, SKIP, '本次不调 AI 评委'))
     else:
         try:
-            claude = claude or evalrun.resolve_claude(path=env.get('PATH'))
+            claude = claude or evalrun.resolve_claude()
             rep.add(check_logged_in(claude, env, run, 'judge_logged_in', label))
         except evalrun.ClaudeNotFound as e:
             rep.add(Item('judge_logged_in', label, HARD, FAIL, str(e)))

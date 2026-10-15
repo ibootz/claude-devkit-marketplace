@@ -1,6 +1,7 @@
 """被测插件的 hook 声明与常驻注入的静态测量（spec「2.2 离线对照」第 7 步：常驻 token 静态算）。
 
-- 读声明：plugin.json 的 `hooks`（内联对象、单个或多个相对路径）与默认的 `hooks/hooks.json`，只取 `type: command`。
+- 读声明：plugin.json 的 `hooks`（内联对象、单个或多个相对路径）与默认的 `hooks/hooks.json`，只取 command 型
+  （`type: command`，没写 type 的也算）。前置检查的 hook 冒烟（preflight.smoke_hooks）用同一份 load_hook_specs 与 run_hook。
 - 执行：真实 HOME、空临时 cwd（spec 第 2 步同款口径），`${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}`
   按文字替换（与 Claude Code 一致），CLAUDE_PLUGIN_DATA 指向临时目录，免得写脏用户真实数据目录。
 - 只执行「常驻」事件：SessionStart、UserPromptSubmit、SubagentStart——每次会话 / 每轮 / 每个子代理必注。
@@ -52,6 +53,7 @@ class HookSpec:
     matcher: Optional[str]
     command: str
     timeout: Optional[int]
+    source: Optional[str] = None   # 声明出处（plugin.json / hooks/hooks.json / 相对路径），不进 key
 
     @property
     def key(self):
@@ -62,7 +64,7 @@ def _read_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8'))
 
 
-def _specs_from_mapping(mapping):
+def _specs_from_mapping(mapping, source=None):
     """mapping 形如 {事件: [{matcher, hooks: [{type, command, timeout}]}]}。"""
     out = []
     if not isinstance(mapping, dict):
@@ -73,26 +75,46 @@ def _specs_from_mapping(mapping):
                 continue
             matcher = group.get('matcher')
             for h in group.get('hooks') or []:
-                if isinstance(h, dict) and h.get('type') == 'command' and isinstance(h.get('command'), str):
+                if (isinstance(h, dict) and h.get('type', 'command') == 'command'
+                        and isinstance(h.get('command'), str) and h['command']):
                     timeout = h.get('timeout')
                     out.append(HookSpec(event, matcher if matcher not in ('',) else None, h['command'],
-                                        timeout if isinstance(timeout, (int, float)) else None))
+                                        timeout if isinstance(timeout, (int, float)) and timeout > 0 else None,
+                                        source))
     return out
 
 
-def _specs_from_file(path):
+def _specs_from_file(path, source=None):
     data = _read_json(path)
-    return _specs_from_mapping(data.get('hooks') if isinstance(data, dict) and 'hooks' in data else data)
+    return _specs_from_mapping(data.get('hooks') if isinstance(data, dict) and 'hooks' in data else data, source)
 
 
-def load_hook_specs(plugin_dir):
-    """返回插件声明的全部 command 型 hook，按声明顺序（plugin.json 在前，默认 hooks/hooks.json 在后）。"""
+def _short(text, limit=200):
+    text = ' '.join(str(text).split())
+    return text if len(text) <= limit else text[:limit] + '…'
+
+
+def load_hook_specs(plugin_dir, errors=None):
+    """返回插件声明的全部 command 型 hook，按声明顺序（plugin.json 在前，默认 hooks/hooks.json 在后）。
+
+    errors 为列表时，某份声明读不出（坏 JSON、读不了）记进去、接着读别的；为 None 时直接抛。"""
     root = Path(plugin_dir)
     specs, loaded_files = [], set()
+
+    def guarded(label, fn):
+        try:
+            return fn()
+        except (OSError, ValueError) as e:
+            if errors is None:
+                raise
+            errors.append('%s 读不出：%s' % (label, _short(e)))
+            return None
+
     manifest = root / '.claude-plugin' / 'plugin.json'
-    declared = _read_json(manifest).get('hooks') if manifest.is_file() else None
+    data = guarded('.claude-plugin/plugin.json', lambda: _read_json(manifest)) if manifest.is_file() else None
+    declared = data.get('hooks') if isinstance(data, dict) else None
     if isinstance(declared, dict):
-        specs += _specs_from_mapping(declared)
+        specs += _specs_from_mapping(declared, 'plugin.json')
     else:
         for rel in ([declared] if isinstance(declared, str) else declared if isinstance(declared, list) else []):
             if not isinstance(rel, str):
@@ -100,10 +122,10 @@ def load_hook_specs(plugin_dir):
             path = (root / rel).resolve()
             if path.is_file() and path not in loaded_files:
                 loaded_files.add(path)
-                specs += _specs_from_file(path)
+                specs += guarded(rel, lambda path=path, rel=rel: _specs_from_file(path, rel)) or []
     default = (root / 'hooks' / 'hooks.json').resolve()
     if default.is_file() and default not in loaded_files:
-        specs += _specs_from_file(default)
+        specs += guarded('hooks/hooks.json', lambda: _specs_from_file(default, 'hooks/hooks.json')) or []
     return specs
 
 
@@ -132,6 +154,11 @@ def _payload(spec, cwd, transcript_path):
         ev['prompt'] = '你好'
     elif spec.event == 'SubagentStart':
         ev.update(agent_id='devkit-plugin-eval-static-agent', agent_type='general-purpose')
+    elif spec.event in ('PreToolUse', 'PostToolUse', 'PermissionRequest'):   # 冒烟用：让 hook 跑到解释器那一步
+        m = spec.matcher if spec.matcher and re.fullmatch(r'[A-Za-z_][\w|]*', spec.matcher) else None
+        ev.update(tool_name=m.split('|')[0] if m else 'Bash', tool_input={'command': 'true'})
+        if spec.event == 'PostToolUse':
+            ev['tool_response'] = {}
     return ev
 
 
@@ -171,9 +198,11 @@ def _expand(command, plugin_root, data_dir):
     return command.replace('${CLAUDE_PLUGIN_ROOT}', str(plugin_root)).replace('${CLAUDE_PLUGIN_DATA}', str(data_dir))
 
 
-def run_hook(spec, plugin_root, *, env, work_parent=None):
+def run_hook(spec, plugin_root, *, env, work_parent=None, max_timeout=None):
     """执行一条 hook 一次。返回 exit_code、timed_out、duration_ms、raw_text（不论退出码都解析出的注入）、
-    text（Claude Code 实际会注入的）、stderr 尾部。临时目录用完即删。
+    text（Claude Code 实际会注入的）、stderr 尾部与首个非空行。临时目录用完即删。
+    超时取 hook 声明的 timeout（缺省 DEFAULT_TIMEOUT_SEC），max_timeout 给了再封顶。
+    子进程带 PYTHONDONTWRITEBYTECODE=1：Python hook 不往插件目录写 __pycache__（会让工作区显示有改动）。
 
     text 的口径（2.1.300 实测）：UserPromptSubmit hook 输出 JSON 后以 3 退出，additionalContext 照样进了
     子会话转录、也没有失败记录；所以只有超时与退出码 2（阻断，官方文档：此时忽略 stdout）不算注入。"""
@@ -188,16 +217,22 @@ def run_hook(spec, plugin_root, *, env, work_parent=None):
         transcript = work / 'transcript.jsonl'
         transcript.write_text('', encoding='utf-8')
         child = dict(env)
-        child.update(CLAUDE_PLUGIN_ROOT=str(plugin_root), CLAUDE_PLUGIN_DATA=str(data_dir), CLAUDE_PROJECT_DIR=str(cwd))
+        child.update(CLAUDE_PLUGIN_ROOT=str(plugin_root), CLAUDE_PLUGIN_DATA=str(data_dir), CLAUDE_PROJECT_DIR=str(cwd),
+                     PYTHONDONTWRITEBYTECODE='1')
         payload = json.dumps(_payload(spec, cwd, transcript), ensure_ascii=False).encode('utf-8')
+        timeout = spec.timeout or DEFAULT_TIMEOUT_SEC
+        if max_timeout:
+            timeout = min(timeout, max_timeout)
         started = time.monotonic()
-        res = {'exit_code': None, 'timed_out': False, 'stderr': ''}
+        res = {'exit_code': None, 'timed_out': False, 'stderr': '', 'stderr_first': '', 'timeout': timeout}
         try:
             proc = subprocess.run(_expand(spec.command, plugin_root, data_dir), shell=True, cwd=str(cwd), env=child,
-                                  input=payload, capture_output=True, timeout=spec.timeout or DEFAULT_TIMEOUT_SEC)
+                                  input=payload, capture_output=True, timeout=timeout)
             res['exit_code'] = proc.returncode
             stdout = proc.stdout.decode('utf-8', errors='replace')
-            res['stderr'] = proc.stderr.decode('utf-8', errors='replace')[-500:]
+            stderr = proc.stderr.decode('utf-8', errors='replace')
+            res['stderr'] = stderr[-500:]
+            res['stderr_first'] = next((ln.strip() for ln in stderr.splitlines() if ln.strip()), '')[:300]
         except subprocess.TimeoutExpired:
             res['timed_out'] = True
             stdout = ''
@@ -218,16 +253,21 @@ def static_profile(plugin_dir, *, env=None, work_parent=None):
     env = dict(os.environ if env is None else env)
     hooks, conditional, errors = [], [], []
     by_event = {}
-    try:
-        specs = load_hook_specs(plugin_dir)
-    except (OSError, ValueError) as e:     # hook 声明读不出来不中止对照，记进 errors 由报告首段标出
-        specs = []
-        errors.append('读 hook 声明失败：%s' % e)
+    read_errors = []
+    specs = load_hook_specs(plugin_dir, errors=read_errors)   # 读不出的声明不中止对照，记进 errors 由报告首段标出
+    errors += ['读 hook 声明失败：%s' % e for e in read_errors]
     for spec in specs:
         if spec.event not in RESIDENT_EVENTS:
             conditional.append({'key': spec.key, 'event': spec.event, 'matcher': spec.matcher, 'command': spec.command})
             continue
-        r = run_hook(spec, plugin_dir, env=env, work_parent=work_parent)
+        try:
+            r = run_hook(spec, plugin_dir, env=env, work_parent=work_parent)
+        except Exception as e:  # noqa: BLE001 —— 单条 hook 起不来（如 shell 不可用、临时目录写不了）不拖垮整份画像
+            errors.append('%s：静态执行出错 %s: %s' % (spec.key, type(e).__name__, _short(e)))
+            hooks.append({'key': spec.key, 'event': spec.event, 'matcher': spec.matcher, 'command': spec.command,
+                          'exit_code': None, 'timed_out': False, 'duration_ms': 0, 'chars': 0, 'tokens_est': 0,
+                          'label': None, 'expected': True, 'stderr_tail': ''})
+            continue
         failed = r['timed_out'] or r['exit_code'] != 0
         text = r['text'] or ''
         item = {
