@@ -1,0 +1,12 @@
+```
+PROBE env.CLAUDE_PLUGIN_DATA=<unset>
+PROBE env.CLAUDE_PLUGIN_ROOT=<unset>
+PROBE env.CLAUDE_SKILL_DIR=<unset>
+PROBE env.CLAUDE_PROJECT_DIR=<unset>
+PROBE arg.dq_data='/Users/zhangq/.claude/plugins/data/eval-envprobe-inline'
+PROBE arg.sq_data='/Users/zhangq/.claude/plugins/data/eval-envprobe-inline'
+PROBE arg.dq_root='/Users/zhangq/.claude/jobs/7058cce7/tmp/p01/envprobe'
+PROBE arg.sq_root='/Users/zhangq/.claude/jobs/7058cce7/tmp/p01/envprobe'
+PROBE file=/Users/zhangq/.claude/jobs/7058cce7/tmp/p01/envprobe/skills/env-probe/scripts/probe.py
+PROBE data_dir_exists=True
+```

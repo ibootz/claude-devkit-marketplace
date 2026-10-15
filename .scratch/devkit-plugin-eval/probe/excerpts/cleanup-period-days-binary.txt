@@ -1,0 +1,7 @@
+# strings -n 6 ~/.local/share/claude/versions/2.1.300 | grep cleanupPeriodDays（摘录；行首数字是 strings 输出的行号）
+
+347040:cleanupPeriodDays:()=>E().int().positive().optional().describe("Number of days to retain chat transcripts before automatic cleanup (default: 30). Minimum 1. Use a large value for long retention; use --no-session-persistence to disable transcript writes entirely.")
+364242:- \`cleanupPeriodDays\`: Days to keep transcripts before automatic cleanup (default: 30; minimum 1)
+283992:cleanupPeriodDays must be at least 1. To keep transcripts for a long time, set a large number (e.g. 3650 for ~10 years). To disable transcript writes entirely, remove this setting and use the --no-session-persistence CLI flag or the SDK persistSession:false option instead. (0 is rejected because it previously silently disabled all transcript writes, which users setting it to mean "never clean up" did not expect.)t
+161471:Transcript retention cleanup is paused until the settings errors above are fixed (cleanupPeriodDays cannot be determined reliably).
+209950:Skipping retention cleanup: userSettings source is disabled (--setting-sources) and no enabled source provides cleanupPeriodDays.

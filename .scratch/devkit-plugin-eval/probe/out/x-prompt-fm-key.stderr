@@ -1,0 +1,2 @@
+✗ /Users/zhangq/.claude/jobs/7058cce7/tmp/p01/x-prompt-fm-key/evals/x-prompt-fm-key: prompt.md: unknown frontmatter key "clause" (expected one of: schema_version, name, description, tags, plugins, runs, expected_outcome, model, max_turns, timeout_seconds, allowed_tools, disallowed_tools, artifact_publish, growthbook_overrides, append_system_prompt, env)
+1 case file(s) failed to load

@@ -1,0 +1,5 @@
+{
+  "name": "eval-envprobe",
+  "version": "0.0.0",
+  "description": "探针：从 skill 里调起的 Python 进程能否拿到 CLAUDE_PLUGIN_DATA"
+}

@@ -1,0 +1,1 @@
+claude plugin eval <ROOT=/Users/zhangq/.claude/jobs/7058cce7/tmp/p01/extras> --ablation none --runs 1 -j 2 --keep-temp --trust-plugin --no-publish --json /Users/zhangq/Workspace/mine/claude-devkit-marketplace/.claude/worktrees/impl-01/.scratch/devkit-plugin-eval/probe/out/extras.json

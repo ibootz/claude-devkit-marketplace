@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "claudeVersion": "2.1.300",
+  "startedAt": "2026-10-15T08:00:38.432Z",
+  "durationSeconds": 4,
+  "costUsd": 0.08314160000000001,
+  "partial": false,
+  "suite": {
+    "root": "/Users/zhangq/.claude/jobs/7058cce7/tmp/p01/extras",
+    "ablation": "none",
+    "threshold": 1,
+    "concurrency": 2,
+    "plugins": [
+      {
+        "name": "eval-extras-probe",
+        "version": "0.0.0",
+        "path": "/Users/zhangq/.claude/jobs/7058cce7/tmp/p01/extras"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "x-casedir",
+      "dir": "evals/x-casedir",
+      "source": "prose",
+      "promptMarkdown": "只回复两个大写字母 OK，不要输出任何别的内容。",
+      "runsPerCase": 3,
+      "timeoutSeconds": 120,
+      "maxTurns": 2,
+      "graders": [
+        {
+          "name": "reply-ok",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "last_message",
+            "pattern": "OK",
+            "flags": "",
+            "match": "contains"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 1,
+            "costUsd": 0.0419548,
+            "judgeCostUsd": 0,
+            "durationSeconds": 4,
+            "startedAt": "2026-10-15T08:00:38.464Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-WnzXIL/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "reply-ok",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched OK",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 1,
+        "passRate": 1
+      }
+    },
+    {
+      "name": "x-graders-junk",
+      "dir": "evals/x-graders-junk",
+      "source": "prose",
+      "promptMarkdown": "只回复两个大写字母 OK，不要输出任何别的内容。",
+      "runsPerCase": 3,
+      "timeoutSeconds": 120,
+      "maxTurns": 2,
+      "graders": [
+        {
+          "name": "reply-ok",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "last_message",
+            "pattern": "OK",
+            "flags": "",
+            "match": "contains"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 1,
+            "costUsd": 0.0411868,
+            "judgeCostUsd": 0,
+            "durationSeconds": 3,
+            "startedAt": "2026-10-15T08:00:38.464Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-hgWojA/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "reply-ok",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched OK",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 1,
+        "passRate": 1
+      }
+    }
+  ],
+  "aggregates": {
+    "casesTotal": 2,
+    "casesPassed": 2,
+    "overallScore": 1,
+    "overallPassRate": 1
+  }
+}

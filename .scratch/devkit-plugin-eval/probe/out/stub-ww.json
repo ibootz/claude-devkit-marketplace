@@ -1,0 +1,384 @@
+{
+  "schemaVersion": 1,
+  "claudeVersion": "2.1.300",
+  "startedAt": "2026-10-15T08:01:27.520Z",
+  "durationSeconds": 39,
+  "costUsd": 0.8549354,
+  "partial": false,
+  "suite": {
+    "root": "/Users/zhangq/.claude/jobs/7058cce7/tmp/p01/stub",
+    "ablation": "with-without",
+    "threshold": 1,
+    "concurrency": 3,
+    "plugins": [
+      {
+        "name": "eval-noplugin-stub",
+        "version": "0.0.0",
+        "path": "/Users/zhangq/.claude/jobs/7058cce7/tmp/p01/stub"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "dispatch-model",
+      "dir": "evals/dispatch-model",
+      "source": "prose",
+      "promptMarkdown": "我想同时弄清两件互不相关的事，请分别派一个子代理去查，最后汇总给我：\n1. 用三句话解释 TCP 三次握手为什么不是两次；\n2. 用三句话解释 HTTP 方法的幂等性，并说明 POST 为什么通常不幂等。\n不需要读任何文件。",
+      "runsPerCase": 3,
+      "timeoutSeconds": 300,
+      "maxTurns": 12,
+      "graders": [
+        {
+          "name": "agent-dispatched",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Agent",
+            "min": 2
+          }
+        },
+        {
+          "name": "agent-has-model",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Agent",
+            "input_match": "\"model\"\\s*:\\s*\"",
+            "min": 2
+          }
+        },
+        {
+          "name": "agent-missing-model-zero",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Agent",
+            "input_match": "^(?![\\s\\S]*\"model\"\\s*:)",
+            "min": 0,
+            "max": 0
+          }
+        },
+        {
+          "name": "marker-sessionstart",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律（会话级常驻",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "marker-userpromptsubmit",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律 · 每轮要点",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 0.3333333333333333,
+            "passed": false,
+            "turns": 1,
+            "costUsd": 0.14381059999999998,
+            "judgeCostUsd": 0,
+            "durationSeconds": 19,
+            "startedAt": "2026-10-15T08:01:27.541Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-xNbZiY/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              }
+            ]
+          },
+          {
+            "score": 0.3333333333333333,
+            "passed": false,
+            "turns": 1,
+            "costUsd": 0.1392358,
+            "judgeCostUsd": 0,
+            "durationSeconds": 20,
+            "startedAt": "2026-10-15T08:01:27.541Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-JuopkK/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              }
+            ]
+          },
+          {
+            "score": 0.3333333333333333,
+            "passed": false,
+            "turns": 1,
+            "costUsd": 0.14475280000000001,
+            "judgeCostUsd": 0,
+            "durationSeconds": 19,
+            "startedAt": "2026-10-15T08:01:27.541Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-FLnT8F/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": true,
+                "scored": false
+              }
+            ]
+          }
+        ],
+        "without": [
+          {
+            "score": 0.3333333333333333,
+            "passed": false,
+            "turns": 1,
+            "costUsd": 0.14304460000000002,
+            "judgeCostUsd": 0,
+            "durationSeconds": 18,
+            "startedAt": "2026-10-15T08:01:46.360Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-Hguig3/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 0.3333333333333333,
+            "passed": false,
+            "turns": 1,
+            "costUsd": 0.1434042,
+            "judgeCostUsd": 0,
+            "durationSeconds": 19,
+            "startedAt": "2026-10-15T08:01:46.686Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-Yl0DfD/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 0.3333333333333333,
+            "passed": false,
+            "turns": 1,
+            "costUsd": 0.14068740000000002,
+            "judgeCostUsd": 0,
+            "durationSeconds": 17,
+            "startedAt": "2026-10-15T08:01:47.778Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-3Qwoms/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 0.3333333333333333,
+        "passRate": 0,
+        "scoreWithout": 0.3333333333333333,
+        "passRateWithout": 0,
+        "delta": 0
+      }
+    }
+  ],
+  "aggregates": {
+    "casesTotal": 1,
+    "casesPassed": 0,
+    "overallScore": 0.3333333333333333,
+    "overallPassRate": 0,
+    "meanDelta": 0
+  }
+}

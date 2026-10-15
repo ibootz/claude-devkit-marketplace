@@ -1,0 +1,2 @@
+⚠ kept /private/tmp/e-sCiF3S: home/ and tmp/ in it were written by the plugin under test and are sealed in /private/tmp/e-sCiF3S/sealed (mode 000; the kept directory is read-only) — open them with `chmod 700 /private/tmp/e-sCiF3S /private/tmp/e-sCiF3S/sealed` to inspect, and do not run git (or anything that loads configuration from its working directory) anywhere inside the kept directory
+Report: /Users/zhangq/.claude/jobs/7058cce7/tmp/p01/envprobe/evals/results/2026-10-15T08-00-44-154Z/report.html

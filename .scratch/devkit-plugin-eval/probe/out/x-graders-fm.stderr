@@ -1,0 +1,2 @@
+✗ /Users/zhangq/.claude/jobs/7058cce7/tmp/p01/x-graders-fm/evals/x-graders-fm: graders/clause-note.md: frontmatter must include "type:" (regex | tool_order | tool_used | file_exists | llm | baseline)
+1 case file(s) failed to load

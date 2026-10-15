@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "claudeVersion": "2.1.300",
+  "startedAt": "2026-10-15T08:02:19.379Z",
+  "durationSeconds": 0,
+  "costUsd": 0,
+  "partial": false,
+  "suite": {
+    "root": "/Users/zhangq/.claude/jobs/7058cce7/tmp/p01/x-graders-fm",
+    "ablation": "none",
+    "threshold": 1,
+    "concurrency": 1,
+    "plugins": []
+  },
+  "cases": [],
+  "aggregates": {
+    "casesTotal": 0,
+    "casesPassed": 0,
+    "overallScore": 0,
+    "overallPassRate": 0
+  }
+}

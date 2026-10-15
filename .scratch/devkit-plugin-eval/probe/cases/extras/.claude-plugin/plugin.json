@@ -1,0 +1,5 @@
+{
+  "name": "eval-extras-probe",
+  "version": "0.0.0",
+  "description": "探针：用例目录里放 eval 不认识的附加文件"
+}

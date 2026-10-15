@@ -1,6 +1,6 @@
 # 01 — 实测「不装」臂的跑法与三项 eval 未知行为
 
-Status: ready-for-agent
+Status: resolved
 
 **What to build:**
 
@@ -11,13 +11,21 @@ spec 定了每个臂各跑一次 `claude plugin eval --ablation none`，但「�
 **Blocked by:** None — can start immediately
 
 
-- [ ] 只含 `.claude-plugin/plugin.json` 的空桩插件跑 `--ablation none`：eval 接受与否、分数是否等同「不装」，给出实测结论
-- [ ] 若空桩不可行：确认改用当前版臂 `--ablation with-without` 取 `W/OUT` 列作「不装」的做法可行，并写明回放用例必须显式带该参数
-- [ ] 用例目录里放 eval 不认识的附加文件（如条款归属说明）是否报错，有实测结论
-- [ ] 从 skill 里调起的 Python 进程能否拿到 `CLAUDE_PLUGIN_DATA`，有实测结论；拿不到时给出按缓存路径推出 marketplace 名的做法
-- [ ] `cleanupPeriodDays` 未设置时的默认值，查官方文档或实测得出，写明出处
-- [ ] spec「实施待定」第 1、3、4、6 条已更新
+- [x] 只含 `.claude-plugin/plugin.json` 的空桩插件跑 `--ablation none`：eval 接受与否、分数是否等同「不装」，给出实测结论
+- [x] 若空桩不可行：确认改用当前版臂 `--ablation with-without` 取 `W/OUT` 列作「不装」的做法可行，并写明回放用例必须显式带该参数（前提不成立：空桩可行；备选仍顺带实测可用）
+- [x] 用例目录里放 eval 不认识的附加文件（如条款归属说明）是否报错，有实测结论
+- [x] 从 skill 里调起的 Python 进程能否拿到 `CLAUDE_PLUGIN_DATA`，有实测结论；拿不到时给出按缓存路径推出 marketplace 名的做法
+- [x] `cleanupPeriodDays` 未设置时的默认值，查官方文档或实测得出，写明出处
+- [x] spec「实施待定」第 1、3、4、6 条已更新
 
 **参考：** [spec](../../plugin-eval/spec.md) 的spec「一、直接用 claude plugin eval 的部分」与「实施待定」第 1、3、4、6 条；[19 history_file 回放实测](../../plugin-eval/issues/19-probe-history-file-replay.md)（auto ablation 会把回放用例降为只跑 with 臂）
 
 ## Comments
+
+- 2026-10-15 实测完成（Claude Code 2.1.300，7 次 eval 合计 $2.75 标价估算，未撞订阅用量限制）。完整报告：[probe/REPORT.md](../probe/REPORT.md)。结论摘要：
+  1. **空桩可行**：eval 接受只含 `plugin.json` 的插件；空桩臂与 without 臂的模型可见面（工具、skill、slash 命令、agent、MCP）逐项相同，计分 grader 结果相同，同一 eval 里装空桩与不装 Δ=0。03 照原设计每臂一次 `--ablation none`，「不装」臂用空桩目录。`with-without` 取 `W/OUT` 也可用，留作备选。
+  2. **新发现，03 必须处理**：`--ablation none` 下 `arm: with-only` grader 计入分数（空桩臂因此 0.2 而非 0.33）。外围脚本算臂分时只取计分 grader，或用例不写这类标记。已加进 spec「一」已实测第 6 条。
+  3. **附加文件**：用例目录与 `evals/` 根目录可放任意附加文件，静默忽略；`graders/` 下带 frontmatter 却无 `type:` 的 md、`prompt.md` frontmatter 里的未知键，都会让该用例加载失败（退出码 1，与「低于阈值」同码，脚本要看 `casesTotal` 与 stderr）。
+  4. **`CLAUDE_PLUGIN_DATA`**：Bash 调起的 Python 进程环境里没有（eval 沙箱与真实会话都实测为 unset）；SKILL.md 正文里写 `${CLAUDE_PLUGIN_DATA}` 会被替换成绝对路径。做法：SKILL.md 传参；兜底按 `plugins/cache/<marketplace>/<plugin>/` 推出 `plugins/data/<plugin>-<marketplace>/`。
+  5. **`cleanupPeriodDays` 默认 30 天**，最小 1，设 0 校验失败；出处为官方文档 settings-reference 与 2.1.300 settings schema。本机 `~/.claude/settings.json` 设的是 90。
+- 证据位置：`probe/cases/`（三组探针插件与用例）、`probe/out/`（`--json`、stdout、stderr、退出码、结构比对）、`probe/excerpts/`（文档原文、可执行文件字符串）、`probe/tools/`。子会话转录与 trace 在 `probe/traces/`，含账号邮箱，已加进仓根 `.gitignore`，未入库。

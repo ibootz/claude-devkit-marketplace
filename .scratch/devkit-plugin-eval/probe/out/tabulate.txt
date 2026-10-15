@@ -1,0 +1,8 @@
+extras	cost=$0.0831	dur=4s	start=2026/10/15 16:00:37	wall=5s	exit=0
+envprobe	cost=$0.1453	dur=13s	start=2026/10/15 16:00:43	wall=14s	exit=0
+stub-none	cost=$0.4813	dur=21s	start=2026/10/15 16:00:58	wall=22s	exit=1
+stub-ww	cost=$0.8549	dur=39s	start=2026/10/15 16:01:26	wall=40s	exit=1
+real-ww	cost=$1.1876	dur=59s	start=2026/10/15 16:01:27	wall=61s	exit=0
+x-graders-fm	cost=$0.0000	dur=0s	start=2026/10/15 16:02:17	wall=2s	exit=1
+x-prompt-fm-key	cost=$0.0000	dur=0s	start=2026/10/15 16:02:19	wall=2s	exit=1
+total cost=$2.7523

@@ -1,0 +1,5 @@
+{
+  "name": "eval-noplugin-stub",
+  "version": "0.0.0",
+  "description": "空桩插件：只有本清单、无任何组件，用作「不装被测插件」臂"
+}

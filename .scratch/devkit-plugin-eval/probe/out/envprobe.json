@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "claudeVersion": "2.1.300",
+  "startedAt": "2026-10-15T08:00:44.154Z",
+  "durationSeconds": 13,
+  "costUsd": 0.145326,
+  "partial": false,
+  "suite": {
+    "root": "/Users/zhangq/.claude/jobs/7058cce7/tmp/p01/envprobe",
+    "ablation": "none",
+    "threshold": 1,
+    "concurrency": 1,
+    "plugins": [
+      {
+        "name": "eval-envprobe",
+        "version": "0.0.0",
+        "path": "/Users/zhangq/.claude/jobs/7058cce7/tmp/p01/envprobe"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "skill-env",
+      "dir": "evals/skill-env",
+      "source": "prose",
+      "promptMarkdown": "请调用 env-probe 这个 skill，照它的指示执行，把命令输出原样贴给我。",
+      "runsPerCase": 3,
+      "timeoutSeconds": 180,
+      "maxTurns": 6,
+      "graders": [
+        {
+          "name": "probe-ran",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "PROBE env\\.CLAUDE_PLUGIN_DATA=",
+            "flags": "",
+            "match": "contains"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 4,
+            "costUsd": 0.145326,
+            "judgeCostUsd": 0,
+            "durationSeconds": 13,
+            "startedAt": "2026-10-15T08:00:44.188Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-sCiF3S/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "probe-ran",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched PROBE env\\.CLAUDE_PLUGIN_DATA=",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 1,
+        "passRate": 1
+      }
+    }
+  ],
+  "aggregates": {
+    "casesTotal": 1,
+    "casesPassed": 1,
+    "overallScore": 1,
+    "overallPassRate": 1
+  }
+}
