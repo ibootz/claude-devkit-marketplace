@@ -1,0 +1,459 @@
+{
+  "schema_version": 1,
+  "kind": "compare",
+  "run_id": "20261015T094658Z-4.1.0-compare",
+  "started_at": "2026-10-15T09:46:58Z",
+  "finished_at": "2026-10-15T09:52:15Z",
+  "plugin": {
+    "name": "devkit-discipline",
+    "version": "4.1.0",
+    "fingerprint": "sha256:c06cf79180afb51c6a65152eb28ff0f1d4177a9ea324c5b8871341770e1d9524",
+    "fingerprint_exclude": [
+      "evals"
+    ],
+    "path_in_repo": "plugins/devkit-discipline"
+  },
+  "clause_list_fingerprint": null,
+  "cases": [
+    "decision-no-ask",
+    "dispatch-model",
+    "env-clickable",
+    "parallel-lookup",
+    "zh-skill"
+  ],
+  "arms": {
+    "none": {
+      "label": "不装",
+      "source": "stub",
+      "eval_exit_code": 1,
+      "trace_dir": "traces/20261015T094658Z-4.1.0-compare/none",
+      "cleanup_warnings": [],
+      "stub_name": "devkit-plugin-eval-noplugin-stub",
+      "version": null,
+      "aggregate_result": "arms/none/aggregate-result.json",
+      "cost_usd": 1.159702,
+      "usage": {
+        "input_tokens": 86,
+        "output_tokens": 15214,
+        "cache_read_input_tokens": 288420,
+        "cache_creation_input_tokens": 106860,
+        "cost_usd": 1.159702,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 86,
+            "output_tokens": 15214,
+            "cache_read_input_tokens": 288420,
+            "cache_creation_input_tokens": 106860,
+            "cost_usd": 1.159702
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.300",
+      "load_issues": [],
+      "score": 0.36666666666666664,
+      "cases": {
+        "decision-no-ask": {
+          "score": 0.5,
+          "run_scores": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "dispatch-model": {
+          "score": 0.3333333333333333,
+          "run_scores": [
+            0.3333333333333333,
+            0.3333333333333333,
+            0.3333333333333333
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "env-clickable": {
+          "score": 0.0,
+          "run_scores": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-clickable": "with-only",
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "parallel-lookup": {
+          "score": 1.0,
+          "run_scores": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "zh-skill": {
+          "score": 0.0,
+          "run_scores": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    },
+    "current": {
+      "label": "当前版",
+      "source": "working-tree",
+      "eval_exit_code": 1,
+      "trace_dir": "traces/20261015T094658Z-4.1.0-compare/current",
+      "cleanup_warnings": [],
+      "version": "4.1.0",
+      "head_sha": "21c1af5b2e0c45731b6f65ac20943ab1d43af49d",
+      "dirty": false,
+      "aggregate_result": "arms/current/aggregate-result.json",
+      "cost_usd": 2.4282832,
+      "usage": {
+        "input_tokens": 86,
+        "output_tokens": 27363,
+        "cache_read_input_tokens": 493310,
+        "cache_creation_input_tokens": 259739,
+        "cost_usd": 2.4282831999999996,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 74,
+            "output_tokens": 24220,
+            "cache_read_input_tokens": 468332,
+            "cache_creation_input_tokens": 212113,
+            "cost_usd": 2.2752663999999996
+          },
+          "claude-sonnet-5-5": {
+            "input_tokens": 12,
+            "output_tokens": 3143,
+            "cache_read_input_tokens": 24978,
+            "cache_creation_input_tokens": 47626,
+            "cost_usd": 0.1530168
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.300",
+      "load_issues": [],
+      "score": 0.8,
+      "cases": {
+        "decision-no-ask": {
+          "score": 1.0,
+          "run_scores": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "dispatch-model": {
+          "score": 1.0,
+          "run_scores": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "env-clickable": {
+          "score": 0.0,
+          "run_scores": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-clickable": "with-only",
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "parallel-lookup": {
+          "score": 1.0,
+          "run_scores": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "zh-skill": {
+          "score": 1.0,
+          "run_scores": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    },
+    "previous": {
+      "label": "上一版",
+      "source": "git-snapshot",
+      "eval_exit_code": 1,
+      "trace_dir": "traces/20261015T094658Z-4.1.0-compare/previous",
+      "cleanup_warnings": [],
+      "version": "4.0.0",
+      "head_sha": "21c1af5b2e0c45731b6f65ac20943ab1d43af49d",
+      "dirty": false,
+      "name": "devkit-discipline",
+      "commit": "8ea2db2099ffceb3e1208fca38fd57fb2ad39cbf",
+      "path_in_repo": "plugins/devkit-discipline",
+      "obtained_by": "auto",
+      "base": null,
+      "cross_rename": false,
+      "fingerprint": "sha256:0a31b1429eb9898a445121b198f8ce6e8f6897d680a68b00815c623291402a7d",
+      "aggregate_result": "arms/previous/aggregate-result.json",
+      "cost_usd": 2.4223087,
+      "usage": {
+        "input_tokens": 92,
+        "output_tokens": 25894,
+        "cache_read_input_tokens": 557121,
+        "cache_creation_input_tokens": 254832,
+        "cost_usd": 2.4223087,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 80,
+            "output_tokens": 23661,
+            "cache_read_input_tokens": 528111,
+            "cache_creation_input_tokens": 214693,
+            "cost_usd": 2.2967062
+          },
+          "claude-sonnet-5-5": {
+            "input_tokens": 12,
+            "output_tokens": 2233,
+            "cache_read_input_tokens": 29010,
+            "cache_creation_input_tokens": 40139,
+            "cost_usd": 0.1256025
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.300",
+      "load_issues": [],
+      "score": 0.8,
+      "cases": {
+        "decision-no-ask": {
+          "score": 1.0,
+          "run_scores": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "dispatch-model": {
+          "score": 1.0,
+          "run_scores": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "env-clickable": {
+          "score": 0.0,
+          "run_scores": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-clickable": "with-only",
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "parallel-lookup": {
+          "score": 1.0,
+          "run_scores": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "zh-skill": {
+          "score": 1.0,
+          "run_scores": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    },
+    "current_with_env": null
+  },
+  "delta": {
+    "cases": {
+      "decision-no-ask": 0.5,
+      "dispatch-model": 0.6666666666666667,
+      "env-clickable": 0.0,
+      "parallel-lookup": 0.0,
+      "zh-skill": 1.0
+    },
+    "overall": 0.4333333333333334,
+    "missing_cases": [],
+    "arm": "current",
+    "baseline": "none"
+  },
+  "claude_code_version": "2.1.300",
+  "main_model": "claude-opus-5-5",
+  "judge_model": null,
+  "usage": {
+    "input_tokens": 264,
+    "output_tokens": 68471,
+    "cache_read_input_tokens": 1338851,
+    "cache_creation_input_tokens": 621431,
+    "cost_usd": 6.010293899999999,
+    "by_model": {
+      "claude-opus-5-5": {
+        "input_tokens": 240,
+        "output_tokens": 63095,
+        "cache_read_input_tokens": 1284863,
+        "cache_creation_input_tokens": 533666,
+        "cost_usd": 5.7316746
+      },
+      "claude-sonnet-5-5": {
+        "input_tokens": 24,
+        "output_tokens": 5376,
+        "cache_read_input_tokens": 53988,
+        "cache_creation_input_tokens": 87765,
+        "cost_usd": 0.2786193
+      }
+    },
+    "cost_basis": "按标价（list price）估算，订阅用户只作信息"
+  },
+  "complete": true,
+  "incomplete_reasons": [],
+  "threshold": 1.0,
+  "passed": false,
+  "pass_criterion": "运行完整，且当前版臂每个有分用例的规则分都 ≥ threshold",
+  "review": {
+    "status": "待审",
+    "reviewed_at": null
+  },
+  "injection_check": null,
+  "judge": null,
+  "resident_tokens": null,
+  "preflight": null,
+  "environment": {
+    "claude_path": "~/.local/bin/claude",
+    "node_path": "/opt/homebrew/bin/node",
+    "runs_per_case": 3,
+    "concurrency": 3,
+    "model_override": null,
+    "platform": "darwin"
+  },
+  "previous_arm": {
+    "degraded": false,
+    "reason": null,
+    "reason_kind": null,
+    "commit": "8ea2db2099ffceb3e1208fca38fd57fb2ad39cbf",
+    "version": "4.0.0",
+    "name": "devkit-discipline",
+    "path_in_repo": "plugins/devkit-discipline",
+    "obtained_by": "auto",
+    "base": null,
+    "cross_rename": false,
+    "ran": true,
+    "incomparable_cases": {}
+  },
+  "env_plugins": [],
+  "delta_vs_previous": {
+    "cases": {
+      "decision-no-ask": 0.0,
+      "dispatch-model": 0.0,
+      "env-clickable": 0.0,
+      "parallel-lookup": 0.0,
+      "zh-skill": 0.0
+    },
+    "overall": 0.0,
+    "missing_cases": []
+  },
+  "delta_env_vs_current": null
+}
