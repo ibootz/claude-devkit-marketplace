@@ -181,6 +181,9 @@ def validate_spec(spec):
             for k in ('min', 'max'):
                 if g.get(k) is not None and (not isinstance(g[k], int) or g[k] < 0):
                     p.append('grader %s 的 %s 应是非负整数' % (n, k))
+            if g.get('max') == 0 and g.get('min') is None:
+                # eval 的 min 缺省为 1：只写 max: 0 恒不通过（票 11 演示实测「expected 1..0」）
+                p.append('grader %s 判「没调用」要同时写 min: 0（eval 的 min 缺省为 1，只写 max: 0 恒不通过）' % n)
         elif t == 'tool_order':
             if not g.get('before') or not g.get('after'):
                 p.append('grader %s 缺 before / after' % n)
@@ -243,6 +246,8 @@ def check_case_dir(case_dir):
         fm, _ = frontmatter(g.read_text(encoding='utf-8'))
         if fm is not None and 'type' not in _keys(fm):
             p.append('graders/%s 带 frontmatter 却没有 type（会让用例加载失败）' % g.name)
+        if fm is not None and re.search(r'^max\s*:\s*0\s*$', fm, re.M) and 'min' not in _keys(fm):
+            p.append('graders/%s 只写了 max: 0 没写 min（eval 的 min 缺省为 1，恒不通过）' % g.name)
     yaml = case_dir / 'case.yaml'
     if yaml.is_file():
         m = re.search(r'scaffold_script\s*:\s*(\S+)', yaml.read_text(encoding='utf-8'))

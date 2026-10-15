@@ -50,7 +50,7 @@ GRADER_NOTE = '''grader（规则判分，不花钱；每个用例 1～4 个，�
 - regex：target 取 last_message（最终回复，缺省）或 trace（整段会话的 JSONL 轨迹，含每次工具调用的 name 与 input）；
   pattern 是 JavaScript 正则；match 取 contains（缺省）/ not_contains / count:N；flags 可写 i、m、s。
 - tool_used：tool 写工具名（Agent / Skill / Read / Grep / Glob / TodoWrite）；input_match 是对该次调用 input 的 JSON
-  文本做匹配的 JavaScript 正则；min / max 是满足条件的调用次数上下限。
+  文本做匹配的 JavaScript 正则；min / max 是满足条件的调用次数上下限，min 缺省为 1，判「没调用」写 min: 0、max: 0。
 - tool_order：before / after 各写一个工具名，判「before 先于 after 出现」。
 - 判行为，不判措辞：查工具调用、调用次数与顺序、回复里必须出现的事实或结构；不要匹配规矩原文里的特定词句，
   模型换种说法也照做了的，应当判通过。
@@ -256,9 +256,9 @@ _KIND_TEXT = {
     'skill-trigger': ('写 {need} 个「应触发」用例：用户的请求落在这个 skill 的适用范围里，但不点名 skill。'
                       'grader 判 Skill 工具以这个 skill 名被调用（arm: both），再加一个判任务结果的 grader。'),
     'skill-no-trigger': ('写 {need} 个「不应触发」用例：请求和这个 skill 沾边、容易误触发，但不在它的适用范围里。'
-                         'grader 判 Skill 工具没有以这个 skill 名被调用（tool_used、max: 0、arm: both），再加一个判任务结果的 grader。'),
+                         'grader 判 Skill 工具没有以这个 skill 名被调用（tool_used、min: 0、max: 0、arm: both），再加一个判任务结果的 grader。'),
     'agent-dispatch': '写 {need} 个「该派」用例：任务正适合交给这个子代理。grader 判 Agent 工具以这个子代理的类型被调用。',
-    'agent-no-dispatch': '写 {need} 个「不该派」用例：任务和这个子代理沾边，但自己做更合适。grader 判没有派它（max: 0）。',
+    'agent-no-dispatch': '写 {need} 个「不该派」用例：任务和这个子代理沾边，但自己做更合适。grader 判没有派它（min: 0、max: 0）。',
     'agent-follow': ('写 {need} 个「照定义做事」用例：任务会让模型派这个子代理，grader 判子代理干活的方式符合定义里写的'
                      '关键要求（看 trace 里子代理的工具调用与产出）。'),
 }
@@ -346,6 +346,8 @@ def _spec(case, g, slug):
         x = {k: v for k, v in x.items() if v not in (None, '')}
         if x.get('type') in casefiles.GRADER_FIELDS:
             x = {k: v for k, v in x.items() if k in casefiles.GRADER_FIELDS[x['type']] + ('name', 'type')}
+        if x.get('type') == 'tool_used' and x.get('max') == 0 and x.get('min') is None:
+            x['min'] = 0          # eval 的 min 缺省为 1：判「没调用」补 min: 0
         graders.append(x)
     clause = g.get('clause')
     judge = [{'id': j.get('id'), 'criterion': j.get('criterion'), 'rule': j.get('rule') or None, 'clause': clause}

@@ -56,6 +56,16 @@ class RenderTest(unittest.TestCase):
         self.assertIn('expected_output', probs)
         self.assertIn('没有 type', probs)
 
+    def test_max_zero_needs_explicit_min(self):
+        g = {'name': 'none', 'type': 'tool_used', 'tool': 'Read', 'max': 0}
+        self.assertIn('min: 0', '\n'.join(casefiles.validate_spec(spec(graders=[g, {'name': 'ok', 'type': 'regex', 'pattern': 'x'}], judge=[]))))
+        d = self.tmp / 'c'
+        write(d / 'prompt.md', '---\nname: c\n---\n做事\n')
+        write(d / 'graders' / 'none.md', '---\ntype: tool_used\ntool: Read\nmax: 0\n---\n')
+        self.assertIn('min', '\n'.join(casefiles.check_case_dir(d)))
+        write(d / 'graders' / 'none.md', '---\ntype: tool_used\ntool: Read\nmin: 0\nmax: 0\n---\n')
+        self.assertEqual(casefiles.check_case_dir(d), [])
+
 
 class TagTest(unittest.TestCase):
     def setUp(self):

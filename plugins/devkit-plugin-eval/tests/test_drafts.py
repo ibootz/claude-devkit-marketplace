@@ -276,7 +276,8 @@ class DrafterTest(Base):
             self.ai_case('clause:C001', 'covered'),                      # 撞名：自动改名
             self.ai_case('skill-trigger:sk', 'bad', allowed_tools=['Bash']),
             self.ai_case('skill-trigger:sk', 'sk-trigger', graders=[
-                {'name': 's', 'type': 'tool_used', 'tool': 'Skill', 'input_match': 'sk', 'arm': 'both'}], judge=[]),
+                {'name': 's', 'type': 'tool_used', 'tool': 'Skill', 'input_match': 'sk', 'arm': 'both'},
+                {'name': 'no-read', 'type': 'tool_used', 'tool': 'Read', 'max': 0}], judge=[]),
         ], 'skipped': [{'target': 'clause:C003', 'code': 'needs-user-reply', 'reason': '要等用户回答'}]},
             {'cases': [], 'skipped': []})
         summary = drafter.draft(self.data, NAME, ai=ai, now=at(5)(), log=SILENT)
@@ -296,6 +297,7 @@ class DrafterTest(Base):
         meta = drafts.read_meta(d)
         self.assertEqual((meta['source'], meta['category'], meta['clause_intent']), ('ai', 'discipline', '派子代理时写明 model'))
         self.assertEqual(clauses.case_tags(self.drafts_root / 'sk-trigger'), ['skill-trigger', 'skill:sk'])
+        self.assertIn('min: 0', (self.drafts_root / 'sk-trigger' / 'graders' / 'no-read.md').read_text(encoding='utf-8'))
         skips = drafter.load_skips(self.repo, NAME)
         self.assertEqual(skips['clause:C003']['code'], 'needs-user-reply')
         self.assertAlmostEqual(summary['cost_usd'], 0.02)
