@@ -115,6 +115,22 @@ class PurgeTest(unittest.TestCase):
         self.assertTrue((other / ('%s.jsonl' % sid)).is_file())
         self.assertEqual(replay.purge_transcripts(arm), [])
 
+    def test_purge_moves_to_keep_dir(self):
+        arm = self.tmp / 'current'
+        sid, recs = replay.build_history('k', replay.TAIL)
+        c = arm / 'evals' / 'compact-a'
+        write(c / 'prompt.md', '---\nname: compact-a\n---\n做事\n')
+        write(c / 'case.yaml', replay.case_yaml_with_history('', 'compact-a'))
+        write(c / replay.HISTORY_FILE, replay.history_text(recs))
+        write(c / ('%s.jsonl' % sid), '{"run": 1}\n')
+        keep = self.tmp / 'traces' / 'current' / 'replay-transcripts'
+        self.assertEqual(len(replay.purge_transcripts(arm, keep_dir=keep)), 1)
+        self.assertFalse((c / ('%s.jsonl' % sid)).exists())
+        self.assertEqual((keep / 'compact-a' / ('%s.jsonl' % sid)).read_text(encoding='utf-8'), '{"run": 1}\n')
+        write(c / ('%s.jsonl' % sid), '{"run": 2}\n')                  # 同一臂目录再清一次：覆盖旧副本
+        replay.purge_transcripts(arm, keep_dir=keep)
+        self.assertEqual((keep / 'compact-a' / ('%s.jsonl' % sid)).read_text(encoding='utf-8'), '{"run": 2}\n')
+
 
 class CompareCleansTranscriptsTest(unittest.TestCase):
     """compare 每跑完一臂就删回放转录：--keep-assembly 留下的组装目录里也没有。"""
@@ -159,6 +175,10 @@ class CompareCleansTranscriptsTest(unittest.TestCase):
             self.assertTrue((d / replay.HISTORY_FILE).is_file())
             self.assertFalse((d / ('%s.jsonl' % sid)).exists())
             self.assertFalse((d / sid).exists())
+        traces = data / 'traces' / res.run_dir.name
+        for arm in ('none', 'current'):
+            self.assertTrue((traces / arm / 'replay-transcripts' / 'compact-a' / ('%s.jsonl' % sid)).is_file(), arm)
+        self.assertFalse(any(p.name == '%s.jsonl' % sid for p in repo.rglob('*')))      # 不进被测仓
 
 
 class GenerateTest(Base):

@@ -58,5 +58,6 @@ def match(clauses, rule, script_events, has_list=True):
         return hits, {'status': 'mapped', 'reason': '脚本挂在 %s，与该条款的 events 唯一相交' % '、'.join(sorted(events))}
     if not hits:
         return [], {'status': 'unmapped', 'reason': '没有未退役条款的 events 含 %s' % '、'.join(sorted(events))}
+    shown = '、'.join(hits[:8]) + ('等' if len(hits) > 8 else '')     # 全列会超 review.LONG_TEXT_LIMIT，整批被自检拒写
     return [], {'status': 'unmapped', 'reason': '%d 条未退役条款的 events 都含 %s（%s），推不出是哪一条'
-                % (len(hits), '、'.join(sorted(events)), '、'.join(hits))}
+                % (len(hits), '、'.join(sorted(events)), shown)}

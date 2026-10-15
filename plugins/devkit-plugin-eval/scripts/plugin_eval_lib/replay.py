@@ -14,8 +14,9 @@
    合成历史不放被测插件的注入文本，否则「不装」臂也读得到：写盘前用 injection_hits 对照被测插件当前的注入文字查一遍，
    命中即整条不写。
 
-三、清理：purge_transcripts 删掉臂组装目录里回放用例目录下的 `<sessionId>.jsonl` 与同名目录（compare._run_arm 跑完每臂即调；
-   组装目录整棵也会在收尾删掉，这一步管 --keep-assembly 与排查时留下的副本）。
+三、清理：purge_transcripts 把臂组装目录里回放用例目录下的 `<sessionId>.jsonl` 与同名目录移到本臂的 trace 目录
+   （用户级数据目录，不进被测仓；compare._run_arm 跑完每臂即调，--keep-assembly 留下的组装目录里也就没有它们）。
+   回放子会话的转录不在沙箱的 projects/ 下，注入核验对回放用例报「找不到子会话转录」（票 13 Comments 已知缺口）。
 """
 import json
 import re
@@ -201,8 +202,10 @@ def _history_rel(case_dir):
     return m.group(1) if m else None
 
 
-def purge_transcripts(arm_dir):
-    """删掉 <臂目录>/evals/ 下回放用例目录里的 `<历史 sessionId>.jsonl` 与同名目录。返回删掉的相对路径。"""
+def purge_transcripts(arm_dir, keep_dir=None):
+    """清掉 <臂目录>/evals/ 下回放用例目录里的 `<历史 sessionId>.jsonl` 与同名目录。keep_dir 给了就移到
+    keep_dir/<用例>/ 下留作排查（compare 传本臂的 trace 目录，在用户级数据目录里，不进被测仓），否则直接删。
+    返回清掉的相对路径。"""
     evals = Path(arm_dir) / 'evals'
     removed = []
     for c in arms.discover_cases(evals):
@@ -212,12 +215,19 @@ def purge_transcripts(arm_dir):
         if not sid or not re.match(r'^[A-Za-z0-9-]{8,64}$', sid):
             continue
         for p in (d / ('%s.jsonl' % sid), d / sid):
-            if p.is_dir():
+            if not (p.is_dir() or p.exists()):
+                continue
+            if keep_dir is not None:
+                dest = Path(keep_dir) / c / p.name
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                if dest.exists():
+                    shutil.rmtree(str(dest), ignore_errors=True) if dest.is_dir() else dest.unlink()
+                shutil.move(str(p), str(dest))
+            elif p.is_dir():
                 shutil.rmtree(str(p), ignore_errors=True)
-                removed.append('%s/%s' % (c, p.name))
-            elif p.exists():
+            else:
                 p.unlink()
-                removed.append('%s/%s' % (c, p.name))
+            removed.append('%s/%s' % (c, p.name))
     return removed
 
 

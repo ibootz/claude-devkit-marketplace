@@ -278,6 +278,19 @@ class PrivacyTest(CandidateBase):
         self.assertEqual(cd.host_terms('见 github.com 文档'), set())
 
 
+class MappingReasonTest(unittest.TestCase):
+    """票 13 真跑撞到：99 条条款都挂同一事件时，未映射原因把 id 全列出来超了 300 字，复盘自检整批拒写。"""
+
+    def test_reason_stays_short(self):
+        from plugin_eval_lib import review_clauses
+        cl = [review_clauses.Clause('C%03d' % i, frozenset({'SessionStart'})) for i in range(1, 100)]
+        ids, m = review_clauses.match(cl, 'hooks/a.js', {'hooks/a.js': {'SessionStart'}})
+        self.assertEqual(ids, [])
+        self.assertLessEqual(len(m['reason']), review.LONG_TEXT_LIMIT)
+        self.assertIn('99 条', m['reason'])
+        self.assertEqual(review.assert_no_text(m), [])
+
+
 class LocateTest(unittest.TestCase):
     def test_pointer_whitelist_blocks_traversal(self):
         self.assertIsNone(cd.locate('/nonexistent', {'session_id': '../../etc/passwd'}))
