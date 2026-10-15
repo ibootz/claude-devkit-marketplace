@@ -120,6 +120,7 @@ def _runs(case):
 
 
 def render_report(rec):
+    from . import baseline   # baseline 依赖 clauses → pending → record：函数内导入免循环
     p = rec['plugin']
     arms = [(k, rec['arms'][k]) for k in ARM_ORDER if rec['arms'].get(k)]
     u = rec['usage']
@@ -158,7 +159,9 @@ def render_report(rec):
         valid = sum(c.get('valid_runs', 0) for c in a.get('cases', {}).values())
         lines.append('| %s | %s | %d | %d | $%.4f |' % (a['label'], _f(a.get('score')), valid,
                                                       a.get('invalid_run_count', 0), a.get('cost_usd') or 0))
-    lines.append('| 差（当前版 − 不装） | %s | | | |' % _d(rec['delta'].get('overall')))
+    guarded = rec['delta'].get('excluded_baseline_satisfied') or []
+    lines.append('| 差（当前版 − 不装）%s | %s | | | |' % (
+        '，不含 %d 个回归守护用例' % len(guarded) if guarded else '', _d(rec['delta'].get('overall'))))
 
     none = rec['arms'].get('none') or {}
     cur = rec['arms'].get('current') or {}
@@ -168,7 +171,7 @@ def render_report(rec):
         c = cur.get('cases', {}).get(name)
         lines.append('| %s | %s | %s | %s | %s | %s |' % (
             name, _f(n and n.get('score')), _f(c and c.get('score')),
-            _d(rec['delta']['cases'].get(name)), _runs(n), _runs(c)))
+            '回归守护' if baseline.is_guarded(rec, name) else _d(rec['delta']['cases'].get(name)), _runs(n), _runs(c)))
 
     below = [n for n in rec['cases']
              if (cur.get('cases', {}).get(n) or {}).get('score') is not None
@@ -197,6 +200,7 @@ def render_report(rec):
         for name in sorted(excluded):
             lines.append('- %s：%s' % (name, '、'.join('`%s`（%s）' % (g, why) for g, why in sorted(excluded[name].items()))))
 
+    lines += baseline.report_sections(rec)       # 基线已满足的用例只出回归结论（票 11）
     lines += armreport.section_lines(rec)
     lines += injection_check.report_sections(rec)
     lines += clausereport.section_lines(rec)

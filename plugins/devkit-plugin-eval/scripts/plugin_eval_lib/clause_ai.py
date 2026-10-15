@@ -129,17 +129,18 @@ def delta_prompt(plugin_name, old_clauses, diff_text):
     ])
 
 
-def build_command(claude, model, schema):
+def build_command(claude, model, schema, system_prompt=None):
     return [str(claude), '-p', '--model', model, '--output-format', 'json', '--tools', '',
             '--no-session-persistence', '--strict-mcp-config', '--setting-sources', '',
-            '--system-prompt', SYSTEM_PROMPT, '--json-schema', json.dumps(schema, ensure_ascii=False)]
+            '--system-prompt', system_prompt or SYSTEM_PROMPT, '--json-schema', json.dumps(schema, ensure_ascii=False)]
 
 
-def claude_caller(claude, *, env=None, cwd=None, timeout=CALL_TIMEOUT_SEC, run=subprocess.run):
+def claude_caller(claude, *, env=None, cwd=None, timeout=CALL_TIMEOUT_SEC, run=subprocess.run, system_prompt=None):
     """返回 ai(prompt, schema, model) -> (结构化结果 dict, 元信息)。元信息：model、cost_usd、usage、duration_ms。
-    失败（起不来、超时、非零退出、is_error、没有 structured_output）一律抛 ClauseAIError。"""
+    失败（起不来、超时、非零退出、is_error、没有 structured_output）一律抛 ClauseAIError。
+    system_prompt 缺省为条款清单维护者（票 10）；用例起草（票 11 drafter）传自己的。"""
     def ai(prompt, schema, model):
-        cmd = build_command(claude, model, schema)
+        cmd = build_command(claude, model, schema, system_prompt)
         try:
             proc = run(cmd, input=prompt.encode('utf-8'), capture_output=True, timeout=timeout, env=env, cwd=cwd)
         except subprocess.TimeoutExpired:

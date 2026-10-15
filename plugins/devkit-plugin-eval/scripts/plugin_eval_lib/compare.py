@@ -21,8 +21,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import (armplan, arms, clauses, envplugins, evalrun, fingerprint, gitstate, injection, injection_check,  # noqa: F401
-               judge, judgepending, preflight, record, registry, resume, sandbox_sweep, scoring, traces)
+from . import (armplan, arms, baseline, clauses, drafts, envplugins, evalrun, fingerprint, gitstate, injection,  # noqa: F401
+               injection_check, judge, judgepending, preflight, record, registry, resume, sandbox_sweep, scoring, traces)
 
 
 # eval 正常跑完的退出码：0 全过、1 有用例低于 --threshold（判分我们自己重算，不看它）。其余（如 2）是中途中止。
@@ -339,6 +339,8 @@ def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp,
                                              model=model, judge_opts=judge_opts, clause_model=clause_model),
     )
     rec.update(plan.record_fields(arm_records))
+    # 基线已满足的用例（票 11）：不出当前版 − 不装的差，改出回归结论
+    baseline.apply_to_record(rec, baseline.satisfied_cases(registry.plugin_dir(entry) / 'evals', cases))
     pre.add(preflight.check_version_model(preflight.previous_compare(Path(run_dir).parent, exclude=run_id),
                                           rec['claude_code_version'], rec['main_model']))
     rec['preflight'] = _merge_preflight(pre.to_dict(), prior_preflight)

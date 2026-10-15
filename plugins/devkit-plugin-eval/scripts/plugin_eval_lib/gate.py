@@ -37,7 +37,7 @@ MAIN_REF_CANDIDATES = ('origin/main', 'main', 'origin/master', 'master')
 
 BASIS_COMPARE = 'compare'
 BASIS_GATE = 'gate'
-SKIPPED_KINDS = ('clauses',)       # 单跑条款清单的运行：不是评测结果，扫 runs/ 时跳过
+SKIPPED_KINDS = ('clauses', 'drafts', 'baseline')   # 条款清单、用例草稿批次、基线判定（票 11）：不是评测结果，扫 runs/ 时跳过
 JUDGE_UNTRUSTED_NOTE = '本报告 AI 判分不采信，已审时由用户判断'
 DIRTY_BLOCKER = '插件目录有未提交改动（不含 evals/），先提交再跑 gate'
 
