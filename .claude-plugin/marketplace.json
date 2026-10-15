@@ -173,6 +173,13 @@
       "category": "Productivity",
       "description": "中文技术文档写作规范 - 阮一峰规范七部分：标题/文本/段落/数值/标点/文档体系，写中文文档时套用",
       "version": "2.0.0"
+    },
+    {
+      "name": "devkit-plugin-eval",
+      "source": "./plugins/devkit-plugin-eval",
+      "category": "Development",
+      "description": "插件评测 - 离线对照被测插件装与不装的差，落盘待审报告",
+      "version": "0.1.0"
     }
   ]
 }

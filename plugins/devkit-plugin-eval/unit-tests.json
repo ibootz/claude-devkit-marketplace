@@ -1,0 +1,5 @@
+{
+  "tests": [
+    { "run": ["python3", "-m", "unittest", "discover", "-s", "tests"], "timeout_sec": 120 }
+  ]
+}
