@@ -1,4 +1,4 @@
-"""命令行：register / list / check / compare / resume / pending / clauses / gate。
+"""命令行：register / list / check / compare / resume / pending / clauses / review / gate。
 
 退出码：0 成功；2 用法、登记、环境类错误（含未登记、前置检查硬项失败）；3 对照跑完但结果不完整（用例加载失败、run 出错等）。
 gate 另用 1 表示未过闸。
@@ -7,7 +7,7 @@ import argparse
 import json
 import sys
 
-from . import armplan, clauses, compare, datadir, evalrun, gate, judge, pending, preflight, registry, resume
+from . import armplan, clauses, compare, datadir, evalrun, gate, judge, pending, preflight, registry, resume, review
 
 
 def _utf8_stdio():
@@ -68,6 +68,7 @@ def _parser():
     g.add_argument('--json', action='store_true', help='输出结构化结果')
 
     clauses.add_parser(sub)
+    review.add_parser(sub)
     return p
 
 
@@ -139,6 +140,8 @@ def main(argv=None):
             return pending.main(args, data_dir)
         if args.cmd == 'clauses':
             return clauses.main(args, data_dir)
+        if args.cmd == 'review':
+            return review.main(args, data_dir)
         runner = evalrun.runner_with_timeout(args.eval_timeout * 60 if args.eval_timeout else None)
         if args.cmd == 'resume':
             res = resume.resume_run(data_dir, args.run_dir, runner=runner, keep_assembly=args.keep_assembly)
