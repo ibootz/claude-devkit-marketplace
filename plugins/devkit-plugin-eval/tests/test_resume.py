@@ -10,7 +10,7 @@ from pathlib import Path
 
 import _support
 from _support import tmpdir, aggregate, grader, make_plugin, make_sandbox, run_result
-from plugin_eval_lib import cli, compare, completeness, registry, resume
+from plugin_eval_lib import cli, compare, completeness, pending, registry, resume
 from test_compare import passing_preflight
 
 GRADERS = [grader('rule')]
@@ -288,6 +288,52 @@ class CliResumeTest(ResumeTestBase):
             code = cli.main(['--data-dir', str(self.data), 'resume', str(self.tmp / 'nowhere')])
         self.assertEqual(code, 2)
         self.assertIn('run.json', err.getvalue())
+
+
+class PendingWithResumeTest(ResumeTestBase):
+    """票 07 × 票 08：待审页与对照、续跑互斥；未结束的运行不出页；续跑后旧页作废、重新生成。"""
+
+    def test_default_run_skips_unfinished_and_locked_runs(self):
+        done = self.compare(ScriptedEval(self.sandboxes, ONE_SHOT))
+        crash = ScriptedEval(self.sandboxes, ONE_SHOT, crash_on='current')
+        with self.assertRaises(RuntimeError):
+            self.compare(crash)                                    # 较新的运行停在检查点
+        page = pending.generate(self.data, 'demo-plugin')
+        self.assertEqual(page.run_id, done.run_dir.name)
+
+        newest = self.compare(ScriptedEval(self.sandboxes, ONE_SHOT))
+        lock = resume.RunLock(self.data, newest.run_dir.name).acquire()   # 模拟它正被续跑
+        self.addCleanup(lock.release)
+        self.assertEqual(pending.generate(self.data, 'demo-plugin').run_id, done.run_dir.name)
+        with self.assertRaises(pending.PendingError) as cm:
+            pending.generate(self.data, 'demo-plugin', run_id=newest.run_dir.name)
+        self.assertIn('正在对照或续跑', str(cm.exception))
+
+    def test_explicit_checkpoint_run_has_nothing_to_review(self):
+        crash = ScriptedEval(self.sandboxes, ONE_SHOT, crash_on='current')
+        with self.assertRaises(RuntimeError):
+            self.compare(crash)
+        run_dir = next((self.repo / 'plugin-evals' / 'demo-plugin' / 'runs').iterdir())
+        with self.assertRaises(pending.NothingPending) as cm:
+            pending.generate(self.data, 'demo-plugin', run_id=run_dir.name)
+        self.assertIn('还没结束', str(cm.exception))
+
+    def test_resume_supersedes_old_page_and_regenerates(self):
+        fake = ScriptedEval(self.sandboxes, FLAKY, fail={('current', 'case-a', 1): LIMIT_ERROR})
+        first = self.compare(fake)
+        old_page = pending.generate(self.data, 'demo-plugin', run_id=first.run_dir.name)
+        res = self.resume(fake, first.run_dir)
+        rec = self.load(first.run_dir)
+        self.assertTrue(rec['complete'])
+        self.assertEqual(res.record['pending']['page_id'], rec['pending']['page_id'])
+        self.assertNotIn(rec['pending']['page_id'], (None, old_page.page_id))
+        self.assertEqual(rec['review']['status'], '待审')
+        old_code = 'PE1 %s %s 1A' % (old_page.run_id, old_page.page_id)
+        with self.assertRaises(pending.ReplyError):
+            pending.apply_reply(self.data, 'demo-plugin', old_code)
+        new_code = 'PE1 %s %s 1A' % (old_page.run_id, rec['pending']['page_id'])
+        pending.apply_reply(self.data, 'demo-plugin', new_code)
+        self.assertEqual(self.load(first.run_dir)['review']['status'], '已审')
 
 
 class CompletenessTest(unittest.TestCase):

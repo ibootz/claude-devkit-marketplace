@@ -96,6 +96,13 @@ class RunLock:
             return self
         raise ResumeError('拿不到运行锁：%s' % self.path)
 
+    def busy(self):
+        """别的进程正持有这把锁（不拿锁，只探测）。"""
+        if self.held or not self.path.exists():
+            return False
+        holder = self._holder()
+        return not (holder.get('host') in (None, socket.gethostname()) and not _pid_alive(holder.get('pid')))
+
     def _holder(self):
         try:
             data = json.loads(self.path.read_text(encoding='utf-8'))
@@ -425,6 +432,7 @@ def resume_run(data_dir, run_dir, *, claude=None, runner=evalrun.run_eval, env=N
                     claude=claude, child_env=child_env, runs=runs, concurrency=concurrency, model=model,
                     run_dir=run_dir, data_dir=data_dir, plan=plan, pre=pre)
         old_arms = {k: v for k, v in (old.get('arms') or {}).items() if v}
+        old_pending = old.get('pending')
         lock = RunLock(data_dir, run_id).acquire()
         try:
             meta['statics'] = compare.static_profiles(plan.specs, child_env)
@@ -451,10 +459,36 @@ def resume_run(data_dir, run_dir, *, claude=None, runner=evalrun.run_eval, env=N
 
             def decorate(rec):
                 rec['resume'] = {'attempts': prior + [attempt]}
+                if old_pending:
+                    rec['pending'] = _superseded_pending(old_pending, attempt_no)
                 return rec
-            return compare.finalize_run(arm_records, [], decorate=decorate, prior_preflight=old.get('preflight'),
-                                        **meta)
+            res = compare.finalize_run(arm_records, [], decorate=decorate, prior_preflight=old.get('preflight'),
+                                       **meta)
         finally:
             lock.release()
     finally:
         plan.cleanup()
+    if old_pending:
+        res = _regenerate_pending(data_dir, name, res, log)
+    return res
+
+
+def _superseded_pending(old_pending, attempt_no):
+    """续跑改了结果，旧待审页作废（page_id 清空，旧回复码对不上）；已写回过的页留进 history。"""
+    history = list(old_pending.get('history') or [])
+    if old_pending.get('applied_at'):
+        history.append({k: old_pending.get(k) for k in ('page_id', 'generated_at', 'applied_at', 'decisions')})
+    return {'page_id': None, 'superseded_by_resume': attempt_no, 'history': history}
+
+
+def _regenerate_pending(data_dir, name, res, log):
+    """首跑生成过待审页的，续跑收尾重新生成一页（票 08）：pending 字段与 report.md「待审页抽样」一节随之更新。"""
+    from . import pending   # 延迟导入：pending 依赖本模块
+    try:
+        page = pending.generate(data_dir, name, run_id=res.run_dir.name)
+        log('续跑改了结果，旧待审页作废，已重新生成：%s' % page.html_path)
+    except pending.PendingError as e:
+        log('续跑后重新生成待审页没成功：%s；稍后手动运行 pending' % e)
+        return res
+    rec = json.loads((res.run_dir / 'run.json').read_text(encoding='utf-8'))
+    return compare.CompareResult(res.run_dir, rec, res.exit_code)
