@@ -251,6 +251,80 @@ class ExtensibleTypeTest(unittest.TestCase):
         self.assertNotIn('## 待审页抽样', (self.run_dir / 'report.md').read_text(encoding='utf-8'))
         self.assertFalse(read_json(self.run_dir / 'run.json')['pending']['sampled'])
 
+class RobustnessTest(unittest.TestCase):
+    """票 08 审查 M1 / M2 / M3 / L2。"""
+
+    def setUp(self):
+        self.env = Env(self)
+        self.run_dir = make_run(self.env.repo)
+
+    def test_writeback_failure_cleans_tmp_and_reports_written_files(self):
+        page = pending.generate(self.env.data, 'demo', now=lambda: T0)
+        before = (self.run_dir / 'run.json').read_bytes()
+        real_replace = pending.os.replace
+
+        def flaky(src, dst):
+            if Path(dst).name == 'run.json':
+                raise OSError('磁盘满')
+            return real_replace(src, dst)
+        code = 'PE1 %s %s 1A' % (RUN_ID, page.page_id)
+        pending.os.replace = flaky
+        try:
+            with self.assertRaises(pending.PendingError) as cm:
+                pending.apply_reply(self.env.data, 'demo', code, now=lambda: T1)
+        finally:
+            pending.os.replace = real_replace
+        self.assertIn('run.json', str(cm.exception))
+        self.assertIn('report.md', str(cm.exception))                  # 列出已写成的文件
+        self.assertEqual(list(self.run_dir.glob('*.pending-tmp')), [])
+        self.assertEqual((self.run_dir / 'run.json').read_bytes(), before)
+        pending.apply_reply(self.env.data, 'demo', code, now=lambda: T1)   # 同一回复码重试补齐
+        self.assertEqual(read_json(self.run_dir / 'run.json')['review']['status'], '已审')
+
+    def test_corrupt_history_run_skipped_unless_selected(self):
+        bad = '20261016T080000Z-1.2.4-compare'
+        _support.write(self.env.repo / 'plugin-evals' / 'demo' / 'runs' / bad / 'run.json', '{坏')
+        self.assertEqual(pending.generate(self.env.data, 'demo', now=lambda: T0).run_id, RUN_ID)
+        with self.assertRaises(pending.PendingError):
+            pending.generate(self.env.data, 'demo', run_id=bad, now=lambda: T0)
+
+    def test_home_path_scrubbed_in_run_json_and_report(self):
+        home = str(Path.home())
+        reg = pending.default_registry()
+        reg.register(pending.ItemType(
+            key='pathy', label='带路径', options=(('K', '留'),), priority=50,
+            collect=lambda s: [pending.PendingItem('pathy:%d' % i, '样本 %s/x/%d.jsonl' % (home, i),
+                                                   payload={'path': '%s/x/%d.jsonl' % (home, i)}) for i in range(12)],
+            apply=lambda *a: None))
+        pending.generate(self.env.data, 'demo', now=lambda: T0, types=reg)
+        run_json = (self.run_dir / 'run.json').read_text(encoding='utf-8')
+        report = (self.run_dir / 'report.md').read_text(encoding='utf-8')
+        self.assertIn('## 待审页抽样', report)
+        self.assertNotIn(home + '/', run_json)
+        self.assertNotIn(home + '/', report)
+        self.assertIn('~/x/', run_json)
+
+    def test_collect_error_is_pending_error(self):
+        def bad(subject):
+            raise ValueError('坏了')
+        reg = pending.default_registry()
+        reg.register(pending.ItemType(key='bad', label='坏类型', options=(('X', 'x'),), collect=bad, apply=None))
+        before = snapshot(self.env.root)
+        with self.assertRaises(pending.PendingError) as cm:
+            pending.generate(self.env.data, 'demo', now=lambda: T0, types=reg)
+        self.assertIn('坏类型', str(cm.exception))
+        no_locks = lambda snap: {k: v for k, v in snap.items() if not k.startswith('data/locks/')}   # 锁文件是空壳，不算改动
+        self.assertEqual(no_locks(snapshot(self.env.root)), no_locks(before))
+
+    def test_item_without_type_is_reply_error(self):
+        page = pending.generate(self.env.data, 'demo', now=lambda: T0)
+        rec = read_json(self.run_dir / 'run.json')
+        del rec['pending']['items'][0]['type']
+        (self.run_dir / 'run.json').write_text(json.dumps(rec, ensure_ascii=False), encoding='utf-8')
+        with self.assertRaises(pending.ReplyError) as cm:
+            pending.apply_reply(self.env.data, 'demo', 'PE1 %s %s 1A' % (RUN_ID, page.page_id), now=lambda: T1)
+        self.assertIn('没有注册写回逻辑', str(cm.exception))
+
 
 class SelectTest(unittest.TestCase):
     def test_priority_then_seeded_sample_keeps_order(self):

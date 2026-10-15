@@ -143,20 +143,32 @@ class Subject(object):
         self.warnings.append(msg)
 
     def commit(self):
-        """先落其它文件，最后落 run.json。返回改动过的文件（相对被测仓）。"""
+        """先落其它文件，最后落 run.json（中途失败时 run.json 仍是旧的，用同一回复码重试即可补齐）。
+        写进被测仓的内容都过 record.scrub_home（会入库）。返回改动过的文件（相对被测仓）。
+        落盘出 OSError 时清掉残片 .pending-tmp，抛 PendingError 并列出已写成的文件。"""
         changed = []
         run_json = self.run_dir / 'run.json'
+        self.rec = record.scrub_home(self.rec)
         self.staged[run_json] = json.dumps(self.rec, ensure_ascii=False, indent=2) + '\n'
         for p in sorted(self.staged, key=lambda x: x == run_json):
             text = self.staged[p]
-            if text is None:
-                if p.exists():
-                    p.unlink()
-            else:
-                p.parent.mkdir(parents=True, exist_ok=True)
-                tmp = p.with_name(p.name + '.pending-tmp')
-                tmp.write_text(text, encoding='utf-8')
-                os.replace(tmp, p)
+            tmp = p.with_name(p.name + '.pending-tmp')
+            try:
+                if text is None:
+                    if p.exists():
+                        p.unlink()
+                else:
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    tmp.write_text(record.scrub_home(text), encoding='utf-8')
+                    os.replace(tmp, p)
+            except OSError as e:
+                try:
+                    tmp.unlink()
+                except OSError:
+                    pass
+                self.staged = {}
+                raise PendingError('写 %s 失败：%s。已写成：%s；run.json 未更新，排除问题后用同一回复码重试' % (
+                    p.relative_to(self.repo).as_posix(), e, '、'.join(changed) or '无'))
             changed.append(p.relative_to(self.repo).as_posix())
         self.staged = {}
         return changed
@@ -308,11 +320,17 @@ def _find_run(data_dir, name, run_id, err=PendingError):
     repo, runs = _runs_dir(data_dir, name)
     if run_id is None:
         cands = sorted(d.name for d in runs.iterdir() if (d / 'run.json').is_file()) if runs.is_dir() else []
-        cands = [c for c in cands if _load_run(runs / c).get('kind') == 'compare']
+        recs = {}
+        for c in cands:
+            try:
+                recs[c] = _load_run(runs / c)
+            except PendingError as e:      # 坏的历史记录不挡别的运行；只有 --run 指定它时才报错
+                print('注意：跳过 %s' % e, file=sys.stderr)
+        cands = [c for c in cands if isinstance(recs.get(c), dict) and recs[c].get('kind') == 'compare']
         if not cands:
             raise NothingPending('%s 下没有离线对照的运行记录' % runs)
         # 跳过未结束的运行（锁被占用或检查点）：它们的 run.json 还会被改写
-        done = [c for c in cands if not resume.RunLock(data_dir, c).busy() and not _unfinished(_load_run(runs / c))]
+        done = [c for c in cands if not resume.RunLock(data_dir, c).busy() and not _unfinished(recs[c])]
         if not done:
             raise NothingPending('%s 下的离线对照都还没结束（进行中或中途退出待续跑）：%s' % (runs, '、'.join(cands)))
         run_id = done[-1]
@@ -371,7 +389,11 @@ def _generate(data_dir, name, repo, run_dir, now, types):
     collected = []
     by_key = types.as_dict()
     for t in types.all():
-        for it in t.collect(subject) or []:
+        try:
+            items = list(t.collect(subject) or [])
+        except Exception as ex:  # noqa: BLE001 —— 收集逻辑由各类型提供，出错时给出类型名，不打 traceback
+            raise PendingError('收集「%s」类待审项时出错（未改任何文件）：%s: %s' % (t.label, type(ex).__name__, ex))
+        for it in items:
             collected.append((t.key, it.id, it))
     if not collected:
         raise NothingPending('运行 %s 没有待判项（报告已审，其它类型也没有未裁定的项）' % run_id)
@@ -541,15 +563,16 @@ def _apply(repo, run_dir, code_run, page_id, decisions, now, types):
                          '请用最新生成的页重新选' % (page_id, pend.get('page_id')))
     if pend.get('applied_at'):
         raise ReplyError('这一页的回复码已在 %s 写回过，不重复写回；要改裁定请重新生成待审页' % pend['applied_at'])
-    items = {it['no']: it for it in pend.get('items') or []}
+    items = {it.get('no'): it for it in pend.get('items') or [] if isinstance(it, dict)}
     plan = []
     for no, opt in decisions:
         it = items.get(no)
         if it is None:
             raise ReplyError('回复码里的第 %d 项不在这一页上（本页 %d 项）' % (no, len(items)))
-        t = types.get(it['type'])
+        t = types.get(it.get('type')) if isinstance(it, dict) else None
         if t is None:
-            raise ReplyError('第 %d 项的类型 %r 没有注册写回逻辑' % (no, it['type']))
+            raise ReplyError('第 %d 项的类型 %r 没有注册写回逻辑（run.json 的 pending.items 可能被改坏）'
+                             % (no, it.get('type') if isinstance(it, dict) else it))
         if opt not in dict(t.options):
             raise ReplyError('第 %d 项（%s）没有选项 %s，可选：%s' % (
                 no, t.label, opt, '、'.join('%s=%s' % o for o in t.options)))
