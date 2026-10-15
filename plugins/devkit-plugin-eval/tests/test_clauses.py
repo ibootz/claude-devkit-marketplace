@@ -402,27 +402,45 @@ class LifecycleTest(unittest.TestCase):
         earlier = pending._earlier_with_items(self.data, self.repo, res.run_dir, pending._REGISTRY)
         self.assertIn(run_dir.name, [rid for rid, _ in earlier])
 
-    def test_rejected_pair_is_never_reused_even_if_another_run_has_it_pending(self):
-        """两次对照产出同一组（基线清单、新指纹）的提案：在其中一份上打回后，另一份未裁定的也不再复用。"""
+    def test_rejected_proposal_is_not_reused_via_a_run_that_copied_it(self):
+        """A 抽出提案 → B 沿用 A 的提案 → 在 B 的页上打回 → C 不再从 A 沿用（同一份提案已被打回），重新抽。"""
         self.extract_and_confirm()
         write(self.plugin / 'rules.txt', RULES + '3. 结论先行。\n')
         delta = {'added': [{'ref': 'N1', 'criterion': '回复先给结论', 'events': ['SessionStart']}],
                  'rewritten': [], 'retired': []}
-        first = self.compare(FakeAI(delta), 10)
-        # 构造：第二个运行独立抽出同一组提案（不复用第一份）
-        orig = clauses.find_reusable
-        clauses.find_reusable = lambda *a, **kw: None
-        try:
-            second = self.compare(FakeAI(delta), 11)
-        finally:
-            clauses.find_reusable = orig
-        p1 = self.page(first.run_dir.name)
-        self.reply(p1, ['%dB' % self.clause_no(p1)[0]])          # 在较早那份上打回
+        a = self.compare(FakeAI(delta), 10)
+        b = self.compare(FakeAI(), 11)
+        self.assertEqual(b.record['clause_check']['reused_from'], a.run_dir.name)
+        pb = self.page(b.run_dir.name)
+        self.reply(pb, ['%dB' % self.clause_no(pb)[0]])          # 在沿用方 B 的页上打回
+        self.assertIsNone(clauses.find_reusable(self.repo, 'demo-plugin', a.record['clause_check']['list_fingerprint'],
+                                                json.loads((a.run_dir / clauses.PROPOSAL_FILE).read_text(
+                                                    encoding='utf-8'))['new_injection_fingerprint']))
         ai = FakeAI(delta)
-        third = self.compare(ai, 12)
-        self.assertEqual(len(ai.calls), 1)                       # 不复用第二份（同一组已被打回），重新抽
-        self.assertIsNone(third.record['clause_check']['reused_from'])
-        self.assertNotEqual(second.run_dir, third.run_dir)
+        c = self.compare(ai, 12)
+        self.assertEqual(len(ai.calls), 1)                       # A 那份已随 B 一起作废，重新抽
+        self.assertIsNone(c.record['clause_check']['reused_from'])
+
+    def test_reextracted_proposal_after_reject_is_reused(self):
+        """R1 打回 → R2 重抽出新提案（待确认）→ R3 沿用 R2，不再调 AI；打回只作废被打回的那一份。"""
+        self.extract_and_confirm()
+        write(self.plugin / 'rules.txt', RULES + '3. 结论先行。\n')
+        delta = {'added': [{'ref': 'N1', 'criterion': '回复先给结论', 'events': ['SessionStart']}],
+                 'rewritten': [], 'retired': []}
+        r1 = self.compare(FakeAI(delta), 10)
+        p1 = self.page(r1.run_dir.name)
+        self.reply(p1, ['%dB' % self.clause_no(p1)[0]])
+        ai2 = FakeAI(delta)
+        r2 = self.compare(ai2, 11)
+        self.assertEqual(len(ai2.calls), 1)
+        self.assertIsNone(r2.record['clause_check']['reused_from'])
+        ai3 = FakeAI()
+        r3 = self.compare(ai3, 12)
+        self.assertEqual(ai3.calls, [])
+        self.assertEqual(r3.record['clause_check']['reused_from'], r2.run_dir.name)
+        prop = json.loads((r3.run_dir / clauses.PROPOSAL_FILE).read_text(encoding='utf-8'))
+        self.assertEqual(prop['created_in_run'], r2.run_dir.name)
+        self.assertEqual([x['id'] for x in prop['added']], ['C004'])
 
     def test_corrupt_list_does_not_abort_compare(self):
         self.extract_and_confirm()

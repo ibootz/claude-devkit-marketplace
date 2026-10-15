@@ -423,11 +423,12 @@ def _iso(dt):
 
 def find_reusable(repo, name, base_fp, new_fp, exclude=None):
     """最近一份还没裁定、基于同一份清单、指向同一个新指纹的提案所在运行目录；没有返回 None。
-    任一运行对同一组（基线清单指纹、新指纹）记过打回，就不再复用这一组的任何提案（打回 = 下次重抽）。"""
+    打回只作废被打回的那一份提案（按提案的 created_in_run 认份：沿用的运行抄的是同一份，created_in_run 不变）：
+    它和所有沿用它的运行都不再复用；打回之后重抽出的新提案照常可复用（打回 = 下次重抽一次，不是永久禁抽）。"""
     runs = evals_root(repo, name) / 'runs'
     if not runs.is_dir():
         return None
-    found = []
+    found, rejected = [], set()
     for d in sorted((p for p in runs.iterdir() if p.is_dir()), key=lambda p: p.name, reverse=True):
         if d.name == exclude or not (d / CHECK_FILE).is_file() or not (d / PROPOSAL_FILE).is_file():
             continue
@@ -439,11 +440,14 @@ def find_reusable(repo, name, base_fp, new_fp, exclude=None):
         if not isinstance(cc, dict) or not isinstance(prop, dict) \
                 or prop.get('base_list_fingerprint') != base_fp or prop.get('new_injection_fingerprint') != new_fp:
             continue
+        origin = prop.get('created_in_run') or d.name
         if (cc.get('decision') or {}).get('status') == STATUS_REJECTED or cc.get('status') == STATUS_REJECTED:
-            return None
-        found.append((d, cc))
-    for d, cc in found:
-        if cc.get('status') == STATUS_PENDING and not cc.get('decision') and (d / RUN_SNAPSHOT_FILE).is_file():
+            rejected.add(origin)
+            continue
+        found.append((d, cc, origin))
+    for d, cc, origin in found:
+        if origin not in rejected and cc.get('status') == STATUS_PENDING and not cc.get('decision') \
+                and (d / RUN_SNAPSHOT_FILE).is_file():
             return d
     return None
 
