@@ -30,8 +30,10 @@
 逐项确认：
 
 - **私有词为空时有提示**：每次运行 stderr 都有一行 `[from-review] ！！未配置私有词，只能靠会话推断与形态检测（…）`；摘要也有一行 `！！未配置私有词，只能靠会话推断与形态检测。可设环境变量 PLUGIN_EVAL_PRIVATE_TERMS（逗号分隔），或在数据目录下建 …/private-terms.txt（每行一个）`。
-- **草稿目录带 `.gitignore`**：写成的草稿 `review-agent-name-model-prefix-after-compact` 目录下有 `.gitignore`，内容是 2 字节的 `*\n`。摘要打出 `！！这些草稿由本机真实会话改写，通过前逐字审隐私。草稿目录里有内容为 * 的 .gitignore…`。
-- **git 看不到草稿**：临时克隆里跑 `git status --porcelain --untracked-files=all`，草稿目录下的文件一个都没列出。列出的只有复盘结果、条款清单和 drafts 运行目录的 `run.json` / `report.md`；这两个文件只记草稿目录名，不含草稿正文。
+- **草稿目录带 `.gitignore`**：写成的那份草稿目录下有 `.gitignore`，内容是 2 字节的 `*\n`。摘要打出 `！！这些草稿由本机真实会话改写，通过前逐字审隐私。草稿目录里有内容为 * 的 .gitignore…`。
+  - 当时目录名由 AI 起；集成审查 integ-C 应修 1 之后，目录名固定为 `review-<候选 id>`，本次即 `review-c-a3c987f89a77`。
+- **git 看不到草稿**：临时克隆里跑 `git status --porcelain --untracked-files=all`，草稿目录下的文件一个都没列出。列出的只有复盘结果、条款清单和 drafts 运行目录的 `run.json` / `report.md`。
+  - 当时这两个文件里有 AI 起的目录名，`run.json` 的待审项标题还带着 AI 写的意图。integ-C 应修 1 已改：这类草稿的标题只写 `review-<候选 id>` 加固定标签「复盘候选改写草稿」，意图只在已被 git 忽略的 `draft.json` 与待审页正文里。
 - **待审页有隐私行**：草稿页该项的事实栏有「隐私：由本机真实会话改写，通过前逐字审隐私（prompt、历史、grader、文件桩都要看）」。
 - **通过后标记不随搬**：AI 代选 `1A` 通过后，`plugins/devkit-discipline/evals/<草稿名>/` 里没有 `.gitignore` 和 `draft.json`。写回把草稿目录里的这两个文件列为删除；剩下的空目录在下次生成草稿页时清掉，这是原有行为。
 - **隐私检索**：对写成的草稿目录检索派发简报规定的词，另加家目录用户名、仓名、worktree 分支前缀和邮箱形态，结果 0 命中。检索用 `/usr/bin/grep`，先用确定存在的 `schema_version` 验证过能搜到 2 个文件。
@@ -48,11 +50,11 @@
 
 逐字重合的来源按片段类型排查过，排查脚本只打印片段类型、命中窗口数和少量 24 字窗口：
 
-- 工具输出里的 eval 用例 frontmatter（如 `timeout_seconds` / `allowed_tools` 一行）被照抄：B1 修复后按设计拒写。
+- 工具输出里的文件内容被照抄：B1 修复后按设计拒写。
 - 合成 compact 摘要照着 Claude Code 摘要的固定开头写（`This session is being continued from a previous conversation…`）：误拒。
-- hook 报错里的被测插件脚本路径（`hooks/guards/bash-guard.js`）：误拒。
+- hook 报错里的被测插件脚本路径（devkit-discipline 已提交的 hook 脚本，如 `hooks/guards/bash-guard.js`）：误拒。
 
-因此集成时追加了一项暂定口径（见票 13「C 批集成」一节）：重合窗口出现在 Claude Code 固定文案或被测插件自己的文本文件里时，不算逐字重合。补了单测 `test_public_text_exempt_from_overlap`。这项改动之后没有再真跑 from-review，避免再次读取真实会话。
+因此集成时追加了逐字重合豁免（见票 13「C 批集成」一节），补了单测 `test_public_text_exempt_from_overlap`。集成审查 integ-C 后收紧并定稿（2026-10-16 主会话复核）：重合部分整段落在被测插件已跟踪文件（HEAD 版本，不含 `plugin-evals/`、`evals/`）或 Claude Code 固定文案内时不算。豁免改动之后没有再真跑 from-review，避免再次读取真实会话。
 
 花费（标价估算）：13 次 AI 调用合计 $3.5710。
 

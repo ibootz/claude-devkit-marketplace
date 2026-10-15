@@ -193,7 +193,7 @@ Status: resolved
 **审查问题**
 
 - **B1** 逐字重合检查改为比对除 compact 边界标记外的全部片段：工具调用参数、工具输出、hook 报错、compact 摘要都比（`test_copy_from_tool_result_rejected`）。
-- **S1** 以下几处的取词门槛从 4 字降到 3 字：cwd 末段、`.claude` 前一段、家目录名、主机名与包名的标签。分支名仍是 ≥ 4 字。通用词表补了 api、app、web、cdn、svc、lib 等。≤ 3 字的私有词按整词匹配（`test_three_letter_terms`）。
+- **S1** 以下几处的取词门槛从 4 字降到 3 字：cwd 末段、`.claude` 前一段、家目录名、主机名与包名的标签。分支名仍是 ≥ 4 字。通用词表补了 api、app、web、cdn、svc、lib 等。≤ 3 字的私有词按整词匹配（`test_three_letter_terms`）。integ-C 修订后：cwd 改取家目录以下全部非通用段，整词匹配只用于会话推断词，见本节末「集成审查 integ-C 修订」。
 - **S2 / 定稿 2** 私有词有两个入口，取并集：环境变量 `PLUGIN_EVAL_PRIVATE_TERMS`，与数据目录下的 `private-terms.txt`（每行一个或逗号分隔，`#` 起注释）。两处都为空时，stderr 与摘要各打一行「未配置私有词，只能靠会话推断与形态检测」（`test_private_terms_file_and_env_union`、`test_no_terms_warns_on_stderr_and_summary`）。
 - **S3 / 定稿 1** 改写出的草稿目录里放内容为 `*` 的 `.gitignore`。草稿待审页通过时，`draft.json` 与这个文件只删不搬。`drafts` 认标记的规则：草稿目录顶层、内容恰为 `*` 的 `.gitignore`，这个文件也不算进用例正文。输出与待审页都写「由本机真实会话改写，通过前逐字审隐私」（`test_draft_dir_gitignored_and_mark_dropped_on_approve`，单测里 `git init` 后查 `git status`）。
 - **S4** 跨日期沿用的 conversion 从只认 `drafted` 改为认 `drafted` 与 `skipped`，`void` 不沿用（`test_skipped_carried_across_dates_void_not`）。
@@ -206,31 +206,48 @@ Status: resolved
 - **L7** spec 第四节已登记，见「devkit-plugin-eval 0.5.0 起」一条。
 - **L2、L4、L6** 已写进上面的「已知缺口」第 5～7 条。
 
-**集成时另定（暂定口径，待主会话复核）**
+**集成时另定（已定（2026-10-16 主会话复核））**
+
+集成时这四条先按暂定口径实现；集成审查（integ-C）后主会话复核，按下面的调整定稿。
 
 1. **逐字重合的豁免语料**（用户可见：拒写的少了）
    - 现象：真跑时 13 次改写有 8 次因逐字重合被拒（见 [demo-integ-C](../demo-integ-C/README.md)）。按片段类型排查，有两类是误拒：
      - AI 写合成 compact 摘要时，照抄了 Claude Code 摘要的固定开头；
      - hook 报错里有被测插件自己的脚本路径。
-   - 选了：重合窗口出现在豁免语料里就不算。豁免语料是 Claude Code 固定文案 `CC_BOILERPLATE`（目前只有 compact 摘要开头那一句），加被测插件目录下除 `evals/` 外的文本文件，上限 200 万字。只对命中的窗口查豁免语料，不影响速度（`test_public_text_exempt_from_overlap`）。
+   - 定稿：重合部分整段落在被测插件已跟踪文件或 Claude Code 固定文案内时不算。判法：逐个 24 字窗口判，任一与原文重合的窗口不在豁免语料里就算命中；公开前缀接私有后缀整段照抄照样拒写。
+   - 豁免语料：Claude Code 固定文案 `CC_BOILERPLATE`（目前只有 compact 摘要开头那一句），加被测插件目录下 `git ls-files` 跟踪的文本文件的 HEAD 版本，上限 200 万字。显式排除 `plugin-evals/` 与 `evals/`。插件目录不在 git 仓里时不做插件文件豁免，只剩固定文案。未跟踪、被 git 忽略的文件、工作区未提交的改动都不算。
    - 备选：不豁免，靠改写提示词劝 AI 别抄。
-   - 理由：这些文字本来就在被测仓或 Claude Code 里，照抄不泄露。工具输出里别的内容照旧拒写。
+   - 理由：已提交的文字本来就在被测仓的提交里，Claude Code 固定文案人人可见，照抄不新增泄露。工具输出里别的内容照旧拒写。
    - 这项改动之后没有再真跑 from-review，避免再次读取真实会话。
-2. **3 字私有词按整词匹配**（不可见）：前后都不是字母或数字才算命中，`abc` 不误中 `abcd`。更长的词仍按子串匹配。
-3. **私有词表文件名与格式**（可见）：`<数据目录>/private-terms.txt`，UTF-8 编码，每行一个或逗号分隔，`#` 起注释，不区分大小写。读不了时按空表处理。
+2. **3 字私有词按整词匹配，仅限会话推断词**（不可见）：从会话推断出的 ≤ 3 字词，前后都不是字母或数字才算命中，`abc` 不误中 `abcd`；更长的推断词按子串匹配。用户自配的词一律按子串匹配、不区分大小写，`abc` 命中 `AbcApiClient`、`ABC2024`。
+3. **私有词表文件名与格式**（可见）：`<数据目录>/private-terms.txt`，UTF-8 编码（带不带 BOM 都行，按 `utf-8-sig` 读），每行一个或逗号分隔，`#` 起注释，不区分大小写。读不了时按空表处理。
 4. **compare 只在完整时打印下一步**（可见，票 16 CLI 缺口 1）：不完整时只给续跑命令，续跑成功后会自动出页。
 
 **已知缺口（集成后新增）**
 
 8. `invalid spec` 只记问题个数。真跑时同一候选两次结构不合格，用户和 AI 都看不到是哪条不合格。后续可以把 `validate_spec` 的结构问题打到 stderr，这些问题只涉及字段名和 grader 名。
-9. drafts 运行目录的 `run.json` 与 `report.md` 会记改写草稿的目录名。目录名由 AI 起，已过隐私自检，但会随被测仓入库。
+9. ~~drafts 运行目录的 `run.json` 与 `report.md` 会记改写草稿的目录名。~~ 已修（integ-C 应修 1）：目录名固定为 `review-<候选 id>`，不再由 AI 起；这类草稿在 run.json、report.md、复盘结果里的标题只写目录名加固定标签「复盘候选改写草稿」，AI 写的 intent 只留在已被 git 忽略的 draft.json 与待审页正文里。
 
 **真实验证**：见 [demo-integ-C](../demo-integ-C/README.md) 第 2、3 节，from-review 与 compact 回放 compare 各真跑过。
 
 **留给票 17 的接口（集成后变化）**
 
-- `candidate_drafts.privacy_findings(texts, private_terms=, source_texts=, public=)`：新增 `public`，即豁免语料，由 `candidate_drafts.public_text(plugin_dir)` 取得。
+- `candidate_drafts.privacy_findings(texts, private_terms=, user_terms=, source_texts=, public=)`：`private_terms` 是会话推断词（短词整词匹配），`user_terms` 是用户自配词（一律子串匹配）；`public` 是豁免语料，由 `candidate_drafts.public_text(plugin_dir)` 取得（只含 git 已跟踪文件的 HEAD 版本，见 `candidate_drafts.tracked_files`）。
+- `candidate_drafts.draft_name(candidate_id)`：复盘候选草稿的目录名 `review-<候选 id>`；`drafts.REVIEW_SOURCE`、`drafts.REVIEW_LABEL` 是这类草稿的来源值与标题固定标签。
 - `candidate_drafts.configured_terms(env, data_dir)`：返回两个入口取并集后的私有词。
 - `candidate_drafts.run(...)` 的摘要新增 `private_terms_configured`、`injection_checked`。
 - `replay.existing_compact(..., skip_rejected_for=)`：传点名的条款时，跳过挂着这些条款且已打回的回放草稿。
 - `resume.pending_hint(data_dir, name, run_id)`：返回 compare 收尾那行下一步命令。
+
+**集成审查 integ-C 修订（2026-10-16，同一集成分支另起提交，版本仍为 0.5.0）**
+
+审查结论「修后合并」，应修 1–6 合 main 前修完。单测都在 `test_candidate_drafts.py`。
+
+- **应修 1** from-review 草稿目录名固定为 `review-<候选 id>`，改写 schema 不再要 AI 给 slug。`drafts._collect` 对 `source=review-candidate` 的草稿，标题只写目录名加「复盘候选改写草稿」，不带 intent。intent 只在 draft.json（目录里有 `*` 型 `.gitignore`）与待审页正文（数据目录下，不入库）里。已知缺口 9 改为已修（`IntegCFixTest.test_review_draft_named_by_candidate_id_no_intent_in_runs_reviews`：断言 `runs/`、`reviews/` 下出页后、打回后都没有 intent 原文与 AI 起的 slug）。
+- **应修 2** 豁免语料改由 `tracked_files` 取：`git ls-files` 跟踪的文件，经 `git cat-file --batch` 读 HEAD 版本；显式排除 `plugin-evals/` 与 `evals/`；插件目录不在 git 仓里时只剩固定文案（`test_public_corpus_only_tracked_head_files`：仓根插件的草稿区即使被强行提交也不算、`evals/`、被 git 忽略的文件、未跟踪文件、工作区未提交的改动都不豁免；不在 git 仓里的插件只有固定文案）。原 `test_public_text_exempt_from_overlap` 改为先提交再取语料。
+- **应修 3** `private-terms.txt` 改用 `utf-8-sig` 读（`test_private_terms_file_with_bom`）。
+- **应修 4** `_path_terms` 取家目录以下的全部非通用段：认 macOS 与 Linux 的用户目录（首段为 Users 或 home，第二段是用户名）、Windows 的 `<盘>:\Users\<名>`、本机家目录；都不是时整条路径都算；`.` 开头的段不取（`test_path_terms_all_segments_below_home`：`/home/dev/work/acmecorp/billing-svc` 取到 `acmecorp`）。
+- **应修 5** `privacy_findings` 分开两类词：`private_terms`（会话推断，≤ 3 字整词匹配）与 `user_terms`（用户自配，一律子串、不分大小写）；`convert_one` 分开传（`test_user_terms_match_as_substring`：`AbcApiClient`、`ABC2024` 命中，整条流程拒写；`test_three_letter_terms` 改为断言推断词 `abc` 不命中 `abcd`、`AbcApiClient`）。
+- **应修 6** 豁免判法代码不变，补守护单测（`test_public_prefix_with_private_suffix_rejected`：已提交的公开句接不足 24 字的私有尾巴、接长私有句，整段照抄都拒写；只抄公开句不拒）。
+- **一并做**：README 第六节豁免口径改为「重合部分整段落在被测插件已跟踪文件或 Claude Code 固定文案内时不算」，词表格式补 BOM 与子串匹配，补目录名与 intent 去向；`drafts --model` 帮助文字补 compact 与 from-review；`host_terms` 把 `.internal`、`.corp`、`.local`、`.lan`、`.intra` 当作后缀，通用词补 env、config、settings，免得 `.env.local` 一类文件名被取词（`test_intranet_host_suffixes`）；改写时 `taken` 加上 `evals/` 下已有目录名，同名时通过不了；demo-integ-C 去掉由真实会话改写出的目录名。
+- 暂定口径四条按上面调整后标为已定（2026-10-16 主会话复核），spec Comments「C 批集成定稿」一节同步。

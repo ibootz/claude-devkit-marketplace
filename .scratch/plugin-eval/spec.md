@@ -387,8 +387,9 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
     - `clause_hint`、`exported_from`：只出现在本仓入库的 3 个演示草稿（`plugin-evals/devkit-discipline/drafts/compact-*`）里，前者记 demo-10 清单里的条款号，后者记出处。
   - **复盘改写草稿目录的 `.gitignore`**：内容 `*`，整个草稿目录不进 `git status`；待审页通过、移进 `evals/` 时与 `draft.json` 一起删掉、不随搬。drafts 的识别规则：只认草稿目录顶层、内容恰为 `*` 的 `.gitignore`。
   - **`reviews/<日期>.json` 的 `candidates[].conversion`**：`{status, code?, draft?, clauses?, findings?, problems?, at}`。`status` 取 `drafted` / `void` / `skipped`（终态）与 `privacy-rejected` / `invalid` / `error`（下次 `from-review` 重试）。`void` 的 `code` 取 `past-retention` / `file-gone` / `record-gone` / `no-pointer`；`skipped` 只记枚举码；`findings` 只记命中类别与个数。同一天重跑带上 conversion；跨日期只沿用 `drafted` 与 `skipped`，`void` 不沿用。
-  - **私有词**：环境变量 `PLUGIN_EVAL_PRIVATE_TERMS`（逗号分隔）与数据目录下的 `private-terms.txt`（每行一个或逗号分隔，`#` 起注释）取并集，不区分大小写；≤ 3 字的按整词匹配。两处都为空时，`from-review` 在 stderr 与摘要各打一行「未配置私有词，只能靠会话推断与形态检测」。
-  - **`from-review` 隐私自检**：路径与邮箱形态、会话推断的私有词（cwd 各段与主机名、包名标签 ≥ 3 字，分支名 ≥ 4 字，通用词除外）、用户私有词、与原文片段（除 compact 边界标记外的全部片段，含工具输出）去空白后逐字重合 ≥ 24 字。重合窗口出现在 Claude Code 固定文案或被测插件自己的文本文件里的不算（暂定口径，见票 13）。输出与待审页写明「由本机真实会话改写，通过前逐字审隐私」。
+  - **私有词**：环境变量 `PLUGIN_EVAL_PRIVATE_TERMS`（逗号分隔）与数据目录下的 `private-terms.txt`（UTF-8，可带 BOM；每行一个或逗号分隔，`#` 起注释）取并集，一律子串匹配、不区分大小写。两处都为空时，`from-review` 在 stderr 与摘要各打一行「未配置私有词，只能靠会话推断与形态检测」。
+  - **`from-review` 隐私自检**：路径与邮箱形态、会话推断的私有词（cwd 在家目录以下的各段与主机名、包名标签 ≥ 3 字，分支名 ≥ 4 字，通用词除外；其中 ≤ 3 字的按整词匹配）、用户私有词、与原文片段（除 compact 边界标记外的全部片段，含工具输出）去空白后逐字重合 ≥ 24 字。重合部分整段落在被测插件已跟踪文件（HEAD 版本，不含 `plugin-evals/`、`evals/`）或 Claude Code 固定文案内时不算（已定，见票 13）。输出与待审页写明「由本机真实会话改写，通过前逐字审隐私」。
+  - **复盘改写草稿的目录名**：固定为 `review-<候选 id>`；`kind=drafts` 运行的 `pending.items[].title` 对这类草稿只写目录名加「复盘候选改写草稿」，不带 intent。
 
 ## 不做的
 
@@ -488,4 +489,9 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
   4. `drafts compact --clauses Cxxx` 点名时，已打回的回放草稿不算覆盖、可重写；不点名时仍算覆盖。与 B 批定稿第 3 条一致。
   5. run-eval 覆盖面保持合并：对照、复盘、闸门、起草、基线、首次抽条款都归 run-eval，整个插件仍只有两个 skill。理由：没有 skill 加载时 AI 拿不到 CLI 路径；票 17 也要求由 skill 引导走到复盘与闸门。
   6. 两票其余自报暂定口径（13 的 11 条、16 的 8 条）里审查判「合理」的照现状保留；13 的第 2、10 条按本节第 4、3 条改写。票内标题改为「已定（2026-10-16 主会话复核）」。
-  - 集成时另定（暂定，待主会话复核，明细见票 13「C 批集成」一节）：逐字重合检查豁免 Claude Code 固定文案与被测插件自己的文本文件；compare 只在完整时打印下一步命令。
+  - 集成时另定四条，集成审查（integ-C）后调整，已定（2026-10-16 主会话复核），明细见票 13「C 批集成」一节：
+    1. 逐字重合豁免：重合部分整段落在被测插件已跟踪文件或 Claude Code 固定文案内时不算。逐个 24 字窗口判，任一与原文重合的窗口不在豁免语料里就算命中。豁免语料只取 `git ls-files` 跟踪的文件、读 HEAD 版本，显式排除 `plugin-evals/` 与 `evals/`；插件目录不在 git 仓里时不做插件文件豁免。
+    2. ≤ 3 字整词匹配只用于从会话推断出的私有词；用户自配的私有词一律子串匹配、不区分大小写。
+    3. `private-terms.txt`：UTF-8（按 `utf-8-sig` 读，带 BOM 也行），每行一个或逗号分隔，`#` 起注释，不区分大小写，读不了按空表。
+    4. compare 只在运行完整时打印下一步命令；不完整时只给续跑命令。
+  - 集成审查 integ-C 另两条应修：复盘改写草稿目录名固定为 `review-<候选 id>`，run.json、report.md、复盘结果里只出现目录名与固定标签，AI 写的 intent 只在 draft.json 与待审页正文；cwd 取词改为家目录以下的全部非通用段。

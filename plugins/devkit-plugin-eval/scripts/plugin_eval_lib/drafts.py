@@ -34,6 +34,8 @@ DRAFT_PRIORITY = 300          # 分歧样本 10 > 抽检 20 > 用例草稿 300 >
 STATUS_OPEN = 'open'
 STATUS_REJECTED = 'rejected'
 SOURCES = ('ai', 'history', 'rehang', 'review-candidate', 'compact-replay')
+REVIEW_SOURCE = 'review-candidate'      # 由本机真实会话改写的草稿（candidate_drafts）
+REVIEW_LABEL = '复盘候选改写草稿'        # 这类草稿在 run.json、report.md、待审项标题里的固定标签，意图只在待审页正文
 # 类别 → 用例 tags 里的类别标记。纪律、文风、诱导三类要挂条款 id；skill / agent 类按 skill:<名> / agent:<名> 归属
 CATEGORIES = ('discipline', 'style', 'style-scenario', 'induced', 'skill-trigger', 'skill-no-trigger',
               'agent-dispatch', 'agent-no-dispatch', 'agent-follow', 'compact-replay', 'review-replay')
@@ -491,7 +493,10 @@ def _collect(subject, key):
             facts.append(('隐私', '由本机真实会话改写，通过前逐字审隐私（prompt、历史、grader、文件桩都要看）'))
             if meta.get('injection_checked') is False:
                 facts.append(('注入核对', '未做注入核对：改写时取不到被测插件的注入文字，看历史里有没有插件规矩原文'))
-        title = '%s：%s' % (b['case'], meta.get('intent') or meta.get('clause_intent') or meta.get('category') or '')
+        if meta.get('source') == REVIEW_SOURCE:      # 标题进 run.json：不带 AI 由真实会话改写出的 intent（审查 integ-C 应修 1）
+            title = '%s：%s' % (b['case'], REVIEW_LABEL)
+        else:
+            title = '%s：%s' % (b['case'], meta.get('intent') or meta.get('clause_intent') or meta.get('category') or '')
         out.append(pending.PendingItem(id='%s:%s' % (key, b['case']), title=title[:160], body=_case_body(d),
                                        facts=tuple(facts), payload={'case': b['case']}))
     return out
@@ -609,7 +614,7 @@ def add_parser(sub):
                                       'from-review 把复盘里选了「转草稿」的候选由 AI 改写成合成用例')
     p.add_argument('action', choices=('write', 'page', 'list', 'sync', 'compact', 'from-review'))
     p.add_argument('name')
-    p.add_argument('--model', help='write：起草用的模型，缺省 %s' % 'claude-fable-5-1')
+    p.add_argument('--model', help='write / compact / from-review：起草或改写用的模型，缺省 %s' % 'claude-fable-5-1')
     p.add_argument('--limit', type=int, default=20, help='write：本次最多起草几个目标（条款 / skill / agent 的缺口），默认 20；'
                         'compact：本次最多生成几个，另受每插件合计 ≤3 的上限约束')
     p.add_argument('--clauses', help='write / compact：只起草这些条款，逗号分隔，如 C001,C007（含之前判为离线评不了的）；'

@@ -16,17 +16,21 @@
 
 草稿防误提交（C 批定稿 1）：每个改写出的草稿目录里放一个内容为 `*` 的 `.gitignore`（GITIGNORE_MARK），整个目录不进
 git status；待审页通过、移进 evals/ 时这个文件不随搬（drafts._apply_draft）。输出与待审页都写明 PRIVACY_NOTE。
+草稿目录名固定为 `review-<候选 id>`，不用 AI 起的名字；AI 写的 intent 只进已被忽略的 draft.json 与待审页正文，
+run.json、report.md、复盘结果里只出现目录名（审查 integ-C 应修 1）。
 
 隐私自检（写盘前，对将写盘的每段文字）：
   - 路径形态（家目录、`/Users|home/`、Windows 用户目录、`~/`）与邮箱形态（`example.invalid` 除外）；
-  - 从这次会话本身取出的私有词：工作目录的项目名、家目录用户名、git 分支名、出现过的主机名与包名里的非通用段
-    （cwd 各段与主机名、包名的标签 ≥ MIN_TERM 字即取，通用段见 _GENERIC）；
+  - 从这次会话本身取出的私有词：家目录用户名、cwd 在家目录以下的全部段（不在家目录下时取全部段）、git 分支名、
+    出现过的主机名与包名里的非通用段（≥ MIN_TERM 字即取，通用段见 _GENERIC，`.` 开头的段不取）；
   - 用户自配的私有词，两个入口取并集（C 批定稿 2；词表都不进任何仓库）：环境变量 PLUGIN_EVAL_PRIVATE_TERMS（逗号分隔），
-    与用户级数据目录下的 PRIVATE_TERMS_FILE（每行一个或逗号分隔，`#` 起注释）；不区分大小写。都为空时 stderr 与摘要各提示一行；
+    与用户级数据目录下的 PRIVATE_TERMS_FILE（UTF-8，可带 BOM；每行一个或逗号分隔，`#` 起注释）。都为空时 stderr 与摘要各提示一行；
   - 与原文片段（除 compact 边界标记外的全部片段：用户与助手的话、工具调用参数、工具输出、hook 报错、compact 摘要）
-    去空白后逐字重合 ≥ OVERLAP_CHARS 字；重合窗口出现在豁免语料里的不算（public_text：Claude Code 固定文案
-    CC_BOILERPLATE 与被测插件自己的文本文件，C 批集成真跑后补，暂定口径）。
-私有词 ≤ MIN_TERM 字的按整词匹配（前后不是字母数字），更长的按子串匹配。任一命中整条不写。
+    去空白后逐字重合 ≥ OVERLAP_CHARS 字。豁免：重合部分整段落在豁免语料内时不算——逐个 OVERLAP_CHARS 字窗口判，
+    任一与原文重合的窗口不在豁免语料里就算命中。豁免语料（public_text）= Claude Code 固定文案 CC_BOILERPLATE，
+    加被测插件目录下 git 已跟踪文件的 HEAD 版本（排除 plugin-evals/ 与 evals/；插件目录不在 git 仓里时只有固定文案）。
+匹配私有词一律不区分大小写。用户自配的词按子串匹配（AbcApiClient、ABC2024 都命中 abc）；从会话推断出的词 ≤ MIN_TERM 字的
+按整词匹配（前后不是字母数字），更长的按子串匹配。任一命中整条不写。
 改写出的合成历史另查与被测插件注入文字的重合（replay.injection_hits），命中也不写；取不到注入文字时照常写，
 draft.json 记 injection_checked=false，待审页事实栏写明「未做注入核对」。
 """
@@ -34,6 +38,8 @@ import copy
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -41,7 +47,7 @@ from pathlib import Path
 from . import casefiles, clauses, drafts, pending, preflight, record, registry, replay, review
 from . import review_pending  # noqa: F401  （注册复盘待审项类型；find_review 也在里面）
 
-SOURCE = 'review-candidate'
+SOURCE = drafts.REVIEW_SOURCE
 CATEGORY = 'review-replay'
 TAG = 'review-replay'
 TERMINAL = ('drafted', 'void', 'skipped')
@@ -60,11 +66,13 @@ CC_BOILERPLATE = ('This session is being continued from a previous conversation 
                   'The summary below covers the earlier portion of the conversation.',)
 PUBLIC_SUFFIXES = ('.js', '.mjs', '.cjs', '.py', '.sh', '.md', '.json', '.txt', '.yaml', '.yml')
 PUBLIC_LIMIT = 2000000      # 豁免语料读被测插件文件的总字数上限
+PUBLIC_EXCLUDE = ('plugin-evals', 'evals')     # 豁免语料不读的目录：草稿区、评测用例（可能含真实会话改写的文字）
 SKIP_CODES = ('not-reproducible-offline', 'needs-write-tools', 'needs-user-reply', 'not-plugin-behavior',
               'cannot-anonymize')
 _EMAIL_RE = re.compile(r'[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)')
 _HOST_RE = re.compile(r'\b[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+){1,6}\b')
-_TLDS = {'com', 'cn', 'net', 'org', 'io', 'dev', 'ai', 'app', 'co', 'cc', 'me', 'info', 'biz', 'edu', 'gov'}
+_TLDS = {'com', 'cn', 'net', 'org', 'io', 'dev', 'ai', 'app', 'co', 'cc', 'me', 'info', 'biz', 'edu', 'gov',
+         'internal', 'corp', 'local', 'lan', 'intra'}       # 后五个：内网主机名后缀
 _GENERIC = {'github', 'gitlab', 'google', 'anthropic', 'claude', 'example', 'localhost', 'npmjs', 'python', 'pypi',
             'apple', 'microsoft', 'openai', 'stackoverflow', 'mozilla', 'docs', 'www', 'http', 'https', 'mail',
             'main', 'master', 'develop', 'head', 'feature', 'release', 'test', 'tests', 'users', 'home', 'workspace',
@@ -75,7 +83,9 @@ _GENERIC = {'github', 'gitlab', 'google', 'anthropic', 'claude', 'example', 'loc
             'css', 'git', 'svn', 'ssh', 'ftp', 'npm', 'pkg', 'cmd', 'out', 'log', 'logs', 'run', 'new', 'old', 'foo',
             'bar', 'baz', 'qux', 'raw', 'cli', 'sdk', 'dns', 'vpn', 'smtp', 'imap', 'static', 'assets', 'build',
             'dist', 'node', 'java', 'org', 'net', 'com', 'inc', 'prod', 'stage', 'staging', 'local', 'internal',
-            'intranet', 'volumes', 'library', 'desktop', 'documents', 'downloads', 'work', 'data', 'service'}
+            'intranet', 'volumes', 'library', 'desktop', 'documents', 'downloads', 'work', 'data', 'service',
+            # 内网后缀进 _TLDS 后补：.env.local、config.local 一类文件名的前段
+            'env', 'config', 'settings'}
 
 SYSTEM_PROMPT = ('你是 Claude Code 插件离线评测的用例改写者。你会读到一段真实会话的片段，把它改写成一个合成的离线用例：'
                  '保留「什么样的任务、什么样的动作触发了这个信号」，其余全部换成虚构内容。'
@@ -109,8 +119,9 @@ def _schema():
         'type': 'object', 'properties': {'role': {'type': 'string', 'enum': ['user', 'assistant']},
                                          'text': {'type': 'string'}}, 'required': ['role', 'text']}}
     case['properties']['compact_summary'] = {'type': 'string'}
-    case['required'] = ['slug', 'intent', 'prompt', 'graders']
+    case['required'] = ['intent', 'prompt', 'graders']
     case['properties'].pop('target', None)
+    case['properties'].pop('slug', None)        # 目录名固定为 review-<候选 id>，不让 AI 起
     s = copy.deepcopy(REWRITE_SCHEMA)
     s['properties']['case'] = case
     return s
@@ -255,21 +266,30 @@ def excerpt(recs, trigger_uuid):
     return {'items': kept, 'private': private}
 
 
+def _below_home(parts):
+    """cwd 各段 → (用户名或 None, 家目录以下的段)。认首段为 Users 或 home 的用户目录、<盘>: 下的 Users、本机家目录；
+    都不是时整条路径都算（/srv、/opt 下的项目同样可能带组织名）。"""
+    low = [p.lower() for p in parts]
+    if len(parts) >= 2 and low[0] in ('users', 'home'):
+        return parts[1], parts[2:]
+    if len(parts) >= 3 and re.match(r'^[a-z]:$', low[0]) and low[1] == 'users':
+        return parts[2], parts[3:]
+    home = [p for p in re.split(r'[/\\]+', os.path.expanduser('~')) if p]
+    if home and parts[:len(home)] == home:
+        return home[-1], parts[len(home):]
+    return None, parts
+
+
 def _path_terms(cwd):
+    """cwd 里的私有词：用户名与家目录以下的全部非通用段（审查 integ-C 应修 4：组织名常在中间段）。"""
     if not isinstance(cwd, str) or not cwd:
         return set()
-    parts = [p for p in re.split(r'[/\\]+', cwd) if p]
-    out = set()
-    home = Path(os.path.expanduser('~')).name
-    if home and len(home) >= 3:
-        out.add(home)
-    if parts:
-        out.add(parts[-1])
-    if '.claude' in parts:           # worktree：.claude/worktrees/<名> 前一段才是项目名
-        i = parts.index('.claude')
-        if i > 0:
-            out.add(parts[i - 1])
-    return {x for x in out if len(x) >= MIN_TERM and x.lower() not in _GENERIC}
+    user, rest = _below_home([p for p in re.split(r'[/\\]+', cwd) if p])
+    out = set(rest)
+    for u in (user, Path(os.path.expanduser('~')).name):
+        if u:
+            out.add(u)
+    return {x for x in out if len(x) >= MIN_TERM and not x.startswith('.') and x.lower() not in _GENERIC}
 
 
 def host_terms(text):
@@ -296,7 +316,7 @@ def configured_terms(env=None, data_dir=None):
     f = Path(data_dir) / PRIVATE_TERMS_FILE if data_dir is not None else None
     if f is not None and f.is_file():
         try:
-            text = f.read_text(encoding='utf-8')
+            text = f.read_text(encoding='utf-8-sig')       # 记事本存的 UTF-8 带 BOM，不去掉首个词就失效
         except (OSError, UnicodeDecodeError):
             text = ''
         for line in text.splitlines():
@@ -304,44 +324,94 @@ def configured_terms(env=None, data_dir=None):
     return out
 
 
-def _term_hit(term, low):
-    if len(term) <= MIN_TERM:          # 短词按整词匹配：abc 不误中 abcd 这类常见词
+def _term_hit(term, low, *, substring=False):
+    """low 已转小写。substring=True（用户自配的词）一律按子串；会话推断的短词按整词，免得 abc 误中 abcd 这类常见词。"""
+    if not substring and len(term) <= MIN_TERM:
         return re.search(r'(?<![a-z0-9])%s(?![a-z0-9])' % re.escape(term), low) is not None
     return term in low
 
 
-def public_text(plugin_dir):
-    """逐字重合检查的豁免语料（去空白）：Claude Code 自带的固定文案，加被测插件自己的文本文件。
-    这些文字本来就在被测仓或 Claude Code 里，片段里出现、草稿里照抄都不泄露（C 批集成真跑：compact 摘要的固定开头、
-    hook 报错里的插件脚本路径曾整条误拒）。"""
-    parts = list(CC_BOILERPLATE)
+def _git_out(git, cwd, args, data=None):
+    try:
+        r = subprocess.run([git, '-C', str(cwd)] + list(args), input=data, capture_output=True, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def tracked_files(plugin_dir, git=None):
+    """被测插件目录下 git 已跟踪文件的 HEAD 版本：[(插件内相对路径, 文字)]。排除 PUBLIC_EXCLUDE 目录与非文本后缀；
+    插件目录不在 git 仓里、没有 git、没有 HEAD 时返回 []。"""
+    git = shutil.which('git') if git is None else git
     root = Path(plugin_dir) if plugin_dir else None
-    total = 0
-    if root is not None and root.is_dir():
-        for f in sorted(root.rglob('*')):
-            if total >= PUBLIC_LIMIT:
-                break
-            if not f.is_file() or f.suffix not in PUBLIC_SUFFIXES or 'evals' in f.relative_to(root).parts:
-                continue
-            try:
-                t = f.read_text(encoding='utf-8')
-            except (OSError, UnicodeDecodeError):
-                continue
-            parts += [t, f.relative_to(root).as_posix()]
-            total += len(t)
+    if not git or root is None or not root.is_dir():
+        return []
+    top = _git_out(git, root, ['rev-parse', '--show-toplevel'])
+    prefix = _git_out(git, root, ['rev-parse', '--show-prefix'])
+    listed = _git_out(git, root, ['ls-files', '-z', '--full-name', '--', '.'])
+    if not top or prefix is None or listed is None:
+        return []
+    prefix = prefix.decode('utf-8', 'replace').strip()
+    paths = []
+    for raw in listed.split(b'\0'):
+        p = raw.decode('utf-8', 'replace')
+        if not p or '\n' in p or not p.startswith(prefix):
+            continue
+        parts = p.split('/')
+        if any(x in PUBLIC_EXCLUDE for x in parts) or not p.endswith(PUBLIC_SUFFIXES):
+            continue
+        paths.append(p)
+    if not paths:
+        return []
+    out = _git_out(git, top.decode('utf-8', 'replace').strip(), ['cat-file', '--batch'],
+                   data=''.join('HEAD:%s\n' % p for p in paths).encode('utf-8'))
+    if out is None:
+        return []
+    files, pos, total = [], 0, 0
+    for p in paths:                     # --batch 按输入顺序逐个回：「<sha> blob <字节数>\n<内容>\n」或「<名> missing\n」
+        nl = out.find(b'\n', pos)
+        if nl < 0:
+            break
+        head = out[pos:nl].split()
+        pos = nl + 1
+        if len(head) != 3 or head[1] != b'blob':
+            continue                    # HEAD 里没有（只暂存未提交）
+        size = int(head[2])
+        body, pos = out[pos:pos + size], pos + size + 1
+        if total >= PUBLIC_LIMIT:
+            break
+        try:
+            text = body.decode('utf-8')
+        except UnicodeDecodeError:
+            continue
+        files.append((p[len(prefix):], text))
+        total += len(text)
+    return files
+
+
+def public_text(plugin_dir, git=None):
+    """逐字重合检查的豁免语料（去空白）：Claude Code 自带的固定文案，加被测插件 git 已跟踪文件的 HEAD 版本。
+    这些文字本来就在被测仓的提交里或 Claude Code 里，片段里出现、草稿里照抄都不新增泄露（C 批集成真跑：compact
+    摘要的固定开头、hook 报错里的插件脚本路径曾整条误拒）。未跟踪、被 git 忽略的本地文件，plugin-evals/ 与 evals/
+    下的草稿和用例（可能含真实会话改写的文字）都不算（审查 integ-C 应修 2）。"""
+    parts = list(CC_BOILERPLATE)
+    for rel, text in tracked_files(plugin_dir, git):
+        parts += [text, rel]
     return _norm('\n'.join(parts))
 
 
-def privacy_findings(texts, *, private_terms=(), source_texts=(), home=None, public=''):
+def privacy_findings(texts, *, private_terms=(), user_terms=(), source_texts=(), home=None, public=''):
     """将写盘的文字里命中的隐私类别与个数：{类别: 个数}。空 = 通过。不回命中原文。
-    public：去空白的豁免语料（public_text），出现在里面的重合窗口不算逐字重合。"""
+    private_terms：从会话推断的私有词（短词整词匹配）；user_terms：用户自配的私有词（一律子串匹配）。
+    public：去空白的豁免语料（public_text）。逐字重合按窗口判：任一与原文重合的窗口不在豁免语料里就算命中，
+    即重合部分整段落在豁免语料内才豁免。"""
     home = (home or os.path.expanduser('~')).rstrip('/')
     found = {}
 
     def hit(kind):
         found[kind] = found.get(kind, 0) + 1
 
-    terms = [t.lower() for t in private_terms if t]
+    terms = [(t.lower(), False) for t in private_terms if t] + [(t.lower(), True) for t in user_terms if t]
     windows = set()
     for s in source_texts:
         n = _norm(s)
@@ -364,8 +434,8 @@ def privacy_findings(texts, *, private_terms=(), source_texts=(), home=None, pub
             if not m.group(1).lower().endswith('example.invalid'):
                 hit('email')
         low = t.lower()
-        for term in terms:
-            if _term_hit(term, low):
+        for term, sub in terms:
+            if _term_hit(term, low, substring=sub):
                 hit('private-term')
         if windows:
             n = _norm(t)
@@ -438,6 +508,11 @@ def _history(case, slug, after_compact):
     return sid, recs
 
 
+def draft_name(candidate_id):
+    """复盘候选草稿的目录名：review-<候选 id>。候选 id 是 kind、rule 的哈希，不含 AI 写的文字。"""
+    return 'review-%s' % candidate_id
+
+
 def convert_one(cand, ex, *, repo, name, ai, model, active, review_date, private_terms, injection_text, now, taken,
                 public=''):
     """改写一个候选。返回 conversion dict（写回复盘结果）与 (花费, 调用次数)。只在全部检查通过后才写盘。"""
@@ -451,7 +526,7 @@ def convert_one(cand, ex, *, repo, name, ai, model, active, review_date, private
     case = obj.get('case') or {}
     active_ids = {c['id'] for c in active}
     cids = [c for c in obj.get('clause_ids') or [] if c in active_ids][:2]
-    slug = drafter._unique_slug('review-%s' % (case.get('slug') or cand.get('id')), taken)
+    slug = drafter._unique_slug(draft_name(cand.get('id')), taken)    # 不用 AI 起的 slug：目录名会进 run.json
     spec = drafter._spec(case, {'kind': 'clause', 'clause': cids[0] if cids else None}, slug)   # tags 下一行整体改写
     spec['tags'] = [TAG] + cids
     sid, recs = _history(case, slug, cand.get('after_compact'))
@@ -478,7 +553,7 @@ def convert_one(cand, ex, *, repo, name, ai, model, active, review_date, private
     rendered = casefiles.render_case(spec)
     texts = list(rendered.values()) + list(rendered.keys()) + [json.dumps(meta_out, ensure_ascii=False)]
     sources = [v for k, v in ex['items'] if k != 'compact']      # 工具输出、hook 报错也比（审查 13 B1）
-    found = privacy_findings(texts, private_terms=set(private_terms) | ex['private'], source_texts=sources,
+    found = privacy_findings(texts, private_terms=ex['private'], user_terms=private_terms, source_texts=sources,
                              public=public)
     if found:
         return {'status': 'privacy-rejected', 'findings': dict(sorted(found.items())), 'at': at}, cost
@@ -487,8 +562,8 @@ def convert_one(cand, ex, *, repo, name, ai, model, active, review_date, private
     (dest / GITIGNORE_MARK).write_text('*\n', encoding='utf-8')     # 整个草稿目录不进 git status（C 批定稿 1）
     drafts.write_meta(dest, meta_out)
     left = casefiles.check_case_dir(dest)
-    found = privacy_findings(_case_texts(dest), private_terms=set(private_terms) | ex['private'], source_texts=sources,
-                             public=public)
+    found = privacy_findings(_case_texts(dest), private_terms=ex['private'], user_terms=private_terms,
+                             source_texts=sources, public=public)
     if left or found:
         import shutil
         shutil.rmtree(str(dest), ignore_errors=True)
@@ -545,6 +620,8 @@ def run(data_dir, name, *, date=None, ai, model, now=None, env=None, injection_t
     public = public_text(plugin_dir)
     root = drafts.drafts_root(repo, name)
     taken = {p.name for p in root.iterdir()} if root.is_dir() else set()
+    evals = Path(plugin_dir) / 'evals'
+    taken |= {p.name for p in evals.iterdir()} if evals.is_dir() else set()     # 同名已在 evals/ 时通过不了
     for cand in todo:
         cid = cand.get('id')
         if cid in have:

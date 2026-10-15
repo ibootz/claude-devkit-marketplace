@@ -270,7 +270,7 @@ class PrivacyTest(CandidateBase):
         self.assertNotIn('acme-billing', self.review_path.read_text(encoding='utf-8'))
 
     def test_example_invalid_email_allowed(self):
-        self.assertEqual(cd.privacy_findings(['联系 someone@example.invalid']), {})
+        self.assertEqual(cd.privacy_findings(['联系 someone' + '@' + 'example.invalid']), {})
 
     def test_host_terms_only_domains_and_packages(self):
         self.assertEqual(cd.host_terms('读 index.html 与 a.py'), set())
@@ -280,6 +280,24 @@ class PrivacyTest(CandidateBase):
 
 
 TOOL_OUTPUT = '对账脚本每月一号凌晨两点把上月全部订单汇总成一份对账单并推送到财务共享盘'
+
+
+def git_run(test, repo, *args):
+    import shutil
+    import subprocess
+    git = shutil.which('git')
+    if not git:
+        test.skipTest('没有 git')
+    return subprocess.run([git, '-C', str(repo), '-c', 'user.name=t', '-c', 'user.email=t' + '@' + 'example.invalid',
+                           '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null'] + list(args),
+                          capture_output=True, check=True).stdout
+
+
+def git_commit_all(test, repo):
+    if not (Path(repo) / '.git').exists():
+        git_run(test, repo, 'init', '-q')
+    git_run(test, repo, 'add', '-A')
+    git_run(test, repo, 'commit', '-q', '--allow-empty', '-m', 'snapshot')
 
 
 class BatchCFixTest(CandidateBase):
@@ -301,9 +319,10 @@ class BatchCFixTest(CandidateBase):
         self.assertEqual(self.drafts_written(), [])
 
     def test_public_text_exempt_from_overlap(self):
-        """集成真跑后补：片段里的 Claude Code 固定文案与被测插件自己的文字，草稿照抄不算逐字重合；别的工具输出照拒。"""
+        """集成真跑后补：片段里的 Claude Code 固定文案与被测插件已提交的文字，草稿照抄不算逐字重合；别的工具输出照拒。"""
         hook_msg = '这条命令被纪律守卫拦下：请改用子 shell 进入目录后再执行后续命令'
         write(self.plugin / 'hooks' / 'cd-guard.js', 'module.exports = %r;\n' % hook_msg)
+        git_commit_all(self, self.repo)
         recs = session_records(str(self.tmp / 'work' / 'acme-billing'))
         recs[2]['message']['content'][0]['content'] = hook_msg
         recs.append(dict(recs[0], uuid='s1', parentUuid='u2', isCompactSummary=True,
@@ -329,9 +348,49 @@ class BatchCFixTest(CandidateBase):
         self.assertEqual(cd.host_terms('调 api.example.com 与 cdn.web.app'), set())
         self.assertIn('abc', cd._path_terms('/opt/work/abc'))
         self.assertNotIn('lib', cd._path_terms('/opt/work/lib'))
-        # 3 字私有词按整词匹配：abc 命中「abc 的工具」，不命中 abcd
+        # 从会话推断出的 3 字词按整词匹配：abc 命中「abc 的工具」，不命中 abcd、AbcApiClient
         self.assertIn('private-term', cd.privacy_findings(['给 abc 的工具加参数'], private_terms={'abc'}))
         self.assertEqual(cd.privacy_findings(['abcd 是虚构项目'], private_terms={'abc'}), {})
+        self.assertEqual(cd.privacy_findings(['调 AbcApiClient'], private_terms={'abc'}), {})
+
+    def test_user_terms_match_as_substring(self):
+        """integ-C 应修 5：用户自配的词一律子串匹配、不分大小写，驼峰与带数字的写法也命中。"""
+        for text in ('调 AbcApiClient 拉数据', '看 ABC2024 年报', 'abcd 是虚构项目', '给 abc 的工具加参数'):
+            self.assertIn('private-term', cd.privacy_findings([text], user_terms={'abc'}), text)
+        self.assertIn('private-term', cd.privacy_findings(['调 AbcApiClient'], user_terms={'ABC'}))
+        self.write_review(candidate('c-aaaaaaaaaaaa'))
+        self.env[cd.PRIVATE_TERMS_ENV] = 'abc'
+        self.run_(FakeAI(rewrite(prompt='给 AbcApiClient 加一个按月拆分输出的参数，先看 src 目录')))
+        self.assertIn('private-term', self.conversions()['c-aaaaaaaaaaaa']['findings'])
+        self.assertEqual(self.drafts_written(), [])
+
+    def test_path_terms_all_segments_below_home(self):
+        """integ-C 应修 4：cwd 取家目录以下的全部非通用段，中间的组织名也取。"""
+        terms = cd._path_terms('/home/dev/work/acmecorp/billing-svc')
+        self.assertIn('acmecorp', terms)
+        self.assertIn('billing-svc', terms)
+        self.assertFalse({'home', 'work'} & terms)
+        terms = cd._path_terms('/'.join(['', 'Users', 'someone', 'Workspace', 'zephyrorg', 'ledger', '.claude',
+                                         'worktrees', 'agent-x1']))       # macOS 形态，拼出来免得隐私检索误报
+        self.assertTrue({'someone', 'zephyrorg', 'ledger', 'agent-x1'} <= terms, terms)
+        self.assertNotIn('.claude', terms)
+        self.assertIn('acmecorp', cd._path_terms('C:\\Users\\dev\\acmecorp\\app'))
+        self.assertIn('acmecorp', cd._path_terms('/srv/acmecorp/app'))         # 不在家目录下：整条都算
+
+    def test_private_terms_file_with_bom(self):
+        """integ-C 应修 3：词表文件带 UTF-8 BOM 时首个词照常生效。"""
+        (self.data / cd.PRIVATE_TERMS_FILE).write_bytes('\ufeffzephyrine\nquillon\n'.encode('utf-8'))
+        terms = cd.configured_terms({}, self.data)
+        self.assertEqual(terms, {'zephyrine', 'quillon'})
+        self.assertIn('private-term', cd.privacy_findings(['给 zephyrine 加参数'], user_terms=terms))
+
+    def test_intranet_host_suffixes(self):
+        """内网主机名后缀 .internal / .corp / .local / .lan / .intra 也取词。"""
+        got = cd.host_terms('连 build.acmecorp.internal、db.zephyr.corp、nas.quill.lan、wiki.ourteam.intra、'
+                            'pr.office.local')
+        self.assertTrue({'acmecorp', 'zephyr', 'quill', 'ourteam', 'office'} <= got, got)
+        self.assertFalse({'internal', 'corp', 'local', 'lan', 'intra'} & got)
+        self.assertEqual(cd.host_terms('改 .env.local 与 config.local'), set())
 
     def test_private_terms_file_and_env_union(self):
         """定稿 2：环境变量与数据目录词表取并集。"""
@@ -422,6 +481,93 @@ class BatchCFixTest(CandidateBase):
         self.run_(FakeAI(rewrite()))
         d2 = [x for x in self.drafts_written() if x.case != d.case][0]
         self.assertIs(d2.meta['injection_checked'], True)
+
+
+PUB = '这条命令被纪律守卫拦下请改用子壳进入目录之后再执行后续的命令'           # 被测插件已提交的文案（≥24 字）
+SECRETS = {'draft-area': '星河物流的结算中心每周三晚上把应收账款同步到总部的报表库里',
+           'evals-dir': '青石医疗的影像归档服务凌晨三点把前一天的检查报告压缩上传备份',
+           'ignored': '远帆教育的排课系统每学期开学前一周批量导入全部班级与教室信息',
+           'untracked': '云杉保险的核保引擎遇到高额保单时先转人工复核再出最终报价单',
+           'worktree-edit': '白鹭零售的会员积分每月一号清零前三天给全部会员推送提醒短信'}
+
+
+class IntegCFixTest(CandidateBase):
+    """C 批集成审查（integ-C）应修 1、2、6。"""
+
+    def test_review_draft_named_by_candidate_id_no_intent_in_runs_reviews(self):
+        """应修 1：目录名 review-<候选 id>；run.json、report.md、复盘结果里没有 AI 写的 intent 与 slug。"""
+        intent = '要看子目录时不发裸 cd'
+        self.write_review(candidate('c-aaaaaaaaaaaa'))
+        self.run_(FakeAI(rewrite()))
+        d = self.drafts_written()[0]
+        self.assertEqual(d.case, 'review-c-aaaaaaaaaaaa')
+        self.assertEqual(d.meta['intent'], intent)                    # intent 只在已被忽略的 draft.json 里
+        run_dir, page, _ = self.batch()
+        rec = json.loads((run_dir / 'run.json').read_text(encoding='utf-8'))
+        self.assertEqual(rec['pending']['items'][0]['title'], 'review-c-aaaaaaaaaaaa：%s' % drafts.REVIEW_LABEL)
+        self.assertIn(intent, Path(page.html_path).read_text(encoding='utf-8'))    # 待审页正文照常给人看
+
+        def leaked():
+            hits = []
+            for sub in ('runs', 'reviews'):
+                for p in (self.root / sub).rglob('*'):
+                    if p.is_file():
+                        t = p.read_text(encoding='utf-8', errors='replace')
+                        hits += ['%s:%s' % (p.name, w) for w in (intent, 'subdir-look') if w in t]
+            return hits
+        self.assertTrue((self.root / 'runs').is_dir() and (self.root / 'reviews').is_dir())
+        self.assertEqual(leaked(), [])
+        self.reply(page, ['1B'])                                      # 打回后这些文件照样不含
+        self.assertEqual(leaked(), [])
+
+    def secret_repo(self, root):
+        """仓根就是插件：已提交的 PUB，加五种不该进豁免语料的文字。"""
+        write(root / 'hooks' / 'guard.js', 'module.exports = %r;\n' % PUB)
+        write(root / 'notes.txt', '已提交的说明\n')
+        write(root / '.gitignore', 'notes.local.md\n')
+        write(root / 'plugin-evals' / 'p' / 'drafts' / 'review-x' / 'prompt.md', SECRETS['draft-area'])
+        write(root / 'evals' / 'case-a' / 'prompt.md', SECRETS['evals-dir'])
+        git_run(self, root, 'init', '-q')
+        git_run(self, root, 'add', '-A')
+        git_run(self, root, 'add', '-f', 'plugin-evals')             # 草稿区哪怕被强行提交也不算
+        git_run(self, root, 'commit', '-q', '-m', 'init')
+        write(root / 'notes.local.md', SECRETS['ignored'])
+        write(root / 'scratch.md', SECRETS['untracked'])
+        write(root / 'notes.txt', '已提交的说明\n' + SECRETS['worktree-edit'])     # 暂存未提交的改动：只读 HEAD 版本
+        git_run(self, root, 'add', 'notes.txt')
+
+    def test_public_corpus_only_tracked_head_files(self):
+        """应修 2：豁免语料只取 git 已跟踪文件的 HEAD 版本，排除 plugin-evals/、evals/；不在 git 仓里只有固定文案。"""
+        root = self.tmp / 'rootplugin'
+        self.secret_repo(root)
+        public = cd.public_text(root)
+        self.assertIn(cd._norm(PUB), public)
+        for kind, s in SECRETS.items():
+            self.assertNotIn(cd._norm(s), public, kind)
+            f = cd.privacy_findings(['照抄：' + s], source_texts=[s], public=public)
+            self.assertIn('verbatim-overlap', f, kind)
+        self.assertEqual(cd.privacy_findings(['照抄：' + PUB], source_texts=[PUB], public=public), {})
+        # 子目录里的插件同理：从子目录看也只取它自己的已跟踪文件
+        self.assertIn(cd._norm(PUB), cd.public_text(root / 'hooks'))
+        self.assertNotIn(cd._norm(SECRETS['ignored']), cd.public_text(root / 'hooks'))
+        # 不在 git 仓里：不做插件文件豁免
+        plain = self.tmp / 'plain-plugin'
+        write(plain / 'hooks' / 'guard.js', 'module.exports = %r;\n' % PUB)
+        self.assertEqual(cd.public_text(plain), cd._norm('\n'.join(cd.CC_BOILERPLATE)))
+
+    def test_public_prefix_with_private_suffix_rejected(self):
+        """应修 6：重合部分整段落在豁免语料内才豁免；公开前缀接私有后缀整段照抄必须拒写。"""
+        root = self.tmp / 'rootplugin'
+        self.secret_repo(root)
+        public = cd.public_text(root)
+        tail = '转给远帆教育排课组'                                     # 不足 24 字，只在跨界窗口里露出来
+        source = PUB + tail
+        self.assertEqual(cd.privacy_findings(['提示：' + PUB], source_texts=[source], public=public), {})
+        self.assertIn('verbatim-overlap', cd.privacy_findings(['提示：' + source], source_texts=[source],
+                                                              public=public))
+        long_tail = SECRETS['untracked']
+        self.assertIn('verbatim-overlap', cd.privacy_findings(['提示：' + PUB + long_tail],
+                                                              source_texts=[PUB + long_tail], public=public))
 
 
 class MappingReasonTest(unittest.TestCase):
