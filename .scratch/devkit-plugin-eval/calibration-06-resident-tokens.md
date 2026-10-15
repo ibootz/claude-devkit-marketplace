@@ -53,17 +53,19 @@
 
 ## 同一插件的复测（不是独立样本）
 
-票 06 的两次演示又对 devkit-discipline 4.1.0 跑了一遍。注入文字与校准点 1 相同，只能说明复测稳定，不能当样本外验证。
+票 06 的两次演示与集成端到端又对 devkit-discipline 4.1.0 跑了三遍。注入文字与校准点 1 相同，只能说明复测稳定，不能当样本外验证。
 
 | 演示 | 估算 | 实测首请求差（中位数） | 残差 |
 |---|---|---|---|
 | ok：SessionStart 4512 + UserPromptSubmit 1803 + skill 列表 215 | 6530 | 17001 − 10316 = 6685 | −2.3% |
 | broken：UserPromptSubmit 已弄坏，SessionStart 4515 + skill 列表 215 | 4730 | 15094 − 10410.5 = 4683.5 | +1.0% |
+| 集成端到端（当前版臂）：SessionStart 4510 + UserPromptSubmit 1802 + skill 列表 215 | 6527 | 17006 − 10398 = 6608 | −1.2% |
 
 仓内可核对：
 
 - `.scratch/devkit-plugin-eval/demo-06/ok/plugin-evals/devkit-discipline/runs/20261015T094409Z-4.1.0-compare/run.json` 的 `resident_tokens`；
-- `.scratch/devkit-plugin-eval/demo-06/broken/plugin-evals/devkit-discipline/runs/20261015T094410Z-4.1.0-compare/run.json` 的 `resident_tokens`。
+- `.scratch/devkit-plugin-eval/demo-06/broken/plugin-evals/devkit-discipline/runs/20261015T094410Z-4.1.0-compare/run.json` 的 `resident_tokens`；
+- `.scratch/devkit-plugin-eval/demo-integ/run.json` 的 `resident_tokens`。
 
 ## 没覆盖的
 
