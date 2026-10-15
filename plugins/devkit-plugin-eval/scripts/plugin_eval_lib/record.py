@@ -5,11 +5,33 @@ clause_list_fingerprint（条款清单，票 10）、judge_model / judge（AI �
 injection_check（注入到达核验，票 06）、resident_tokens（常驻 token，票 06）、preflight（前置检查，票 04）、
 arms.previous / arms.current_with_env（上一版与环境插件臂，票 05）。
 """
+import os
+import re
 from collections import Counter
+
+from .registry import TRUST_SCOPE
 
 SCHEMA_VERSION = 1
 ARM_ORDER = ('none', 'current', 'previous', 'current_with_env')
 REVIEW_PENDING = '待审'
+
+
+def scrub_home(obj, home=None):
+    """把字符串里的本机家目录前缀换成 ~（run.json / report.md 会入库，不留用户名）。只换完整路径段。"""
+    home = (home or os.path.expanduser('~')).rstrip('/')
+    if not home or home == '~':
+        return obj
+    pat = re.compile(re.escape(home) + r'(?=/|$|[^\w.-])')
+
+    def walk(o):
+        if isinstance(o, str):
+            return pat.sub('~', o)
+        if isinstance(o, list):
+            return [walk(x) for x in o]
+        if isinstance(o, dict):
+            return {k: walk(v) for k, v in o.items()}
+        return o
+    return walk(obj)
 
 
 def _uniq(values):
@@ -100,6 +122,8 @@ def render_report(rec):
         '',
         '> 状态：**%s**。待审报告不能作为改插件或发版的依据；用户审过后改为「已审」。' % rec['review']['status'],
         '',
+        '> 信任范围：%s' % TRUST_SCOPE,
+        '',
         '- 运行：`%s`，%s 至 %s（UTC）' % (rec['run_id'], rec['started_at'], rec['finished_at']),
         '- 插件内容指纹：`%s`' % p['fingerprint'],
         '- Claude Code：%s；主力模型：%s' % (rec['claude_code_version'], rec['main_model']),
@@ -131,6 +155,20 @@ def render_report(rec):
             name, _f(n and n.get('score')), _f(c and c.get('score')),
             _d(rec['delta']['cases'].get(name)), _runs(n), _runs(c)))
 
+    below = [n for n in rec['cases']
+             if (cur.get('cases', {}).get(n) or {}).get('score') is not None
+             and cur['cases'][n]['score'] < rec['threshold']]
+    if below:
+        lines += ['', '## 当前版未达 threshold 的用例', '',
+                  '「是否通过」要求当前版每个有分用例 ≥ threshold（%s）；下列用例没达到：' % rec['threshold'], '']
+        lines += ['- %s：%s' % (n, _f(cur['cases'][n]['score'])) for n in below]
+
+    unscored = [(a['label'], n) for _, a in arms for n, c in a.get('cases', {}).items() if c.get('no_scored_graders')]
+    if unscored:
+        lines += ['', '## 告警：没有可计分的 grader', '',
+                  '下列用例的 grader 全被剔除（with-only 或付费类型），得分为空，不进臂总分与差，也不参与「是否通过」：', '']
+        lines += ['- %s臂：%s' % (label, n) for label, n in unscored]
+
     excluded = {}
     for _, a in arms:
         for name, c in a.get('cases', {}).items():
@@ -138,8 +176,9 @@ def render_report(rec):
                 excluded.setdefault(name, {})[g] = why
     if excluded:
         lines += ['', '## 未计分的 grader', '',
-                  '`with-only` 标记在 `--ablation none` 下会被 eval 计入分数，本报告按用例级 '
-                  '`config.arm` 剔除；`llm` / `baseline` 等付费 grader 不在规则判分范围内，也剔除。', '']
+                  'with-only 的 grader 在 `--ablation none` 下会被 eval 计入分数，本报告照 eval 在 with-without '
+                  '模式下的判据剔除：显式 `arm: with-only`、未写 arm 的 `tool_used: Skill`、mock 全为插件 server 替身时'
+                  '未写 arm 的 mock_calls grader；`llm` / `baseline` 等付费 grader 不在规则判分范围内，也剔除。', '']
         for name in sorted(excluded):
             lines.append('- %s：%s' % (name, '、'.join('`%s`（%s）' % (g, why) for g, why in sorted(excluded[name].items()))))
 

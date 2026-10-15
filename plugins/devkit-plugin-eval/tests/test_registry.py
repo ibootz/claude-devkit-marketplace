@@ -72,8 +72,13 @@ class RegistryTest(unittest.TestCase):
     def test_lookup_unregistered_raises_with_register_hint(self):
         with self.assertRaises(registry.NotRegistered) as ctx:
             registry.lookup(self.data, 'demo-plugin')
-        self.assertIn('register', str(ctx.exception))
-        self.assertIn('demo-plugin', str(ctx.exception))
+        msg = str(ctx.exception)
+        self.assertIn('register', msg)
+        self.assertIn('demo-plugin', msg)
+        # 从源码仓跑时推不出数据目录，提示里的登记命令要带 --data-dir（且就是这次用的那个）
+        self.assertIn("--data-dir '%s'" % self.data, msg)
+        # 写明信任范围：登记后会以用户身份跑用例的 scaffold_script
+        self.assertIn('scaffold_script', msg)
 
     def test_plugin_dir_resolves(self):
         registry.register(self.data, 'demo-plugin', self.repo)

@@ -4,7 +4,7 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 
 ## 概述
 
-本市场包含 **20 个插件**（以两份市场清单为准），覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论、输出风格等场景。下面的编号清单只有 17 节——`devkit-clickable-paths`、`devkit-token-saver` 与 `devkit-ruanyf-style` 至今只登记在市场清单与目录树里，没有单独的介绍段落，属于既有遗漏。
+本市场包含 **21 个插件**（以两份市场清单为准），覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论、输出风格、插件评测等场景。下面的编号清单只有 17 节——`devkit-clickable-paths`、`devkit-token-saver` 与 `devkit-ruanyf-style` 至今只登记在市场清单与目录树里，没有单独的介绍段落，属于既有遗漏；`devkit-plugin-eval`（插件离线对照评测）尚在开发，介绍段落随它的使用说明一并补上。
 
 原 `devkit-git`、`devkit-dev`、`devkit-issue` 已从市场移除，不再作为独立插件提供。
 
@@ -394,7 +394,8 @@ claude-devkit-marketplace/
 │   ├── devkit-readable-citations/
 │   ├── devkit-token-saver/
 │   ├── devkit-ruanyf-style/
-│   └── devkit-complexity-first/
+│   ├── devkit-complexity-first/
+│   └── devkit-plugin-eval/
 ├── .githooks/
 │   └── pre-commit             # 提交前强制跑版本四方校验（需 git config core.hooksPath .githooks）
 ├── scripts/

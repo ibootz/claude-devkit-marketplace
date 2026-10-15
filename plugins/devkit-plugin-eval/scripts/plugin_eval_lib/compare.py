@@ -19,6 +19,10 @@ from pathlib import Path
 from . import arms, evalrun, fingerprint, record, registry, scoring, traces
 
 
+# eval 正常跑完的退出码：0 全过、1 有用例低于 --threshold（判分我们自己重算，不看它）。其余（如 2）是中途中止。
+EVAL_OK_EXIT_CODES = (0, 1)
+
+
 class CompareError(Exception):
     pass
 
@@ -103,7 +107,6 @@ def _run_arm(spec, *, ctx):
     arm_out.mkdir(parents=True, exist_ok=True)
     shutil.copy2(agg_path, arm_out / 'aggregate-result.json')
     agg = json.loads(agg_path.read_text(encoding='utf-8'))
-    scored = scoring.score_arm(agg)
 
     usages, models = [], Counter()
     for case in agg.get('cases', []):
@@ -117,16 +120,28 @@ def _run_arm(spec, *, ctx):
                 tp, log_dir / ('%s-%d' % (_case_slug(case), i)), ctx['sandbox_roots'])
 
     rec.update(
-        score=scored['score'], cases=scored['cases'], invalid_run_count=scored['invalid_run_count'],
         aggregate_result='arms/%s/aggregate-result.json' % spec.key,
         cost_usd=agg.get('costUsd'), usage=traces.merge_usage(usages),
         main_model=models.most_common(1)[0][0] if models else None,
         claude_version=agg.get('claudeVersion'),
         load_issues=scoring.check_loaded_cases(agg, ctx['cases'], stderr),
     )
-    ctx['log']('[%s] 完成：规则分 %s，eval 退出码 %s' % (
-        spec.label, '—' if rec['score'] is None else '%.2f' % rec['score'], exit_code))
+    rec['_agg'] = agg   # 判分用，写 run.json 前去掉
     return rec
+
+
+def _score_arms(arm_records, log):
+    """mock_calls grader 是否视同 with-only 只能从装了插件的当前版臂看，两臂用同一份结论，分数才可比。"""
+    cur_agg = (arm_records.get('current') or {}).get('_agg')
+    mock_cases = scoring.mock_with_only_cases(cur_agg) if cur_agg else set()
+    for rec in arm_records.values():
+        agg = rec.pop('_agg', None)
+        if agg is None:
+            continue
+        scored = scoring.score_arm(agg, mock_cases)
+        rec.update(score=scored['score'], cases=scored['cases'], invalid_run_count=scored['invalid_run_count'])
+        log('[%s] 规则分 %s，eval 退出码 %s' % (
+            rec['label'], '—' if rec['score'] is None else '%.2f' % rec['score'], rec['eval_exit_code']))
 
 
 def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=1.0, claude=None,
@@ -151,8 +166,11 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
         raise CompareError('%s 下没有用例（含 prompt.md 或 case.yaml 的目录）' % evals_src)
 
     extra_exclude = ('.git', 'plugin-evals') if entry['plugin_path'] == '.' else ()
-    head_sha, dirty = git_state(repo, entry['plugin_path'])
     claude = claude or evalrun.resolve_claude()
+    # 插件在仓根时 .gitignore 就在插件目录里：先写它，再取 git 状态与指纹，否则指纹一跑完就对不上
+    ensure_gitignore(repo, entry['plugin_path'])
+    head_sha, dirty = git_state(repo, entry['plugin_path'])
+    plugin_fp = fingerprint.plugin_fingerprint(plugin_dir, extra_exclude)
     child_env = evalrun.child_env(env)
 
     started = (now or (lambda: datetime.now(timezone.utc)))()
@@ -173,19 +191,24 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
     arm_records, reasons = {}, []
     try:
         for spec in _arm_specs(plugin_dir):
-            rec = _run_arm(spec, ctx=ctx)
-            arm_records[spec.key] = rec
-            reasons += ['%s臂：%s' % (spec.label, i) for i in rec['load_issues']]
-            if rec['invalid_run_count']:
-                reasons.append('%s臂：%d 个 run 出错，判无效不计分' % (spec.label, rec['invalid_run_count']))
+            arm_records[spec.key] = _run_arm(spec, ctx=ctx)
     finally:
         if not keep_assembly:
             shutil.rmtree(assembly_root, ignore_errors=True)
+    _score_arms(arm_records, log)
+    for spec in _arm_specs(plugin_dir):
+        rec = arm_records[spec.key]
+        if rec['eval_exit_code'] not in EVAL_OK_EXIT_CODES:
+            reasons.append('%s臂：eval 退出码 %s（0 / 1 以外：中途中止，如 --max-cost-usd 触顶为 2），结果可能不全'
+                           % (spec.label, rec['eval_exit_code']))
+        reasons += ['%s臂：%s' % (spec.label, i) for i in rec['load_issues']]
+        if rec['invalid_run_count']:
+            reasons.append('%s臂：%d 个 run 出错，判无效不计分' % (spec.label, rec['invalid_run_count']))
 
     rec = record.build_run_record(
         run_id=run_id,
         plugin={'name': name, 'version': version,
-                'fingerprint': fingerprint.plugin_fingerprint(plugin_dir, extra_exclude),
+                'fingerprint': plugin_fp,
                 'fingerprint_exclude': list(fingerprint.FINGERPRINT_EXCLUDE) + list(extra_exclude),
                 'path_in_repo': entry['plugin_path']},
         arms=arm_records,
@@ -196,7 +219,7 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
                      'runs_per_case': runs, 'concurrency': concurrency, 'model_override': model,
                      'platform': sys.platform},
     )
+    rec = record.scrub_home(rec)   # 产物会入库：本机家目录前缀换成 ~
     (run_dir / 'run.json').write_text(json.dumps(rec, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     (run_dir / 'report.md').write_text(record.render_report(rec), encoding='utf-8')
-    ensure_gitignore(repo, entry['plugin_path'])
     return CompareResult(run_dir, rec, 0 if rec['complete'] else 3)

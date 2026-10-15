@@ -1,9 +1,9 @@
 """规则判分：从 eval 的 aggregate-result.json 重算每臂分数，再算臂间差。
 
 为什么不直接用 eval 给的 score：
-- `--ablation none` 下标了 `arm: with-only` 的 grader 也计分（票 01 实测：空桩臂 0.2 而非 0.33），
+- `--ablation none` 下 with-only 的 grader 也计分（票 01 实测：空桩臂 0.2 而非 0.33），
   而逐 run 结果里的 withOnly / scored 在 none 模式下都标成计分，剔除依据只能取用例级
-  `cases[].graders[].config.arm`；
+  `cases[].graders[].config`，判据照抄 2.1.300 二进制里 with-without 模式的判定（见 _exclusion_reason）；
 - 本机制只用规则判分，llm / baseline 这类付费 grader 一律不计（spec「一」规则判分一行）。
 分数口径与 eval 一致：单 run 分 = 通过的计分 grader 权重和 / 计分 grader 权重和；
 用例分 = 有效 run 的均值；臂总分 = 有分用例的均值。error 非空的 run 判无效、不计分。
@@ -19,19 +19,46 @@ def _mean(xs):
     return sum(xs) / len(xs) if xs else None
 
 
-def _exclusion_reason(g):
-    if (g.get('config') or {}).get('arm') == 'with-only':
+def _exclusion_reason(g, mock_with_only=False):
+    """2.1.300 二进制在 with-without 模式下把三类 grader 当「插件起效指示」、不计分：
+    显式 `arm: with-only`；arm 未写且 `type: tool_used` + `tool: Skill`（--help 原文 incl. `tool_used: Skill`）；
+    arm 未写、target / focus 为 mock_calls，且该用例的 mock 全是替插件 server 顶班的 shadow（mock_with_only）。"""
+    cfg = g.get('config') or {}
+    arm = cfg.get('arm')
+    if arm == 'with-only':
         return 'with-only'
+    if arm is None and g.get('type') == 'tool_used' and cfg.get('tool') == 'Skill':
+        return 'with-only（tool_used: Skill，eval 隐式视同）'
+    if (arm is None and mock_with_only
+            and ((g.get('type') == 'regex' and cfg.get('target') == 'mock_calls')
+                 or (g.get('type') == 'llm' and cfg.get('focus') == 'mock_calls'))):
+        return 'with-only（mock_calls，mock 全为插件 server 的 shadow，eval 隐式视同）'
     if g.get('type') not in RULE_GRADER_TYPES:
         return g.get('type') or 'unknown'
     return None
 
 
-def score_case(case):
+def _shadow_only(mocks):
+    """二进制 Da()：未 withheld 的 mock server 至少一个，且没有 standalone（全是替插件 server 顶班的 shadow）。"""
+    servers = [s for s in (mocks or {}).get('servers', []) if not s.get('withheld')]
+    return bool(servers) and all(s.get('kind') != 'standalone' for s in servers)
+
+
+def mock_with_only_cases(agg):
+    """哪些用例的 mock_calls grader 要视同 with-only。只能从装了插件的臂看：
+    不装臂里没有插件 server，同一份 mock 会被 eval 判成 standalone。"""
+    return {_case_rel_dir(c) for c in agg.get('cases', [])
+            if any(_shadow_only(r.get('mocks')) for r in c.get('arms', {}).get('with', []))}
+
+
+_detect_mock_with_only = mock_with_only_cases   # score_arm 的同名参数会遮住函数名
+
+
+def score_case(case, mock_with_only=False):
     excluded = {}
     weights = {}
     for g in case.get('graders', []):
-        reason = _exclusion_reason(g)
+        reason = _exclusion_reason(g, mock_with_only)
         if reason:
             excluded[g['name']] = reason
         else:
@@ -53,11 +80,19 @@ def score_case(case):
         'valid_runs': len(run_scores),
         'invalid_runs': invalid,
         'excluded_graders': excluded,
+        'no_scored_graders': not sum(weights.values()),
     }
 
 
-def score_arm(agg):
-    cases = {c['name']: score_case(c) for c in agg.get('cases', [])}
+def score_arm(agg, mock_with_only_cases=None):
+    """按用例目录（去掉 evals/）建键：frontmatter name 可以重名，按 name 建键会互相覆盖。
+    mock_with_only_cases 缺省时从本臂自己的 run 推（只对装了插件的臂成立）。"""
+    if mock_with_only_cases is None:
+        mock_with_only_cases = _detect_mock_with_only(agg)
+    cases = {}
+    for c in agg.get('cases', []):
+        key = _case_rel_dir(c)
+        cases[key] = score_case(c, key in mock_with_only_cases)
     return {
         'score': _mean(c['score'] for c in cases.values()),
         'cases': cases,

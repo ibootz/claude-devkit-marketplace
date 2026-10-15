@@ -11,18 +11,22 @@ from pathlib import Path
 
 import _support
 from _support import tmpdir, aggregate, grader, make_plugin, make_sandbox, run_result
-from plugin_eval_lib import cli, compare, registry
+from plugin_eval_lib import cli, compare, fingerprint, registry
 
 GRADERS = [grader('rule'), grader('marker', 'regex', arm='with-only')]
+MOCK_GRADER = {'name': 'mock-hit', 'type': 'regex', 'weight': 1,
+               'config': {'target': 'mock_calls', 'pattern': 'x', 'flags': '', 'match': 'contains'}}
 
 
 class FakeEval:
     """记下每次调用的命令，按臂名写 aggregate-result.json，并造 --keep-temp 沙箱。"""
 
-    def __init__(self, sandbox_root, scores, drop_case=None):
+    def __init__(self, sandbox_root, scores, drop_case=None, exit_code=1, mock_kind=None):
         self.sandbox_root = Path(sandbox_root)
         self.scores = scores          # {臂名: 是否通过 rule}
         self.drop_case = drop_case    # (臂名, 用例名)：模拟该用例加载失败
+        self.exit_code = exit_code    # eval 退出码（2 = --max-cost-usd 触顶）
+        self.mock_kind = mock_kind    # 当前版臂 run 的 mock 种类；不装臂里同一 mock 必为 standalone
         self.calls = []
 
     def __call__(self, cmd, cwd, env, log_dir):
@@ -41,12 +45,17 @@ class FakeEval:
             runs = []
             for i in range(int(cmd[cmd.index('--runs') + 1])):
                 sb = make_sandbox(self.sandbox_root, '%s-%s-%d' % (arm, n, i))
-                runs.append(run_result({'rule': self.scores[arm], 'marker': arm == 'current'},
-                                       trace_path=str(sb / 'out' / 'trace.jsonl')))
-            cases.append((n, GRADERS, runs))
+                r = run_result({'rule': self.scores[arm], 'marker': arm == 'current', 'mock-hit': arm == 'current'},
+                               trace_path=str(sb / 'out' / 'trace.jsonl'))
+                if self.mock_kind:
+                    kind = self.mock_kind if arm == 'current' else 'standalone'
+                    r['mocks'] = {'servers': [{'server': 's', 'kind': kind, 'tools': []}], 'warnings': [],
+                                  'calls': {'total': 1, 'errors': 0, 'unmocked': []}}
+                runs.append(r)
+            cases.append((n, GRADERS + ([MOCK_GRADER] if self.mock_kind else []), runs))
         (out / 'aggregate-result.json').write_text(json.dumps(aggregate(cases, root=str(arm_dir))), encoding='utf-8')
         (Path(log_dir) / 'eval.stderr').write_text(stderr, encoding='utf-8')
-        return 1, stderr
+        return self.exit_code, stderr
 
 
 class CompareTest(unittest.TestCase):
@@ -138,11 +147,62 @@ class CompareTest(unittest.TestCase):
         with self.assertRaises(compare.CompareError):
             self.run_compare(FakeEval(self.sandboxes, {'none': False, 'current': True}))
 
+    def test_eval_exit_code_outside_0_1_marks_incomplete(self):
+        registry.register(self.data, 'demo-plugin', self.repo)
+        res = self.run_compare(FakeEval(self.sandboxes, {'none': False, 'current': True}, exit_code=2))
+        rec = json.loads((res.run_dir / 'run.json').read_text(encoding='utf-8'))
+        self.assertEqual(res.exit_code, 3)
+        self.assertFalse(rec['complete'])
+        self.assertEqual(sum('退出码 2' in r for r in rec['incomplete_reasons']), 2)
+
+    def test_mock_calls_with_only_follows_current_arm(self):
+        # 当前版臂里 mock 都是 shadow → mock_calls grader 视同 with-only，两臂都剔除（不装臂自己看是 standalone）
+        registry.register(self.data, 'demo-plugin', self.repo)
+        res = self.run_compare(FakeEval(self.sandboxes, {'none': False, 'current': True}, mock_kind='shadow'))
+        rec = json.loads((res.run_dir / 'run.json').read_text(encoding='utf-8'))
+        for arm in ('none', 'current'):
+            self.assertIn('mock-hit', rec['arms'][arm]['cases']['case-a']['excluded_graders'], arm)
+        self.assertEqual(rec['arms']['none']['score'], 0)
+
+    def test_home_prefix_replaced_with_tilde(self):
+        registry.register(self.data, 'demo-plugin', self.repo)
+        claude = str(Path.home() / '.local' / 'bin' / 'claude')
+        res = compare.run_compare(
+            self.data, 'demo-plugin', runs=1, concurrency=1, claude=claude,
+            runner=FakeEval(self.sandboxes, {'none': False, 'current': True}),
+            env={'PATH': '/usr/bin'}, tmp_parent=self.assembly_parent, sandbox_roots=[self.sandboxes],
+            log=lambda *a: None)
+        text = (res.run_dir / 'run.json').read_text(encoding='utf-8')
+        self.assertEqual(json.loads(text)['environment']['claude_path'], '~/.local/bin/claude')
+        self.assertNotIn(str(Path.home()) + '/', text)
+        self.assertNotIn(str(Path.home()) + '/', (res.run_dir / 'report.md').read_text(encoding='utf-8'))
+
+    def _git(self, *args):
+        subprocess.run(['git', '-C', str(self.repo), '-c', 'user.name=t', '-c', 'user.email=t@example.invalid',
+                        '-c', 'commit.gpgsign=false', *args], check=True, capture_output=True)
+
+    @unittest.skipUnless(shutil.which('git'), 'git 不可用')
+    def test_repo_root_plugin_fingerprint_matches_tree_after_run(self):
+        # 插件在仓根：.gitignore 就在插件目录里，必须先写 .gitignore 再取指纹与 dirty
+        repo = self.tmp / 'rootrepo'
+        make_plugin(repo, name='demo-plugin')
+        self.repo = repo
+        self._git('init', '-q')
+        self._git('add', '-A')
+        self._git('commit', '-q', '-m', 'init')
+        registry.register(self.data, 'demo-plugin', repo)
+        res = self.run_compare(FakeEval(self.sandboxes, {'none': False, 'current': True}))
+        rec = json.loads((res.run_dir / 'run.json').read_text(encoding='utf-8'))
+        self.assertIn('evals/results/', (repo / '.gitignore').read_text().splitlines())
+        self.assertEqual(rec['plugin']['fingerprint'],
+                         fingerprint.plugin_fingerprint(repo, ('.git', 'plugin-evals')))
+        status = subprocess.run(['git', '-C', str(repo), 'status', '--porcelain', '--', '.', ':(exclude)plugin-evals'],
+                                capture_output=True, text=True).stdout.strip()
+        self.assertEqual(rec['arms']['current']['dirty'], bool(status))
+
     @unittest.skipUnless(shutil.which('git'), 'git 不可用')
     def test_git_head_and_dirty_recorded(self):
-        def git(*args):
-            subprocess.run(['git', '-C', str(self.repo), '-c', 'user.name=t', '-c', 'user.email=t@example.invalid',
-                            '-c', 'commit.gpgsign=false', *args], check=True, capture_output=True)
+        git = self._git
         git('init', '-q')
         git('add', '-A')
         git('commit', '-q', '-m', 'init')
@@ -174,6 +234,7 @@ class CliTest(unittest.TestCase):
             self.assertEqual(cli.main(['--data-dir', str(tmp / 'd'), 'register', 'demo-plugin', '--repo', str(repo)]), 0)
         self.assertIn('demo-plugin', out.getvalue())
         self.assertTrue(re.search(r'plugins/demo-plugin', out.getvalue()))
+        self.assertIn('scaffold_script', out.getvalue())
 
 
 if __name__ == '__main__':

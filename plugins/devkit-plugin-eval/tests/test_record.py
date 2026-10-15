@@ -93,6 +93,37 @@ class ReportTest(unittest.TestCase):
         self.assertIn('-0.17', md)     # 用例 b 的差
         self.assertIn('with-only', md)  # 剔除说明
 
+    def test_report_lists_cases_below_threshold(self):
+        md = record.render_report(build(cur_scores=(1.0, 0.5)))
+        self.assertIn('未达 threshold', md)
+        section = md.split('未达 threshold', 1)[1].split('\n## ', 1)[0]
+        self.assertIn('b', section)
+        self.assertNotIn('- a', section)
+        self.assertNotIn('未达 threshold', record.render_report(build()))
+
+    def test_report_warns_cases_without_scored_graders(self):
+        r = build()
+        r['arms']['current']['cases']['a'] = dict(case(None, (None,)), no_scored_graders=True,
+                                                  excluded_graders={'m': 'with-only'})
+        md = record.render_report(r)
+        self.assertIn('没有可计分的 grader', md)
+        self.assertIn('当前版', md.split('没有可计分的 grader', 1)[1].split('\n## ', 1)[0])
+
+    def test_report_states_trust_scope(self):
+        md = record.render_report(build())
+        self.assertIn('scaffold_script', md)
+        self.assertIn('--trust-plugin', md)
+
+    def test_scrub_home(self):
+        home = '/Users/someone'
+        rec = {'a': '/Users/someone/.local/bin/claude', 'b': ['/Users/someone', '/Users/someoneelse/x'],
+               'c': {'d': 'see /Users/someone/x and /tmp/y'}, 'e': 3}
+        out = record.scrub_home(rec, home)
+        self.assertEqual(out['a'], '~/.local/bin/claude')
+        self.assertEqual(out['b'], ['~', '/Users/someoneelse/x'])
+        self.assertEqual(out['c']['d'], 'see ~/x and /tmp/y')
+        self.assertEqual(out['e'], 3)
+
     def test_report_lists_incomplete_reasons(self):
         md = record.render_report(build(complete_reasons=['当前版臂：1 个用例加载失败']))
         self.assertIn('不完整', md)

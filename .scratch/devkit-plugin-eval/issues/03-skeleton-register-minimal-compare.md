@@ -51,3 +51,18 @@ Status: resolved
 3. `passed` 口径暂定为「运行完整，且当前版臂每个有分用例的规则分 ≥ threshold（默认 1.0）」。
 
 **已知缺口**：`traces/` 的 90 天清理未做；中途异常会留下没有 run.json 的运行目录（交给断点续跑的票）；Windows / Linux 未实测；无 skill、无 README、无 `.codex-plugin`。
+
+### 2026-10-15 按审查意见修订（结论「修后合并」）
+
+同一分支另起一个提交，未合并、未推送。
+
+- **with-only 判据补全**：照 2.1.300 二进制在 with-without 模式下的判定。除显式 `arm: with-only` 外，再剔除两类：arm 未写的 `tool_used` + `tool: Skill`；arm 未写、`target` 为 `mock_calls` 的 regex grader，前提是该用例当前版臂的 mock 全是替插件 server 顶班的 shadow（二进制 `Da()`）。不装臂里同一份 mock 会被判成 standalone，所以两臂统一用当前版臂的结论。
+- **用例键**：`score_arm` / `delta` 改按用例目录（去掉 `evals/`）建键，同名用例不再互相覆盖。
+- **顺序**：先写 `.gitignore`，再取 git 状态与插件内容指纹，再组装各臂。插件在仓根时，指纹与 dirty 和跑完后的工作区一致。
+- **eval 退出码**：0 / 1 以外（如 `--max-cost-usd` 触顶为 2）记一条不完整原因。
+- **家目录前缀**：run.json / report.md 里的家目录前缀换成 `~`。demo-03 已按新规则就地重算（分数不变），未重跑 eval。
+- **未登记提示**：登记命令带上 `--data-dir`。登记提示、register 输出、report.md 都写明信任范围：每次对照都加 `--trust-plugin` 与 `--scaffold`，以用户身份运行用例声明的 `scaffold_script`。
+- **report.md 新增两节**：列出当前版未达 threshold 的用例；grader 全被剔除、得分为空的用例单列告警。
+- 上面「待用户拍板」第 2 条（一律加 `--scaffold`）已由主会话定为保留。
+
+**后续缺口（审查列为可留后续，本票不做）**：dirty 判定排除 `evals/`；付费 grader 被剔除时的提示；沙箱没有汇总结果时的清理与子进程超时；断链符号链接；`--eval-dir`；`.gitignore` 追加写（审查原话，细节待审查方补充）。

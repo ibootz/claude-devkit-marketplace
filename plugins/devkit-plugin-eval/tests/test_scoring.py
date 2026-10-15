@@ -57,6 +57,78 @@ class ArmScoreTest(unittest.TestCase):
         arm = scoring.score_arm(aggregate([('c', [grader('a')], [run_result({'a': True}, error='x')])]))
         self.assertIsNone(arm['cases']['c']['score'])
 
+    def test_no_scored_graders_flagged(self):
+        gs = [grader('m', 'regex', arm='with-only'), grader('j', 'llm')]
+        case = scoring.score_arm(aggregate([('c', gs, [run_result({'m': True, 'j': True})])]))['cases']['c']
+        self.assertTrue(case['no_scored_graders'])
+        ok = scoring.score_arm(aggregate([('c', [grader('a')], [run_result({'a': True})])]))['cases']['c']
+        self.assertFalse(ok['no_scored_graders'])
+
+    def test_implicit_with_only_tool_used_skill(self):
+        # 2.1.300 二进制：arm 未写、type=tool_used、tool=Skill 的 grader 视同 with-only（--help 也写 incl. `tool_used: Skill`）
+        skill = {'name': 'skill-fired', 'type': 'tool_used', 'weight': 1, 'config': {'tool': 'Skill'}}
+        both = {'name': 'skill-both', 'type': 'tool_used', 'weight': 1, 'config': {'tool': 'Skill', 'arm': 'both'}}
+        gs = [grader('a'), skill, both]
+        case = scoring.score_arm(aggregate([('c', gs, [run_result({'a': True, 'skill-fired': False,
+                                                                    'skill-both': False})])]))['cases']['c']
+        self.assertIn('skill-fired', case['excluded_graders'])
+        self.assertTrue(case['excluded_graders']['skill-fired'].startswith('with-only'))
+        self.assertNotIn('skill-both', case['excluded_graders'])
+        self.assertEqual(case['score'], 0.5)
+
+
+def mock_run(passes, kinds, withheld=()):
+    r = run_result(passes)
+    r['mocks'] = {'servers': [dict({'server': 's%d' % i, 'kind': k, 'tools': []},
+                                   **({'withheld': True} if i in withheld else {}))
+                              for i, k in enumerate(kinds)],
+                  'warnings': [], 'calls': {'total': 1, 'errors': 0, 'unmocked': []}}
+    return r
+
+
+MOCK_GRADERS = [grader('a'), {'name': 'mock-hit', 'type': 'regex', 'weight': 1,
+                              'config': {'target': 'mock_calls', 'pattern': 'x', 'flags': '', 'match': 'contains'}}]
+
+
+class MockCallsWithOnlyTest(unittest.TestCase):
+    """2.1.300 二进制：mock 全是替插件 server 顶班的 shadow（无 standalone、至少一个未 withheld）时，
+    arm 未写的 regex target=mock_calls grader 视同 with-only。"""
+
+    def test_cases_detected_from_current_arm_runs(self):
+        agg = aggregate([('shadow', MOCK_GRADERS, [mock_run({'a': True}, ['shadow'])]),
+                         ('mixed', MOCK_GRADERS, [mock_run({'a': True}, ['shadow', 'standalone'])]),
+                         ('withheld', MOCK_GRADERS, [mock_run({'a': True}, ['shadow'], withheld=(0,))]),
+                         ('nomock', MOCK_GRADERS, [run_result({'a': True})])])
+        self.assertEqual(scoring.mock_with_only_cases(agg), {'shadow'})
+
+    def test_excluded_only_for_given_cases(self):
+        runs = [run_result({'a': True, 'mock-hit': False})]
+        agg = aggregate([('x', MOCK_GRADERS, runs), ('y', MOCK_GRADERS, runs)])
+        arm = scoring.score_arm(agg, mock_with_only_cases={'x'})
+        self.assertIn('mock-hit', arm['cases']['x']['excluded_graders'])
+        self.assertEqual(arm['cases']['x']['score'], 1)
+        self.assertNotIn('mock-hit', arm['cases']['y']['excluded_graders'])
+        self.assertEqual(arm['cases']['y']['score'], 0.5)
+
+    def test_default_uses_arms_own_mocks(self):
+        agg = aggregate([('x', MOCK_GRADERS, [mock_run({'a': True, 'mock-hit': False}, ['shadow'])])])
+        self.assertEqual(scoring.score_arm(agg)['cases']['x']['score'], 1)
+
+
+class CaseKeyTest(unittest.TestCase):
+    def test_same_name_cases_keyed_by_dir(self):
+        # frontmatter name 可以重名；按用例目录（去掉 evals/）建键，互不覆盖
+        agg = aggregate([('dup', [grader('a')], [run_result({'a': True})]),
+                         ('dup', [grader('a')], [run_result({'a': False})])])
+        agg['cases'][0]['dir'] = 'evals/group-1/dup'
+        agg['cases'][1]['dir'] = 'evals/group-2/dup'
+        arm = scoring.score_arm(agg)
+        self.assertEqual(set(arm['cases']), {'group-1/dup', 'group-2/dup'})
+        self.assertEqual(arm['cases']['group-1/dup']['score'], 1)
+        self.assertEqual(arm['cases']['group-2/dup']['score'], 0)
+        d = scoring.delta(arm, arm)
+        self.assertEqual(set(d['cases']), {'group-1/dup', 'group-2/dup'})
+
 
 class DeltaTest(unittest.TestCase):
     def test_delta_per_case_and_overall(self):

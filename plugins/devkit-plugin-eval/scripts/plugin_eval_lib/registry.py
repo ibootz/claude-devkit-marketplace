@@ -25,6 +25,11 @@ class NotRegistered(RegistryError):
     pass
 
 
+# 信任范围：compare 一律给 eval 加 --trust-plugin 与 --scaffold，登记就是对这两件事的授权
+TRUST_SCOPE = ('登记即声明信任该插件：之后每次对照都给 eval 加 --trust-plugin 与 --scaffold，'
+               '以你的身份运行插件代码与用例声明的 scaffold_script（作者写的 bash 脚本）。')
+
+
 def _registry_path(data_dir):
     return Path(data_dir) / 'registry.json'
 
@@ -91,8 +96,9 @@ def lookup(data_dir, name):
     entry = load(data_dir)['plugins'].get(name)
     if entry is None:
         raise NotRegistered(
-            '插件 %s 未登记，拒绝跑对照。登记即声明信任它的代码与用例，先运行：\n'
-            '  python3 plugin_eval.py register %s --repo <被测插件所在仓的根目录>' % (name, name))
+            '插件 %s 未登记，拒绝跑对照。%s\n确认信任后先运行：\n'
+            "  python3 plugin_eval.py --data-dir '%s' register %s --repo <被测插件所在仓的根目录>"
+            % (name, TRUST_SCOPE, data_dir, name))
     return dict(entry, name=name)
 
 

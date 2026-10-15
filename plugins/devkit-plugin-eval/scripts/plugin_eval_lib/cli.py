@@ -46,6 +46,7 @@ def main(argv=None):
             entry = registry.register(data_dir, args.name, args.repo)
             print('已登记 %s：仓 %s，插件路径 %s' % (args.name, entry['repo'], entry['plugin_path']))
             print('登记清单：%s' % (data_dir / 'registry.json'))
+            print(registry.TRUST_SCOPE)
             return 0
         if args.cmd == 'list':
             print(json.dumps(registry.load(data_dir)['plugins'], ensure_ascii=False, indent=2))
