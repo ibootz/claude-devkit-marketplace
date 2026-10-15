@@ -5,6 +5,8 @@
 - 上一版 / 环境插件臂（票 05）往 _arm_specs 里加 ArmSpec；
 - 注入到达核验（票 06）在 _run_arm 里搬 trace 之前读转录；
 - AI 评委（票 09）在所有臂跑完、写 run.json 之前。
+不完整与续跑（票 07）：每跑完一臂写一次检查点 run.json（complete=false），中途退出也留得下；
+收尾在 finalize_run，续跑（resume.py）复用它与 _run_arm，所以这两处的扩展续跑自动带上。
 """
 import json
 import shutil
@@ -16,7 +18,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import arms, evalrun, fingerprint, record, registry, scoring, traces
+from . import arms, evalrun, fingerprint, record, registry, resume, sandbox_sweep, scoring, traces
 
 
 # eval 正常跑完的退出码：0 全过、1 有用例低于 --threshold（判分我们自己重算，不看它）。其余（如 2）是中途中止。
@@ -101,6 +103,7 @@ def _run_arm(spec, *, ctx):
                    usage=traces.merge_usage([]), main_model=None, claude_version=None,
                    load_issues=['eval 没有产出 aggregate-result.json（退出码 %s），stderr 见 %s/eval.stderr'
                                 % (exit_code, rec['trace_dir'])])
+        rec['cleanup_warnings'] += sandbox_sweep.sweep_orphans(arm_dir, log_dir, ctx['sandbox_roots'])
         return rec
 
     arm_out = ctx['run_dir'] / 'arms' / spec.key
@@ -118,6 +121,7 @@ def _run_arm(spec, *, ctx):
                 models[s['main_model']] += 1
             rec['cleanup_warnings'] += traces.harvest_sandbox(
                 tp, log_dir / ('%s-%d' % (_case_slug(case), i)), ctx['sandbox_roots'])
+    rec['cleanup_warnings'] += sandbox_sweep.sweep_orphans(arm_dir, log_dir, ctx['sandbox_roots'])
 
     rec.update(
         aggregate_result='arms/%s/aggregate-result.json' % spec.key,
@@ -189,12 +193,29 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
         'head_sha': head_sha, 'dirty': dirty, 'sandbox_roots': sandbox_roots,
     }
     arm_records, reasons = {}, []
+    meta = dict(log=log, plugin_dir=plugin_dir, run_id=run_id, name=name, version=version, plugin_fp=plugin_fp,
+                extra_exclude=extra_exclude, entry=entry, cases=cases, threshold=threshold, started=started,
+                claude=claude, child_env=child_env, runs=runs, concurrency=concurrency, model=model, run_dir=run_dir)
+    lock = resume.RunLock(data_dir, run_id)
+    lock.acquire()
     try:
-        for spec in _arm_specs(plugin_dir):
-            arm_records[spec.key] = _run_arm(spec, ctx=ctx)
+        resume.write_checkpoint(meta, arm_records)
+        try:
+            for spec in _arm_specs(plugin_dir):
+                arm_records[spec.key] = _run_arm(spec, ctx=ctx)
+                resume.write_checkpoint(meta, arm_records)
+        finally:
+            if not keep_assembly:
+                shutil.rmtree(assembly_root, ignore_errors=True)
+        return finalize_run(arm_records, reasons, **meta)
     finally:
-        if not keep_assembly:
-            shutil.rmtree(assembly_root, ignore_errors=True)
+        lock.release()
+
+
+def finalize_run(arm_records, reasons, *, log, plugin_dir, run_id, name, version, plugin_fp, extra_exclude, entry,
+                 cases, threshold, started, claude, child_env, runs, concurrency, model, run_dir, decorate=None):
+    """判分、汇总不完整原因、写 run.json 与 report.md。arm_records 里带 _agg 的臂才判分。
+    decorate(rec) 在落盘前改记录（续跑用它写 resume 字段）。"""
     _score_arms(arm_records, log)
     for spec in _arm_specs(plugin_dir):
         rec = arm_records[spec.key]
@@ -203,7 +224,8 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
                            % (spec.label, rec['eval_exit_code']))
         reasons += ['%s臂：%s' % (spec.label, i) for i in rec['load_issues']]
         if rec['invalid_run_count']:
-            reasons.append('%s臂：%d 个 run 出错，判无效不计分' % (spec.label, rec['invalid_run_count']))
+            reasons.append('%s臂：%d 个 run 出错，判无效不计分%s' % (spec.label, rec['invalid_run_count'],
+                                                               resume.usage_limit_note(rec)))
 
     rec = record.build_run_record(
         run_id=run_id,
@@ -219,7 +241,9 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
                      'runs_per_case': runs, 'concurrency': concurrency, 'model_override': model,
                      'platform': sys.platform},
     )
+    if decorate:
+        rec = decorate(rec)
     rec = record.scrub_home(rec)   # 产物会入库：本机家目录前缀换成 ~
     (run_dir / 'run.json').write_text(json.dumps(rec, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    (run_dir / 'report.md').write_text(record.render_report(rec), encoding='utf-8')
+    (run_dir / 'report.md').write_text(record.render_report(rec) + resume.report_section(rec), encoding='utf-8')
     return CompareResult(run_dir, rec, 0 if rec['complete'] else 3)

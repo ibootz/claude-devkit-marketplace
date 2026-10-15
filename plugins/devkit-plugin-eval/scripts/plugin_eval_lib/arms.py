@@ -6,6 +6,7 @@
     ...                         ← 被测插件其余文件，不含它自带的 evals/
     evals/                      ← 一律拷当前版仓里的用例，不含 evals/results/
 「不装」臂用空桩跑 --ablation none，等同不装（票 01 报告第二节实测）。
+断开的符号链接跳过不拷（装到本机时它同样指向不存在的文件），否则 copytree 拷完整棵树才抛 shutil.Error。
 扩展点：上一版臂只需给 ArmSpec.source 传 git archive 解出的快照目录；环境插件臂要把环境插件拷进
 组装目录内（eval 只从 containment root 内加载用例 plugins 字段列的插件），属后续票。
 """
@@ -68,11 +69,11 @@ def assemble_arm(root, spec, evals_src, extra_exclude=()):
 
         def ignore(dirpath, names):
             return [n for n in names if Path(dirpath) == src and n in top_excluded]
-        shutil.copytree(src, dest, ignore=ignore)
+        shutil.copytree(src, dest, ignore=ignore, ignore_dangling_symlinks=True)
 
     evals_src = Path(evals_src)
 
     def ignore_results(dirpath, names):
         return ['results'] if Path(dirpath) == evals_src and 'results' in names else []
-    shutil.copytree(evals_src, dest / 'evals', ignore=ignore_results)
+    shutil.copytree(evals_src, dest / 'evals', ignore=ignore_results, ignore_dangling_symlinks=True)
     return dest
