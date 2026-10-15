@@ -66,3 +66,9 @@ Status: resolved
 - 上面「待用户拍板」第 2 条（一律加 `--scaffold`）已由主会话定为保留。
 
 **后续缺口（审查列为可留后续，本票不做）**：dirty 判定排除 `evals/`；付费 grader 被剔除时的提示；沙箱没有汇总结果时的清理与子进程超时；断链符号链接；`--eval-dir`；`.gitignore` 追加写（审查原话，细节待审查方补充）。
+
+### 2026-10-15 集成审查修订（review-integ，提交 e95fba3、6e02baf）
+
+**已修（波及本票）**
+
+- 臂组装原用 `shutil.copytree(..., ignore_dangling_symlinks=True)`。标准库按进程 cwd 判断相对链接是否断开，有效的相对符号链接会被当成断链静默丢掉，eval 跑的插件就少了这些文件。现改用 `arms.copy_tree`，在链接所在目录判断。单测：`test_assemble_follows_relative_symlink_outside_plugin`。详见票 04 本节。

@@ -95,3 +95,13 @@ Status: resolved
 
 - (f)：`envplugins._git_head` 用 `text=True`，没有显式 UTF-8。输出是 ASCII 的 sha，实际不会出错。
 - (g)：退化原因里的插件绝对路径、path 形式环境插件的 `path` 字段会进入库的 run.json / report.md。家目录下的路径由 `scrub_home` 换成 `~`，家目录以外的路径原样入库。宜与票 04「只记仓内相对路径」统一口径。
+
+### 2026-10-15 集成审查修订（review-integ，提交 e95fba3、6e02baf）
+
+**已修（波及本票）**
+
+- 环境插件拷进组装目录时改用 `arms.copy_tree`。原写法 `copytree(..., ignore_dangling_symlinks=True)` 会把有效的相对符号链接当断链丢掉，详见票 04 本节。
+
+**已知缺口（来自集成审查，未修）**
+
+- N6：续跑重建环境插件时，用的是 run.json 里 `env_plugins[].spec`（入参原文），没用记下的绝对路径 `path`，位置在 armplan.py `rebuild_plan`。首跑传的是相对路径、续跑时换了目录，就会被拒绝；这种情况会报错，不会静默出错。

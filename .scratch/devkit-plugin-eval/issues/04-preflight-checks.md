@@ -82,3 +82,14 @@ Status: resolved
 - 超时只杀 shell，孙进程会成孤儿。冒烟与票 06 的静态执行共用 `injection.run_hook`，这一条与票 06 F 是同一处。
 - 通过时「N 条 command 已执行」把超时未判定的条目也算进去了。
 - 参数特性探测只查 `--help` 文本里有没有出现参数名：参数被移除、说明文字仍提到它时会漏判。
+
+### 2026-10-15 集成审查修订（review-integ，提交 e95fba3、6e02baf）
+
+**已修**
+
+- N2：冒烟副本原来用 `copytree(symlinks=True)`。hook 脚本若是指向插件目录外的相对符号链接，副本里的链接会断，冒烟得到 127，硬项被误判失败。现在改为跟随链接、拷贝链接指向的内容。
+  - 改的时候查明：审查建议对齐的 `shutil.copytree(..., ignore_dangling_symlinks=True)`（即 arms.py 臂组装的原写法）按进程 cwd 判断相对链接是否断开，而不是按链接所在目录。结果是，有效的相对链接会被当成断链静默丢掉。这一点在 Python 3.14 上实测过，标准库 `shutil._copytree` 源码也是这样写的。
+  - 因此抽出 `arms.copy_tree`，在链接所在目录判断是否断链。共用它的有五处：冒烟副本、臂组装（插件本体与 evals 各一处）、环境插件拷贝、续跑用例子集。
+  - 单测：`test_symlink_to_outside_plugin_dir_still_reachable`、`test_assemble_follows_relative_symlink_outside_plugin`。去掉修复时两条都失败，已反证。
+- 展示问题：macOS 上 `/var` 实为 `/private/var`，冒烟报错里曾出现「/private${CLAUDE_PLUGIN_ROOT}」这样的残缺路径。现在冒烟的临时 HOME 先 resolve 再用。单测 `test_failure_detail_shows_plugin_root_placeholder_not_temp_copy` 加了一条断言；去掉修复时这条断言失败，已反证。
+- N5：常驻 token 的静态执行复用本票的 `preflight._plugin_copy`，同样在副本里跑，详见票 06。

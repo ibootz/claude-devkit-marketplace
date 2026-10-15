@@ -79,3 +79,12 @@ Status: resolved
 - C：标签只取正文第一个非空行做子串匹配。首行含日期、cwd 等动态内容时误报 missing（会响亮报出）；首行太通用（`---`、`# Rules`）时，环境插件臂里别的插件的注入可能被认成被测插件的。
 - F：超时只杀 shell，孙进程（如 node）会成孤儿，并且是在真实 HOME 下继续跑；Windows 上 `communicate()` 可能被孙进程占着管道卡住。
 - G：`observe_run` 收集的 `obs['successes']` 没有任何地方用到。
+
+### 2026-10-15 集成审查修订（review-integ，提交 e95fba3、6e02baf）
+
+**已修**
+
+- N5：常驻 token 的静态执行原来在真实插件目录里跑 hook。hook 若往 `${CLAUDE_PLUGIN_ROOT}` 写文件，会弄脏用户工作区，之后续跑还会因为插件指纹变了被拒。现在改为与冒烟一样：先用 `preflight._plugin_copy` 拷一份副本，在副本里执行，用完即删。
+  - 副本放在 `tmp_parent` 下，与臂组装目录同处。
+  - HOME 仍用真实 HOME，上面的「主会话口径」不变。
+  - 单测：`test_static_profile_hook_writes_land_in_copy_not_plugin_dir`。

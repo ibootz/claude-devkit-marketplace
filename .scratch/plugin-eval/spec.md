@@ -329,6 +329,11 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
 - HTML 待审页在本机生成，不入库。
 - 评 radnove 等内网插件时，用例与结果进内网仓，不进本仓（本仓公开）（[06](issues/06-scope.md)）。
 - 已撤销：用户级花费账本 `ledger.jsonl`（[13](issues/13-result-layout.md) 10-15 覆盖）。
+- devkit-plugin-eval 0.2.0 起，run.json 新增四个字段，供续跑防混跑与审计用（2026-10-15 集成票 04–08 时登记）：
+  - `plugin.evals_fingerprint`：用例目录指纹，形如 `{shared, cases}`。`shared` 是 evals/ 下不属于任何用例目录的文件（mocks/ 等共用件）的指纹，`cases` 是「用例 → 指纹」。不进插件内容指纹。续跑前重算，首跑时已有的用例或共用文件改过就拒绝续跑；新增的用例不算改过。
+  - `env_plugins[].fingerprint`：每个环境插件的内容指纹。续跑时与重算值不同就拒绝续跑。
+  - `preflight.first_run`：只在续跑过的运行里出现，是首跑那次的整份前置检查结果。多次续跑时仍指向首跑。首跑的软项提示另外去重并进顶层 `preflight.warnings`。
+  - `pending.superseded_by_resume`：续跑改了结果时，旧待审页作废。此时 `page_id` 置为 null，`superseded_by_resume` 记第几次续跑作废的，已写回过的旧页留进 `pending.history`。续跑收尾重新生成一页时，`pending` 换成新页，`history` 照留。
 
 ## 不做的
 

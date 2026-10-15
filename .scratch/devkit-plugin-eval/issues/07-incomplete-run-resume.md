@@ -77,3 +77,22 @@ Status: resolved
 - C2：Windows 上 `taskkill /T /F` 失败时没有退回 `proc.kill()`，随后的 `proc.wait()` 可能一直等下去。
 - C5：`replaced_invalid_runs` 在补跑之前就登记。补跑一个汇总都没产出时，首跑出错的 run 仍会从磁盘汇总里删掉，报告却写「替换掉的无效 run N 个」。整次仍判不完整，但证据丢了、措辞也不实。
 - C6：`finalize_run` 不核对「每个用例的有效 run 数等于 `runs_per_case`」，完整与否靠退出码与 `partial` 间接保证。宜加成续跑完整性的硬判据。
+
+### 2026-10-15 集成审查修订（review-integ，提交 e95fba3、6e02baf）
+
+**已修**
+
+- N1：续跑原来写检查点时只记本次续跑的前置检查，也不带 `pending`。续跑中途再崩，首跑软项、待审页历史都会丢，再续跑成功后也不重新生成待审页。现在检查点带上与首跑合并后的 `preflight`，以及经 `_superseded_pending` 作废后的 `pending`。单测：`test_resume_crash_then_resume_keeps_first_run_preflight_and_pending`。去掉修复时这条单测失败，已反证。
+- N7：多次续跑时 `preflight.first_run` 固定指向真正的首跑，不再层层嵌套。中间各次续跑的软项提示仍并进顶层 `warnings`；中间各次的整份前置检查结果不再保留。断言在 N1 那条单测里。
+- N3：0.1.0 老运行的汇总里没有 `devkitTraceDir`，续跑后注入核验会误报「找不到转录」。现在续跑读首跑汇总时，按票 03 的命名 `traces/<run_id>/<臂>/<用例>-<序号>` 补上这个字段，序号取剔除无效 run 之前的位置。单测：`test_resume_fills_trace_dir_for_runs_from_old_aggregate`。
+- N8：不限时模式（`--eval-timeout 0`，即默认）也装 SIGTERM / SIGHUP 处理，父进程单独收到信号时一并停掉 eval。这种模式下 eval 与父进程同组：先发 SIGTERM，宽限 10 秒后再 SIGKILL。原来是直接 SIGKILL，eval 来不及收拾它起的 claude 子进程。单测：`test_sigterm_to_parent_kills_eval_without_timeout`。去掉修复时这条单测失败，已反证。
+  - 上面「主会话口径」待拍板 2 的前提是「B3 已修」，现在对限时、不限时两种模式都成立。
+  - TaskStop 是杀整个进程组还是只杀单个进程，仍未核实。
+
+**已知缺口（来自集成审查，未修）**
+
+- N4：续跑后 dirty 有两个来源，值可能不一致。
+  - run.json 的 `preflight.dirty` 取自续跑时：resume.py 里 `pre.dirty = dirty` 一行。
+  - `arms.current.dirty` 沿用首跑的值。
+  - 闸门读哪一个，由票 14 定，已追加到票 14 Comments。
+- 推断（未实测）：SIGKILL 拦不住。父进程被 SIGKILL 时，不限时模式下的 eval 仍会留在后台；整组一起收到信号时除外。

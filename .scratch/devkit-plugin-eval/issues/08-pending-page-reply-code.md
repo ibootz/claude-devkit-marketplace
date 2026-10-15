@@ -70,3 +70,9 @@ Status: resolved
 - L1：`generate` 直接用 `rec['run_id']` 拼 HTML 路径、写进页内 JSON 脚本块，没过 `_RUN_ID_RE`，脚本块里也只转义了 `</`。run.json 被篡改时可带 `../`，或让页面脚本失效（不会执行注入代码）。run.json 里的 run_id 与目录名不一致时，回复码永远写不回。宜统一用 `run_dir.name`，并把 `<` 转成 `<`。来源是受信的 compare，风险低。
 - L3：扩展接口对 09–12 的支撑有限。写回只有逐文件的 `stage_text` / `stage_delete`：没有整目录移动（票 11 草稿转用例要用），`stage_delete` 会留空目录，也不支持二进制文件。新类型只能靠 import 时 `register_type` 登记，没有发现机制。写回前不重新收集、不核对该项是否仍待判，09 起各类型的写回要能重复执行，才接得住 M1 的重试。
 - L4：提示命令 `--reply '<回复码>'` 用单引号，Windows cmd 会把回复码拆成多个参数。与 registry 已有写法一致，宜统一处理。
+
+### 2026-10-15 集成审查修订（review-integ，提交 e95fba3、6e02baf）
+
+**已修（波及本票）**
+
+- N1：续跑中途再崩时，检查点原来不带 `pending`：已写回过的页的历史全丢，再续跑成功后也不重新生成待审页。现在检查点里的 `pending` 已作废（`page_id=null`、`superseded_by_resume`、`history` 保留）；再续跑成功后照常重新生成一页。单测见票 07 本节 N1。
