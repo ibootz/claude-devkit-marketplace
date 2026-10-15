@@ -67,6 +67,13 @@ def _parser():
     g.add_argument('--main-ref', help='查漏检用的 main 分支引用；缺省依次试 origin/main、main、origin/master、master')
     g.add_argument('--since', metavar='提交', help='漏检起算的提交；缺省取 main 上首次入库 plugin-evals/<插件名>/ 的提交')
     g.add_argument('--json', action='store_true', help='输出结构化结果')
+    g.add_argument('--run-subset', action='store_true',
+                   help='闸门外版本缺依据时跑一次规则判分子集（真跑模型、只跑当前版一臂、不调 AI 评委、不进待审页），'
+                        '跑完重判；插件要先登记')
+    g.add_argument('--runs', type=int, default=3, help='同 --run-subset：每例次数，默认 3')
+    g.add_argument('-j', '--concurrency', type=int, default=3, help='同 --run-subset：eval 并发数，默认 3')
+    g.add_argument('--model', help='同 --run-subset：覆盖被测模型（传给 eval --model）')
+    g.add_argument('--eval-timeout', type=float, default=0, help='同 --run-subset：eval 超时（分钟），默认 0 不限时')
 
     clauses.add_parser(sub)
     review.add_parser(sub)
@@ -122,7 +129,7 @@ def _check(args, data_dir):
 def main(argv=None):
     _utf8_stdio()
     args = _parser().parse_args(argv)
-    if args.cmd == 'gate':           # 只读插件目录与仓内 runs/，不用用户级数据目录
+    if args.cmd == 'gate':           # 只读插件目录与仓内 runs/；--run-subset 时才解析用户级数据目录（登记清单）
         return gate.main(args)
     try:
         data_dir = datadir.resolve_data_dir(args.data_dir)
