@@ -88,3 +88,8 @@ Status: resolved
   - 副本放在 `tmp_parent` 下，与臂组装目录同处。
   - HOME 仍用真实 HOME，上面的「主会话口径」不变。
   - 单测：`test_static_profile_hook_writes_land_in_copy_not_plugin_dir`。
+
+### 2026-10-15 用户拍板（集成待拍板项，原话「按照推荐来」）
+
+- 待拍板 1（常驻 token 估算方式）：维持字符估算，无代码改动。校准数据与措辞以上面「集成」一节 A 为准。
+- 待拍板 2（注入未到达是否挡闸门）：不改 `complete`，注入未到达不让运行变成不完整。闸门读 run.json 的 `injection_check.ok`，为 false 时拒绝把这次运行作依据，已追加到票 14 Comments。

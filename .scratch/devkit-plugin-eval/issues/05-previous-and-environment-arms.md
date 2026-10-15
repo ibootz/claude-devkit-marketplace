@@ -105,3 +105,9 @@ Status: resolved
 **已知缺口（来自集成审查，未修）**
 
 - N6：续跑重建环境插件时，用的是 run.json 里 `env_plugins[].spec`（入参原文），没用记下的绝对路径 `path`，位置在 armplan.py `rebuild_plan`。首跑传的是相对路径、续跑时换了目录，就会被拒绝；这种情况会报错，不会静默出错。
+
+### 2026-10-15 用户拍板（集成待拍板项，原话「按照推荐来」）
+
+- 待拍板 1（新插件首评）：仍标退化，不新设状态。`reason_kind=no-different-version` 的退化原因改为以「新插件首评或从未升过版本号，按基线规则比不装」开头，括号里保留原来的事实说明。闸门按 `reason_kind` 区别对待这一类，已追加到票 14 Comments。单测：test_previous.py 里两条 `no-different-version` 用例加了措辞断言。
+  - 这条覆盖了设计票 14（`.scratch/plugin-eval/issues/14-previous-version-arm.md`）第 4 条「新插件首次评测……不算退化」里的「不算退化」：现行口径是仍标退化，靠措辞与 `reason_kind` 区分。见 spec Comments 同日条目。
+- 待拍板 3（`--base` 解析不到）：维持中止，无代码改动。

@@ -96,3 +96,12 @@ Status: resolved
   - `arms.current.dirty` 沿用首跑的值。
   - 闸门读哪一个，由票 14 定，已追加到票 14 Comments。
 - 推断（未实测）：SIGKILL 拦不住。父进程被 SIGKILL 时，不限时模式下的 eval 仍会留在后台；整组一起收到信号时除外。
+
+### 2026-10-15 用户拍板（集成待拍板项，原话「按照推荐来」）
+
+- 待拍板 1（续跑时 Claude Code 版本或主力模型与首跑不同）：
+  - Claude Code 版本不同：照常合并。单值字段 `arms.<臂>.claude_version` 保留首跑值；新增 `arms.<臂>.claude_versions`（续跑过的臂才有，首跑与各次续跑出现过的全部版本，按出现先后）；run.json 顶层新增 `claude_code_versions`（各臂全部版本去重排序，所有运行都有）。报告「续跑」一节照旧告警。
+  - 主力模型不同：判为不完整。新增 `arms.<臂>.main_models`（同上口径），多于一个时 `incomplete_reasons` 加一条「续跑时主力模型与首跑不同（X → Y），前后两段结果不可比，续跑合不成完整；请重新对照」。这个字段随 run.json 保留，再续跑也合不成完整。
+  - 闸门检查 Claude Code 版本是否混用，已追加到票 14 Comments。
+  - 单测：`test_claude_version_drift_merges_and_records_all_versions`、`test_main_model_drift_makes_run_incomplete_even_after_another_resume`。
+- 续跑后自动重新生成待审页、审阅状态回到待审：维持现状。

@@ -30,3 +30,6 @@ Status: ready-for-agent
 - 2026-10-15，票 03 审查遗留（主会话定、jev 同意）：run.json 的 `dirty` 现按插件目录 `git status` 计，含 `evals/`，也含 compare 自己往插件目录写的那行 `.gitignore`（仓根插件首次对照必为 dirty）。本票实现闸门时统一 dirty 口径：dirty 排除 `evals/`（与插件内容指纹的排除范围一致），并排除 compare 自写的 `.gitignore` 行。票 03 不改。
 - 2026-10-15，票 04 集成口径②（主会话定）：插件不在 git 仓、取不到 git 状态时 run.json 记 `dirty=null`。闸门判据必须写成 `dirty is False`；写成 `not dirty` 会把 null 放行。上一版臂的 `head_sha` / `dirty` 恒为 null（快照来自 git 历史，没有 dirty 一说），不能拿它套这条判据。
 - 2026-10-15，集成审查 N4（未修，待本票定）：续跑过的运行，dirty 有两个来源。run.json 的 `preflight.dirty` 取自最后一次续跑时，`arms.current.dirty` 沿用首跑。两者可能不一致，闸门判据须写明读哪一个；也可以要求两者都是 `False`。见票 07 Comments「集成审查修订」一节。
+- 2026-10-15，用户拍板 05-1（原话「按照推荐来」）：新插件首评或从未升过版本号时，上一版臂仍标退化（`previous_arm.degraded=true`、`reason_kind=no-different-version`），不新设状态。闸门按 `reason_kind` 区别对待：`no-different-version` 的退化报告是「按基线规则比不装」，与 `not-git` / `no-history` / `snapshot-failed` 这类取不到上一版的退化分开处理，具体放行规则本票定。
+- 2026-10-15，用户拍板 06-3.2：注入未到达不改 `complete`。闸门读 run.json 的 `injection_check.ok`，为 false 时拒绝把这次运行作依据。
+- 2026-10-15，用户拍板 07-1：续跑时 Claude Code 版本不同照常合并。闸门须检查 run.json 顶层的 `claude_code_versions`：多于一个即版本混用（续跑时版本变了，或各臂不同），按混用处理。主力模型不同已在运行侧判为不完整（`complete=false`），闸门照「不完整不作依据」排除即可。

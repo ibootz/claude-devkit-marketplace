@@ -333,6 +333,7 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
   - `plugin.evals_fingerprint`：用例目录指纹，形如 `{shared, cases}`。`shared` 是 evals/ 下不属于任何用例目录的文件（mocks/ 等共用件）的指纹，`cases` 是「用例 → 指纹」。不进插件内容指纹。续跑前重算，首跑时已有的用例或共用文件改过就拒绝续跑；新增的用例不算改过。
   - `env_plugins[].fingerprint`：每个环境插件的内容指纹。续跑时与重算值不同就拒绝续跑。
   - `preflight.first_run`：只在续跑过的运行里出现，是首跑那次的整份前置检查结果。多次续跑时仍指向首跑。首跑的软项提示另外去重并进顶层 `preflight.warnings`。
+  - `claude_code_versions`（顶层）与 `arms.<臂>.claude_versions`、`arms.<臂>.main_models`：Claude Code 版本与主力模型的全部取值（2026-10-15 拍板 07-1）。顶层列表是各臂全部版本去重排序，每次运行都有，多于一个即混用；臂级两个列表只在续跑过的臂上出现，按出现先后，首跑值在前。单值字段 `claude_code_version`、`arms.<臂>.claude_version`、`arms.<臂>.main_model` 保留首跑值不变。`main_models` 多于一个时运行判不完整。
   - `pending.superseded_by_resume`：续跑改了结果时，旧待审页作废。此时 `page_id` 置为 null，`superseded_by_resume` 记第几次续跑作废的，已写回过的旧页留进 `pending.history`。续跑收尾重新生成一页时，`pending` 换成新页，`history` 照留。
 
 ## 不做的
@@ -397,3 +398,12 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
 - 2026-10-15 拆为 17 张实施票（用户确认粒度、阻塞关系，无合并或再拆），写在 `.scratch/devkit-plugin-eval/issues/`。
 - 2026-10-15 执行方式（用户拍板 1a、2a）：01、02 两张票的后台会话（7058cce7、2a42d84b）跑完，主会话审过分支后合进 main；03 起每张票由主会话派 subagent（独立 worktree），`/mattpocock-skills:implement` 的要求（TDD、代码审查、提交到当前分支）写进派发 prompt，主会话审过后合进 main。
 - 2026-10-15 票 02 遗留口径（用户拍板 2a）：票 02 给 8 个插件新增 `unit-tests.json`，不升这 8 个插件的版本号；插件内容指纹口径不变，仍只排除 `evals/`，不额外排除 `unit-tests.json`（只排除它而不排除 `tests/` 口径不一致）。等本 spec「审后改一字就要重跑」的重开条件触发时再议指纹范围。
+- 2026-10-15 票 04–08 集成拍板（用户原话「按照推荐来」；集成分支 `worktree-agent-a152752b99f3bc6f1`，devkit-plugin-eval 0.2.0 内，不升版本号）：
+  - Q1（票 05 待拍板 1，新插件首评）：仍标退化，不新设状态。`reason_kind=no-different-version` 的退化原因改为以「新插件首评或从未升过版本号，按基线规则比不装」开头；闸门按 `reason_kind` 区别对待（票 14）。本条覆盖设计票 [14 上一版臂](issues/14-previous-version-arm.md)第 4 条「新插件首次评测按 07 本来就比『不装』，不算退化」里的「不算退化」：现行口径是仍标退化、措辞区分、闸门按 `reason_kind` 处理；该句其余部分（新插件首评比「不装」）不变。
+  - Q2（票 05 待拍板 3，`--base` 解析不到）：维持中止。
+  - Q3（票 06 待拍板 1，常驻 token）：维持字符估算，口径见 `.scratch/devkit-plugin-eval/calibration-06-resident-tokens.md`（两点拟合，残差 ≤3%，英文为主的文本未验证）。
+  - Q4（票 06 待拍板 2，注入未到达）：不改 `complete`；闸门读 `injection_check.ok`，为 false 时拒绝作依据（票 14）。
+  - Q5（票 07 待拍板 1，续跑时版本不同）：Claude Code 版本不同照常合并，全部版本记进 `claude_code_versions` 与 `arms.<臂>.claude_versions`，单值字段保留首跑值，报告照旧告警；主力模型不同判不完整，再续跑也合不成完整，需重新对照。闸门检查版本是否混用（票 14）。字段见上文「四、目录布局与状态文件」。
+  - Q6（票 08 待拍板 2，`pending` 不带 `--run`）：仍取最新一次；它没有待审项时，提示里逐个列出较早仍待审的 run_id 与 `--run` 用法。
+  - Q8（续跑后自动重新生成待审页、审阅状态回到待审）：维持现状。
+  - 票 04 口径①（spec 例外）：eval 子进程的 PATH 剔除 `~/.asdf/shims`（版本管理器 shim 在空 HOME 下起不来），找 `claude` 可执行文件时退回本进程的完整 PATH，与 compare、resume 一致。也就是说，「2.6 前置检查」表里「hook 解释器可达」一行说的「同一 PATH」（冒烟与 eval 子进程同一份）仍成立，例外只在解析 `claude` 自身这一步。
