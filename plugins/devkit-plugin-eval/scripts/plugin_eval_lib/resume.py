@@ -9,7 +9,7 @@
 - 臂计划按首跑记下的来源重建（armplan.rebuild_plan）：上一版须是同一提交、环境插件须同版本同内容。
   拿锁之前重跑前置检查硬项（票 04），不过即中止。注入核验与常驻 token（票 06）在 finalize_run 里按合并后的
   汇总重算，所以续跑后仍按臂完整。
-- 同一个运行目录同一时刻只许一个进程写：锁文件在用户级数据目录 locks/ 下，不进被测仓。
+- 同一个运行目录同一时刻只许一个进程写：操作系统咨询锁，锁文件在用户级数据目录 locks/ 下，不进被测仓。
 """
 import copy
 import json
@@ -43,65 +43,73 @@ def _public(arm_rec):
 
 # ---------- 锁 ----------
 
-def _pid_alive(pid):
-    if not isinstance(pid, int) or pid <= 0:
-        return False
-    if sys.platform == 'win32':
-        import ctypes
-        kernel32 = ctypes.windll.kernel32
-        handle = kernel32.OpenProcess(0x1000, False, pid)   # PROCESS_QUERY_LIMITED_INFORMATION
-        if not handle:
-            return False
-        code = ctypes.c_ulong()
-        kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
-        kernel32.CloseHandle(handle)
-        return code.value == 259                              # STILL_ACTIVE
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    except OSError:
-        return False
-    return True
+if sys.platform == 'win32':
+    import msvcrt
+
+    def _try_lock(fh):
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)   # 锁第 0 字节；被占用抛 OSError
+
+    def _unlock(fh):
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+else:
+    import fcntl
+
+    def _try_lock(fh):
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)   # 被占用抛 OSError（EWOULDBLOCK）
+
+    def _unlock(fh):
+        fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
 
 
 class RunLock:
-    """<数据目录>/locks/<run_id>.lock，内容是持有者 pid 与主机名。持有者已不在就接管。"""
+    """<数据目录>/locks/<run_id>.lock 上的操作系统咨询锁（POSIX flock / Windows msvcrt.locking）。
+
+    持锁进程活着就一直持有，进程一死（含被 kill -9）由系统自动释放，不用判断「持有者是否已死」，
+    也就没有「空锁文件被当成死锁接管」「两个进程同时接管」这类竞态。锁文件本身不删（删了会让后来者
+    锁到另一个 inode 上），内容只是持有者的 pid 与主机名，供报错时提示。
+    """
 
     def __init__(self, data_dir, run_id):
         self.path = Path(data_dir) / 'locks' / ('%s.lock' % run_id)
         self.held = False
+        self._fh = None
 
     def acquire(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        for _ in range(2):
-            try:
-                fd = os.open(str(self.path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            except FileExistsError:
-                holder = self._holder()
-                same_host = holder.get('host') in (None, socket.gethostname())
-                if same_host and not _pid_alive(holder.get('pid')):
-                    try:
-                        self.path.unlink()
-                    except FileNotFoundError:
-                        pass
-                    continue
-                raise ResumeError('运行 %s 正在被进程 %s（主机 %s）对照或续跑；它结束后再续跑。确认那个进程已不在时，'
-                                  '删掉锁文件 %s' % (self.path.stem, holder.get('pid'), holder.get('host'), self.path))
-            with os.fdopen(fd, 'w', encoding='utf-8') as f:
-                json.dump({'pid': os.getpid(), 'host': socket.gethostname()}, f)
-            self.held = True
-            return self
-        raise ResumeError('拿不到运行锁：%s' % self.path)
+        fh = open(str(self.path), 'a+', encoding='utf-8')
+        try:
+            _try_lock(fh)
+        except OSError:
+            fh.close()
+            holder = self._holder()
+            raise ResumeError('运行 %s 正在被进程 %s（主机 %s）对照或续跑；它结束后再续跑'
+                              % (self.path.stem, holder.get('pid', '?'), holder.get('host', '?')))
+        fh.seek(0)
+        fh.truncate()
+        fh.write(json.dumps({'pid': os.getpid(), 'host': socket.gethostname()}))
+        fh.flush()
+        self._fh, self.held = fh, True
+        return self
 
     def busy(self):
-        """别的进程正持有这把锁（不拿锁，只探测）。"""
+        """别的进程正持有这把锁（试拿一下立刻放掉）。"""
         if self.held or not self.path.exists():
             return False
-        holder = self._holder()
-        return not (holder.get('host') in (None, socket.gethostname()) and not _pid_alive(holder.get('pid')))
+        try:
+            fh = open(str(self.path), 'a+', encoding='utf-8')
+        except OSError:
+            return False
+        try:
+            _try_lock(fh)
+        except OSError:
+            return True
+        else:
+            _unlock(fh)
+            return False
+        finally:
+            fh.close()
 
     def _holder(self):
         try:
@@ -113,18 +121,24 @@ class RunLock:
     def release(self):
         if self.held:
             try:
-                self.path.unlink()
-            except FileNotFoundError:
+                self._fh.seek(0)
+                self._fh.truncate()
+                self._fh.flush()
+                _unlock(self._fh)
+            except OSError:
                 pass
-            self.held = False
+            finally:
+                self._fh.close()
+                self._fh, self.held = None, False
 
 
 # ---------- 检查点 ----------
 
-def _plugin_block(meta):
-    return {'name': meta['name'], 'version': meta['version'], 'fingerprint': meta['plugin_fp'],
-            'fingerprint_exclude': list(fingerprint.FINGERPRINT_EXCLUDE) + list(meta['extra_exclude']),
-            'path_in_repo': meta['entry']['plugin_path']}
+def plugin_block(*, name, version, plugin_fp, evals_fp, extra_exclude, entry, **_):
+    """run.json 的 plugin 段。evals_fingerprint 是用例目录指纹（不进插件指纹），续跑据此拒绝改过用例的运行。"""
+    return {'name': name, 'version': version, 'fingerprint': plugin_fp,
+            'fingerprint_exclude': list(fingerprint.FINGERPRINT_EXCLUDE) + list(extra_exclude),
+            'path_in_repo': entry['plugin_path'], 'evals_fingerprint': evals_fp}
 
 
 def _environment(meta):
@@ -148,7 +162,7 @@ def write_checkpoint(meta, arm_records, extra=None):
     同时记下臂计划的来源字段（续跑据此重建）与前置检查结果。"""
     done = [arm_records[k].get('label', k) for k in record.ARM_ORDER if arm_records.get(k)]
     rec = record.build_run_record(
-        run_id=meta['run_id'], plugin=_plugin_block(meta),
+        run_id=meta['run_id'], plugin=plugin_block(**meta),
         arms={k: _public(v) for k, v in arm_records.items() if v},
         delta={'cases': {}, 'overall': None, 'missing_cases': []},
         cases=meta['cases'],
@@ -356,6 +370,15 @@ def _resume_arm(spec, *, old_rec, run_dir, cases, runs, base_ctx, tmp_root, atte
     return rec
 
 
+def _evals_changed(old, new, cases):
+    """首跑记的用例目录指纹与现在比：返回变了的部分（共用件、各用例），首跑没记则为空。新增的用例不算。"""
+    if not isinstance(old, dict):
+        return []
+    out = ['evals/ 下的共用文件'] if old.get('shared') != new['shared'] else []
+    return out + ['用例 %s' % c for c in cases
+                  if (old.get('cases') or {}).get(c) and old['cases'][c] != new['cases'].get(c)]
+
+
 def resume_run(data_dir, run_dir, *, claude=None, runner=evalrun.run_eval, env=None, tmp_parent=None,
                sandbox_roots=None, keep_assembly=False, log=None, now=None, preflight_check=None):
     log = log or (lambda msg: print(msg, file=sys.stderr))
@@ -364,14 +387,22 @@ def resume_run(data_dir, run_dir, *, claude=None, runner=evalrun.run_eval, env=N
     rec_path = run_dir / 'run.json'
     if not rec_path.is_file():
         raise ResumeError('%s 下没有 run.json，不是对照运行目录' % run_dir)
-    old = json.loads(rec_path.read_text(encoding='utf-8'))
-    if old.get('kind') != 'compare':
-        raise ResumeError('只能续跑离线对照（kind=compare），%s 是 %r' % (rec_path, old.get('kind')))
+    try:
+        old = json.loads(rec_path.read_text(encoding='utf-8'))
+    except ValueError as e:
+        raise ResumeError('%s 不是合法 JSON（%s），无法续跑；请重新对照' % (rec_path, e))
+    if not isinstance(old, dict) or old.get('kind') != 'compare':
+        raise ResumeError('只能续跑离线对照（kind=compare），%s 是 %r'
+                          % (rec_path, old.get('kind') if isinstance(old, dict) else type(old).__name__))
     if old.get('complete') is True:
         log('运行已完整，无需续跑：%s' % run_dir)
         return compare.CompareResult(run_dir, old, 0)
+    p = old.get('plugin') if isinstance(old.get('plugin'), dict) else {}
+    missing = [k for k in ('plugin.name', 'plugin.version', 'plugin.fingerprint', 'run_id', 'started_at')
+               if not (p.get(k.split('.')[1]) if k.startswith('plugin.') else old.get(k))]
+    if missing:
+        raise ResumeError('%s 缺少续跑必需的字段：%s；请重新对照' % (rec_path, '、'.join(missing)))
 
-    p = old['plugin']
     name = p['name']
     entry = registry.lookup(data_dir, name)          # 未登记即抛 NotRegistered：续跑同样要信任声明
     repo = Path(entry['repo'])
@@ -401,6 +432,12 @@ def resume_run(data_dir, run_dir, *, claude=None, runner=evalrun.run_eval, env=N
     gone = sorted(set(cases) - set(arms.discover_cases(evals_src)))
     if gone:
         raise ResumeError('首跑的用例已不在 %s 下：%s；请重新对照' % (evals_src, ', '.join(gone)))
+    evals_fp = fingerprint.evals_fingerprint(evals_src, arms.discover_cases(evals_src))
+    changed = _evals_changed(p.get('evals_fingerprint'), evals_fp, cases)
+    if changed:
+        raise ResumeError('首跑之后改过用例或 grader（%s）：补跑的 run 会按新判据、首跑的按旧判据，合在一起静默错分；'
+                          '请重新对照' % '、'.join(changed))
+    evals_fp = {'shared': evals_fp['shared'], 'cases': {c: evals_fp['cases'][c] for c in cases}}
 
     try:
         plan = armplan.rebuild_plan(old, plugin_dir=plugin_dir, name=name, version=raw_version, cases=cases,
@@ -426,8 +463,10 @@ def resume_run(data_dir, run_dir, *, claude=None, runner=evalrun.run_eval, env=N
         attempt_no = len(prior) + 1
         attempt = {'attempt': attempt_no, 'started_at': _iso(now()), 'finished_at': None,
                    'reran': {}, 'replaced_invalid_runs': [], 'warnings': []}
+        if not p.get('evals_fingerprint'):
+            attempt['warnings'].append('首跑没有记用例目录指纹（早于集成版的运行），无法核对首跑之后用例或 grader 是否改过')
 
-        meta = dict(log=log, run_id=run_id, name=name, version=version, plugin_fp=plugin_fp,
+        meta = dict(log=log, run_id=run_id, name=name, version=version, plugin_fp=plugin_fp, evals_fp=evals_fp,
                     extra_exclude=extra_exclude, entry=entry, cases=cases, threshold=threshold, started=started,
                     claude=claude, child_env=child_env, runs=runs, concurrency=concurrency, model=model,
                     run_dir=run_dir, data_dir=data_dir, plan=plan, pre=pre)

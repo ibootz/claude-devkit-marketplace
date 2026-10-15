@@ -5,6 +5,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 
@@ -96,6 +97,35 @@ def _kill_tree(proc, own_group):
             continue
 
 
+class _ExitOnSignal(object):
+    """限时模式下 eval 在独立进程组里，父进程被 SIGTERM / SIGHUP 按默认处理直接退出时整组会留在后台继续跑
+    （如后台跑的 compare 被 TaskStop 停掉）。这里把这两个信号转成 SystemExit（退出码 128+信号值），
+    让 run_eval 的 except BaseException 执行到 _kill_tree。只在主线程装（signal 的限制），退出时还原。"""
+
+    SIGNALS = ('SIGTERM', 'SIGHUP')
+
+    def __init__(self, enabled):
+        self.enabled = enabled and threading.current_thread() is threading.main_thread()
+        self.saved = {}
+
+    @staticmethod
+    def _raise(signum, frame):
+        raise SystemExit(128 + signum)
+
+    def __enter__(self):
+        if self.enabled:
+            for name in self.SIGNALS:
+                sig = getattr(signal, name, None)
+                if sig is not None:
+                    self.saved[sig] = signal.signal(sig, self._raise)
+        return self
+
+    def __exit__(self, *exc):
+        for sig, old in self.saved.items():
+            signal.signal(sig, old)
+        return False
+
+
 def run_eval(cmd, cwd, env, log_dir, timeout=None):
     """执行一次 eval，stdout / stderr 落到 log_dir。返回 (退出码, stderr 文本)。
 
@@ -108,16 +138,17 @@ def run_eval(cmd, cwd, env, log_dir, timeout=None):
     with open(log_dir / 'eval.stdout', 'wb') as out, open(log_dir / 'eval.stderr', 'wb') as err:
         # 限时才另起进程组（超时好整组杀）；不限时保持原样，终端 Ctrl-C 照常连带 eval 一起停
         kw = {'start_new_session': True} if timeout and sys.platform != 'win32' else {}
-        proc = subprocess.Popen(cmd, cwd=str(cwd), env=env, stdout=out, stderr=err, stdin=subprocess.DEVNULL, **kw)
-        try:
-            proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            _kill_tree(proc, bool(kw))
-            proc.wait()
-        except BaseException:
-            _kill_tree(proc, bool(kw))   # Ctrl-C 等：别把 eval 子进程留在后台继续跑
-            raise
+        with _ExitOnSignal(bool(kw)):
+            proc = subprocess.Popen(cmd, cwd=str(cwd), env=env, stdout=out, stderr=err, stdin=subprocess.DEVNULL, **kw)
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                _kill_tree(proc, bool(kw))
+                proc.wait()
+            except BaseException:
+                _kill_tree(proc, bool(kw))   # Ctrl-C、SIGTERM / SIGHUP 等：别把 eval 子进程留在后台继续跑
+                raise
     if timed_out:
         with open(log_dir / 'eval.stderr', 'a', encoding='utf-8') as err:
             err.write('\n[devkit-plugin-eval] eval 运行超时（%s 秒）被终止\n' % timeout)

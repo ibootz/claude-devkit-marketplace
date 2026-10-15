@@ -220,6 +220,7 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
         pre.dirty = dirty
         pre.add(preflight.check_dirty(head_sha, dirty))
         plugin_fp = fingerprint.plugin_fingerprint(plugin_dir, extra_exclude)
+        evals_fp = fingerprint.evals_fingerprint(evals_src, cases)
         child_env = evalrun.child_env(env)
 
         started = (now or (lambda: datetime.now(timezone.utc)))()
@@ -229,7 +230,7 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
             raise CompareError('运行目录已存在：%s' % run_dir)
         run_dir.mkdir(parents=True)
 
-        meta = dict(log=log, run_id=run_id, name=name, version=version, plugin_fp=plugin_fp,
+        meta = dict(log=log, run_id=run_id, name=name, version=version, plugin_fp=plugin_fp, evals_fp=evals_fp,
                     extra_exclude=extra_exclude, entry=entry, cases=cases, threshold=threshold, started=started,
                     claude=claude, child_env=child_env, runs=runs, concurrency=concurrency, model=model,
                     run_dir=run_dir, data_dir=data_dir, plan=plan, pre=pre)
@@ -261,7 +262,7 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
         plan.cleanup()
 
 
-def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp, extra_exclude, entry,
+def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp, evals_fp, extra_exclude, entry,
                  cases, threshold, started, claude, child_env, runs, concurrency, model, run_dir, data_dir,
                  plan, pre, statics, prior_preflight=None, decorate=None):
     """判分、注入核验、汇总不完整原因、写 injection-check.json、run.json 与 report.md。
@@ -286,10 +287,8 @@ def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp,
 
     rec = record.build_run_record(
         run_id=run_id,
-        plugin={'name': name, 'version': version,
-                'fingerprint': plugin_fp,
-                'fingerprint_exclude': list(fingerprint.FINGERPRINT_EXCLUDE) + list(extra_exclude),
-                'path_in_repo': entry['plugin_path']},
+        plugin=resume.plugin_block(name=name, version=version, plugin_fp=plugin_fp, evals_fp=evals_fp,
+                                   extra_exclude=extra_exclude, entry=entry),
         arms=arm_records,
         delta=scoring.delta(arm_records['current'], arm_records['none']),
         cases=cases, incomplete_reasons=reasons, threshold=threshold,

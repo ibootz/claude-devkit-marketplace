@@ -266,7 +266,74 @@ class InterruptedRunTest(ResumeTestBase):
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         lock_path.write_text(json.dumps({'pid': 2 ** 22 + 12345}), encoding='utf-8')
         self.assertEqual(self.resume(fake, first.run_dir).exit_code, 0)
-        self.assertFalse(lock_path.exists())
+        self.assertFalse(resume.RunLock(self.data, first.run_dir.name).busy())   # 锁随进程释放，文件留着无妨
+
+    def test_lock_with_empty_file_still_held(self):
+        """票 07 B1：持有者刚建好锁文件、还没写 pid 时，别的进程不能把它当死锁接管。"""
+        a = resume.RunLock(self.data, 'r1').acquire()
+        self.addCleanup(a.release)
+        a.path.write_text('', encoding='utf-8')
+        b = resume.RunLock(self.data, 'r1')
+        self.assertTrue(b.busy())
+        with self.assertRaises(resume.ResumeError):
+            b.acquire()
+        a.release()
+        self.assertFalse(b.busy())
+        b.acquire()
+        b.release()
+
+    def test_lock_released_when_holder_process_killed(self):
+        """票 07 B1：锁由操作系统持有，持有进程被 kill -9 也自动释放，不靠判断 pid 存活。"""
+        import signal
+        import subprocess
+        import sys
+        import time
+        ready = self.tmp / 'ready'
+        code = ("import sys, time; sys.path.insert(0, %r)\n"
+                "from plugin_eval_lib import resume\n"
+                "l = resume.RunLock(%r, 'r2').acquire(); open(%r, 'w').write('1'); time.sleep(120)\n"
+                % (str(Path(resume.__file__).resolve().parents[1]), str(self.data), str(ready)))
+        proc = subprocess.Popen([sys.executable, '-c', code], env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))
+        self.addCleanup(lambda: proc.poll() is None and proc.kill())
+        deadline = time.monotonic() + 20
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        lock = resume.RunLock(self.data, 'r2')
+        self.assertTrue(lock.busy())
+        with self.assertRaises(resume.ResumeError) as cm:
+            lock.acquire()
+        self.assertIn(str(proc.pid), str(cm.exception))
+        proc.send_signal(signal.SIGKILL)
+        proc.wait(timeout=10)
+        self.assertFalse(lock.busy())
+        lock.acquire()
+        lock.release()
+
+    def test_resume_refused_when_evals_changed(self):
+        """票 07 B2：首跑之后改过用例或 grader，续跑拒绝（补跑按新判据、首跑按旧判据会静默错分）。"""
+        fake = ScriptedEval(self.sandboxes, FLAKY, fail={('current', 'case-a', 1): LIMIT_ERROR})
+        first = self.compare(fake)
+        self.assertTrue(self.load(first.run_dir)['plugin']['evals_fingerprint']['cases']['case-a'].startswith('sha256:'))
+        (self.plugin / 'evals' / 'results').mkdir(exist_ok=True)
+        (self.plugin / 'evals' / 'results' / 'x.json').write_text('{}', encoding='utf-8')   # results/ 不算改用例
+        prompt = self.plugin / 'evals' / 'case-a' / 'prompt.md'
+        prompt.write_text(prompt.read_text(encoding='utf-8') + '多一句\n', encoding='utf-8')
+        with self.assertRaises(resume.ResumeError) as cm:
+            self.resume(fake, first.run_dir)
+        self.assertIn('用例 case-a', str(cm.exception))
+
+    def test_corrupt_run_json_is_resume_error(self):
+        """票 07 C4：坏的 run.json 给可读的报错，不抛 traceback。"""
+        fake = ScriptedEval(self.sandboxes, FLAKY, fail={('current', 'case-a', 1): LIMIT_ERROR})
+        first = self.compare(fake)
+        (first.run_dir / 'run.json').write_text('{"kind": "compare", ', encoding='utf-8')
+        with self.assertRaises(resume.ResumeError) as cm:
+            self.resume(fake, first.run_dir)
+        self.assertIn('不是合法 JSON', str(cm.exception))
+        (first.run_dir / 'run.json').write_text('{"kind": "compare", "complete": false}', encoding='utf-8')
+        with self.assertRaises(resume.ResumeError) as cm:
+            self.resume(fake, first.run_dir)
+        self.assertIn('缺少续跑必需的字段', str(cm.exception))
 
 
 class CliResumeTest(ResumeTestBase):

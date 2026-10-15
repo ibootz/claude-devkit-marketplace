@@ -48,6 +48,40 @@ class EvalTimeoutTest(unittest.TestCase):
         self.assertEqual(r.keywords, {'timeout': 5})
 
 
+    @unittest.skipIf(sys.platform == 'win32', 'POSIX 信号')
+    def test_sigterm_to_parent_kills_eval_group_in_timeout_mode(self):
+        """限时模式下父进程被 SIGTERM（如后台 compare 被 TaskStop），eval 进程组跟着被杀，不留在后台（票 07 B3）。"""
+        import signal
+        import subprocess
+        tmp = tmpdir(self)
+        pid_file = tmp / 'child.pid'
+        child = "import os,time; open(%r,'w').write(str(os.getpid())); time.sleep(120)" % str(pid_file)
+        parent = ("import sys; sys.path.insert(0, %r)\n"
+                  "from plugin_eval_lib import evalrun\n"
+                  "evalrun.run_eval([sys.executable, '-c', %r], cwd=%r, env=None, log_dir=%r, timeout=600)\n"
+                  % (str(Path(evalrun.__file__).resolve().parents[1]), child, str(tmp), str(tmp / 'log')))
+        proc = subprocess.Popen([sys.executable, '-c', parent], env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))
+        deadline = time.monotonic() + 20
+        while not (pid_file.is_file() and pid_file.read_text()) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        child_pid = int(pid_file.read_text())
+        proc.send_signal(signal.SIGTERM)
+        self.assertEqual(proc.wait(timeout=30), 128 + signal.SIGTERM)
+
+        def alive(pid):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return False
+            return True
+        deadline = time.monotonic() + 15
+        while alive(child_pid) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        if alive(child_pid):
+            os.kill(child_pid, signal.SIGKILL)
+            self.fail('eval 子进程在父进程收到 SIGTERM 后仍在运行')
+
+
 def _sandbox_with_plugin(root, label, plugin_path):
     sb = Path(root) / ('e-' + label)
     init = {'type': 'system', 'subtype': 'init', 'model': 'm',

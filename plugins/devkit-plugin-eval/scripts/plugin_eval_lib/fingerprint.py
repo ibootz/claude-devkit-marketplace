@@ -32,9 +32,9 @@ def _content_digest(path):
     return hashlib.sha256(data).hexdigest()
 
 
-def iter_files(plugin_dir, extra_exclude=()):
+def iter_files(plugin_dir, extra_exclude=(), base_exclude=FINGERPRINT_EXCLUDE):
     root = Path(plugin_dir)
-    top_excluded = set(FINGERPRINT_EXCLUDE) | set(extra_exclude)
+    top_excluded = set(base_exclude) | set(extra_exclude)
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         rel_dir = Path(dirpath).relative_to(root)
         at_top = rel_dir == Path('.')
@@ -55,3 +55,21 @@ def iter_files(plugin_dir, extra_exclude=()):
 def plugin_fingerprint(plugin_dir, extra_exclude=()):
     lines = sorted('%s\0%s\n' % (rel, _content_digest(full)) for rel, full in iter_files(plugin_dir, extra_exclude))
     return 'sha256:' + hashlib.sha256(''.join(lines).encode('utf-8')).hexdigest()
+
+
+def _digest_lines(lines):
+    return 'sha256:' + hashlib.sha256(''.join(sorted(lines)).encode('utf-8')).hexdigest()
+
+
+def evals_fingerprint(evals_dir, cases):
+    """用例目录（evals/）的内容指纹，算法同插件指纹，跳过顶层 results/（eval 裸跑的产物）。
+    cases 是 evals/ 下现有的全部用例（相对路径）。返回 {'shared': 不属于任何用例的文件（mocks/ 等共用件）的指纹,
+    'cases': {用例: 该用例目录的指纹}}。续跑据此拒绝「首跑之后改过用例或 grader」：合并汇总时用例级 graders
+    沿用首跑，判据变了会静默错分；分用例记，首跑之后新增用例不影响续跑。"""
+    prefixes = sorted(cases, key=len, reverse=True)
+    shared, per_case = [], {c: [] for c in cases}
+    for rel, full in iter_files(evals_dir, ('results',), base_exclude=()):
+        owner = next((c for c in prefixes if rel.startswith(c + '/')), None)
+        line = '%s\0%s\n' % (rel if owner is None else rel[len(owner) + 1:], _content_digest(full))
+        (shared if owner is None else per_case[owner]).append(line)
+    return {'shared': _digest_lines(shared), 'cases': {c: _digest_lines(v) for c, v in per_case.items()}}
