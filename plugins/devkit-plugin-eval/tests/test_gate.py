@@ -384,6 +384,16 @@ class LeakTest(GateTestBase):
         self.r.commit('升 1.2.0')
         self.assertEqual([x['version'] for x in self.gate().data['leaks']], ['1.1.0'])
 
+    def test_eval_required_followed_by_blank_line_and_signature_without_report_is_leak(self):
+        """漏检检查与当前版本判定同口径：eval-required: 后跟空行与署名段（git 不认 trailer）也算进闸门。"""
+        self.r.set_version('1.1.0')
+        self.r.commit('升 1.1.0', trailers=['eval-required: 改了注入文本', '', 'Co-Authored-By: t <t@example.invalid>'])
+        self.r.set_version('1.2.0')
+        self.r.commit('升 1.2.0')
+        leaks = self.gate().data['leaks']
+        self.assertEqual([x['version'] for x in leaks], ['1.1.0'])
+        self.assertIn('eval-required: 改了注入文本', leaks[0]['gated_by'])
+
     def test_skip_or_matching_reviewed_report_not_leak(self):
         self.r.set_version('2.0.0')
         self.r.commit('升 2.0.0', trailers=['eval-skip: 急'])

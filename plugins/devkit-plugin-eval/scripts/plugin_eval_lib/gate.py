@@ -384,7 +384,7 @@ def find_leaks(git, top, target, runs, main_ref, since=None, tmp_parent=None):
         if _git(git, top, 'merge-base', '--is-ancestor', start, intro.sha).returncode != 0:
             continue                 # 早于起算点引入的版本不追溯
         prev_ver = segs[i + 1][0] if i + 1 < len(segs) else None
-        required = [v for c in commits for v in c.trailer(TRAILER_REQUIRED)]
+        required = [v for c in commits for v in c.required()]   # 与当前版本判定同口径：宽松识别正文里的声明
         major = is_major_bump(ver, prev_ver)
         if not (major or required):
             continue
