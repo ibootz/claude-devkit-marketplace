@@ -8,6 +8,7 @@
 「不装」臂用空桩跑 --ablation none，等同不装（票 01 报告第二节实测）。
 上一版臂的 ArmSpec.source 是 git archive 解出的快照目录（previous.py）；环境插件臂在组装后由
 envplugins.install 把环境插件拷进组装目录内（eval 只从 containment root 内加载用例 plugins 字段列的插件）。
+断开的符号链接跳过不拷（装到本机时它同样指向不存在的文件），否则 copytree 拷完整棵树才抛 shutil.Error。
 """
 import json
 import os
@@ -70,11 +71,11 @@ def assemble_arm(root, spec, evals_src, extra_exclude=()):
 
         def ignore(dirpath, names):
             return [n for n in names if Path(dirpath) == src and n in top_excluded]
-        shutil.copytree(src, dest, ignore=ignore)
+        shutil.copytree(src, dest, ignore=ignore, ignore_dangling_symlinks=True)
 
     evals_src = Path(evals_src)
 
     def ignore_results(dirpath, names):
         return ['results'] if Path(dirpath) == evals_src and 'results' in names else []
-    shutil.copytree(evals_src, dest / 'evals', ignore=ignore_results)
+    shutil.copytree(evals_src, dest / 'evals', ignore=ignore_results, ignore_dangling_symlinks=True)
     return dest

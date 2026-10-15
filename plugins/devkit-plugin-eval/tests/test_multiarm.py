@@ -8,7 +8,7 @@ from unittest import mock
 
 import _support
 from _support import tmpdir, write
-from plugin_eval_lib import armplan, compare, envplugins, preflight, previous, registry
+from plugin_eval_lib import armplan, compare, envplugins, preflight, previous, registry, resume
 from test_compare import FakeEval
 
 GIT = shutil.which('git')
@@ -248,6 +248,97 @@ class CliSummaryTest(unittest.TestCase):
         with redirect_stdout(out):
             cli._print_extra_arms({'previous_arm': {'degraded': True, 'reason': '不在 git 仓'}, 'arms': {}}, fmt)
         self.assertIn('上一版臂已退化：不在 git 仓', out.getvalue())
+
+
+class CrashOn(InspectingEval):
+    """跑到 crash_on 臂时抛异常（模拟进程中途退出），之后照常。"""
+
+    def __init__(self, *a, crash_on=None, **kw):
+        super().__init__(*a, **kw)
+        self.crash_on = crash_on
+
+    def __call__(self, cmd, cwd, env, log_dir):
+        if Path(cmd[3]).name == self.crash_on:
+            self.crash_on = None
+            raise RuntimeError('模拟中途退出')
+        return super().__call__(cmd, cwd, env, log_dir)
+
+
+@unittest.skipUnless(GIT, 'git 不可用')
+class MultiArmResumeTest(unittest.TestCase):
+    """续跑按首跑记下的来源重建上一版臂与环境插件臂（票 05 × 票 07）。搭建沿用 MultiArmTest，不继承它的用例。"""
+    setUp, git, commit, preflight, run_compare = (MultiArmTest.setUp, MultiArmTest.git, MultiArmTest.commit,
+                                                  MultiArmTest.preflight, MultiArmTest.run_compare)
+
+    def _crash_then_paths(self, env_src):
+        registry.register(self.data, 'demo-plugin', self.repo)
+        fake = CrashOn(self.sandboxes, SCORES, crash_on='current')
+        with self.assertRaises(RuntimeError):
+            self.run_compare(fake, env_plugins=[str(env_src)])
+        run_dir = next((self.repo / 'plugin-evals' / 'demo-plugin' / 'runs').iterdir())
+        return fake, run_dir
+
+    def _env(self):
+        env_src = self.tmp / 'envsrc' / 'env-a'
+        manifest(env_src, 'env-a', '0.9.0')
+        return env_src
+
+    def resume(self, fake, run_dir):
+        return resume.resume_run(self.data, run_dir, runner=fake, claude='/fake/claude', env={'PATH': '/usr/bin'},
+                                 tmp_parent=self.assembly_parent, sandbox_roots=[self.sandboxes],
+                                 log=lambda *a: None, preflight_check=self.preflight)
+
+    def test_checkpoint_keeps_arm_sources_and_resume_rebuilds_all_arms(self):
+        env_src = self._env()
+        fake, run_dir = self._crash_then_paths(env_src)
+        cp = json.loads((run_dir / 'run.json').read_text(encoding='utf-8'))
+        self.assertFalse(cp['complete'])
+        self.assertEqual(cp['previous_arm']['commit'], self.c1)
+        self.assertTrue(cp['previous_arm']['ran'])
+        self.assertEqual(cp['env_plugins'][0]['version'], '0.9.0')
+        self.assertTrue(cp['env_plugins'][0]['fingerprint'].startswith('sha256:'))
+        self.assertIsNotNone(cp['preflight'])
+        self.assertEqual(list(self.assembly_parent.iterdir()), [])     # 快照目录随中途退出一并清掉
+
+        n_pre = len(self.preflight_kw)
+        res = self.resume(fake, run_dir)
+        self.assertEqual(len(self.preflight_kw), n_pre + 1)           # 续跑重跑前置检查
+        self.assertEqual([lab for lab, _ in self.preflight_kw[-1]['others']][0][:6], '上一版快照 ')
+        arms_run = [Path(c['cmd'][3]).name for c in fake.calls]
+        self.assertEqual(arms_run, ['none', 'previous', 'current', 'current_with_env'])
+        self.assertEqual(fake.seen['current_with_env']['env'], ['env-a'])
+        rec = json.loads((run_dir / 'run.json').read_text(encoding='utf-8'))
+        self.assertTrue(rec['complete'], rec['incomplete_reasons'])
+        self.assertEqual(rec['arms']['previous']['commit'], self.c1)
+        self.assertIsNone(rec['arms']['previous']['head_sha'])
+        self.assertEqual(rec['delta_vs_previous']['overall'], 1)
+        self.assertEqual(rec['delta_env_vs_current']['overall'], 0)
+        self.assertEqual(set(rec['injection_check']['arms']), {'none', 'previous', 'current', 'current_with_env'})
+        self.assertEqual(list(self.assembly_parent.iterdir()), [])
+
+    def test_resume_refused_when_env_plugin_changed(self):
+        env_src = self._env()
+        fake, run_dir = self._crash_then_paths(env_src)
+        write(env_src / 'hooks' / 'x.js', 'changed\n')
+        with self.assertRaises(resume.ResumeError) as cm:
+            self.resume(fake, run_dir)
+        self.assertIn('环境插件', str(cm.exception))
+        manifest(env_src, 'env-a', '0.9.1')
+        with self.assertRaises(resume.ResumeError) as cm:
+            self.resume(fake, run_dir)
+        self.assertIn('0.9.0', str(cm.exception))
+        self.assertEqual(list(self.assembly_parent.iterdir()), [])
+
+    def test_resume_refused_when_previous_resolves_elsewhere(self):
+        env_src = self._env()
+        fake, run_dir = self._crash_then_paths(env_src)
+        # 首跑后又发了一版、但被测插件内容不变是不可能的；这里直接改首跑记下的提交，模拟认定漂移
+        rec = json.loads((run_dir / 'run.json').read_text(encoding='utf-8'))
+        rec['previous_arm']['commit'] = self.c2
+        (run_dir / 'run.json').write_text(json.dumps(rec), encoding='utf-8')
+        with self.assertRaises(resume.ResumeError) as cm:
+            self.resume(fake, run_dir)
+        self.assertIn('上一版认定与首跑不同', str(cm.exception))
 
 
 if __name__ == '__main__':

@@ -3,8 +3,11 @@
 臂：不装、上一版（取得到才跑）、当前版、当前版+环境插件（传了才跑）。扩展点：
 - 前置检查（票 04，preflight.py）在臂计划定好之后、任何仓库写入之前；
 - 上一版 / 环境插件臂（票 05）由 armplan.plan_arms 定，臂清单在 plan.specs；
-- 注入到达核验（票 06）：_run_arm 记下静态画像与逐 run 转录位置，所有臂跑完后 injection_check.build 读搬出的转录；
+- 注入到达核验（票 06）：静态画像在 eval 开跑前按臂算好；_run_arm 把逐 run 搬出的转录目录写进汇总
+  （devkitTraceDir），finalize_run 据此重建清单交 injection_check.build；
 - AI 评委（票 09）在所有臂跑完、写 run.json 之前。
+不完整与续跑（票 07）：每跑完一臂写一次检查点 run.json（complete=false），中途退出也留得下；
+收尾在 finalize_run，续跑（resume.py）复用它与 _run_arm，所以这两处的扩展续跑自动带上。
 """
 import json
 import shutil
@@ -17,11 +20,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import (armplan, arms, envplugins, evalrun, fingerprint, injection, injection_check, preflight, record,
-               registry, scoring, traces)
+               registry, resume, sandbox_sweep, scoring, traces)
 
 
 # eval 正常跑完的退出码：0 全过、1 有用例低于 --threshold（判分我们自己重算，不看它）。其余（如 2）是中途中止。
 EVAL_OK_EXIT_CODES = (0, 1)
+# 汇总里每个 with run 记它搬出的转录目录（相对数据目录的 posix 路径），续跑合并后仍能找回
+TRACE_DIR_KEY = 'devkitTraceDir'
 
 
 class CompareError(Exception):
@@ -69,6 +74,21 @@ def _case_slug(case):
     return scoring._case_rel_dir(case).replace('/', '__')
 
 
+def static_profiles(specs, env):
+    """各臂常驻注入的静态画像（票 06）：{臂 key: 画像}，「不装」臂为 None。同一插件目录只算一次。
+    在 eval 开跑前算：静态执行 hook 的结果与 eval 无关，放到跑完后算会让中途退出的运行缺这份数据。"""
+    by_source, out = {}, {}
+    for spec in specs:
+        if spec.source is None:
+            out[spec.key] = None
+            continue
+        src = str(spec.source)
+        if src not in by_source:
+            by_source[src] = injection.static_profile(spec.source, env=env)
+        out[spec.key] = by_source[src]
+    return out
+
+
 def _run_arm(spec, *, ctx):
     arm_dir = arms.assemble_arm(ctx['assembly_root'], spec, ctx['evals_src'], extra_exclude=ctx['extra_exclude'])
     env_skipped = envplugins.install(arm_dir, spec.env_plugins) if spec.env_plugins else None
@@ -87,9 +107,6 @@ def _run_arm(spec, *, ctx):
         'eval_exit_code': exit_code,
         'trace_dir': 'traces/%s/%s' % (ctx['run_id'], spec.key),
         'cleanup_warnings': [],
-        # 注入到达核验（票 06）：常驻注入的静态画像与逐 run 转录位置，injection_check.build 取走
-        '_static': injection.static_profile(spec.source, env=ctx['env']) if spec.source is not None else None,
-        '_runs': [],
     }
     if spec.source is None:
         rec.update(stub_name=arms.STUB_NAME, version=None)
@@ -106,13 +123,10 @@ def _run_arm(spec, *, ctx):
                    usage=traces.merge_usage([]), main_model=None, claude_version=None,
                    load_issues=['eval 没有产出 aggregate-result.json（退出码 %s），stderr 见 %s/eval.stderr'
                                 % (exit_code, rec['trace_dir'])])
+        rec['cleanup_warnings'] += sandbox_sweep.sweep_orphans(arm_dir, log_dir, ctx['sandbox_roots'])
         return rec
 
-    arm_out = ctx['run_dir'] / 'arms' / spec.key
-    arm_out.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(agg_path, arm_out / 'aggregate-result.json')
     agg = json.loads(agg_path.read_text(encoding='utf-8'))
-
     usages, models = [], Counter()
     for case in agg.get('cases', []):
         for i, run in enumerate(case.get('arms', {}).get('with', []), 1):
@@ -121,10 +135,14 @@ def _run_arm(spec, *, ctx):
             usages.append(s['usage'])
             if s['main_model']:
                 models[s['main_model']] += 1
-            run_trace_dir = log_dir / ('%s-%d' % (_case_slug(case), i))
-            rec['cleanup_warnings'] += traces.harvest_sandbox(tp, run_trace_dir, ctx['sandbox_roots'])
-            rec['_runs'].append({'case': scoring._case_rel_dir(case), 'run': i, 'dir': run_trace_dir, 'trace_path': tp})
+            run_name = '%s-%d' % (_case_slug(case), i)
+            rec['cleanup_warnings'] += traces.harvest_sandbox(tp, log_dir / run_name, ctx['sandbox_roots'])
+            run[TRACE_DIR_KEY] = '%s/%s' % (rec['trace_dir'], run_name)
+    rec['cleanup_warnings'] += sandbox_sweep.sweep_orphans(arm_dir, log_dir, ctx['sandbox_roots'])
 
+    arm_out = ctx['run_dir'] / 'arms' / spec.key
+    arm_out.mkdir(parents=True, exist_ok=True)
+    resume.write_json_atomic(arm_out / 'aggregate-result.json', agg)   # 带上 devkitTraceDir 标注
     rec.update(
         aggregate_result='arms/%s/aggregate-result.json' % spec.key,
         cost_usd=agg.get('costUsd'), usage=traces.merge_usage(usages),
@@ -134,6 +152,17 @@ def _run_arm(spec, *, ctx):
     )
     rec['_agg'] = agg   # 判分用，写 run.json 前去掉
     return rec
+
+
+def _runs_from_agg(agg, data_dir):
+    """注入核验要的逐 run 转录位置：[{case, run, dir, trace_path}]。dir 取汇总里记的 devkitTraceDir。"""
+    out = []
+    for case in (agg or {}).get('cases', []):
+        for i, run in enumerate(case.get('arms', {}).get('with', []), 1):
+            rel = run.get(TRACE_DIR_KEY)
+            out.append({'case': scoring._case_rel_dir(case), 'run': i,
+                        'dir': Path(data_dir) / rel if rel else None, 'trace_path': run.get('tracePath')})
+    return out
 
 
 def _score_arms(arm_records, log):
@@ -200,24 +229,47 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
             raise CompareError('运行目录已存在：%s' % run_dir)
         run_dir.mkdir(parents=True)
 
-        assembly_root = Path(tempfile.mkdtemp(prefix='devkit-plugin-eval-', dir=tmp_parent))
-        ctx = {
-            'assembly_root': assembly_root, 'evals_src': evals_src, 'extra_exclude': extra_exclude,
-            'traces_root': data_dir / 'traces' / run_id, 'run_dir': run_dir, 'run_id': run_id,
-            'claude': claude, 'runs': runs, 'concurrency': concurrency, 'model': model,
-            'runner': runner, 'env': child_env, 'cases': cases, 'log': log, 'version': version,
-            'head_sha': head_sha, 'dirty': dirty, 'sandbox_roots': sandbox_roots,
-        }
+        meta = dict(log=log, run_id=run_id, name=name, version=version, plugin_fp=plugin_fp,
+                    extra_exclude=extra_exclude, entry=entry, cases=cases, threshold=threshold, started=started,
+                    claude=claude, child_env=child_env, runs=runs, concurrency=concurrency, model=model,
+                    run_dir=run_dir, data_dir=data_dir, plan=plan, pre=pre)
         arm_records = {}
+        lock = resume.RunLock(data_dir, run_id)
+        lock.acquire()
         try:
-            for spec in plan.specs:
-                arm_records[spec.key] = _run_arm(spec, ctx=ctx)
+            resume.write_checkpoint(meta, arm_records)
+            meta['statics'] = static_profiles(plan.specs, child_env)
+            assembly_root = Path(tempfile.mkdtemp(prefix='devkit-plugin-eval-', dir=tmp_parent))
+            ctx = {
+                'assembly_root': assembly_root, 'evals_src': evals_src, 'extra_exclude': extra_exclude,
+                'traces_root': data_dir / 'traces' / run_id, 'run_dir': run_dir, 'run_id': run_id,
+                'claude': claude, 'runs': runs, 'concurrency': concurrency, 'model': model,
+                'runner': runner, 'env': child_env, 'cases': cases, 'log': log, 'version': version,
+                'head_sha': head_sha, 'dirty': dirty, 'sandbox_roots': sandbox_roots,
+            }
+            try:
+                for spec in plan.specs:
+                    arm_records[spec.key] = _run_arm(spec, ctx=ctx)
+                    resume.write_checkpoint(meta, arm_records)
+            finally:
+                if not keep_assembly:
+                    shutil.rmtree(assembly_root, ignore_errors=True)
+            return finalize_run(arm_records, [], **meta)
         finally:
-            if not keep_assembly:
-                shutil.rmtree(assembly_root, ignore_errors=True)
+            lock.release()
     finally:
         plan.cleanup()
-    reasons = []
+
+
+def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp, extra_exclude, entry,
+                 cases, threshold, started, claude, child_env, runs, concurrency, model, run_dir, data_dir,
+                 plan, pre, statics, prior_preflight=None, decorate=None):
+    """判分、注入核验、汇总不完整原因、写 injection-check.json、run.json 与 report.md。
+    arm_records 里带 _agg 的臂才判分、才有逐 run 的注入核验。pre 是本次的前置检查报告（Report）；
+    prior_preflight 是续跑时首跑记下的那份（dict），软项提示并进本次。decorate(rec) 在落盘前改记录。"""
+    for key, rec in arm_records.items():
+        rec['_static'] = statics.get(key)
+        rec['_runs'] = _runs_from_agg(rec.get('_agg'), data_dir)
     _score_arms(arm_records, log)
     inj_check, resident = injection_check.build(arm_records)
     for problem in inj_check['problems']:
@@ -229,7 +281,8 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
                            % (spec.label, rec['eval_exit_code']))
         reasons += ['%s臂：%s' % (spec.label, i) for i in rec['load_issues']]
         if rec['invalid_run_count']:
-            reasons.append('%s臂：%d 个 run 出错，判无效不计分' % (spec.label, rec['invalid_run_count']))
+            reasons.append('%s臂：%d 个 run 出错，判无效不计分%s' % (spec.label, rec['invalid_run_count'],
+                                                               resume.usage_limit_note(rec)))
 
     rec = record.build_run_record(
         run_id=run_id,
@@ -246,13 +299,25 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
                      'platform': sys.platform},
     )
     rec.update(plan.record_fields(arm_records))
-    pre.add(preflight.check_version_model(preflight.previous_compare(run_dir.parent, exclude=run_id),
+    pre.add(preflight.check_version_model(preflight.previous_compare(Path(run_dir).parent, exclude=run_id),
                                           rec['claude_code_version'], rec['main_model']))
-    rec['preflight'] = pre.to_dict()
+    rec['preflight'] = _merge_preflight(pre.to_dict(), prior_preflight)
     rec.update(injection_check=injection_check.summary(inj_check), resident_tokens=resident)
+    if decorate:
+        rec = decorate(rec)
     rec = record.scrub_home(rec)   # 产物会入库：本机家目录前缀换成 ~
-    (run_dir / 'injection-check.json').write_text(
-        json.dumps(record.scrub_home(inj_check), ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    (run_dir / 'run.json').write_text(json.dumps(rec, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    (run_dir / 'report.md').write_text(record.render_report(rec), encoding='utf-8')
-    return CompareResult(run_dir, rec, 0 if rec['complete'] else 3)
+    resume.write_json_atomic(Path(run_dir) / 'injection-check.json', record.scrub_home(inj_check))
+    resume.write_json_atomic(Path(run_dir) / 'run.json', rec)
+    (Path(run_dir) / 'report.md').write_text(record.render_report(rec) + resume.report_section(rec), encoding='utf-8')
+    return CompareResult(Path(run_dir), rec, 0 if rec['complete'] else 3)
+
+
+def _merge_preflight(current, prior):
+    """续跑：首跑的软项提示保留（去重后排在前面），整份首跑结果另存在 first_run 下。"""
+    if not prior:
+        return current
+    merged = dict(current)
+    merged['warnings'] = list(dict.fromkeys(list(prior.get('warnings') or []) + list(current.get('warnings') or [])))
+    merged['first_run'] = prior
+    return merged
+

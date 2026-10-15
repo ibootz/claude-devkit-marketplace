@@ -1,7 +1,10 @@
 """调起 `claude plugin eval`：解析可执行路径、准备子进程环境、拼命令、执行。"""
+import functools
 import os
 import shutil
+import signal
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -63,17 +66,68 @@ def build_eval_command(claude, arm_dir, output_dir, *, runs, concurrency, report
     return cmd
 
 
-def run_eval(cmd, cwd, env, log_dir):
+# 超时被终止时记的退出码（同 GNU timeout）。不在 0 / 1 之内，compare 据此把该臂记为不完整、可续跑。
+EVAL_TIMEOUT_EXIT_CODE = 124
+# 超时后先发 SIGTERM，等这么多秒再强杀
+KILL_GRACE_SECONDS = 10
+
+
+def _kill_tree(proc, own_group):
+    """eval 会起一串 claude 子进程：POSIX 杀整个进程组（own_group 为真时 eval 是组长），Windows 用 taskkill /T。"""
+    if sys.platform == 'win32':
+        taskkill = shutil.which('taskkill')
+        if taskkill:
+            subprocess.run([taskkill, '/T', '/F', '/PID', str(proc.pid)], capture_output=True)
+        else:
+            proc.kill()
+        return
+    if not own_group:
+        proc.kill()
+        return
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(proc.pid, sig)
+        except OSError:
+            return
+        try:
+            proc.wait(timeout=KILL_GRACE_SECONDS)
+            return
+        except subprocess.TimeoutExpired:
+            continue
+
+
+def run_eval(cmd, cwd, env, log_dir, timeout=None):
     """执行一次 eval，stdout / stderr 落到 log_dir。返回 (退出码, stderr 文本)。
 
     退出码 1 既可能是「有用例低于阈值」也可能是「有用例加载失败」，调用方另行核对，不能当运行失败。
+    timeout（秒）为 None 时不限时；超时则终止 eval 及其子进程，返回 EVAL_TIMEOUT_EXIT_CODE。
     """
     log_dir = Path(log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
+    timed_out = False
     with open(log_dir / 'eval.stdout', 'wb') as out, open(log_dir / 'eval.stderr', 'wb') as err:
-        proc = subprocess.run(cmd, cwd=str(cwd), env=env, stdout=out, stderr=err, stdin=subprocess.DEVNULL)
+        # 限时才另起进程组（超时好整组杀）；不限时保持原样，终端 Ctrl-C 照常连带 eval 一起停
+        kw = {'start_new_session': True} if timeout and sys.platform != 'win32' else {}
+        proc = subprocess.Popen(cmd, cwd=str(cwd), env=env, stdout=out, stderr=err, stdin=subprocess.DEVNULL, **kw)
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            _kill_tree(proc, bool(kw))
+            proc.wait()
+        except BaseException:
+            _kill_tree(proc, bool(kw))   # Ctrl-C 等：别把 eval 子进程留在后台继续跑
+            raise
+    if timed_out:
+        with open(log_dir / 'eval.stderr', 'a', encoding='utf-8') as err:
+            err.write('\n[devkit-plugin-eval] eval 运行超时（%s 秒）被终止\n' % timeout)
     stderr = (log_dir / 'eval.stderr').read_text(encoding='utf-8', errors='replace')
-    return proc.returncode, stderr
+    return (EVAL_TIMEOUT_EXIT_CODE if timed_out else proc.returncode), stderr
+
+
+def runner_with_timeout(seconds):
+    """给 compare / resume 的 runner 参数用：seconds 为空或 0 时就是 run_eval 本身。"""
+    return functools.partial(run_eval, timeout=seconds) if seconds else run_eval
 
 
 def find_aggregate(output_dir):

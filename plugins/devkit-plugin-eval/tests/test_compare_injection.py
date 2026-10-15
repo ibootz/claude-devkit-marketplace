@@ -7,7 +7,7 @@ from pathlib import Path
 
 import _support
 from _support import tmpdir, aggregate, grader, run_result, trace_lines, write
-from plugin_eval_lib import compare, registry
+from plugin_eval_lib import compare, registry, resume
 from test_compare import passing_preflight
 from test_injection import HOOK_SRC, hook_cmd, make_hook_plugin, std_hooks
 
@@ -119,6 +119,34 @@ class CompareInjectionTest(unittest.TestCase):
         # 不计分：不改变完整性与分数
         self.assertTrue(res.record['complete'])
         self.assertEqual(res.record['arms']['current']['score'], 1.0)
+
+
+    def test_resume_after_crash_keeps_injection_check_and_resident_tokens_per_arm(self):
+        """票 06 × 票 07：续跑沿用首跑的不装臂、补跑当前版臂，核验与常驻 token 仍按臂完整。"""
+        fake = TranscriptEval(self.sandboxes)
+
+        def crashing(cmd, cwd, env, log_dir):
+            if Path(cmd[3]).name == 'current':
+                raise RuntimeError('模拟中途退出')
+            return fake(cmd, cwd, env, log_dir)
+        with self.assertRaises(RuntimeError):
+            self.run_compare(crashing)
+        run_dir = next((self.repo / 'plugin-evals' / 'inj-plugin' / 'runs').iterdir())
+        self.assertFalse(json.loads((run_dir / 'run.json').read_text(encoding='utf-8'))['complete'])
+
+        res = resume.resume_run(self.data, run_dir, runner=fake, claude='/fake/claude', env=dict(os.environ),
+                                tmp_parent=self.tmp / 'assembly', sandbox_roots=[self.sandboxes],
+                                log=lambda *a: None, preflight_check=passing_preflight)
+        self.assertTrue(res.record['complete'], res.record['incomplete_reasons'])
+        check = json.loads((run_dir / 'injection-check.json').read_text(encoding='utf-8'))
+        self.assertTrue(check['ok'], check['problems'])
+        self.assertEqual((check['arms']['none']['runs_total'], check['arms']['none']['runs_no_transcript']), (2, 0))
+        self.assertEqual((check['arms']['current']['runs_total'], check['arms']['current']['runs_arrived']), (2, 2))
+        self.assertEqual(set(res.record['injection_check']['arms']), {'none', 'current'})
+        self.assertGreater(res.record['resident_tokens']['arms']['current']['total_tokens_est'], 0)
+        report = (run_dir / 'report.md').read_text(encoding='utf-8')
+        self.assertIn('## 注入到达核验', report)
+        self.assertIn('## 续跑记录', report)
 
 
 if __name__ == '__main__':

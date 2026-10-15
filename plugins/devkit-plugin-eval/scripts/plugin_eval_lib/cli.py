@@ -1,4 +1,4 @@
-"""命令行：register / list / check / compare。
+"""命令行：register / list / check / compare / resume。
 
 退出码：0 成功；2 用法、登记、环境类错误（含未登记、前置检查硬项失败）；3 对照跑完但结果不完整（用例加载失败、run 出错等）。
 """
@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 
-from . import armplan, compare, datadir, evalrun, preflight, registry
+from . import armplan, compare, datadir, evalrun, preflight, registry, resume
 
 
 def _utf8_stdio():
@@ -47,6 +47,12 @@ def _parser():
                    help='上一版改用这个提交或版本号（版本号取它的引入提交）；缺省自动认定')
     c.add_argument('--env-plugin', action='append', default=[], metavar='插件名@市场|路径',
                    help='加一个「当前版+环境插件」臂；可重复，多个环境插件同装在这一个臂里')
+    c.add_argument('--eval-timeout', type=float, default=0, help='每次调 eval 的超时（分钟），超时终止并记为不完整、可续跑；默认 0 不限时')
+
+    rs = sub.add_parser('resume', help='续跑一次不完整的对照：已完成的 run 不重跑，只补跑判无效与未跑的 run')
+    rs.add_argument('run_dir', help='运行目录：<仓>/plugin-evals/<插件>/runs/<run_id>')
+    rs.add_argument('--keep-assembly', action='store_true', help='保留臂组装目录（排查用）')
+    rs.add_argument('--eval-timeout', type=float, default=0, help='同 compare --eval-timeout')
     return p
 
 
@@ -93,13 +99,17 @@ def main(argv=None):
         if args.cmd == 'list':
             print(json.dumps(registry.load(data_dir)['plugins'], ensure_ascii=False, indent=2))
             return 0
-        if args.cmd == 'check':
+        if args.cmd == 'check':      # check 没有 --eval-timeout，要排在读它之前
             return _check(args, data_dir)
-        res = compare.run_compare(data_dir, args.name, runs=args.runs, concurrency=args.concurrency,
-                                  model=args.model, threshold=args.threshold, keep_assembly=args.keep_assembly,
-                                  base=args.base, env_plugins=args.env_plugin)
+        runner = evalrun.runner_with_timeout(args.eval_timeout * 60 if args.eval_timeout else None)
+        if args.cmd == 'resume':
+            res = resume.resume_run(data_dir, args.run_dir, runner=runner, keep_assembly=args.keep_assembly)
+        else:
+            res = compare.run_compare(data_dir, args.name, runs=args.runs, concurrency=args.concurrency,
+                                      model=args.model, threshold=args.threshold, keep_assembly=args.keep_assembly,
+                                      base=args.base, env_plugins=args.env_plugin, runner=runner)
     except (registry.RegistryError, datadir.DataDirError, evalrun.ClaudeNotFound, compare.CompareError,
-            armplan.ArmSourceError, preflight.PreflightFailed) as e:
+            armplan.ArmSourceError, preflight.PreflightFailed, resume.ResumeError) as e:
         print('错误：%s' % e, file=sys.stderr)
         return 2
 
@@ -113,4 +123,6 @@ def main(argv=None):
                                                 rec['usage']['cost_usd']))
     for r in rec['incomplete_reasons']:
         print('  不完整原因：%s' % r)
+    if not rec['complete']:
+        print('续跑（已完成的 run 不重跑，只补跑判无效与未跑的 run）：%s' % resume.resume_hint(res.run_dir, data_dir))
     return res.exit_code
