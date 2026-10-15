@@ -7,7 +7,8 @@ import argparse
 import json
 import sys
 
-from . import armplan, clauses, compare, datadir, evalrun, gate, judge, pending, preflight, registry, resume, review
+from . import armplan, clauses, compare, datadir, evalrun, gate, judge, judgereport, pending, preflight, registry, resume, \
+    review
 
 
 def _utf8_stdio():
@@ -164,12 +165,9 @@ def main(argv=None):
     _print_extra_arms(rec, fmt)
     print('完整：%s；状态：%s；花费（标价估算）：$%.4f' % ('是' if rec['complete'] else '否', rec['review']['status'],
                                                 rec['usage']['cost_usd']))
-    j = rec.get('judge')
-    if j:
-        g = j.get('gold') or {}
-        print('AI 评委 %s：样本 %d、分歧 %d、抽检 %d、出错 %d；金标一致率 %s；%s' % (
-            j['model'], j['samples'], j['disagreements'], j['spot_checks'], j['errors'],
-            fmt(g.get('agreement_rate')), '采信' if j.get('trusted') else 'AI 判分不采信：%s' % j.get('untrusted_reason')))
+    line = judgereport.console_line(rec.get('judge'))
+    if line:
+        print(line)
     for r in rec['incomplete_reasons']:
         print('  不完整原因：%s' % r)
     if not rec['complete']:

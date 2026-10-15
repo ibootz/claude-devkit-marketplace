@@ -11,7 +11,7 @@ from pathlib import Path
 
 import _support
 from _support import tmpdir, write
-from plugin_eval_lib import cli, clauses, compare, judge, judgepending, pending, record, registry, resume
+from plugin_eval_lib import cli, clauses, compare, judge, judgepending, judgereport, pending, record, registry, resume
 from test_compare import FakeEval, passing_preflight
 from test_resume import ScriptedEval
 
@@ -481,6 +481,17 @@ class ResumeOptionsTest(JudgeCompareBase):
 
 
 class PureFunctionTest(unittest.TestCase):
+    def test_console_line_covers_three_trust_states_and_no_judge(self):
+        base = {'model': 'm', 'samples': 4, 'disagreements': 2, 'spot_checks': 2, 'errors': 0,
+                'gold': {'agreement_rate': None}, 'untrusted_reason': None}
+        self.assertTrue(judgereport.console_line(dict(base, trusted=None)).endswith('采信（未校准）'))
+        self.assertTrue(judgereport.console_line(dict(base, trusted=True)).endswith('；采信'))
+        line = judgereport.console_line(dict(base, trusted=False, untrusted_reason='一致率 0.50 低于阈值 0.80'))
+        self.assertIn('不采信（一致率 0.50 低于阈值 0.80）', line)
+        self.assertNotIn('None', judgereport.console_line(dict(base, trusted=None)))
+        self.assertEqual(judgereport.console_line({'skipped': 'no-judge'}), 'AI 评委：按 --no-judge 跳过')
+        self.assertIsNone(judgereport.console_line(None))
+
     def test_parse_verdict(self):
         self.assertEqual(judge.parse_verdict('{"verdict":"pass","reason":"ok"}'), ('pass', 'ok'))
         self.assertEqual(judge.parse_verdict('前言 {"x": {"y": 1}} 然后 {"verdict": "FAIL", "reason": "r"}')[0], 'fail')

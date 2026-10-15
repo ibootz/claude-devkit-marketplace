@@ -25,6 +25,18 @@ def skipped(j):
     return isinstance(j, dict) and j.get('skipped') == 'no-judge'
 
 
+def console_line(j):
+    """compare / resume 收尾在终端打印的评委一行；没有评委段时返回 None。"""
+    if not isinstance(j, dict):
+        return None
+    if skipped(j):
+        return 'AI 评委：按 --no-judge 跳过'
+    rate = (j.get('gold') or {}).get('agreement_rate')
+    return 'AI 评委 %s：样本 %s、分歧 %s、抽检 %s、出错 %s；金标一致率 %s；%s' % (
+        j.get('model'), j.get('samples'), j.get('disagreements'), j.get('spot_checks'), j.get('errors'),
+        '—' if rate is None else '%.2f' % rate, trust_text(j).replace('**', ''))
+
+
 def scoring_line(rec):
     """报告首段「判分」一行：按本次实际情况写。"""
     j = rec.get('judge')
