@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
-from . import record, registry, resume
+from . import record, registry
 
 PAGE_LIMIT = 10
 REPLY_PREFIX = 'PE1'
@@ -653,3 +653,8 @@ def main(args, data_dir):
     print('回复码以「%s %s %s」开头。用户贴回后运行：' % (REPLY_PREFIX, page.run_id, page.page_id))
     print("  python3 plugin_eval.py --data-dir '%s' pending %s --reply '<回复码>'" % (data_dir, args.name))
     return 0
+
+
+# resume 放到模块末尾才导入：resume → compare → judgepending / clauses 会在导入期调 register_type，
+# 那时本模块必须已定义完 ItemType 与注册表。本模块只在函数体里用 resume.X。
+from . import resume  # noqa: E402

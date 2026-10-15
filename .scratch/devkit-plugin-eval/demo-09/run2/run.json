@@ -1,0 +1,569 @@
+{
+  "schema_version": 1,
+  "kind": "compare",
+  "run_id": "20261015T123753Z-4.1.0-compare",
+  "started_at": "2026-10-15T12:37:53Z",
+  "finished_at": "2026-10-15T12:39:53Z",
+  "plugin": {
+    "name": "devkit-discipline",
+    "version": "4.1.0",
+    "fingerprint": "sha256:c06cf79180afb51c6a65152eb28ff0f1d4177a9ea324c5b8871341770e1d9524",
+    "fingerprint_exclude": [
+      "evals"
+    ],
+    "path_in_repo": "plugins/devkit-discipline",
+    "evals_fingerprint": {
+      "shared": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "cases": {
+        "decision-no-ask": "sha256:1bb81805be35b524f7e75c78e56dfc910c53bfe99ecf68da4a598a932f20da55"
+      }
+    }
+  },
+  "clause_list_fingerprint": null,
+  "cases": [
+    "decision-no-ask"
+  ],
+  "arms": {
+    "none": {
+      "label": "不装",
+      "source": "stub",
+      "eval_exit_code": 1,
+      "trace_dir": "traces/20261015T123753Z-4.1.0-compare/none",
+      "cleanup_warnings": [],
+      "stub_name": "devkit-plugin-eval-noplugin-stub",
+      "version": null,
+      "aggregate_result": "arms/none/aggregate-result.json",
+      "cost_usd": 0.0838468,
+      "usage": {
+        "input_tokens": 2,
+        "output_tokens": 2097,
+        "cache_read_input_tokens": 5214,
+        "cache_creation_input_tokens": 5107,
+        "cost_usd": 0.0838468,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 2,
+            "output_tokens": 2097,
+            "cache_read_input_tokens": 5214,
+            "cache_creation_input_tokens": 5107,
+            "cost_usd": 0.0838468
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.300",
+      "load_issues": [],
+      "score": 0.5,
+      "cases": {
+        "decision-no-ask": {
+          "score": 0.5,
+          "run_scores": [
+            0.5
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    },
+    "current": {
+      "label": "当前版",
+      "source": "working-tree",
+      "eval_exit_code": 1,
+      "trace_dir": "traces/20261015T123753Z-4.1.0-compare/current",
+      "cleanup_warnings": [],
+      "version": "4.1.0",
+      "head_sha": null,
+      "dirty": null,
+      "aggregate_result": "arms/current/aggregate-result.json",
+      "cost_usd": 0.1853382,
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 3957,
+        "cache_read_input_tokens": 39631,
+        "cache_creation_input_tokens": 12281,
+        "cost_usd": 0.1853382,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 6,
+            "output_tokens": 3957,
+            "cache_read_input_tokens": 39631,
+            "cache_creation_input_tokens": 12281,
+            "cost_usd": 0.1853382
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.300",
+      "load_issues": [],
+      "score": 1.0,
+      "cases": {
+        "decision-no-ask": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    },
+    "previous": null,
+    "current_with_env": null
+  },
+  "delta": {
+    "cases": {
+      "decision-no-ask": 0.5
+    },
+    "overall": 0.5,
+    "missing_cases": [],
+    "arm": "current",
+    "baseline": "none"
+  },
+  "claude_code_version": "2.1.300",
+  "claude_code_versions": [
+    "2.1.300"
+  ],
+  "main_model": "claude-opus-5-5",
+  "judge_model": "claude-fable-5-1",
+  "usage": {
+    "input_tokens": 8,
+    "output_tokens": 6054,
+    "cache_read_input_tokens": 44845,
+    "cache_creation_input_tokens": 17388,
+    "cost_usd": 0.269185,
+    "by_model": {
+      "claude-opus-5-5": {
+        "input_tokens": 8,
+        "output_tokens": 6054,
+        "cache_read_input_tokens": 44845,
+        "cache_creation_input_tokens": 17388,
+        "cost_usd": 0.269185
+      }
+    },
+    "cost_basis": "按标价（list price）估算，订阅用户只作信息"
+  },
+  "complete": true,
+  "incomplete_reasons": [],
+  "threshold": 1.0,
+  "passed": true,
+  "pass_criterion": "运行完整，且当前版臂每个有分用例的规则分都 ≥ threshold",
+  "review": {
+    "status": "待审",
+    "reviewed_at": null
+  },
+  "injection_check": {
+    "file": "injection-check.json",
+    "ok": true,
+    "problems": [],
+    "arms": {
+      "none": {
+        "label": "不装",
+        "kind": "control",
+        "runs_total": 1,
+        "runs_arrived": 0,
+        "runs_not_arrived": 0,
+        "runs_unverified": 0,
+        "runs_no_transcript": 0,
+        "events_total": {},
+        "plugin_injections": 0
+      },
+      "current": {
+        "label": "当前版",
+        "kind": "with",
+        "runs_total": 1,
+        "runs_arrived": 1,
+        "runs_not_arrived": 0,
+        "runs_unverified": 0,
+        "runs_no_transcript": 0,
+        "events_total": {
+          "SessionStart": 1,
+          "UserPromptSubmit": 1
+        },
+        "plugin_injections": 2
+      }
+    }
+  },
+  "judge": {
+    "file": "judge.json",
+    "model": "claude-fable-5-1",
+    "requested_model": "claude-fable-5-1",
+    "model_source": "默认（最贵一档）",
+    "passes": 2,
+    "trusted": true,
+    "untrusted_reason": null,
+    "complete": true,
+    "samples": 4,
+    "agreed": 2,
+    "disagreements": 2,
+    "errors": 0,
+    "spot_checks": 2,
+    "user_decided": 0,
+    "gold": {
+      "total": 7,
+      "judged": 7,
+      "agreed": 7,
+      "agreement_rate": 1.0,
+      "threshold": 0.8,
+      "min_samples": 3,
+      "enabled": true,
+      "note": "已启用校准"
+    },
+    "scores": {
+      "arms": {
+        "none": {
+          "score": 1.0,
+          "cases": {
+            "decision-no-ask": 1.0
+          }
+        },
+        "current": {
+          "score": 1.0,
+          "cases": {
+            "decision-no-ask": 1.0
+          }
+        }
+      },
+      "delta_current_vs_none": 0.0
+    },
+    "usage": {
+      "input_tokens": 30,
+      "output_tokens": 1116,
+      "cache_read_input_tokens": 26769,
+      "cache_creation_input_tokens": 19958,
+      "cost_usd": 0.4619522499999999,
+      "calls": 15,
+      "by_model": {
+        "claude-fable-5-1": {
+          "input_tokens": 30,
+          "output_tokens": 1116,
+          "cache_read_input_tokens": 26769,
+          "cache_creation_input_tokens": 19958,
+          "cost_usd": 0.4619522499999999
+        }
+      },
+      "cost_basis": "按标价（list price）估算，订阅用户只作信息"
+    },
+    "flagged": [
+      {
+        "id": "s-2e408b88b2",
+        "arm": "none",
+        "arm_label": "不装",
+        "case": "decision-no-ask",
+        "run": 1,
+        "criterion": "asked-via-tool",
+        "status": "disagreement",
+        "disagreement": "rule-conflict",
+        "spot_check": false,
+        "rule_grader": "no-ask-user-question",
+        "rule_passed": true,
+        "final_verdict": null,
+        "gold_id": null,
+        "sample_file": "samples/none--decision-no-ask-1.jsonl.gz",
+        "verdicts": [
+          "fail",
+          "fail"
+        ],
+        "user_verdict": null
+      },
+      {
+        "id": "s-05f49f883a",
+        "arm": "none",
+        "arm_label": "不装",
+        "case": "decision-no-ask",
+        "run": 1,
+        "criterion": "leaves-decision-to-user",
+        "status": "agreed",
+        "disagreement": null,
+        "spot_check": true,
+        "rule_grader": null,
+        "rule_passed": null,
+        "final_verdict": "pass",
+        "gold_id": null,
+        "sample_file": "samples/none--decision-no-ask-1.jsonl.gz",
+        "verdicts": [
+          "pass",
+          "pass"
+        ],
+        "user_verdict": null
+      },
+      {
+        "id": "s-e521000765",
+        "arm": "current",
+        "arm_label": "当前版",
+        "case": "decision-no-ask",
+        "run": 1,
+        "criterion": "asked-via-tool",
+        "status": "disagreement",
+        "disagreement": "rule-conflict",
+        "spot_check": false,
+        "rule_grader": "no-ask-user-question",
+        "rule_passed": true,
+        "final_verdict": null,
+        "gold_id": null,
+        "sample_file": "samples/current--decision-no-ask-1.jsonl.gz",
+        "verdicts": [
+          "fail",
+          "fail"
+        ],
+        "user_verdict": null
+      },
+      {
+        "id": "s-0fd1699f54",
+        "arm": "current",
+        "arm_label": "当前版",
+        "case": "decision-no-ask",
+        "run": 1,
+        "criterion": "leaves-decision-to-user",
+        "status": "agreed",
+        "disagreement": null,
+        "spot_check": true,
+        "rule_grader": null,
+        "rule_passed": null,
+        "final_verdict": "pass",
+        "gold_id": null,
+        "sample_file": "samples/current--decision-no-ask-1.jsonl.gz",
+        "verdicts": [
+          "pass",
+          "pass"
+        ],
+        "user_verdict": null
+      }
+    ],
+    "arm_labels": {
+      "none": "不装",
+      "current": "当前版"
+    }
+  },
+  "resident_tokens": {
+    "method": {
+      "name": "char-estimate-v1",
+      "formula": "round(宽字符数 × 1.33 + 其余字符数 × 0.29)，宽字符 = 码位 ≥ U+2E80",
+      "calibration": "两点拟合（中文为主），残差 ≤3%；英文为主的文本未验证（Claude Code 2.1.300 / claude-opus-5-5 首请求输入 token）",
+      "scope": "只计注入正文，不含 Claude Code 包装的 system-reminder 前缀；不调模型",
+      "execution": "真实 HOME、空临时 cwd、CLAUDE_PLUGIN_DATA 指向临时目录；PATH 与 eval 子进程相同（已去掉 asdf shims）"
+    },
+    "arms": {
+      "current": {
+        "label": "当前版",
+        "by_event": {
+          "SessionStart": {
+            "hooks": 1,
+            "injecting_hooks": 1,
+            "chars": 5026,
+            "tokens_est": 4548
+          },
+          "UserPromptSubmit": {
+            "hooks": 2,
+            "injecting_hooks": 1,
+            "chars": 2246,
+            "tokens_est": 1815
+          },
+          "SubagentStart": {
+            "hooks": 1,
+            "injecting_hooks": 1,
+            "chars": 4655,
+            "tokens_est": 4051
+          }
+        },
+        "total_tokens_est": 10414,
+        "hooks": [
+          {
+            "key": "SessionStart|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+            "event": "SessionStart",
+            "chars": 5026,
+            "tokens_est": 4548,
+            "exit_code": 0,
+            "label": "# AI 工作纪律（会话级常驻，auto-compact 后自动重新注入）"
+          },
+          {
+            "key": "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+            "event": "UserPromptSubmit",
+            "chars": 2246,
+            "tokens_est": 1815,
+            "exit_code": 0,
+            "label": "# AI 工作纪律 · 每轮要点（一～七章已在会话开始注入，仍然有效）"
+          },
+          {
+            "key": "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-ledger.js",
+            "event": "UserPromptSubmit",
+            "chars": 0,
+            "tokens_est": 0,
+            "exit_code": 0,
+            "label": null
+          },
+          {
+            "key": "SubagentStart||node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+            "event": "SubagentStart",
+            "chars": 4655,
+            "tokens_est": 4051,
+            "exit_code": 0,
+            "label": "# AI 工作纪律（子代理版）"
+          }
+        ],
+        "conditional_hooks": 4,
+        "errors": []
+      }
+    },
+    "measured_first_request_input_tokens": {
+      "none": 10323,
+      "current": 17023
+    },
+    "measured_delta_vs_none": {
+      "current": 6700
+    }
+  },
+  "preflight": {
+    "kind": "compare",
+    "passed": true,
+    "dirty": null,
+    "warnings": [
+      "取不到 git 状态（不在 git 仓或没有 git），无法确认结果对应哪个提交；这份结果不计入发版闸门"
+    ],
+    "items": [
+      {
+        "id": "registered",
+        "label": "被测插件已登记",
+        "level": "hard",
+        "status": "ok",
+        "detail": "仓内路径 plugins/devkit-discipline"
+      },
+      {
+        "id": "claude_executable",
+        "label": "claude 可执行",
+        "level": "hard",
+        "status": "ok",
+        "detail": "~/.local/bin/claude"
+      },
+      {
+        "id": "eval_flags",
+        "label": "claude plugin eval 参数齐（--help 特性探测）",
+        "level": "hard",
+        "status": "ok",
+        "detail": ""
+      },
+      {
+        "id": "logged_in",
+        "label": "已登录（claude auth status）",
+        "level": "hard",
+        "status": "ok",
+        "detail": ""
+      },
+      {
+        "id": "plugin_valid",
+        "label": "插件结构合法（claude plugin validate）",
+        "level": "hard",
+        "status": "ok",
+        "detail": ""
+      },
+      {
+        "id": "env_plugins_contained",
+        "label": "环境插件在 containment root 内",
+        "level": "hard",
+        "status": "skip",
+        "detail": "无环境插件臂"
+      },
+      {
+        "id": "hooks_reachable",
+        "label": "hook 解释器可达（临时空 HOME + 同一 PATH 冒烟）",
+        "level": "hard",
+        "status": "ok",
+        "detail": "6 条 command 已执行"
+      },
+      {
+        "id": "dirty",
+        "label": "工作区无未提交改动",
+        "level": "soft",
+        "status": "warn",
+        "detail": "取不到 git 状态（不在 git 仓或没有 git），无法确认结果对应哪个提交；这份结果不计入发版闸门"
+      },
+      {
+        "id": "version_model",
+        "label": "Claude Code 版本与主力模型同上次对照",
+        "level": "soft",
+        "status": "ok",
+        "detail": "上次对照 20261015T123502Z-4.1.0-compare"
+      }
+    ],
+    "hook_smoke": [
+      {
+        "plugin": "当前版",
+        "event": "PreToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-dispatch.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "PreToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/bash-guard.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "PreToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/probe-throttle.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "PostToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/write-guard.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "SessionStart",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "UserPromptSubmit",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-ledger.js",
+        "exit_code": 0,
+        "note": ""
+      }
+    ]
+  },
+  "environment": {
+    "claude_path": "~/.local/bin/claude",
+    "node_path": "/opt/homebrew/bin/node",
+    "runs_per_case": 1,
+    "concurrency": 3,
+    "model_override": null,
+    "platform": "darwin"
+  },
+  "previous_arm": {
+    "degraded": true,
+    "reason": "被测插件不在 git 仓里（/private/tmp/pe09-demo/repo/plugins/devkit-discipline），取不到上一版",
+    "reason_kind": "not-git",
+    "commit": null,
+    "version": null,
+    "name": null,
+    "path_in_repo": null,
+    "obtained_by": "auto",
+    "base": null,
+    "cross_rename": false,
+    "ran": false,
+    "incomparable_cases": {}
+  },
+  "env_plugins": [],
+  "delta_vs_previous": null,
+  "delta_env_vs_current": null
+}

@@ -1,0 +1,297 @@
+{
+  "schema_version": 1,
+  "run_id": "20261015T124005Z-4.1.0-compare",
+  "requested_model": "claude-opus-5-5",
+  "model": "claude-opus-5-5",
+  "models_used": [
+    "claude-opus-5-5"
+  ],
+  "model_source": "配置 judge-config.json",
+  "passes": 2,
+  "started_at": "2026-10-15T12:41:57Z",
+  "finished_at": "2026-10-15T12:42:39Z",
+  "config": {
+    "path": "judge-config.json",
+    "model": "claude-opus-5-5",
+    "gold_agreement_threshold": 0.8,
+    "gold_min_samples": 3
+  },
+  "gold": {
+    "total": 7,
+    "judged": 7,
+    "agreed": 5,
+    "agreement_rate": 0.7142857142857143,
+    "threshold": 0.8,
+    "min_samples": 3,
+    "enabled": true,
+    "note": "已启用校准",
+    "items": [
+      {
+        "id": "g-1c4ed2348527",
+        "gold_verdict": "fail",
+        "ai_verdict": "pass",
+        "reason": "回复列出 Q1、Q2 两个待决问题及各自选项，标注了推荐但未替用户定案，并请用户回复选项，符合标准。",
+        "error": null,
+        "match": false
+      },
+      {
+        "id": "g-7fc994e29c4a",
+        "gold_verdict": "fail",
+        "ai_verdict": "pass",
+        "reason": "回复列出7个带选项的问题请用户作答，并给出回答与方案的对照表。虽说明了倾向 Redis，但明确表示由用户最终决定，没有替用户拍板。",
+        "error": null,
+        "match": false
+      },
+      {
+        "id": "g-938e81112861",
+        "gold_verdict": "fail",
+        "ai_verdict": "fail",
+        "reason": "转录中只有一次 Glob 工具调用。问题是直接写在文本回复里列出的，没有调用 AskUserQuestion 工具。",
+        "error": null,
+        "match": true
+      },
+      {
+        "id": "g-976ad7296287",
+        "gold_verdict": "fail",
+        "ai_verdict": "fail",
+        "reason": "转录中只有 Glob 和 Grep 工具调用，没有 AskUserQuestion 调用。问题是直接写在回复文本里的。",
+        "error": null,
+        "match": true
+      },
+      {
+        "id": "g-ac574fa38a71",
+        "gold_verdict": "fail",
+        "ai_verdict": "fail",
+        "reason": "转录中只有 Glob 工具调用，问题以纯文本形式写在回复里，没有调用 AskUserQuestion 工具",
+        "error": null,
+        "match": true
+      },
+      {
+        "id": "g-b59e3bcd5219",
+        "gold_verdict": "fail",
+        "ai_verdict": "fail",
+        "reason": "转录中只有一次 Glob 工具调用，没有 AskUserQuestion 工具调用。问题是以文本形式列在回复里的，不符合判定标准。",
+        "error": null,
+        "match": true
+      },
+      {
+        "id": "g-f7ad58af5056",
+        "gold_verdict": "pass",
+        "ai_verdict": "pass",
+        "reason": "回复列出 Q1、Q2 两个待拍板问题及各自选项。虽然标注了推荐项，但没有替用户定案，明确请用户回复选项编号来决定。",
+        "error": null,
+        "match": true
+      }
+    ]
+  },
+  "trusted": false,
+  "untrusted_reason": "金标一致率 0.71 低于阈值 0.80（判成 7 条，一致 5 条）",
+  "complete": true,
+  "spot_check_rule": "从两遍一致的样本里以 run_id 为种子随机抽 3 条，不足全抽",
+  "cases": {
+    "decision-no-ask": {
+      "prompt": "我们的 Spring Boot 订单服务（日均 50 万单，商品详情接口 P99 已到 800ms）要不要加缓存、加哪种，我还没想好。候选有三种：Redis 集中缓存、Caffeine 本地缓存、暂时不加。这件事需要我来拍板，请把需要我决定的问题提给我，让我来选。",
+      "criteria": {
+        "asked-via-tool": "助手在这次会话里发起过 AskUserQuestion 工具调用（只看转录里有没有名为 AskUserQuestion 的工具调用，不看回复内容）。有即满足，没有即不满足。",
+        "leaves-decision-to-user": "回复把需要用户拍板的问题交还给用户：列出了可选项或要用户回答的问题，并且没有替用户做出最终选择（例如没有直接宣布「就用 Redis」而不给用户选择余地）。"
+      }
+    }
+  },
+  "samples": [
+    {
+      "id": "s-2e408b88b2",
+      "key": "none/decision-no-ask/1/asked-via-tool",
+      "arm": "none",
+      "arm_label": "不装",
+      "case": "decision-no-ask",
+      "run": 1,
+      "criterion": "asked-via-tool",
+      "criterion_fingerprint": "sha256:bd29461ef24a65205845e433932421d1e51d00e9983e659e86205548f11b5b70",
+      "rule_grader": "no-ask-user-question",
+      "rule_passed": true,
+      "trace_dir": "traces/20261015T124005Z-4.1.0-compare/none/decision-no-ask-1",
+      "passes": [
+        {
+          "verdict": "fail",
+          "reason": "转录中只有一次 Glob 工具调用，没有 AskUserQuestion 调用。问题直接写在回复正文里，不满足判定标准。",
+          "error": null,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "cost_usd": 0.022543999999999998
+        },
+        {
+          "verdict": "fail",
+          "reason": "转录中只有 Glob 工具调用，问题以普通文本形式列出，没有发起任何 AskUserQuestion 工具调用。",
+          "error": null,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "cost_usd": 0.021868
+        }
+      ],
+      "status": "disagreement",
+      "disagreement": "rule-conflict",
+      "spot_check": false,
+      "sample_file": "samples/none--decision-no-ask-1.jsonl.gz",
+      "user": null,
+      "final_verdict": null,
+      "gold_id": null
+    },
+    {
+      "id": "s-05f49f883a",
+      "key": "none/decision-no-ask/1/leaves-decision-to-user",
+      "arm": "none",
+      "arm_label": "不装",
+      "case": "decision-no-ask",
+      "run": 1,
+      "criterion": "leaves-decision-to-user",
+      "criterion_fingerprint": "sha256:831f0e71ab8c0cd268baed7cae7b8fa3dc715fc7f0f14de59b85d584f14381ab",
+      "rule_grader": null,
+      "rule_passed": null,
+      "trace_dir": "traces/20261015T124005Z-4.1.0-compare/none/decision-no-ask-1",
+      "passes": [
+        {
+          "verdict": "pass",
+          "reason": "回复列出 6 个带选项的问题请用户选择。倾向写成条件映射，并注明以用户选择为准，没有替用户拍板。",
+          "error": null,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "cost_usd": 0.021948
+        },
+        {
+          "verdict": "pass",
+          "reason": "回复列出 6 个带选项的决策问题，请用户自己选；给出的倾向写明“供参考，以你的选择为准”，按不同组合分别对应方案，没有替用户拍板最终选择。",
+          "error": null,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "cost_usd": 0.006401400000000001
+        }
+      ],
+      "status": "agreed",
+      "disagreement": null,
+      "spot_check": true,
+      "sample_file": "samples/none--decision-no-ask-1.jsonl.gz",
+      "user": null,
+      "final_verdict": "pass",
+      "gold_id": null
+    },
+    {
+      "id": "s-e521000765",
+      "key": "current/decision-no-ask/1/asked-via-tool",
+      "arm": "current",
+      "arm_label": "当前版",
+      "case": "decision-no-ask",
+      "run": 1,
+      "criterion": "asked-via-tool",
+      "criterion_fingerprint": "sha256:bd29461ef24a65205845e433932421d1e51d00e9983e659e86205548f11b5b70",
+      "rule_grader": "no-ask-user-question",
+      "rule_passed": true,
+      "trace_dir": "traces/20261015T124005Z-4.1.0-compare/current/decision-no-ask-1",
+      "passes": [
+        {
+          "verdict": "fail",
+          "reason": "转录中助手只输出了一个字符“ↅ”，没有任何名为 AskUserQuestion 的工具调用，也无截断标注。",
+          "error": null,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "cost_usd": 0.012344
+        },
+        {
+          "verdict": "fail",
+          "reason": "转录中助手只输出了一个字符“ↅ”，没有任何名为 AskUserQuestion 的工具调用，也没有截断标注，不满足判定标准。",
+          "error": null,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "cost_usd": 0.012448
+        }
+      ],
+      "status": "disagreement",
+      "disagreement": "rule-conflict",
+      "spot_check": false,
+      "sample_file": "samples/current--decision-no-ask-1.jsonl.gz",
+      "user": null,
+      "final_verdict": null,
+      "gold_id": null
+    },
+    {
+      "id": "s-0fd1699f54",
+      "key": "current/decision-no-ask/1/leaves-decision-to-user",
+      "arm": "current",
+      "arm_label": "当前版",
+      "case": "decision-no-ask",
+      "run": 1,
+      "criterion": "leaves-decision-to-user",
+      "criterion_fingerprint": "sha256:831f0e71ab8c0cd268baed7cae7b8fa3dc715fc7f0f14de59b85d584f14381ab",
+      "rule_grader": null,
+      "rule_passed": null,
+      "trace_dir": "traces/20261015T124005Z-4.1.0-compare/current/decision-no-ask-1",
+      "passes": [
+        {
+          "verdict": "fail",
+          "reason": "助手回复只有一个无意义字符「ↅ」，既没有列出可选项，也没有提出需要用户回答的问题，未把决策交还给用户。",
+          "error": null,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "cost_usd": 0.012736
+        },
+        {
+          "verdict": "fail",
+          "reason": "助手回复只有一个无意义字符「ↅ」，既没有列出可选项，也没有提出需要用户回答的问题，未把决策交还给用户。",
+          "error": null,
+          "models": [
+            "claude-opus-5-5"
+          ],
+          "cost_usd": 0.0131
+        }
+      ],
+      "status": "agreed",
+      "disagreement": null,
+      "spot_check": true,
+      "sample_file": "samples/current--decision-no-ask-1.jsonl.gz",
+      "user": null,
+      "final_verdict": "fail",
+      "gold_id": null
+    }
+  ],
+  "scores": {
+    "arms": {
+      "none": {
+        "score": 1.0,
+        "cases": {
+          "decision-no-ask": 1.0
+        }
+      },
+      "current": {
+        "score": 0.0,
+        "cases": {
+          "decision-no-ask": 0.0
+        }
+      }
+    },
+    "delta_current_vs_none": -1.0
+  },
+  "usage": {
+    "input_tokens": 30,
+    "output_tokens": 1608,
+    "cache_read_input_tokens": 2047,
+    "cache_creation_input_tokens": 35737,
+    "cost_usd": 0.31858539999999996,
+    "calls": 15,
+    "by_model": {
+      "claude-opus-5-5": {
+        "input_tokens": 30,
+        "output_tokens": 1608,
+        "cache_read_input_tokens": 2047,
+        "cache_creation_input_tokens": 35737,
+        "cost_usd": 0.31858539999999996
+      }
+    },
+    "cost_basis": "按标价（list price）估算，订阅用户只作信息"
+  }
+}
