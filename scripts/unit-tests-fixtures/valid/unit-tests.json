@@ -1,0 +1,22 @@
+{
+  "tests": [
+    {
+      "run": [
+        "node",
+        "ok.js"
+      ]
+    },
+    {
+      "run": [
+        "node",
+        "ok.js"
+      ],
+      "timeout_sec": 30,
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ]
+    }
+  ]
+}

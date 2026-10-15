@@ -1,0 +1,16 @@
+{
+  "tests": [
+    {
+      "run": [
+        "devkit-no-such-interpreter",
+        "ok.js"
+      ]
+    },
+    {
+      "run": [
+        "node",
+        "ok.js"
+      ]
+    }
+  ]
+}

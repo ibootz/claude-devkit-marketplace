@@ -1,0 +1,7 @@
+{
+  "platform": "linux",
+  "declaration": "ok",
+  "errors": [],
+  "tests": [],
+  "precommit": "pass"
+}

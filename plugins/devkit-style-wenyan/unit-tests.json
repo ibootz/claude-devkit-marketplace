@@ -1,0 +1,5 @@
+{
+  "tests": [
+    { "run": ["node", "hooks/tests/wenyan-output-style.test.js"] }
+  ]
+}

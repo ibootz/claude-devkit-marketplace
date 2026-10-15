@@ -1,0 +1,9 @@
+{
+  "platform": "linux",
+  "declaration": "invalid",
+  "errors": [
+    "bad-test"
+  ],
+  "tests": [],
+  "precommit": "block"
+}

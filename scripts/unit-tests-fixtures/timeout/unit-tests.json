@@ -1,0 +1,11 @@
+{
+  "tests": [
+    {
+      "run": [
+        "node",
+        "sleep.js"
+      ],
+      "timeout_sec": 1
+    }
+  ]
+}

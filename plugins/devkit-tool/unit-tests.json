@@ -1,0 +1,7 @@
+{
+  "tests": [
+    { "run": ["python3", "tests/probe-refresh-url-criterion.test.py"] },
+    { "run": ["node", "hooks/tests/worktree-cwd-recovery.js"] },
+    { "run": ["bash", "hooks/tests/codegraph-hint-gating.sh"], "platforms": ["darwin", "linux"] }
+  ]
+}
