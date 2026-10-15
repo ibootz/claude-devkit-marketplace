@@ -16,7 +16,7 @@ from unittest import mock
 
 import _support
 from _support import make_plugin, tmpdir, write
-from plugin_eval_lib import cli, compare, preflight, registry
+from plugin_eval_lib import cli, compare, envplugins, preflight, registry
 
 PY = '"%s"' % sys.executable
 
@@ -240,6 +240,16 @@ class ClaudeItemsTest(Base):
         bad = self.check(env_plugins=[inside, outside], containment_root=root)
         self.assertEqual(item(bad, 'env_plugins_contained').status, preflight.FAIL)
         self.assertIn('elsewhere', item(bad, 'env_plugins_contained').detail)
+
+    def test_env_dir_name_taken_by_tested_plugin_aborts(self):
+        """票 05 (d)：被测插件顶层已有 _plugin_eval_env/，环境插件拷不进臂组装目录，开跑前就拦下。"""
+        env = make_plugin(self.tmp / 'envsrc' / 'env-a')
+        self.assertEqual(item(self.check(env_plugins=[env]), 'env_plugins_contained').status, preflight.OK)
+        (self.plugin / envplugins.ENV_DIR).mkdir()
+        rep = self.check(env_plugins=[env])
+        self.assertEqual(item(rep, 'env_plugins_contained').status, preflight.FAIL)
+        self.assertIn(envplugins.ENV_DIR, item(rep, 'env_plugins_contained').detail)
+        self.assertFalse(rep.passed)
 
 
 class SoftItemsTest(unittest.TestCase):

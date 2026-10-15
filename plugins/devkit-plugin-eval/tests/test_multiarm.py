@@ -123,6 +123,8 @@ class MultiArmTest(unittest.TestCase):
         self.assertFalse(prev['cross_rename'])
         self.assertTrue(prev['fingerprint'].startswith('sha256:'))
         self.assertEqual(rec['arms']['current']['head_sha'], self.c3)
+        # 票 05 (a)：快照取自历史提交，没有工作区；当前版的 HEAD / dirty 不属于它
+        self.assertEqual((prev['head_sha'], prev['dirty']), (None, None))
         self.assertEqual(rec['previous_arm']['degraded'], False)
         self.assertEqual(rec['delta_vs_previous']['overall'], 1)
         self.assertIsNone(rec['delta_env_vs_current'])

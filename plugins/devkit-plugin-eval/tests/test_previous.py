@@ -109,6 +109,32 @@ class ResolveTest(unittest.TestCase):
         self.assertTrue(res.degraded)
         self.assertEqual(res.reason_kind, 'not-git')
 
+    def test_base_given_but_not_in_git_repo_raises(self):
+        """票 05 (c)：点名了 --base 却连 git 仓都没有，中止（同解析不到），不静默退化成两臂。"""
+        d = self.tmp / 'plain' / 'p'
+        write(d / '.claude-plugin' / 'plugin.json', json.dumps({'name': 'p', 'version': '1.0.0'}))
+        with self.assertRaises(previous.BaseNotFound) as cm:
+            previous.resolve(d, '1.0.0', base='0.9.0', git=GIT, ceiling=self.tmp)
+        self.assertIn('--base 0.9.0', str(cm.exception))
+        with self.assertRaises(previous.BaseNotFound):
+            previous.resolve(self.plugin, '1.1.0', base='1.0.0', git='')
+
+    def test_missing_version_compares_against_last_written_version(self):
+        """票 05 (b)：工作目录 plugin.json 没写 version（None），上一版是历史里最近写过的版本，不是第一个提交。"""
+        write(self.plugin / '.claude-plugin' / 'plugin.json', json.dumps({'name': 'p'}, indent=2) + '\n')
+        res = previous.resolve(self.plugin, None)
+        self.assertFalse(res.degraded, res.reason)
+        self.assertEqual((res.version, res.commit), ('1.1.0', self.c3))
+
+    def test_never_versioned_history_degrades_with_clear_reason(self):
+        r = GitRepo(self.tmp / 'nover')
+        write(r.root / 'plugins/q/.claude-plugin/plugin.json', json.dumps({'name': 'q'}, indent=2) + '\n')
+        r.commit('init')
+        res = previous.resolve(r.root / 'plugins' / 'q', None)
+        self.assertTrue(res.degraded)
+        self.assertEqual(res.reason_kind, 'no-different-version')
+        self.assertIn('没写 version', res.reason)
+
     def test_follows_rename_and_flags_cross_rename(self):
         r = self.repo
         r.git('mv', 'plugins/p', 'plugins/devkit-p')

@@ -10,7 +10,7 @@
 3. 取该版本号在序列里最早出现的提交（引入提交）。同号跨多个提交、并行分支各自写出同号时都取最早那个。
 
 退化（自动跳过上一版臂）：没有 git、不在 git 仓、仓里没有提交、历史里没有与当前不同的版本号、快照失败。
---base 解析不到不退化，抛 BaseNotFound：用户点名要的基线找不到，静默只跑两臂会掩盖输入错误。
+--base 解析不到不退化，抛 BaseNotFound（传了 --base 但没有 git、不在 git 仓、仓里没有提交同样抛）：用户点名要的基线找不到，静默只跑两臂会掩盖输入错误。
 """
 import io
 import json
@@ -117,18 +117,25 @@ def resolve(plugin_dir, current_version, *, base=None, current_name=None, git=No
         except (OSError, ValueError):
             current_name = None
     common = {'base': base, 'current_name': current_name, 'obtained_by': '--base' if base else 'auto'}
+
+    def degrade(kind, reason):
+        # 用户点名了 --base 却连仓都没有：同「--base 解析不到」，中止而不是静默退化成两臂
+        if base:
+            raise BaseNotFound('传了 --base %s，但%s' % (base, reason))
+        return _degraded(kind, reason, **common)
+
     if not git:
-        return _degraded('not-git', '找不到 git 可执行文件，取不到上一版', **common)
+        return degrade('not-git', '找不到 git 可执行文件，取不到上一版')
     env = None
     if ceiling:
         env = dict(os.environ, GIT_CEILING_DIRECTORIES=str(Path(ceiling).resolve()))
     top = _run(git, plugin_dir, 'rev-parse', '--show-toplevel', env=env)
     if top.returncode != 0:
-        return _degraded('not-git', '被测插件不在 git 仓里（%s），取不到上一版' % plugin_dir, **common)
+        return degrade('not-git', '被测插件不在 git 仓里（%s），取不到上一版' % plugin_dir)
     toplevel = Path(top.stdout.strip()).resolve()
     common.update(git=git, toplevel=str(toplevel))
     if _run(git, toplevel, 'rev-parse', '--verify', '-q', 'HEAD').returncode != 0:
-        return _degraded('no-history', 'git 仓里还没有任何提交，取不到上一版', **common)
+        return degrade('no-history', 'git 仓里还没有任何提交，取不到上一版')
     rel = Path(os.path.relpath(plugin_dir, toplevel)).as_posix()
     manifest_rel = MANIFEST_REL if rel == '.' else '%s/%s' % (rel, MANIFEST_REL)
     hist = _history(git, toplevel, manifest_rel)
@@ -138,10 +145,12 @@ def resolve(plugin_dir, current_version, *, base=None, current_name=None, git=No
     if not hist:
         return _degraded('no-history', 'git 历史里没有 %s 的提交记录（插件还没提交过），取不到上一版' % manifest_rel,
                          **common)
+    # current_version 是 plugin.json 的原值：没写 version 为 None，与历史里同样没写的提交视为同号
     different = [h for h in hist if h[2] != current_version]
     if not different:
+        now = '当前的 %s' % current_version if current_version is not None else '没写 version'
         return _degraded('no-different-version',
-                         'git 历史里 plugin.json 的版本号一直是当前的 %s，没有与它不同的版本' % current_version, **common)
+                         'git 历史里 plugin.json 的版本号一直是%s，没有与它不同的版本' % now, **common)
     prev_version = different[0][2]
     sha, path, version, name = [h for h in hist if h[2] == prev_version][-1]
     return Resolution(degraded=False, commit=sha, version=version, name=name,
