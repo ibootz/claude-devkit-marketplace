@@ -2,13 +2,15 @@
 
 run.json 字段按 spec「四、目录布局与状态文件」列：本版能填的照填，后续票才填的留键位、值为 null：
 clause_list_fingerprint（条款清单，票 10）、judge_model / judge（AI 评委，票 09）、
-injection_check（注入到达核验，票 06）、resident_tokens（常驻 token，票 06）、preflight（前置检查，票 04）、
-arms.previous / arms.current_with_env（上一版与环境插件臂，票 05）。
+injection_check（注入到达核验，票 06）、resident_tokens（常驻 token，票 06）、preflight（前置检查，票 04）。
+上一版与环境插件臂（票 05）的 previous_arm / env_plugins / delta_vs_previous / delta_env_vs_current
+由 compare 在本函数之后补进（armplan.Plan.record_fields），段落渲染在 armreport.py。
 """
 import os
 import re
 from collections import Counter
 
+from . import armreport
 from .registry import TRUST_SCOPE
 
 SCHEMA_VERSION = 1
@@ -120,6 +122,7 @@ def render_report(rec):
     lines = [
         '# 离线对照报告：%s %s' % (p['name'], p['version']),
         '',
+        *armreport.head_lines(rec),
         '> 状态：**%s**。待审报告不能作为改插件或发版的依据；用户审过后改为「已审」。' % rec['review']['status'],
         '',
         '> 信任范围：%s' % TRUST_SCOPE,
@@ -182,6 +185,7 @@ def render_report(rec):
         for name in sorted(excluded):
             lines.append('- %s：%s' % (name, '、'.join('`%s`（%s）' % (g, why) for g, why in sorted(excluded[name].items()))))
 
+    lines += armreport.section_lines(rec)
     lines += ['', '## 本报告未覆盖', '',
-              '前置检查、上一版臂、注入到达核验、AI 评委、常驻 token 尚未接入，run.json 里对应字段为 null。', '']
+              '前置检查、注入到达核验、AI 评委、常驻 token 尚未接入，run.json 里对应字段为 null。', '']
     return '\n'.join(lines)

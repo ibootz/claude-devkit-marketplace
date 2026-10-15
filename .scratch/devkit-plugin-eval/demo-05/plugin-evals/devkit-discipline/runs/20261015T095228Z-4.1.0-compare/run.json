@@ -1,0 +1,574 @@
+{
+  "schema_version": 1,
+  "kind": "compare",
+  "run_id": "20261015T095228Z-4.1.0-compare",
+  "started_at": "2026-10-15T09:52:28Z",
+  "finished_at": "2026-10-15T09:56:43Z",
+  "plugin": {
+    "name": "devkit-discipline",
+    "version": "4.1.0",
+    "fingerprint": "sha256:c06cf79180afb51c6a65152eb28ff0f1d4177a9ea324c5b8871341770e1d9524",
+    "fingerprint_exclude": [
+      "evals"
+    ],
+    "path_in_repo": "plugins/devkit-discipline"
+  },
+  "clause_list_fingerprint": null,
+  "cases": [
+    "decision-no-ask",
+    "dispatch-model",
+    "env-clickable",
+    "parallel-lookup",
+    "zh-skill"
+  ],
+  "arms": {
+    "none": {
+      "label": "不装",
+      "source": "stub",
+      "eval_exit_code": 1,
+      "trace_dir": "traces/20261015T095228Z-4.1.0-compare/none",
+      "cleanup_warnings": [],
+      "stub_name": "devkit-plugin-eval-noplugin-stub",
+      "version": null,
+      "aggregate_result": "arms/none/aggregate-result.json",
+      "cost_usd": 0.3902602,
+      "usage": {
+        "input_tokens": 30,
+        "output_tokens": 5075,
+        "cache_read_input_tokens": 103041,
+        "cache_creation_input_tokens": 35889,
+        "cost_usd": 0.3902602,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 30,
+            "output_tokens": 5075,
+            "cache_read_input_tokens": 103041,
+            "cache_creation_input_tokens": 35889,
+            "cost_usd": 0.3902602
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.300",
+      "load_issues": [],
+      "score": 0.36666666666666664,
+      "cases": {
+        "decision-no-ask": {
+          "score": 0.5,
+          "run_scores": [
+            0.5
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "dispatch-model": {
+          "score": 0.3333333333333333,
+          "run_scores": [
+            0.3333333333333333
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "env-clickable": {
+          "score": 0.0,
+          "run_scores": [
+            0.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-clickable": "with-only",
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "parallel-lookup": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "zh-skill": {
+          "score": 0.0,
+          "run_scores": [
+            0.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    },
+    "current": {
+      "label": "当前版",
+      "source": "working-tree",
+      "eval_exit_code": 1,
+      "trace_dir": "traces/20261015T095228Z-4.1.0-compare/current",
+      "cleanup_warnings": [],
+      "version": "4.1.0",
+      "head_sha": "21c1af5b2e0c45731b6f65ac20943ab1d43af49d",
+      "dirty": false,
+      "aggregate_result": "arms/current/aggregate-result.json",
+      "cost_usd": 0.8396327,
+      "usage": {
+        "input_tokens": 32,
+        "output_tokens": 9853,
+        "cache_read_input_tokens": 197761,
+        "cache_creation_input_tokens": 85218,
+        "cost_usd": 0.8396327,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 28,
+            "output_tokens": 9272,
+            "cache_read_input_tokens": 188091,
+            "cache_creation_input_tokens": 72115,
+            "cost_usd": 0.8000902
+          },
+          "claude-sonnet-5-5": {
+            "input_tokens": 4,
+            "output_tokens": 581,
+            "cache_read_input_tokens": 9670,
+            "cache_creation_input_tokens": 13103,
+            "cost_usd": 0.03954250000000001
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.300",
+      "load_issues": [],
+      "score": 0.8,
+      "cases": {
+        "decision-no-ask": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "dispatch-model": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "env-clickable": {
+          "score": 0.0,
+          "run_scores": [
+            0.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-clickable": "with-only",
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "parallel-lookup": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "zh-skill": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    },
+    "previous": {
+      "label": "上一版",
+      "source": "git-snapshot",
+      "eval_exit_code": 1,
+      "trace_dir": "traces/20261015T095228Z-4.1.0-compare/previous",
+      "cleanup_warnings": [],
+      "version": "3.37.0",
+      "head_sha": "21c1af5b2e0c45731b6f65ac20943ab1d43af49d",
+      "dirty": false,
+      "name": "working-discipline",
+      "commit": "c9109dc2ed79bcb3aeac5cdd4aaa7319ab295301",
+      "path_in_repo": "plugins/working-discipline",
+      "obtained_by": "--base",
+      "base": "3.37.0",
+      "cross_rename": true,
+      "fingerprint": "sha256:25376bf25d8eaca40bcaca1db94cbdc6b8b0109a39eba4601333c06c87979695",
+      "aggregate_result": "arms/previous/aggregate-result.json",
+      "cost_usd": 0.8668278999999999,
+      "usage": {
+        "input_tokens": 30,
+        "output_tokens": 11594,
+        "cache_read_input_tokens": 179435,
+        "cache_creation_input_tokens": 86385,
+        "cost_usd": 0.8668278999999999,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 26,
+            "output_tokens": 10676,
+            "cache_read_input_tokens": 168159,
+            "cache_creation_input_tokens": 71508,
+            "cost_usd": 0.8193197999999999
+          },
+          "claude-sonnet-5-5": {
+            "input_tokens": 4,
+            "output_tokens": 918,
+            "cache_read_input_tokens": 11276,
+            "cache_creation_input_tokens": 14877,
+            "cost_usd": 0.0475081
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.300",
+      "load_issues": [],
+      "score": 0.6,
+      "cases": {
+        "decision-no-ask": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "dispatch-model": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "env-clickable": {
+          "score": 0.0,
+          "run_scores": [
+            0.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-clickable": "with-only",
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "parallel-lookup": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "zh-skill": {
+          "score": 0.0,
+          "run_scores": [
+            0.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    },
+    "current_with_env": {
+      "label": "当前版+环境插件",
+      "source": "working-tree+env",
+      "eval_exit_code": 1,
+      "trace_dir": "traces/20261015T095228Z-4.1.0-compare/current_with_env",
+      "cleanup_warnings": [],
+      "version": "4.1.0",
+      "head_sha": "21c1af5b2e0c45731b6f65ac20943ab1d43af49d",
+      "dirty": false,
+      "env_plugins": [
+        {
+          "spec": "devkit-clickable-paths@claude-devkit-marketplace",
+          "source": "installed",
+          "plugin_id": "devkit-clickable-paths@claude-devkit-marketplace",
+          "name": "devkit-clickable-paths",
+          "version": "2.0.0",
+          "git_commit_sha": "8ea2db2099ffceb3e1208fca38fd57fb2ad39cbf",
+          "scope": "user",
+          "path": "~/.claude/plugins/cache/claude-devkit-marketplace/devkit-clickable-paths/2.0.0"
+        }
+      ],
+      "env_not_applied_cases": [],
+      "aggregate_result": "arms/current_with_env/aggregate-result.json",
+      "cost_usd": 0.902544,
+      "usage": {
+        "input_tokens": 28,
+        "output_tokens": 12095,
+        "cache_read_input_tokens": 167903,
+        "cache_creation_input_tokens": 91800,
+        "cost_usd": 0.902544,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 24,
+            "output_tokens": 11235,
+            "cache_read_input_tokens": 156627,
+            "cache_creation_input_tokens": 74034,
+            "cost_usd": 0.8483934
+          },
+          "claude-sonnet-5-5": {
+            "input_tokens": 4,
+            "output_tokens": 860,
+            "cache_read_input_tokens": 11276,
+            "cache_creation_input_tokens": 17766,
+            "cost_usd": 0.05415059999999999
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.300",
+      "load_issues": [],
+      "score": 1.0,
+      "cases": {
+        "decision-no-ask": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "dispatch-model": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "env-clickable": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-clickable": "with-only",
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "parallel-lookup": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "zh-skill": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    }
+  },
+  "delta": {
+    "cases": {
+      "decision-no-ask": 0.5,
+      "dispatch-model": 0.6666666666666667,
+      "env-clickable": 0.0,
+      "parallel-lookup": 0.0,
+      "zh-skill": 1.0
+    },
+    "overall": 0.4333333333333334,
+    "missing_cases": [],
+    "arm": "current",
+    "baseline": "none"
+  },
+  "claude_code_version": "2.1.300",
+  "main_model": "claude-opus-5-5",
+  "judge_model": null,
+  "usage": {
+    "input_tokens": 120,
+    "output_tokens": 38617,
+    "cache_read_input_tokens": 648140,
+    "cache_creation_input_tokens": 299292,
+    "cost_usd": 2.9992647999999997,
+    "by_model": {
+      "claude-opus-5-5": {
+        "input_tokens": 108,
+        "output_tokens": 36258,
+        "cache_read_input_tokens": 615918,
+        "cache_creation_input_tokens": 253546,
+        "cost_usd": 2.8580636
+      },
+      "claude-sonnet-5-5": {
+        "input_tokens": 12,
+        "output_tokens": 2359,
+        "cache_read_input_tokens": 32222,
+        "cache_creation_input_tokens": 45746,
+        "cost_usd": 0.1412012
+      }
+    },
+    "cost_basis": "按标价（list price）估算，订阅用户只作信息"
+  },
+  "complete": true,
+  "incomplete_reasons": [],
+  "threshold": 1.0,
+  "passed": false,
+  "pass_criterion": "运行完整，且当前版臂每个有分用例的规则分都 ≥ threshold",
+  "review": {
+    "status": "待审",
+    "reviewed_at": null
+  },
+  "injection_check": null,
+  "judge": null,
+  "resident_tokens": null,
+  "preflight": null,
+  "environment": {
+    "claude_path": "~/.local/bin/claude",
+    "node_path": "/opt/homebrew/bin/node",
+    "runs_per_case": 1,
+    "concurrency": 3,
+    "model_override": null,
+    "platform": "darwin"
+  },
+  "previous_arm": {
+    "degraded": false,
+    "reason": null,
+    "reason_kind": null,
+    "commit": "c9109dc2ed79bcb3aeac5cdd4aaa7319ab295301",
+    "version": "3.37.0",
+    "name": "working-discipline",
+    "path_in_repo": "plugins/working-discipline",
+    "obtained_by": "--base",
+    "base": "3.37.0",
+    "cross_rename": true,
+    "ran": true,
+    "incomparable_cases": {
+      "zh-skill": [
+        "devkit-discipline:zh-disambiguate"
+      ]
+    }
+  },
+  "env_plugins": [
+    {
+      "spec": "devkit-clickable-paths@claude-devkit-marketplace",
+      "source": "installed",
+      "plugin_id": "devkit-clickable-paths@claude-devkit-marketplace",
+      "name": "devkit-clickable-paths",
+      "version": "2.0.0",
+      "git_commit_sha": "8ea2db2099ffceb3e1208fca38fd57fb2ad39cbf",
+      "scope": "user",
+      "path": "~/.claude/plugins/cache/claude-devkit-marketplace/devkit-clickable-paths/2.0.0"
+    }
+  ],
+  "delta_vs_previous": {
+    "cases": {
+      "decision-no-ask": 0.0,
+      "dispatch-model": 0.0,
+      "env-clickable": 0.0,
+      "parallel-lookup": 0.0,
+      "zh-skill": 1.0
+    },
+    "overall": 0.0,
+    "missing_cases": [],
+    "excluded_from_overall": [
+      "zh-skill"
+    ]
+  },
+  "delta_env_vs_current": {
+    "cases": {
+      "decision-no-ask": 0.0,
+      "dispatch-model": 0.0,
+      "env-clickable": 1.0,
+      "parallel-lookup": 0.0,
+      "zh-skill": 0.0
+    },
+    "overall": 0.2,
+    "missing_cases": []
+  }
+}

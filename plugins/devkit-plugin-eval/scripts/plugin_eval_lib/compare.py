@@ -1,8 +1,8 @@
 """离线对照（compare）编排：查登记 → 组装各臂 → 每臂跑 eval → 规则判分 → 落盘 → 清理。
 
-本版只有「不装」与「当前版」两臂。扩展点：
+臂：不装、上一版（取得到才跑）、当前版、当前版+环境插件（传了才跑）。扩展点：
 - 前置检查（票 04）插在 run_compare 开头、lookup 之后；
-- 上一版 / 环境插件臂（票 05）往 _arm_specs 里加 ArmSpec；
+- 上一版 / 环境插件臂（票 05）由 armplan.plan_arms 定，臂清单在 plan.specs；
 - 注入到达核验（票 06）在 _run_arm 里搬 trace 之前读转录；
 - AI 评委（票 09）在所有臂跑完、写 run.json 之前。
 """
@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import arms, evalrun, fingerprint, record, registry, scoring, traces
+from . import armplan, arms, envplugins, evalrun, fingerprint, record, registry, scoring, traces
 
 
 # eval 正常跑完的退出码：0 全过、1 有用例低于 --threshold（判分我们自己重算，不看它）。其余（如 2）是中途中止。
@@ -68,12 +68,9 @@ def _case_slug(case):
     return scoring._case_rel_dir(case).replace('/', '__')
 
 
-def _arm_specs(plugin_dir):
-    return [arms.ArmSpec('none', '不装', None), arms.ArmSpec('current', '当前版', plugin_dir)]
-
-
 def _run_arm(spec, *, ctx):
     arm_dir = arms.assemble_arm(ctx['assembly_root'], spec, ctx['evals_src'], extra_exclude=ctx['extra_exclude'])
+    env_skipped = envplugins.install(arm_dir, spec.env_plugins) if spec.env_plugins else None
     out_dir = ctx['assembly_root'] / '_out' / spec.key
     log_dir = ctx['traces_root'] / spec.key
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -94,6 +91,10 @@ def _run_arm(spec, *, ctx):
         rec.update(stub_name=arms.STUB_NAME, version=None)
     else:
         rec.update(version=ctx['version'], head_sha=ctx['head_sha'], dirty=ctx['dirty'])
+    if spec.record is not None:
+        rec.update(spec.record)
+    if env_skipped is not None:
+        rec['env_not_applied_cases'] = env_skipped
 
     agg_path = evalrun.find_aggregate(out_dir)
     if agg_path is None:
@@ -146,7 +147,7 @@ def _score_arms(arm_records, log):
 
 def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=1.0, claude=None,
                 runner=evalrun.run_eval, env=None, tmp_parent=None, sandbox_roots=None,
-                keep_assembly=False, log=None, now=None):
+                keep_assembly=False, log=None, now=None, base=None, env_plugins=(), validate=None):
     log = log or (lambda msg: print(msg, file=sys.stderr))
     data_dir = Path(data_dir)
     entry = registry.lookup(data_dir, name)          # 未登记即抛 NotRegistered
@@ -178,6 +179,11 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
     run_dir = repo / 'plugin-evals' / name / 'runs' / run_id
     if run_dir.exists():
         raise CompareError('运行目录已存在：%s' % run_dir)
+    plan = armplan.plan_arms(
+        plugin_dir=plugin_dir, name=name, version=version, cases=cases, evals_src=evals_src, base=base,
+        env_specs=env_plugins, validate=validate or armplan.claude_validator(claude), tmp_parent=tmp_parent,
+        current_record={'version': version, 'head_sha': head_sha, 'dirty': dirty},
+        extra_exclude=extra_exclude, env=env, log=log)
     run_dir.mkdir(parents=True)
 
     assembly_root = Path(tempfile.mkdtemp(prefix='devkit-plugin-eval-', dir=tmp_parent))
@@ -190,13 +196,14 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
     }
     arm_records, reasons = {}, []
     try:
-        for spec in _arm_specs(plugin_dir):
+        for spec in plan.specs:
             arm_records[spec.key] = _run_arm(spec, ctx=ctx)
     finally:
+        plan.cleanup()
         if not keep_assembly:
             shutil.rmtree(assembly_root, ignore_errors=True)
     _score_arms(arm_records, log)
-    for spec in _arm_specs(plugin_dir):
+    for spec in plan.specs:
         rec = arm_records[spec.key]
         if rec['eval_exit_code'] not in EVAL_OK_EXIT_CODES:
             reasons.append('%s臂：eval 退出码 %s（0 / 1 以外：中途中止，如 --max-cost-usd 触顶为 2），结果可能不全'
@@ -219,6 +226,7 @@ def run_compare(data_dir, name, *, runs=3, concurrency=3, model=None, threshold=
                      'runs_per_case': runs, 'concurrency': concurrency, 'model_override': model,
                      'platform': sys.platform},
     )
+    rec.update(plan.record_fields(arm_records))
     rec = record.scrub_home(rec)   # 产物会入库：本机家目录前缀换成 ~
     (run_dir / 'run.json').write_text(json.dumps(rec, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     (run_dir / 'report.md').write_text(record.render_report(rec), encoding='utf-8')

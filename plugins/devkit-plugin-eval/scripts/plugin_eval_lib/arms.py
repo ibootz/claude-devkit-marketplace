@@ -6,8 +6,8 @@
     ...                         ← 被测插件其余文件，不含它自带的 evals/
     evals/                      ← 一律拷当前版仓里的用例，不含 evals/results/
 「不装」臂用空桩跑 --ablation none，等同不装（票 01 报告第二节实测）。
-扩展点：上一版臂只需给 ArmSpec.source 传 git archive 解出的快照目录；环境插件臂要把环境插件拷进
-组装目录内（eval 只从 containment root 内加载用例 plugins 字段列的插件），属后续票。
+上一版臂的 ArmSpec.source 是 git archive 解出的快照目录（previous.py）；环境插件臂在组装后由
+envplugins.install 把环境插件拷进组装目录内（eval 只从 containment root 内加载用例 plugins 字段列的插件）。
 """
 import json
 import os
@@ -25,6 +25,8 @@ class ArmSpec:
     key: str                 # 目录名与 run.json 里的键：none / current / previous ...
     label: str               # 给人读的臂名：不装 / 当前版 / 上一版
     source: Optional[Path]   # 被测插件某一版所在目录；None 表示空桩
+    env_plugins: tuple = ()  # envplugins.EnvPlugin：组装后拷进臂目录并写进每个用例的 plugins 字段
+    record: Optional[dict] = None   # 该臂写进 run.json 的来源字段；None 用当前版的默认字段
 
 
 def discover_cases(evals_dir):
