@@ -179,7 +179,7 @@
       "source": "./plugins/devkit-plugin-eval",
       "category": "Development",
       "description": "插件评测 - 离线对照被测插件装与不装的差，落盘待审报告",
-      "version": "0.2.0"
+      "version": "0.3.0"
     }
   ]
 }
