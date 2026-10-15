@@ -152,6 +152,13 @@ class CheckRunTest(unittest.TestCase):
         self.assertEqual(h['verdict'], 'failed')
         self.assertEqual(h['exit_codes'], [126])
 
+    def test_trace_failure_does_not_flip_hook_that_should_not_fire(self):
+        """票 06 审查 D：trace 失败记录只有事件名；本 run 没派子代理时，SubagentStart 的失败（如环境插件的）
+        不把被测插件本不触发的 SubagentStart hook 判成 failed。"""
+        r = self.check(GOOD_MAIN, trace_text=trace(hook_codes=[('SubagentStart', 1)]))
+        self.assertEqual(r['hooks']['SubagentStart||' + SS_CMD]['verdict'], 'not_triggered')
+        self.assertTrue(r['arrived'])
+
     def test_conditional_hook_failure_reported_but_deny_exit_2_is_not(self):
         main = GOOD_MAIN + [fail('PreToolUse', GUARD_CMD, 126), fail('PreToolUse', GUARD_CMD, 2)]
         r = self.check(main)
@@ -221,6 +228,14 @@ class BuildCheckTest(unittest.TestCase):
         self.assertIn('退出码 1', text)
         self.assertIn('不装臂', text)
         self.assertEqual(check['arms']['none']['plugin_injections'], 1)
+
+    def test_with_arm_without_runs_is_a_problem(self):
+        """票 06 审查 E：eval 没产出逐 run 结果时，with 臂 0 个 run 可核验，不判通过。"""
+        arms = {'none': arm_rec('不装', None, self.runs('none', [[{'type': 'user'}]])),
+                'current': arm_rec('当前版', profile(), [])}
+        check, _ = injection_check.build(arms)
+        self.assertFalse(check['ok'])
+        self.assertIn('当前版臂：0 个 run 可核验', '\n'.join(check['problems']))
 
     def test_static_errors_become_problems(self):
         prof = profile()

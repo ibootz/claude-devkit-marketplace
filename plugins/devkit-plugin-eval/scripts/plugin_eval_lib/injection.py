@@ -32,16 +32,17 @@ LABEL_MAX = 60
 STATIC_SESSION_ID = 'devkit-plugin-eval-static'
 
 # 估算系数：码位 ≥ U+2E80（中日韩文字与全角标点）每字 1.33 token，其余每字 0.29 token。
-# 校准依据（Claude Code 2.1.300、claude-opus-5-5 实测首请求输入 token）：devkit-discipline 4.1.0 装与不装
-# 首请求差约 6574（SessionStart + 一次 UserPromptSubmit 注入 + 一条 skill 列表），按本式估 6305 + skill 列表约 215；
-# devkit-clickable-paths 的 UserPromptSubmit 注入实测约 1369，本式估 1404。误差约 ±5%，只作信息。
+# 两点拟合（Claude Code 2.1.300、claude-opus-5-5 首请求输入 token）：devkit-discipline 4.1.0 装与不装差 6574，
+# 估 6306 + skill 列表约 215，残差 −0.8%；devkit-clickable-paths 一次 UserPromptSubmit 推算约 1370，估 1402，残差 +2.3%。
+# 两点都是中文为主的文本，窄字符系数基本没被约束；英文为主的文本未验证。只作信息。
+# 原始数据：.scratch/devkit-plugin-eval/calibration-06-resident-tokens.md
 WIDE_CODEPOINT = 0x2E80
 WIDE_RATE = 1.33
 NARROW_RATE = 0.29
 METHOD = {
     'name': 'char-estimate-v1',
     'formula': 'round(宽字符数 × %.2f + 其余字符数 × %.2f)，宽字符 = 码位 ≥ U+%04X' % (WIDE_RATE, NARROW_RATE, WIDE_CODEPOINT),
-    'calibration': 'Claude Code 2.1.300 / claude-opus-5-5 首请求输入 token 实测，误差约 ±5%',
+    'calibration': '两点拟合（中文为主），残差 ≤3%；英文为主的文本未验证（Claude Code 2.1.300 / claude-opus-5-5 首请求输入 token）',
     'scope': '只计注入正文，不含 Claude Code 包装的 system-reminder 前缀；不调模型',
     'execution': '真实 HOME、空临时 cwd、CLAUDE_PLUGIN_DATA 指向临时目录；PATH 与 eval 子进程相同（已去掉 asdf shims）',
 }

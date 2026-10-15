@@ -13,9 +13,10 @@ trace 里 SessionStart 的 hook_response 带 exit_code，作冒烟之外的第�
 
 逐 hook 判定（只判 injection.static_profile 标了 expected 的常驻 hook）：
 - arrived：转录里有同事件、正文含其标签的注入；
-- failed：转录有该 command 的非零退出，或 trace 里同事件 hook 非零退出且未到达 → 未到达；
+- failed：转录有该 command 的非零退出，或（该 hook 本应触发时）trace 里同事件 hook 非零退出且未到达 → 未到达；
 - missing：该事件应当触发、却既无注入也无失败记录 → 未到达；
-- not_triggered：SubagentStart 而本 run 没派子代理，或 matcher 不匹配本次触发值；
+- not_triggered：SubagentStart 而本 run 没派子代理，或 matcher 不匹配本次触发值。先于 trace 失败记录判：
+  trace 的失败记录只有事件名，同事件别的 hook（如环境插件的）失败不该把本不触发的 hook 判成 failed；
 - unverified：静态取不到标签，又没有失败记录，无法逐条确认。
 """
 import json
@@ -155,10 +156,10 @@ def check_run(obs, profile):
             entry['verdict'] = 'arrived'
         elif codes:
             entry.update(verdict='failed', exit_codes=codes)
-        elif trace_fail.get(h['event']):
-            entry.update(verdict='failed', exit_codes=sorted(trace_fail[h['event']]), source='trace')
         elif not _should_fire(h, obs):
             entry['verdict'] = 'not_triggered'
+        elif trace_fail.get(h['event']):
+            entry.update(verdict='failed', exit_codes=sorted(trace_fail[h['event']]), source='trace')
         elif not h['label']:
             entry['verdict'] = 'unverified'
         else:
@@ -248,6 +249,8 @@ def build(arm_records):
 
         n = arm['runs_total']
         if prof:
+            if not n:
+                check['problems'].append('%s臂：0 个 run 可核验（eval 没产出逐 run 结果），注入是否到达无从判断' % label)
             if arm['runs_not_arrived']:
                 check['problems'].append('%s臂：%d/%d 个 run 有注入未到达（%s）' % (label, arm['runs_not_arrived'], n, _summarize(why)))
             if cond_fail:
