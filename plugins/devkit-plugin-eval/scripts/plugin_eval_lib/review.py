@@ -3,13 +3,14 @@
 
 原始 jsonl 不入库、不另存；抽取在 review_scan 里完成，结果只含计数、信号名与定位指针（会话 id、uuid、时间、版本），
 不含对话原文。写盘前先对未脱敏的结果自检（assert_no_text：路径含 `~/`、长文本；check_pointers：指针字段白名单），
-全部插件都过了再统一写盘（每个文件拿与待审页写回同一把锁），写前再过一遍 record.scrub_home。
+全部插件都过了再统一写盘（每个文件拿与待审页写回同一把锁，锁内重读同一天旧结果再合并、再自检），写前再过一遍 record.scrub_home。
 
 同一天重跑覆盖当天文件，已勾选的复盘候选（按候选 id）与「建议跑对照」的已读标记带过去；旧待审页作废。
 更早日期已裁定的同一候选 id 跨日期沿用（插件版本相同时），记下沿用自哪天的哪次裁定（carried_from）；
 插件版本变了就重新上页；命中新的规则键时候选 id 本身就不同。
 日期用本机本地日期命名 reviews/<日期>.json，结果里另记时区偏移 tz_offset；时刻字段仍是 UTC。
 """
+import copy
 import hashlib
 import json
 import os
@@ -333,6 +334,21 @@ def check_pointers(rec):
     return bad
 
 
+def _merged(rec, path, date):
+    """带上同一天旧结果里的裁定与更早日期可沿用的裁定（读的是盘上当前内容）。"""
+    return carry_earlier(merge_previous(rec, _read_json(path) if path.is_file() else None),
+                         _earlier(path.parent, date))
+
+
+def _self_check(name, rec):
+    """自检必须在 scrub_home 之前：脱敏会把家目录换成 ~，家目录不在 /Users、/home 下时再查就漏了。"""
+    bad = assert_no_text(rec) + check_pointers(rec)
+    if bad:
+        raise ReviewError('%s 的复盘结果里有疑似原文、路径或不合形态的指针（%s），整批拒绝写盘'
+                          % (name, '、'.join(bad[:5])))
+    return rec
+
+
 def _write(path, rec):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + '.tmp')
@@ -391,17 +407,14 @@ def run_review(data_dir, *, days=None, now=None, env=None, cfg=None, hook_labels
                            clauses=clauses, clause_note=clause_note, prev=prev, now=now, days=days, since=since,
                            date=date, tz_offset=tz_offset, has_list=(evals / review_clauses.LIST_FILE).is_file())
         path = reviews_dir(repo, name) / ('%s.json' % date)
-        rec = carry_earlier(merge_previous(rec, _read_json(path) if path.is_file() else None),
-                            _earlier(path.parent, date))
-        # 自检在 scrub_home 之前：脱敏会把家目录换成 ~，再查就漏了（检测正则也认 `~/`）
-        bad = assert_no_text(rec) + check_pointers(rec)
-        if bad:
-            raise ReviewError('%s 的复盘结果里有疑似原文、路径或不合形态的指针（%s），整批拒绝写盘'
-                              % (name, '、'.join(bad[:5])))
-        built.append((name, path, record.scrub_home(rec)))
+        _self_check(name, _merged(copy.deepcopy(rec), path, date))     # 先全部自检，一个不过整批不写
+        built.append((name, path, rec))
     out = []
     for name, path, rec in built:
         with pending._locked(data_dir, 'review-%s-%s' % (name, date), err=ReviewError):   # 与待审页写回同一把锁
+            # 旧结果在锁内重读再合并：自检到拿锁之间若有一次待审页写回，它的裁定不被覆盖
+            rec = _self_check(name, _merged(rec, path, date))
+            rec = record.scrub_home(rec)
             _write(path, rec)
         out.append((name, path, rec))
     return out

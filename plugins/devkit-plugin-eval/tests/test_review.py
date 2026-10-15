@@ -9,6 +9,7 @@ import os
 import sys
 import time
 import unittest
+from unittest import mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -369,6 +370,43 @@ class ReviewScanTest(unittest.TestCase):
         finally:
             lock.release()
         self.fx.run()
+
+    def test_self_check_happens_before_scrub(self):
+        """钉住顺序：家目录不在 /Users、/home 下时，结果里出现家目录本身，脱敏后只剩 `~`、检测正则认不出；
+        先自检才拦得住。把自检挪到 scrub_home 之后，这条就会过不了。"""
+        home = '/opt/pe-home-7f3a'
+        orig = review.build_record
+
+        def leaky(**kw):
+            rec = orig(**kw)
+            rec['note'] = home
+            return rec
+        with mock.patch.dict(os.environ, {'HOME': home}), mock.patch.object(review, 'build_record', side_effect=leaky):
+            with self.assertRaises(review.ReviewError) as cm:
+                self.fx.run()
+        self.assertIn('$.note', str(cm.exception))
+        self.assertFalse((self.fx.repo / 'plugin-evals' / 'demo-guard' / 'reviews').exists())
+
+    def test_rerun_rereads_old_result_inside_the_lock(self):
+        """同一天重跑：自检之后、拿到锁之前落了一次待审页写回，锁内重读旧结果，裁定不被覆盖。"""
+        self.fx.run()
+        page = review_pending.generate(self.fx.data, 'demo-guard', '2026-10-15', now=lambda: NOW)
+        cid = page.items[0]['payload']['candidate_id']
+        real = pending._locked
+        state = {'raced': False}
+
+        def racing(data_dir, run_id, err=None):
+            if run_id == 'review-demo-guard-2026-10-15' and not state['raced']:
+                state['raced'] = True          # 只在复盘写盘前插一次写回；写回自己也走这把锁，不再递归
+                pending.apply_reply(self.fx.data, 'demo-guard', 'PE1 review-2026-10-15 %s 1A' % page.page_id,
+                                    now=lambda: NOW)
+            return real(data_dir, run_id, err=err) if err is not None else real(data_dir, run_id)
+        with mock.patch.object(pending, '_locked', side_effect=racing):
+            self.fx.run()
+        self.assertTrue(state['raced'])
+        rec = self.fx.load()
+        self.assertEqual({c['id']: c['selection'] for c in rec['candidates']}[cid], 'draft')
+        self.assertEqual(rec['pending']['history'][-1]['page_id'], page.page_id)
 
     def test_date_is_local_with_offset(self):
         tz = timezone(timedelta(hours=14))               # 12:00 UTC = 次日 02:00
