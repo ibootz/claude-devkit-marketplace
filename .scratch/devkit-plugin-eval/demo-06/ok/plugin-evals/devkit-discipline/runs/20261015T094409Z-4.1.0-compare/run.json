@@ -1,0 +1,325 @@
+{
+  "schema_version": 1,
+  "kind": "compare",
+  "run_id": "20261015T094409Z-4.1.0-compare",
+  "started_at": "2026-10-15T09:44:09Z",
+  "finished_at": "2026-10-15T09:44:58Z",
+  "plugin": {
+    "name": "devkit-discipline",
+    "version": "4.1.0",
+    "fingerprint": "sha256:c06cf79180afb51c6a65152eb28ff0f1d4177a9ea324c5b8871341770e1d9524",
+    "fingerprint_exclude": [
+      "evals"
+    ],
+    "path_in_repo": "plugins/devkit-discipline"
+  },
+  "clause_list_fingerprint": null,
+  "cases": [
+    "dispatch-model",
+    "parallel-lookup"
+  ],
+  "arms": {
+    "none": {
+      "label": "不装",
+      "source": "stub",
+      "eval_exit_code": 1,
+      "trace_dir": "traces/20261015T094409Z-4.1.0-compare/none",
+      "cleanup_warnings": [],
+      "stub_name": "devkit-plugin-eval-noplugin-stub",
+      "version": null,
+      "aggregate_result": "arms/none/aggregate-result.json",
+      "cost_usd": 0.395126,
+      "usage": {
+        "input_tokens": 40,
+        "output_tokens": 4377,
+        "cache_read_input_tokens": 133035,
+        "cache_creation_input_tokens": 39743,
+        "cost_usd": 0.39512600000000003,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 40,
+            "output_tokens": 4377,
+            "cache_read_input_tokens": 133035,
+            "cache_creation_input_tokens": 39743,
+            "cost_usd": 0.39512600000000003
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.300",
+      "load_issues": [],
+      "score": 0.6666666666666666,
+      "cases": {
+        "dispatch-model": {
+          "score": 0.3333333333333333,
+          "run_scores": [
+            0.3333333333333333,
+            0.3333333333333333
+          ],
+          "valid_runs": 2,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "parallel-lookup": {
+          "score": 1.0,
+          "run_scores": [
+            1.0,
+            1.0
+          ],
+          "valid_runs": 2,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    },
+    "current": {
+      "label": "当前版",
+      "source": "working-tree",
+      "eval_exit_code": 1,
+      "trace_dir": "traces/20261015T094409Z-4.1.0-compare/current",
+      "cleanup_warnings": [],
+      "version": "4.1.0",
+      "head_sha": "7c805118298c372adda5a53762cb939330ba52b2",
+      "dirty": false,
+      "aggregate_result": "arms/current/aggregate-result.json",
+      "cost_usd": 0.7194547,
+      "usage": {
+        "input_tokens": 30,
+        "output_tokens": 6072,
+        "cache_read_input_tokens": 169789,
+        "cache_creation_input_tokens": 91475,
+        "cost_usd": 0.7194547,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 22,
+            "output_tokens": 5081,
+            "cache_read_input_tokens": 148843,
+            "cache_creation_input_tokens": 63140,
+            "cost_usd": 0.6365966
+          },
+          "claude-sonnet-5-5": {
+            "input_tokens": 8,
+            "output_tokens": 991,
+            "cache_read_input_tokens": 20946,
+            "cache_creation_input_tokens": 28335,
+            "cost_usd": 0.0828581
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.300",
+      "load_issues": [],
+      "score": 1.0,
+      "cases": {
+        "dispatch-model": {
+          "score": 1.0,
+          "run_scores": [
+            1.0,
+            1.0
+          ],
+          "valid_runs": 2,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        },
+        "parallel-lookup": {
+          "score": 1.0,
+          "run_scores": [
+            1.0,
+            1.0
+          ],
+          "valid_runs": 2,
+          "invalid_runs": [],
+          "excluded_graders": {
+            "marker-sessionstart": "with-only",
+            "marker-userpromptsubmit": "with-only"
+          },
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    },
+    "previous": null,
+    "current_with_env": null
+  },
+  "delta": {
+    "cases": {
+      "dispatch-model": 0.6666666666666667,
+      "parallel-lookup": 0.0
+    },
+    "overall": 0.33333333333333337,
+    "missing_cases": [],
+    "arm": "current",
+    "baseline": "none"
+  },
+  "claude_code_version": "2.1.300",
+  "main_model": "claude-opus-5-5",
+  "judge_model": null,
+  "usage": {
+    "input_tokens": 70,
+    "output_tokens": 10449,
+    "cache_read_input_tokens": 302824,
+    "cache_creation_input_tokens": 131218,
+    "cost_usd": 1.1145807,
+    "by_model": {
+      "claude-opus-5-5": {
+        "input_tokens": 62,
+        "output_tokens": 9458,
+        "cache_read_input_tokens": 281878,
+        "cache_creation_input_tokens": 102883,
+        "cost_usd": 1.0317226
+      },
+      "claude-sonnet-5-5": {
+        "input_tokens": 8,
+        "output_tokens": 991,
+        "cache_read_input_tokens": 20946,
+        "cache_creation_input_tokens": 28335,
+        "cost_usd": 0.0828581
+      }
+    },
+    "cost_basis": "按标价（list price）估算，订阅用户只作信息"
+  },
+  "complete": true,
+  "incomplete_reasons": [],
+  "threshold": 1.0,
+  "passed": true,
+  "pass_criterion": "运行完整，且当前版臂每个有分用例的规则分都 ≥ threshold",
+  "review": {
+    "status": "待审",
+    "reviewed_at": null
+  },
+  "injection_check": {
+    "file": "injection-check.json",
+    "ok": true,
+    "problems": [],
+    "arms": {
+      "none": {
+        "label": "不装",
+        "kind": "control",
+        "runs_total": 4,
+        "runs_arrived": 0,
+        "runs_not_arrived": 0,
+        "runs_unverified": 0,
+        "runs_no_transcript": 0,
+        "events_total": {},
+        "plugin_injections": 0
+      },
+      "current": {
+        "label": "当前版",
+        "kind": "with",
+        "runs_total": 4,
+        "runs_arrived": 4,
+        "runs_not_arrived": 0,
+        "runs_unverified": 0,
+        "runs_no_transcript": 0,
+        "events_total": {
+          "SubagentStart": 4,
+          "SessionStart": 4,
+          "UserPromptSubmit": 8,
+          "PreToolUse": 2
+        },
+        "plugin_injections": 16
+      }
+    }
+  },
+  "judge": null,
+  "resident_tokens": {
+    "method": {
+      "name": "char-estimate-v1",
+      "formula": "round(宽字符数 × 1.33 + 其余字符数 × 0.29)，宽字符 = 码位 ≥ U+2E80",
+      "calibration": "Claude Code 2.1.300 / claude-opus-5-5 首请求输入 token 实测，误差约 ±5%",
+      "scope": "只计注入正文，不含 Claude Code 包装的 system-reminder 前缀；不调模型",
+      "execution": "真实 HOME、空临时 cwd、CLAUDE_PLUGIN_DATA 指向临时目录；PATH 与 eval 子进程相同（已去掉 asdf shims）"
+    },
+    "arms": {
+      "current": {
+        "label": "当前版",
+        "by_event": {
+          "SessionStart": {
+            "hooks": 1,
+            "injecting_hooks": 1,
+            "chars": 4900,
+            "tokens_est": 4512
+          },
+          "UserPromptSubmit": {
+            "hooks": 2,
+            "injecting_hooks": 1,
+            "chars": 2204,
+            "tokens_est": 1803
+          },
+          "SubagentStart": {
+            "hooks": 1,
+            "injecting_hooks": 1,
+            "chars": 4571,
+            "tokens_est": 4026
+          }
+        },
+        "total_tokens_est": 10341,
+        "hooks": [
+          {
+            "key": "SessionStart|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+            "event": "SessionStart",
+            "chars": 4900,
+            "tokens_est": 4512,
+            "exit_code": 0,
+            "label": "# AI 工作纪律（会话级常驻，auto-compact 后自动重新注入）"
+          },
+          {
+            "key": "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+            "event": "UserPromptSubmit",
+            "chars": 2204,
+            "tokens_est": 1803,
+            "exit_code": 0,
+            "label": "# AI 工作纪律 · 每轮要点（一～七章已在会话开始注入，仍然有效）"
+          },
+          {
+            "key": "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-ledger.js",
+            "event": "UserPromptSubmit",
+            "chars": 0,
+            "tokens_est": 0,
+            "exit_code": 0,
+            "label": null
+          },
+          {
+            "key": "SubagentStart||node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+            "event": "SubagentStart",
+            "chars": 4571,
+            "tokens_est": 4026,
+            "exit_code": 0,
+            "label": "# AI 工作纪律（子代理版）"
+          }
+        ],
+        "conditional_hooks": 4,
+        "errors": []
+      }
+    },
+    "measured_first_request_input_tokens": {
+      "none": 10316.0,
+      "current": 17001.0
+    },
+    "measured_delta_vs_none": {
+      "current": 6685.0
+    }
+  },
+  "preflight": null,
+  "environment": {
+    "claude_path": "~/.local/bin/claude",
+    "node_path": "/opt/homebrew/bin/node",
+    "runs_per_case": 2,
+    "concurrency": 4,
+    "model_override": null,
+    "platform": "darwin"
+  }
+}

@@ -1,0 +1,224 @@
+{
+  "schema_version": 1,
+  "purpose": "注入到达核验：只作前置核验、不计分",
+  "ok": true,
+  "problems": [],
+  "arms": {
+    "none": {
+      "label": "不装",
+      "kind": "control",
+      "runs": [
+        {
+          "events": {},
+          "subagent_transcripts": 2,
+          "trace_hook_failures": [],
+          "verdict": "control",
+          "case": "dispatch-model",
+          "run": 1
+        },
+        {
+          "events": {},
+          "subagent_transcripts": 2,
+          "trace_hook_failures": [],
+          "verdict": "control",
+          "case": "dispatch-model",
+          "run": 2
+        },
+        {
+          "events": {},
+          "subagent_transcripts": 0,
+          "trace_hook_failures": [],
+          "verdict": "control",
+          "case": "parallel-lookup",
+          "run": 1
+        },
+        {
+          "events": {},
+          "subagent_transcripts": 0,
+          "trace_hook_failures": [],
+          "verdict": "control",
+          "case": "parallel-lookup",
+          "run": 2
+        }
+      ],
+      "events_total": {},
+      "runs_total": 4,
+      "runs_arrived": 0,
+      "runs_not_arrived": 0,
+      "runs_unverified": 0,
+      "runs_no_transcript": 0,
+      "plugin_injections": 0
+    },
+    "current": {
+      "label": "当前版",
+      "kind": "with",
+      "runs": [
+        {
+          "events": {
+            "SubagentStart": 2,
+            "SessionStart": 1,
+            "UserPromptSubmit": 3,
+            "PreToolUse": 2
+          },
+          "subagent_transcripts": 2,
+          "hooks": {
+            "SessionStart|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js": {
+              "event": "SessionStart",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+              "count": 1,
+              "verdict": "arrived"
+            },
+            "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js": {
+              "event": "UserPromptSubmit",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+              "count": 3,
+              "verdict": "arrived"
+            },
+            "SubagentStart||node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js": {
+              "event": "SubagentStart",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+              "count": 2,
+              "verdict": "arrived"
+            }
+          },
+          "plugin_hook_failures": [],
+          "trace_hook_failures": [],
+          "first_request_input_tokens": 17005,
+          "verdict": "arrived",
+          "arrived": true,
+          "case": "dispatch-model",
+          "run": 1
+        },
+        {
+          "events": {
+            "SubagentStart": 2,
+            "SessionStart": 1,
+            "UserPromptSubmit": 3
+          },
+          "subagent_transcripts": 2,
+          "hooks": {
+            "SessionStart|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js": {
+              "event": "SessionStart",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+              "count": 1,
+              "verdict": "arrived"
+            },
+            "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js": {
+              "event": "UserPromptSubmit",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+              "count": 3,
+              "verdict": "arrived"
+            },
+            "SubagentStart||node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js": {
+              "event": "SubagentStart",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+              "count": 2,
+              "verdict": "arrived"
+            }
+          },
+          "plugin_hook_failures": [],
+          "trace_hook_failures": [],
+          "first_request_input_tokens": 17005,
+          "verdict": "arrived",
+          "arrived": true,
+          "case": "dispatch-model",
+          "run": 2
+        },
+        {
+          "events": {
+            "SessionStart": 1,
+            "UserPromptSubmit": 1
+          },
+          "subagent_transcripts": 0,
+          "hooks": {
+            "SessionStart|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js": {
+              "event": "SessionStart",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+              "count": 1,
+              "verdict": "arrived"
+            },
+            "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js": {
+              "event": "UserPromptSubmit",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+              "count": 1,
+              "verdict": "arrived"
+            },
+            "SubagentStart||node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js": {
+              "event": "SubagentStart",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+              "count": 0,
+              "verdict": "not_triggered"
+            }
+          },
+          "plugin_hook_failures": [],
+          "trace_hook_failures": [],
+          "first_request_input_tokens": 16994,
+          "verdict": "arrived",
+          "arrived": true,
+          "case": "parallel-lookup",
+          "run": 1
+        },
+        {
+          "events": {
+            "SessionStart": 1,
+            "UserPromptSubmit": 1
+          },
+          "subagent_transcripts": 0,
+          "hooks": {
+            "SessionStart|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js": {
+              "event": "SessionStart",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+              "count": 1,
+              "verdict": "arrived"
+            },
+            "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js": {
+              "event": "UserPromptSubmit",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+              "count": 1,
+              "verdict": "arrived"
+            },
+            "SubagentStart||node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js": {
+              "event": "SubagentStart",
+              "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+              "count": 0,
+              "verdict": "not_triggered"
+            }
+          },
+          "plugin_hook_failures": [],
+          "trace_hook_failures": [],
+          "first_request_input_tokens": 16997,
+          "verdict": "arrived",
+          "arrived": true,
+          "case": "parallel-lookup",
+          "run": 2
+        }
+      ],
+      "events_total": {
+        "SubagentStart": 4,
+        "SessionStart": 4,
+        "UserPromptSubmit": 8,
+        "PreToolUse": 2
+      },
+      "runs_total": 4,
+      "runs_arrived": 4,
+      "runs_not_arrived": 0,
+      "runs_unverified": 0,
+      "runs_no_transcript": 0,
+      "plugin_injections": 16,
+      "expected_hooks": [
+        {
+          "key": "SessionStart|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+          "label": "# AI 工作纪律（会话级常驻，auto-compact 后自动重新注入）"
+        },
+        {
+          "key": "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+          "label": "# AI 工作纪律 · 每轮要点（一～七章已在会话开始注入，仍然有效）"
+        },
+        {
+          "key": "SubagentStart||node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+          "label": "# AI 工作纪律（子代理版）"
+        }
+      ]
+    }
+  }
+}

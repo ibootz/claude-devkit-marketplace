@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 1,
+  "claudeVersion": "2.1.300",
+  "startedAt": "2026-10-15T09:44:31.999Z",
+  "durationSeconds": 48,
+  "costUsd": 0.5372356,
+  "partial": false,
+  "suite": {
+    "root": "/private/var/folders/hs/pw8f7p_n3qjcsh3yzq527f3w0000gn/T/devkit-plugin-eval-gn73b_2j/current",
+    "ablation": "none",
+    "threshold": 1,
+    "concurrency": 4,
+    "plugins": [
+      {
+        "name": "devkit-discipline",
+        "version": "4.1.0",
+        "path": "/private/var/folders/hs/pw8f7p_n3qjcsh3yzq527f3w0000gn/T/devkit-plugin-eval-gn73b_2j/current"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "dispatch-model",
+      "dir": "evals/dispatch-model",
+      "source": "prose",
+      "promptMarkdown": "我想同时弄清两件互不相关的事，请分别派一个子代理去查，最后汇总给我：\n1. 用三句话解释 TCP 三次握手为什么不是两次；\n2. 用三句话解释 HTTP 方法的幂等性，并说明 POST 为什么通常不幂等。\n不需要读任何文件。",
+      "runsPerCase": 3,
+      "timeoutSeconds": 300,
+      "maxTurns": 12,
+      "graders": [
+        {
+          "name": "agent-dispatched",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Agent",
+            "min": 2
+          }
+        },
+        {
+          "name": "agent-has-model",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Agent",
+            "input_match": "\"model\"\\s*:\\s*\"",
+            "min": 2
+          }
+        },
+        {
+          "name": "agent-missing-model-zero",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Agent",
+            "input_match": "^(?![\\s\\S]*\"model\"\\s*:)",
+            "min": 0,
+            "max": 0
+          }
+        },
+        {
+          "name": "marker-sessionstart",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律（会话级常驻",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "marker-userpromptsubmit",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律 · 每轮要点",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 0.6,
+            "passed": false,
+            "turns": 1,
+            "costUsd": 0.3312504,
+            "judgeCostUsd": 0,
+            "durationSeconds": 48,
+            "startedAt": "2026-10-15T09:44:32.033Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-GJQt5l/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 4x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched AI 工作纪律（会话级常驻",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 0.8,
+            "passed": false,
+            "turns": 3,
+            "costUsd": 0.20598520000000003,
+            "judgeCostUsd": 0,
+            "durationSeconds": 37,
+            "startedAt": "2026-10-15T09:44:32.033Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-xxG323/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched AI 工作纪律（会话级常驻",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 0.7,
+        "passRate": 0
+      }
+    }
+  ],
+  "aggregates": {
+    "casesTotal": 1,
+    "casesPassed": 0,
+    "overallScore": 0.7,
+    "overallPassRate": 0
+  }
+}

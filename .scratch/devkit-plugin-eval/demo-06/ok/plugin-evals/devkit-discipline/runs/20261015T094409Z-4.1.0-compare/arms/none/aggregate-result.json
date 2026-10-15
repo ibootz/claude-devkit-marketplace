@@ -1,0 +1,367 @@
+{
+  "schemaVersion": 1,
+  "claudeVersion": "2.1.300",
+  "startedAt": "2026-10-15T09:44:10.235Z",
+  "durationSeconds": 22,
+  "costUsd": 0.395126,
+  "partial": false,
+  "suite": {
+    "root": "/private/var/folders/hs/pw8f7p_n3qjcsh3yzq527f3w0000gn/T/devkit-plugin-eval-_osweb6_/none",
+    "ablation": "none",
+    "threshold": 1,
+    "concurrency": 4,
+    "plugins": [
+      {
+        "name": "devkit-plugin-eval-noplugin-stub",
+        "version": "0.0.0",
+        "path": "/private/var/folders/hs/pw8f7p_n3qjcsh3yzq527f3w0000gn/T/devkit-plugin-eval-_osweb6_/none"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "dispatch-model",
+      "dir": "evals/dispatch-model",
+      "source": "prose",
+      "promptMarkdown": "我想同时弄清两件互不相关的事，请分别派一个子代理去查，最后汇总给我：\n1. 用三句话解释 TCP 三次握手为什么不是两次；\n2. 用三句话解释 HTTP 方法的幂等性，并说明 POST 为什么通常不幂等。\n不需要读任何文件。",
+      "runsPerCase": 3,
+      "timeoutSeconds": 300,
+      "maxTurns": 12,
+      "graders": [
+        {
+          "name": "agent-dispatched",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Agent",
+            "min": 2
+          }
+        },
+        {
+          "name": "agent-has-model",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Agent",
+            "input_match": "\"model\"\\s*:\\s*\"",
+            "min": 2
+          }
+        },
+        {
+          "name": "agent-missing-model-zero",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Agent",
+            "input_match": "^(?![\\s\\S]*\"model\"\\s*:)",
+            "min": 0,
+            "max": 0
+          }
+        },
+        {
+          "name": "marker-sessionstart",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律（会话级常驻",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "marker-userpromptsubmit",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律 · 每轮要点",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 0.2,
+            "passed": false,
+            "turns": 1,
+            "costUsd": 0.1378488,
+            "judgeCostUsd": 0,
+            "durationSeconds": 19,
+            "startedAt": "2026-10-15T09:44:10.273Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-Nw2mBC/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 0.2,
+            "passed": false,
+            "turns": 1,
+            "costUsd": 0.14083700000000002,
+            "judgeCostUsd": 0,
+            "durationSeconds": 22,
+            "startedAt": "2026-10-15T09:44:10.273Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-48FMjf/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "agent-dispatched",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-has-model",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 0x (expected 2..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "agent-missing-model-zero",
+                "passed": false,
+                "weight": 1,
+                "explanation": "Agent called 2x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 0.2,
+        "passRate": 0
+      }
+    },
+    {
+      "name": "parallel-lookup",
+      "dir": "evals/parallel-lookup",
+      "source": "mixed",
+      "promptMarkdown": "当前目录下有三个子目录 billing、auth、report，各有一个同名的 .py 文件（billing/billing.py、auth/auth.py、report/report.py）。请把这三个文件都完整读一遍，分别用一句话概括每个文件做什么，并给出其中常量的值。",
+      "runsPerCase": 3,
+      "timeoutSeconds": 300,
+      "maxTurns": 10,
+      "graders": [
+        {
+          "name": "answer-correct",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "last_message",
+            "pattern": "^(?=[\\s\\S]*0\\.137)(?=[\\s\\S]*2719)(?=[\\s\\S]*83)",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "marker-sessionstart",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律（会话级常驻",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "marker-userpromptsubmit",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "AI 工作纪律 · 每轮要点",
+            "flags": "",
+            "match": "contains",
+            "arm": "with-only"
+          }
+        },
+        {
+          "name": "parallel-tool-calls",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "\"id\":\"(msg_[A-Za-z0-9]+)\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"[\\s\\S]*?\\n[^\\n]*\"id\":\"\\1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"",
+            "flags": "",
+            "match": "contains"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 0.5,
+            "passed": false,
+            "turns": 4,
+            "costUsd": 0.05859,
+            "judgeCostUsd": 0,
+            "durationSeconds": 14,
+            "startedAt": "2026-10-15T09:44:10.273Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-pWXJKc/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "answer-correct",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched ^(?=[\\s\\S]*0\\.137)(?=[\\s\\S]*2719)(?=[\\s\\S]*83)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "parallel-tool-calls",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \"id\":\"(msg_[A-Za-z0-9]+)\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"[\\s\\S]*?\\n[^\\n]*\"id\":\"\\1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 0.5,
+            "passed": false,
+            "turns": 4,
+            "costUsd": 0.057850200000000004,
+            "judgeCostUsd": 0,
+            "durationSeconds": 8,
+            "startedAt": "2026-10-15T09:44:10.273Z",
+            "error": null,
+            "tracePath": "/private/tmp/e-usup3x/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "answer-correct",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched ^(?=[\\s\\S]*0\\.137)(?=[\\s\\S]*2719)(?=[\\s\\S]*83)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-sessionstart",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "marker-userpromptsubmit",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in trace",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "parallel-tool-calls",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \"id\":\"(msg_[A-Za-z0-9]+)\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"[\\s\\S]*?\\n[^\\n]*\"id\":\"\\1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":\\[\\{\"type\":\"tool_use\"",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 0.5,
+        "passRate": 0
+      }
+    }
+  ],
+  "aggregates": {
+    "casesTotal": 2,
+    "casesPassed": 0,
+    "overallScore": 0.35,
+    "overallPassRate": 0
+  }
+}
