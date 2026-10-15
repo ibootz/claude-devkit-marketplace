@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "plugin": "devkit-discipline",
+  "created_in_run": "20261015T124124Z-4.1.0-clauses",
+  "created_at": "2026-10-15T12:41:24Z",
+  "base_list_fingerprint": "sha256:c5f787a7f61cd1eb915ff81f858b689acefeb25c94df8fada32de3590513aa27",
+  "old_injection_fingerprint": "sha256:36b0fa5f5a1cc79686fd3f94a89684e546bc33df1af20428431c5f31d1973b9f",
+  "new_injection_fingerprint": "sha256:a203ba406d6f315d1a795b7c52cc8bba1f7427c8125b1ae863ecba7e7bb24641",
+  "kind": "delta",
+  "ai": {
+    "model": "claude-fable-5-1",
+    "cost_usd": 0.28152275,
+    "duration_ms": 6989,
+    "usage": {
+      "input_tokens": 2,
+      "output_tokens": 495,
+      "cache_read_input_tokens": 851,
+      "cache_creation_input_tokens": 12827
+    },
+    "cost_basis": "按标价（list price）估算，订阅用户只作信息",
+    "old_snapshot_found": true
+  },
+  "added": [
+    {
+      "id": "C101",
+      "criterion": "派发子代理前盘点「在飞 + 拟派」总数，前台子代理不超过 8 个、后台子代理不超过 4 个（用户当场放宽除外）。",
+      "events": [
+        "SessionStart",
+        "SubagentStart"
+      ],
+      "ai_ref": "N1"
+    }
+  ],
+  "rewritten": [],
+  "retired": [
+    {
+      "id": "C100",
+      "reason": "criterion-changed",
+      "replaced_by": [
+        "C101"
+      ],
+      "rehang_hint": "在飞上限从单一的 8 改为前台 8、后台 4 两档，原挂在 C100 上的用例改挂到 C101，并按前台 / 后台分别核对上限。",
+      "old_criterion": "派发子代理前盘点「在飞 + 拟派」总数，不超过 8 个（用户当场放宽除外）。"
+    }
+  ]
+}
