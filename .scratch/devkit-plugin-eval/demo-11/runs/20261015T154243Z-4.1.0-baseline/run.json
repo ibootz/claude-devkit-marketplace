@@ -1,0 +1,284 @@
+{
+  "schema_version": 1,
+  "kind": "baseline",
+  "run_id": "20261015T154243Z-4.1.0-baseline",
+  "started_at": "2026-10-15T15:42:43Z",
+  "finished_at": "2026-10-15T15:43:51Z",
+  "plugin": {
+    "name": "devkit-discipline",
+    "version": "4.1.0",
+    "path_in_repo": "plugins/devkit-discipline"
+  },
+  "cases": [
+    "dispatch-with-model",
+    "grep-then-targeted-read",
+    "parallel-lookup",
+    "zero-hit-verify-search"
+  ],
+  "threshold": 1.0,
+  "runs_per_case": 3,
+  "rule": "不装臂 3 次中 ≥ 2 次规则分 ≥ threshold 即基线已满足",
+  "arms": {
+    "none": {
+      "label": "不装",
+      "source": "stub",
+      "eval_exit_code": 1,
+      "trace_dir": "traces/20261015T154243Z-4.1.0-baseline/none",
+      "cleanup_warnings": [],
+      "stub_name": "devkit-plugin-eval-noplugin-stub",
+      "version": null,
+      "aggregate_result": "arms/none/aggregate-result.json",
+      "cost_usd": 1.1167892,
+      "usage": {
+        "input_tokens": 106,
+        "output_tokens": 12393,
+        "cache_read_input_tokens": 401561,
+        "cache_creation_input_tokens": 109779,
+        "cost_usd": 1.1167892,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 106,
+            "output_tokens": 12393,
+            "cache_read_input_tokens": 401561,
+            "cache_creation_input_tokens": 109779,
+            "cost_usd": 1.1167892
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.301",
+      "load_issues": [],
+      "score": 0.75,
+      "cases": {
+        "dispatch-with-model": {
+          "score": 0.3333333333333333,
+          "run_scores": [
+            0.3333333333333333,
+            0.3333333333333333,
+            0.3333333333333333
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        },
+        "grep-then-targeted-read": {
+          "score": 1.0,
+          "run_scores": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        },
+        "parallel-lookup": {
+          "score": 1.0,
+          "run_scores": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        },
+        "zero-hit-verify-search": {
+          "score": 0.6666666666666666,
+          "run_scores": [
+            0.6666666666666666,
+            0.6666666666666666,
+            0.6666666666666666
+          ],
+          "valid_runs": 3,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    }
+  },
+  "verdicts": {
+    "dispatch-with-model": {
+      "verdict": "not-satisfied",
+      "passes": 0,
+      "invalid": 0,
+      "valid": 3,
+      "need": 2,
+      "run_scores": [
+        0.3333333333333333,
+        0.3333333333333333,
+        0.3333333333333333
+      ],
+      "threshold": 1.0,
+      "runs": 3,
+      "run_id": "20261015T154243Z-4.1.0-baseline",
+      "at": "2026-10-15T15:42:43Z",
+      "tag_changed": false,
+      "case_fingerprint": "sha256:b40642b87255712ebf23a19e6c76b6684c2449355c30124dc9b07b1ee8f0da33"
+    },
+    "grep-then-targeted-read": {
+      "verdict": "satisfied",
+      "passes": 3,
+      "invalid": 0,
+      "valid": 3,
+      "need": 2,
+      "run_scores": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "threshold": 1.0,
+      "runs": 3,
+      "run_id": "20261015T154243Z-4.1.0-baseline",
+      "at": "2026-10-15T15:42:43Z",
+      "tag_changed": true,
+      "case_fingerprint": "sha256:90826a915f80fc6936f07f32efa48ef2d7b7706f49cafed8f1957e36f382f114"
+    },
+    "parallel-lookup": {
+      "verdict": "satisfied",
+      "passes": 3,
+      "invalid": 0,
+      "valid": 3,
+      "need": 2,
+      "run_scores": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "threshold": 1.0,
+      "runs": 3,
+      "run_id": "20261015T154243Z-4.1.0-baseline",
+      "at": "2026-10-15T15:42:43Z",
+      "tag_changed": true,
+      "case_fingerprint": "sha256:c868fc5594baeb53c14a82f8b0120cc3bb3bde5aba03426890e40dbdc079a1d1"
+    },
+    "zero-hit-verify-search": {
+      "verdict": "not-satisfied",
+      "passes": 0,
+      "invalid": 0,
+      "valid": 3,
+      "need": 2,
+      "run_scores": [
+        0.6666666666666666,
+        0.6666666666666666,
+        0.6666666666666666
+      ],
+      "threshold": 1.0,
+      "runs": 3,
+      "run_id": "20261015T154243Z-4.1.0-baseline",
+      "at": "2026-10-15T15:42:43Z",
+      "tag_changed": false,
+      "case_fingerprint": "sha256:54c46f2faa594b3a89aef1b21d7519040d381e1f7d21f376172163c72a6d85fe"
+    }
+  },
+  "preflight": {
+    "kind": "compare",
+    "passed": true,
+    "dirty": null,
+    "warnings": [],
+    "items": [
+      {
+        "id": "registered",
+        "label": "被测插件已登记",
+        "level": "hard",
+        "status": "ok",
+        "detail": "仓内路径 plugins/devkit-discipline"
+      },
+      {
+        "id": "claude_executable",
+        "label": "claude 可执行",
+        "level": "hard",
+        "status": "ok",
+        "detail": "~/.local/bin/claude"
+      },
+      {
+        "id": "eval_flags",
+        "label": "claude plugin eval 参数齐（--help 特性探测）",
+        "level": "hard",
+        "status": "ok",
+        "detail": ""
+      },
+      {
+        "id": "logged_in",
+        "label": "已登录（claude auth status）",
+        "level": "hard",
+        "status": "ok",
+        "detail": ""
+      },
+      {
+        "id": "plugin_valid",
+        "label": "插件结构合法（claude plugin validate）",
+        "level": "hard",
+        "status": "ok",
+        "detail": ""
+      },
+      {
+        "id": "env_plugins_contained",
+        "label": "环境插件在 containment root 内",
+        "level": "hard",
+        "status": "skip",
+        "detail": "无环境插件臂"
+      },
+      {
+        "id": "hooks_reachable",
+        "label": "hook 解释器可达（临时空 HOME + 同一 PATH 冒烟）",
+        "level": "hard",
+        "status": "ok",
+        "detail": "6 条 command 已执行"
+      }
+    ],
+    "hook_smoke": [
+      {
+        "plugin": "当前版",
+        "event": "PreToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-dispatch.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "PreToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/bash-guard.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "PreToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/probe-throttle.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "PostToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/write-guard.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "SessionStart",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "UserPromptSubmit",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-ledger.js",
+        "exit_code": 0,
+        "note": ""
+      }
+    ]
+  },
+  "usage": {
+    "cost_usd": 1.1167892,
+    "cost_basis": "按标价（list price）估算，订阅用户只作信息"
+  }
+}

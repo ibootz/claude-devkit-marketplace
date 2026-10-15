@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "plugin": "devkit-discipline",
+  "skipped": {
+    "clause:C003": {
+      "code": "needs-write-tools",
+      "reason": "规矩针对执行命令前用 wc -l / head 收窄输出，沙箱没有 Bash，无法跑任何命令。",
+      "model": "claude-fable-5-1",
+      "at": "2026-10-15T15:34:47Z"
+    },
+    "clause:C004": {
+      "code": "needs-write-tools",
+      "reason": "触发条件是命令输出收窄后仍超 200 行，离线沙箱无法运行命令产生输出，也看不到「第 2 层子代理」的层级状态。",
+      "model": "claude-fable-5-1",
+      "at": "2026-10-15T15:34:47Z"
+    },
+    "clause:C006": {
+      "code": "needs-write-tools",
+      "reason": "规矩要求用 ls 列父目录确认非 ASCII 路径，沙箱没有 Bash；改用 Glob 列目录在不装插件时也是常规动作，无法区分守与不守。",
+      "model": "claude-fable-5-1",
+      "at": "2026-10-15T15:34:47Z"
+    },
+    "clause:C008": {
+      "code": "not-observable-offline",
+      "reason": "TaskList / TaskGet 不在可用工具集内，不用它们统计是必然结果，而「自己记账」是模型内部状态，会话里看不出来。",
+      "model": "claude-fable-5-1",
+      "at": "2026-10-15T15:34:47Z"
+    },
+    "clause:C009": {
+      "code": "not-observable-offline",
+      "reason": "单次 claude -p 会话无法触发 auto-compact，compact 之后的派发策略离线观察不到。",
+      "model": "claude-fable-5-1",
+      "at": "2026-10-15T15:34:47Z"
+    },
+    "clause:C010": {
+      "code": "not-observable-offline",
+      "reason": "claude -p 会话本身是顶层代理，无法让被测模型处于「已是第 2 层子代理」的位置；子代理内部是否再派发也不出现在轨迹里。",
+      "model": "claude-fable-5-1",
+      "at": "2026-10-15T15:34:47Z"
+    },
+    "clause:C012": {
+      "code": "not-observable-offline",
+      "reason": "单次 claude -p 会话无法进入 team 模式，也无法在不点名规矩的前提下自然触发嵌套派发或代派前的 reference 阅读。",
+      "model": "claude-fable-5-1",
+      "at": "2026-10-15T15:34:47Z"
+    },
+    "clause:C013": {
+      "code": "not-observable-offline",
+      "reason": "触发条件是作为 teammate 调 Agent 被拒并收到 omit the name parameter 报错，离线普通会话里 Agent 不会这样拒绝，行为无从观察。",
+      "model": "claude-fable-5-1",
+      "at": "2026-10-15T15:34:47Z"
+    }
+  }
+}

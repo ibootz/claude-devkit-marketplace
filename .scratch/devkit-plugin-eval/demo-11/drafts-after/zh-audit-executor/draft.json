@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "case": "zh-audit-executor",
+  "source": "history",
+  "created_at": "2026-10-15T12:00:00Z",
+  "created_by": {
+    "by": "票 11 历史素材迁入"
+  },
+  "status": "open",
+  "category": "skill-trigger",
+  "skill": "zh-disambiguate",
+  "clauses": [],
+  "intent": "应触发 zh-disambiguate；回复指出执行者不明，以及重试的条件与执行者不明",
+  "history_source": "zh-disambiguate skill 自带 evals/evals.json 第 1 例（plugins/devkit-discipline/skills/zh-disambiguate/evals/evals.json），expected_output 改写为 judge 判定标准，另加规则 grader"
+}

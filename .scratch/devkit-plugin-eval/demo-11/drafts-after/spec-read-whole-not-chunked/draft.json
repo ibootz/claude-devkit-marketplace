@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "case": "spec-read-whole-not-chunked",
+  "source": "ai",
+  "category": "discipline",
+  "clauses": [
+    "C002"
+  ],
+  "clause_intent": "核对整份规范或协议时一次整读全文，不分片读取。",
+  "intent": "核对实现是否符合协议规范时，一次整读规范全文，而不是分片（带 offset/limit）读取。",
+  "target": "clause:C002",
+  "created_at": "2026-10-15T15:34:47Z",
+  "created_by": {
+    "model": "claude-fable-5-1"
+  },
+  "status": "open"
+}

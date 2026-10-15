@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "plugin": "devkit-discipline",
+  "cases": {
+    "dispatch-with-model": {
+      "verdict": "not-satisfied",
+      "passes": 0,
+      "invalid": 0,
+      "valid": 3,
+      "need": 2,
+      "run_scores": [
+        0.3333333333333333,
+        0.3333333333333333,
+        0.3333333333333333
+      ],
+      "threshold": 1.0,
+      "runs": 3,
+      "run_id": "20261015T154243Z-4.1.0-baseline",
+      "at": "2026-10-15T15:42:43Z",
+      "tag_changed": false,
+      "case_fingerprint": "sha256:b40642b87255712ebf23a19e6c76b6684c2449355c30124dc9b07b1ee8f0da33"
+    },
+    "grep-then-targeted-read": {
+      "verdict": "satisfied",
+      "passes": 3,
+      "invalid": 0,
+      "valid": 3,
+      "need": 2,
+      "run_scores": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "threshold": 1.0,
+      "runs": 3,
+      "run_id": "20261015T154243Z-4.1.0-baseline",
+      "at": "2026-10-15T15:42:43Z",
+      "tag_changed": true,
+      "case_fingerprint": "sha256:90826a915f80fc6936f07f32efa48ef2d7b7706f49cafed8f1957e36f382f114"
+    },
+    "parallel-lookup": {
+      "verdict": "satisfied",
+      "passes": 3,
+      "invalid": 0,
+      "valid": 3,
+      "need": 2,
+      "run_scores": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "threshold": 1.0,
+      "runs": 3,
+      "run_id": "20261015T154243Z-4.1.0-baseline",
+      "at": "2026-10-15T15:42:43Z",
+      "tag_changed": true,
+      "case_fingerprint": "sha256:c868fc5594baeb53c14a82f8b0120cc3bb3bde5aba03426890e40dbdc079a1d1"
+    },
+    "zero-hit-verify-search": {
+      "verdict": "not-satisfied",
+      "passes": 0,
+      "invalid": 0,
+      "valid": 3,
+      "need": 2,
+      "run_scores": [
+        0.6666666666666666,
+        0.6666666666666666,
+        0.6666666666666666
+      ],
+      "threshold": 1.0,
+      "runs": 3,
+      "run_id": "20261015T154243Z-4.1.0-baseline",
+      "at": "2026-10-15T15:42:43Z",
+      "tag_changed": false,
+      "case_fingerprint": "sha256:54c46f2faa594b3a89aef1b21d7519040d381e1f7d21f376172163c72a6d85fe"
+    }
+  }
+}

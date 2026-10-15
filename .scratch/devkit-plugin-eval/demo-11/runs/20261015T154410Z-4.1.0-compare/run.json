@@ -1,0 +1,1391 @@
+{
+  "schema_version": 1,
+  "kind": "compare",
+  "run_id": "20261015T154410Z-4.1.0-compare",
+  "started_at": "2026-10-15T15:44:10Z",
+  "finished_at": "2026-10-15T15:46:15Z",
+  "plugin": {
+    "name": "devkit-discipline",
+    "version": "4.1.0",
+    "fingerprint": "sha256:77b29b2b343ce3057dd6ed21a62a345ba98051eb86b2c99a75b4323d7967c706",
+    "fingerprint_exclude": [
+      "evals"
+    ],
+    "path_in_repo": "plugins/devkit-discipline",
+    "evals_fingerprint": {
+      "shared": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "cases": {
+        "dispatch-with-model": "sha256:b40642b87255712ebf23a19e6c76b6684c2449355c30124dc9b07b1ee8f0da33",
+        "grep-then-targeted-read": "sha256:90826a915f80fc6936f07f32efa48ef2d7b7706f49cafed8f1957e36f382f114",
+        "parallel-lookup": "sha256:c868fc5594baeb53c14a82f8b0120cc3bb3bde5aba03426890e40dbdc079a1d1",
+        "zero-hit-verify-search": "sha256:54c46f2faa594b3a89aef1b21d7519040d381e1f7d21f376172163c72a6d85fe"
+      }
+    }
+  },
+  "clause_list_fingerprint": "sha256:c5f787a7f61cd1eb915ff81f858b689acefeb25c94df8fada32de3590513aa27",
+  "cases": [
+    "dispatch-with-model",
+    "grep-then-targeted-read",
+    "parallel-lookup",
+    "zero-hit-verify-search"
+  ],
+  "arms": {
+    "none": {
+      "label": "不装",
+      "source": "stub",
+      "eval_exit_code": 1,
+      "trace_dir": "traces/20261015T154410Z-4.1.0-compare/none",
+      "cleanup_warnings": [],
+      "stub_name": "devkit-plugin-eval-noplugin-stub",
+      "version": null,
+      "aggregate_result": "arms/none/aggregate-result.json",
+      "cost_usd": 0.3419792,
+      "usage": {
+        "input_tokens": 32,
+        "output_tokens": 3853,
+        "cache_read_input_tokens": 118656,
+        "cache_creation_input_tokens": 32471,
+        "cost_usd": 0.3419792,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 32,
+            "output_tokens": 3853,
+            "cache_read_input_tokens": 118656,
+            "cache_creation_input_tokens": 32471,
+            "cost_usd": 0.3419792
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.301",
+      "load_issues": [],
+      "score": 0.75,
+      "cases": {
+        "dispatch-with-model": {
+          "score": 0.3333333333333333,
+          "run_scores": [
+            0.3333333333333333
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        },
+        "grep-then-targeted-read": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        },
+        "parallel-lookup": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        },
+        "zero-hit-verify-search": {
+          "score": 0.6666666666666666,
+          "run_scores": [
+            0.6666666666666666
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    },
+    "current": {
+      "label": "当前版",
+      "source": "working-tree",
+      "eval_exit_code": 1,
+      "trace_dir": "traces/20261015T154410Z-4.1.0-compare/current",
+      "cleanup_warnings": [],
+      "version": "4.1.0",
+      "head_sha": "28f59f231000bf1e19899c14b170783b5741411b",
+      "dirty": false,
+      "aggregate_result": "arms/current/aggregate-result.json",
+      "cost_usd": 0.6843389000000001,
+      "usage": {
+        "input_tokens": 34,
+        "output_tokens": 6919,
+        "cache_read_input_tokens": 229937,
+        "cache_creation_input_tokens": 73103,
+        "cost_usd": 0.6843389,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 30,
+            "output_tokens": 5941,
+            "cache_read_input_tokens": 220267,
+            "cache_creation_input_tokens": 59606,
+            "cost_usd": 0.6398414
+          },
+          "claude-sonnet-5-5": {
+            "input_tokens": 4,
+            "output_tokens": 978,
+            "cache_read_input_tokens": 9670,
+            "cache_creation_input_tokens": 13497,
+            "cost_usd": 0.044497499999999995
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.301",
+      "load_issues": [],
+      "score": 0.9166666666666666,
+      "cases": {
+        "dispatch-with-model": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        },
+        "grep-then-targeted-read": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        },
+        "parallel-lookup": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        },
+        "zero-hit-verify-search": {
+          "score": 0.6666666666666666,
+          "run_scores": [
+            0.6666666666666666
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    },
+    "previous": {
+      "label": "上一版",
+      "source": "git-snapshot",
+      "eval_exit_code": 1,
+      "trace_dir": "traces/20261015T154410Z-4.1.0-compare/previous",
+      "cleanup_warnings": [],
+      "version": "4.0.0",
+      "head_sha": null,
+      "dirty": null,
+      "name": "devkit-discipline",
+      "commit": "8ea2db2099ffceb3e1208fca38fd57fb2ad39cbf",
+      "path_in_repo": "plugins/devkit-discipline",
+      "obtained_by": "auto",
+      "base": null,
+      "cross_rename": false,
+      "fingerprint": "sha256:0a31b1429eb9898a445121b198f8ce6e8f6897d680a68b00815c623291402a7d",
+      "aggregate_result": "arms/previous/aggregate-result.json",
+      "cost_usd": 0.704321,
+      "usage": {
+        "input_tokens": 32,
+        "output_tokens": 7733,
+        "cache_read_input_tokens": 214410,
+        "cache_creation_input_tokens": 74784,
+        "cost_usd": 0.704321,
+        "by_model": {
+          "claude-opus-5-5": {
+            "input_tokens": 28,
+            "output_tokens": 6166,
+            "cache_read_input_tokens": 204740,
+            "cache_creation_input_tokens": 61152,
+            "cost_usd": 0.653596
+          },
+          "claude-sonnet-5-5": {
+            "input_tokens": 4,
+            "output_tokens": 1567,
+            "cache_read_input_tokens": 9670,
+            "cache_creation_input_tokens": 13632,
+            "cost_usd": 0.050725
+          }
+        }
+      },
+      "main_model": "claude-opus-5-5",
+      "claude_version": "2.1.301",
+      "load_issues": [],
+      "score": 0.9166666666666666,
+      "cases": {
+        "dispatch-with-model": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        },
+        "grep-then-targeted-read": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        },
+        "parallel-lookup": {
+          "score": 1.0,
+          "run_scores": [
+            1.0
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        },
+        "zero-hit-verify-search": {
+          "score": 0.6666666666666666,
+          "run_scores": [
+            0.6666666666666666
+          ],
+          "valid_runs": 1,
+          "invalid_runs": [],
+          "excluded_graders": {},
+          "no_scored_graders": false
+        }
+      },
+      "invalid_run_count": 0
+    },
+    "current_with_env": null
+  },
+  "delta": {
+    "cases": {
+      "dispatch-with-model": 0.6666666666666667,
+      "grep-then-targeted-read": null,
+      "parallel-lookup": null,
+      "zero-hit-verify-search": 0.0
+    },
+    "overall": 0.33333333333333337,
+    "missing_cases": [],
+    "arm": "current",
+    "baseline": "none",
+    "excluded_baseline_satisfied": [
+      "grep-then-targeted-read",
+      "parallel-lookup"
+    ]
+  },
+  "claude_code_version": "2.1.301",
+  "claude_code_versions": [
+    "2.1.301"
+  ],
+  "main_model": "claude-opus-5-5",
+  "judge_model": null,
+  "usage": {
+    "input_tokens": 98,
+    "output_tokens": 18505,
+    "cache_read_input_tokens": 563003,
+    "cache_creation_input_tokens": 180358,
+    "cost_usd": 1.7306390999999999,
+    "by_model": {
+      "claude-opus-5-5": {
+        "input_tokens": 90,
+        "output_tokens": 15960,
+        "cache_read_input_tokens": 543663,
+        "cache_creation_input_tokens": 153229,
+        "cost_usd": 1.6354166
+      },
+      "claude-sonnet-5-5": {
+        "input_tokens": 8,
+        "output_tokens": 2545,
+        "cache_read_input_tokens": 19340,
+        "cache_creation_input_tokens": 27129,
+        "cost_usd": 0.09522249999999999
+      }
+    },
+    "cost_basis": "按标价（list price）估算，订阅用户只作信息"
+  },
+  "complete": true,
+  "incomplete_reasons": [],
+  "threshold": 1.0,
+  "passed": false,
+  "pass_criterion": "运行完整，且当前版臂每个有分用例的规则分都 ≥ threshold",
+  "review": {
+    "status": "待审",
+    "reviewed_at": null
+  },
+  "injection_check": {
+    "file": "injection-check.json",
+    "ok": true,
+    "problems": [],
+    "arms": {
+      "none": {
+        "label": "不装",
+        "kind": "control",
+        "runs_total": 4,
+        "runs_arrived": 0,
+        "runs_not_arrived": 0,
+        "runs_unverified": 0,
+        "runs_no_transcript": 0,
+        "events_total": {},
+        "plugin_injections": 0
+      },
+      "previous": {
+        "label": "上一版",
+        "kind": "with",
+        "runs_total": 4,
+        "runs_arrived": 4,
+        "runs_not_arrived": 0,
+        "runs_unverified": 0,
+        "runs_no_transcript": 0,
+        "events_total": {
+          "SubagentStart": 2,
+          "SessionStart": 4,
+          "UserPromptSubmit": 6,
+          "PreToolUse": 3
+        },
+        "plugin_injections": 12
+      },
+      "current": {
+        "label": "当前版",
+        "kind": "with",
+        "runs_total": 4,
+        "runs_arrived": 4,
+        "runs_not_arrived": 0,
+        "runs_unverified": 0,
+        "runs_no_transcript": 0,
+        "events_total": {
+          "SubagentStart": 2,
+          "SessionStart": 4,
+          "UserPromptSubmit": 6,
+          "PreToolUse": 1
+        },
+        "plugin_injections": 12
+      }
+    }
+  },
+  "judge": {
+    "skipped": "no-judge"
+  },
+  "resident_tokens": {
+    "method": {
+      "name": "char-estimate-v1",
+      "formula": "round(宽字符数 × 1.33 + 其余字符数 × 0.29)，宽字符 = 码位 ≥ U+2E80",
+      "calibration": "两点拟合（中文为主），残差 ≤3%；英文为主的文本未验证（Claude Code 2.1.300 / claude-opus-5-5 首请求输入 token）",
+      "scope": "只计注入正文，不含 Claude Code 包装的 system-reminder 前缀；不调模型",
+      "execution": "真实 HOME、空临时 cwd、CLAUDE_PLUGIN_DATA 指向临时目录；PATH 与 eval 子进程相同（已去掉 asdf shims）"
+    },
+    "arms": {
+      "previous": {
+        "label": "上一版",
+        "by_event": {
+          "SessionStart": {
+            "hooks": 1,
+            "injecting_hooks": 1,
+            "chars": 5005,
+            "tokens_est": 4527
+          },
+          "UserPromptSubmit": {
+            "hooks": 2,
+            "injecting_hooks": 1,
+            "chars": 2246,
+            "tokens_est": 1815
+          },
+          "SubagentStart": {
+            "hooks": 1,
+            "injecting_hooks": 1,
+            "chars": 4655,
+            "tokens_est": 4051
+          }
+        },
+        "total_tokens_est": 10393,
+        "hooks": [
+          {
+            "key": "SessionStart|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+            "event": "SessionStart",
+            "chars": 5005,
+            "tokens_est": 4527,
+            "exit_code": 0,
+            "label": "# AI 工作纪律（会话级常驻，auto-compact 后自动重新注入）"
+          },
+          {
+            "key": "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+            "event": "UserPromptSubmit",
+            "chars": 2246,
+            "tokens_est": 1815,
+            "exit_code": 0,
+            "label": "# AI 工作纪律 · 每轮要点（一～七章已在会话开始注入，仍然有效）"
+          },
+          {
+            "key": "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-ledger.js",
+            "event": "UserPromptSubmit",
+            "chars": 0,
+            "tokens_est": 0,
+            "exit_code": 0,
+            "label": null
+          },
+          {
+            "key": "SubagentStart||node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+            "event": "SubagentStart",
+            "chars": 4655,
+            "tokens_est": 4051,
+            "exit_code": 0,
+            "label": "# AI 工作纪律（子代理版）"
+          }
+        ],
+        "conditional_hooks": 4,
+        "errors": []
+      },
+      "current": {
+        "label": "当前版",
+        "by_event": {
+          "SessionStart": {
+            "hooks": 1,
+            "injecting_hooks": 1,
+            "chars": 5025,
+            "tokens_est": 4548
+          },
+          "UserPromptSubmit": {
+            "hooks": 2,
+            "injecting_hooks": 1,
+            "chars": 2246,
+            "tokens_est": 1815
+          },
+          "SubagentStart": {
+            "hooks": 1,
+            "injecting_hooks": 1,
+            "chars": 4654,
+            "tokens_est": 4051
+          }
+        },
+        "total_tokens_est": 10414,
+        "hooks": [
+          {
+            "key": "SessionStart|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+            "event": "SessionStart",
+            "chars": 5025,
+            "tokens_est": 4548,
+            "exit_code": 0,
+            "label": "# AI 工作纪律（会话级常驻，auto-compact 后自动重新注入）"
+          },
+          {
+            "key": "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+            "event": "UserPromptSubmit",
+            "chars": 2246,
+            "tokens_est": 1815,
+            "exit_code": 0,
+            "label": "# AI 工作纪律 · 每轮要点（一～七章已在会话开始注入，仍然有效）"
+          },
+          {
+            "key": "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-ledger.js",
+            "event": "UserPromptSubmit",
+            "chars": 0,
+            "tokens_est": 0,
+            "exit_code": 0,
+            "label": null
+          },
+          {
+            "key": "SubagentStart||node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+            "event": "SubagentStart",
+            "chars": 4654,
+            "tokens_est": 4051,
+            "exit_code": 0,
+            "label": "# AI 工作纪律（子代理版）"
+          }
+        ],
+        "conditional_hooks": 4,
+        "errors": []
+      }
+    },
+    "measured_first_request_input_tokens": {
+      "none": 10286.0,
+      "previous": 16959.0,
+      "current": 16978.0
+    },
+    "measured_delta_vs_none": {
+      "previous": 6673.0,
+      "current": 6692.0
+    }
+  },
+  "preflight": {
+    "kind": "compare",
+    "passed": true,
+    "dirty": false,
+    "warnings": [],
+    "items": [
+      {
+        "id": "registered",
+        "label": "被测插件已登记",
+        "level": "hard",
+        "status": "ok",
+        "detail": "仓内路径 plugins/devkit-discipline"
+      },
+      {
+        "id": "claude_executable",
+        "label": "claude 可执行",
+        "level": "hard",
+        "status": "ok",
+        "detail": "~/.local/bin/claude"
+      },
+      {
+        "id": "eval_flags",
+        "label": "claude plugin eval 参数齐（--help 特性探测）",
+        "level": "hard",
+        "status": "ok",
+        "detail": ""
+      },
+      {
+        "id": "logged_in",
+        "label": "已登录（claude auth status）",
+        "level": "hard",
+        "status": "ok",
+        "detail": ""
+      },
+      {
+        "id": "plugin_valid",
+        "label": "插件结构合法（claude plugin validate）",
+        "level": "hard",
+        "status": "ok",
+        "detail": ""
+      },
+      {
+        "id": "env_plugins_contained",
+        "label": "环境插件在 containment root 内",
+        "level": "hard",
+        "status": "skip",
+        "detail": "无环境插件臂"
+      },
+      {
+        "id": "hooks_reachable",
+        "label": "hook 解释器可达（临时空 HOME + 同一 PATH 冒烟）",
+        "level": "hard",
+        "status": "ok",
+        "detail": "12 条 command 已执行"
+      },
+      {
+        "id": "dirty",
+        "label": "工作区无未提交改动",
+        "level": "soft",
+        "status": "ok",
+        "detail": "HEAD 28f59f231000"
+      },
+      {
+        "id": "version_model",
+        "label": "Claude Code 版本与主力模型同上次对照",
+        "level": "soft",
+        "status": "ok",
+        "detail": "无上次对照"
+      }
+    ],
+    "hook_smoke": [
+      {
+        "plugin": "当前版",
+        "event": "PreToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-dispatch.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "PreToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/bash-guard.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "PreToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/probe-throttle.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "PostToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/write-guard.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "SessionStart",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "当前版",
+        "event": "UserPromptSubmit",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-ledger.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "上一版快照 4.0.0（8ea2db2099ff）",
+        "event": "PreToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/agent-dispatch.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "上一版快照 4.0.0（8ea2db2099ff）",
+        "event": "PreToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/bash-guard.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "上一版快照 4.0.0（8ea2db2099ff）",
+        "event": "PreToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/probe-throttle.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "上一版快照 4.0.0（8ea2db2099ff）",
+        "event": "PostToolUse",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/write-guard.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "上一版快照 4.0.0（8ea2db2099ff）",
+        "event": "SessionStart",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js",
+        "exit_code": 0,
+        "note": ""
+      },
+      {
+        "plugin": "上一版快照 4.0.0（8ea2db2099ff）",
+        "event": "UserPromptSubmit",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-ledger.js",
+        "exit_code": 0,
+        "note": ""
+      }
+    ]
+  },
+  "environment": {
+    "claude_path": "~/.local/bin/claude",
+    "node_path": "/opt/homebrew/bin/node",
+    "runs_per_case": 1,
+    "concurrency": 3,
+    "model_override": null,
+    "platform": "darwin",
+    "judge": {
+      "enabled": false,
+      "model": null
+    },
+    "clause_model": null
+  },
+  "previous_arm": {
+    "degraded": false,
+    "reason": null,
+    "reason_kind": null,
+    "commit": "8ea2db2099ffceb3e1208fca38fd57fb2ad39cbf",
+    "version": "4.0.0",
+    "name": "devkit-discipline",
+    "path_in_repo": "plugins/devkit-discipline",
+    "obtained_by": "auto",
+    "base": null,
+    "cross_rename": false,
+    "ran": true,
+    "incomparable_cases": {}
+  },
+  "env_plugins": [],
+  "delta_vs_previous": {
+    "cases": {
+      "dispatch-with-model": 0.0,
+      "grep-then-targeted-read": 0.0,
+      "parallel-lookup": 0.0,
+      "zero-hit-verify-search": 0.0
+    },
+    "overall": 0.0,
+    "missing_cases": []
+  },
+  "delta_env_vs_current": null,
+  "clause_check": {
+    "schema_version": 1,
+    "status": "up-to-date",
+    "stale": false,
+    "injection_fingerprint": "sha256:36b0fa5f5a1cc79686fd3f94a89684e546bc33df1af20428431c5f31d1973b9f",
+    "list_injection_fingerprint": "sha256:36b0fa5f5a1cc79686fd3f94a89684e546bc33df1af20428431c5f31d1973b9f",
+    "list_fingerprint": "sha256:c5f787a7f61cd1eb915ff81f858b689acefeb25c94df8fada32de3590513aa27",
+    "list_counts": {
+      "active": 99,
+      "retired": 1
+    },
+    "hooks": {
+      "injecting_hooks": 3,
+      "silent_hooks": [
+        "UserPromptSubmit|*|node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-ledger.js"
+      ],
+      "failed_hooks": [],
+      "unstable_hooks": []
+    },
+    "normalization": "injection-text-v1",
+    "errors": [],
+    "proposal": null,
+    "proposal_kind": null,
+    "proposal_counts": null,
+    "reused_from": null,
+    "ai": null,
+    "decision": null,
+    "rows": [
+      {
+        "id": "C001",
+        "criterion": "定位少数符号时先用 Grep 取到行号再定点 Read，不整读整个文件。",
+        "status": "active",
+        "cases": [
+          "grep-then-targeted-read"
+        ]
+      },
+      {
+        "id": "C002",
+        "criterion": "核对整份规范或协议时一次整读全文，不分片读取。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C003",
+        "criterion": "跑可能产生大输出的命令前先用 wc -l、head 等方式收窄输出。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C004",
+        "criterion": "收窄后仍超过 200 行且需逐条分析的输出，交子代理只回摘要；自己已是第 2 层子代理时则自行收窄后跑。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C005",
+        "criterion": "检索结果为「没有」时，先用同一条命令搜一个确知存在的样本验证检索手段，再采信零命中结论。",
+        "status": "active",
+        "cases": [
+          "zero-hit-verify-search"
+        ]
+      },
+      {
+        "id": "C006",
+        "criterion": "在 macOS 上检索非 ASCII 路径零命中时，先 ls 父目录确认，再下结论。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C007",
+        "criterion": "派发子代理前盘点「在飞 + 拟派」总数，不超过 16 个（用户当场放宽除外）。",
+        "status": "retired",
+        "cases": [],
+        "retire_reason": "criterion-changed",
+        "replaced_by": [
+          "C100"
+        ]
+      },
+      {
+        "id": "C008",
+        "criterion": "在飞子代理数靠自己记账（派发 +1、完成 -1），不用 TaskList 或 TaskGet 来统计。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C009",
+        "criterion": "auto-compact 之后按保守口径分批派发子代理，不按可能失准的记账一次派满。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C010",
+        "criterion": "已是第 2 层子代理时不再派发任何 subagent。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C011",
+        "criterion": "派发第 2 层子代理时，在其 prompt 里写明「你是第 2 层子代理，禁止再派发任何 subagent」。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C012",
+        "criterion": "team 模式下要嵌套派发或代派时，先读 reference 的 SEC:subagent 再动手。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C013",
+        "criterion": "team 模式下作为 teammate 调 Agent 被拒后，不按报错提示 \"omit the name parameter\" 重试，而是把子任务写进回执交父代理代派。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C014",
+        "criterion": "多个子代理要读同一份长文档时，父代理先读一次，把共同骨架写成临时目录下的 scratch 文件供它们引用。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C015",
+        "criterion": "共享骨架的 scratch 文件不提交进 git，任务结束后清理掉。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C016",
+        "criterion": "说明中的名词只取可核验来源（代码标识符、UI 文案、需求设计产物、测试用例、表列字典值、API 与错误码文案、日志报错、用户原话）。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C017",
+        "criterion": "所有来源都查不到才自起描述性说法，并当场声明「这是我为说明起的名字」。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C018",
+        "criterion": "标识符读不出业务语义时，从字段注释、表列注释、i18n 文案、行内注释等处查出真名并附在说明里。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C019",
+        "criterion": "多来源叫法不一致时按场景选用（对人用页面或文档叫法，指实现用标识符原文），同段首次出现括号对应，不折中出新名字。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C020",
+        "criterion": "提到文件路径、函数名、变量名、报错原文时直接点名，不用「它 / 这个」代指。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C021",
+        "criterion": "引用关键内容时把原文摘抄进来，不让读者凭章节号、路径或链接去翻原文（代码内的路径引用保持原样）。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C022",
+        "criterion": "提出待拍板方案或评审发现的问题时，写齐起源、差距、影响范围、现场证据四要素。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C023",
+        "criterion": "现场证据把相关代码、文档、配置摘抄进代码块，类与方法带 path/to/file.ext:行号（先取到行号再写，只写类名方法名不算）。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C024",
+        "criterion": "四要素中不适用的一条明写「无」，不静默省略。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C025",
+        "criterion": "待拍板问题在正文里问，不调用 AskUserQuestion。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C026",
+        "criterion": "待拍板回复首行写 `[要拍板]` 加一句摘要。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C027",
+        "criterion": "待拍板回复用具名小标题分列四要素，`---` 之后用 H1 `Q1: 问句` 提问，正文一句一行。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C028",
+        "criterion": "待拍板选项用 a.、b. 编号，每项的做法、代价、能否回退各占一行，推荐项标「推荐」。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C029",
+        "criterion": "要信息与要授权分开问，不混在同一个问题里。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C030",
+        "criterion": "问句与选项里的状态类断言读不到真源时写「未核实」。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C031",
+        "criterion": "发现授权是凭错误断言拿到的，立即说明并把处置权交回用户。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C032",
+        "criterion": "问句与选项里的状态、编号、计数、时序，当轮读过真源再写。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C033",
+        "criterion": "子代理回执默认用完整段落讲因果、机制、影响，不堆光秃短语；清单或方案对照用列表、表格后每项展开说明（父代理另有要求时照其要求）。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C034",
+        "criterion": "断言按已证实（附出处）/ 推断（写证据与假设）/ 建议 / 待核实（给核实途径）/ 范围外五类标明，推断不写成事实，建议不写成定案。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C035",
+        "criterion": "能核实的事项先核实再下结论，不迎合用户、不臆断。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C036",
+        "criterion": "交流、注释、说明性文字一律用简体中文，不用日文、韩文、繁体，不随引用素材的语言切换；代码、命令、标识符、路径、日志、报错保持原样。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C037",
+        "criterion": "提到实体时写「名称(id)」两样齐全不截断；表无名称字段时只给 id 并说明。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C038",
+        "criterion": "枚举、状态码、标记位、错误码写成「值(含义)」，位掩码逐位拆开。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C039",
+        "criterion": "时间戳附带时区的可读时刻，无单位的数字补上单位。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C040",
+        "criterion": "裸值的含义取自枚举定义、字典表、列注释、错误码文案，查不到写「含义未查到」，不按字面猜；SQL、命令参数、代码与配置内部的值照原样写。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C041",
+        "criterion": "用户拍板后，回复里回收选定项与适用范围、未选项、下一步、残余不确定、重开条件。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C042",
+        "criterion": "拍板决定波及文件、spec、票或范围时，同轮写进受影响文件的 `## Comments` 或 `docs/adr/`，不只留在对话里。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C043",
+        "criterion": "用户答复对不上给出的选项时回头确认，不替用户挑选。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C044",
+        "criterion": "撞到只认授权弹框的守卫时，不把用户正文答复当作授权，说明原委并默认引导进 worktree。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C045",
+        "criterion": "业务名词与承重概念首次出现时给一句白话定义及其在流程里的角色。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C046",
+        "criterion": "给出承重的文件、行、配置、测试链接时，同句说明它是什么、支撑哪条论断、点开能核验什么。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C047",
+        "criterion": "讲方案、问题成因、跨服务 / 跨模块调用、状态流转时，先调 devkit-tool:show-me 定视图与落点再展开文字；单函数小改动、纯问答或纯清单不画。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C048",
+        "criterion": "讲方案时改前、改后各出一张图。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C049",
+        "criterion": "show-me 未安装时把 mermaid 源码写进临时目录 `claude-diagrams/<主题>.md`，正文给链接。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C050",
+        "criterion": "子代理不能写文件时把 mermaid 源码附在回执里交父代理落盘。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C051",
+        "criterion": "关键句的执行者、对象、作用范围、动作状态（指令 / 已完成 / 条件触发）都能从字面读出。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C052",
+        "criterion": "同一概念不换词，不同概念不并成一个词；项目有 CONTEXT.md 时以它为准。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C053",
+        "criterion": "原文没写的内容标「待确认」，不补写成已定。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C054",
+        "criterion": "需要逐句审计中文歧义时走 zh-disambiguate skill。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C055",
+        "criterion": "回复首行是一句状态（如已改完 / 无异常 / 待拍板），再按需列结论、阻塞与待拍板项、证据、下一步。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C056",
+        "criterion": "只在本轮写过文件时才列改动清单，每项一个可点击链接加一句提要，不贴 diff。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C057",
+        "criterion": "新写或大改 md 前，先在对话里输出「本次 md 受众判定：{人 / AI / 人机混合}，理由：……」，且先于任何写 md 的工具调用；极小改动可声明「沿用原判定」。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C058",
+        "criterion": "md 按受众写：人读结论前置、少堆术语；AI 读上下文齐备、用词精确不留模糊、示例覆盖典型与边界；混合读者两组叠加。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C059",
+        "criterion": "搬迁或重命名后，逐条 ls 或 Read 确认每个新路径真实存在，不只凭引用声明的 diff 判定完成。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C060",
+        "criterion": "报错或评审发现问题时，先判它是否所有场景的必经入口；不是则只阻塞它自己那条路径，不报成全面阻塞。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C061",
+        "criterion": "同批派发 ≥2 个子代理且有未返回者时，已完成的回执只静默累积原文，不逐条总结、不据它派新任务，全部到齐后一次性汇总（用户追问某项可直接答）。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C062",
+        "criterion": "子代理报出产线告警、密钥泄漏、破坏性错误时即时告知用户并冻结剩余任务，交用户拍板。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C063",
+        "criterion": "派发 prompt 含【目标】【上下文】【约束】【期望输出】四段，其中【期望输出】逐条索要结构化回执（改了哪些文件、关键决策、阻塞点、需跟进事项）。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C064",
+        "criterion": "派发涉及截图时把截图绝对路径原样写进 prompt 并要求子代理先 Read。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C065",
+        "criterion": "派发含外部系统写操作时，要求每一步用读接口逐字段回读，不以 2xx 作为成功依据。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C066",
+        "criterion": "派核实类任务时把停止条件写进【约束】、把交代实际深度写进【期望输出】。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C067",
+        "criterion": "派发 prompt 里写死的「事实」给出处 path:行号，或注明「未核实」。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C068",
+        "criterion": "据子代理回执里的归因去改判据或代码前，自己先复现一次。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C069",
+        "criterion": "子代理因 529、限额、限流、超时、断流失败时，不默认重派也不默认放弃，先判幂等与瞬态（外部写先回读服务端），再在立即重派（档位不升）/ 回读定位断点后补做或回滚 / 冻结交用户拍板中三选一。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C070",
+        "criterion": "hook 拦下多条违规时一次报清、照 finding 一次改全，不逐条试。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C071",
+        "criterion": "改完仍被 hook 拦下且确信无害时，报告用户拍板，不反复试探正则边界。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C072",
+        "criterion": "启动 agent-browser 前确认登录态，活动实例 ≥4 时先 close 再启动。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C073",
+        "criterion": "Bash 里不用裸 cd，改用 `(cd /abs/path && cmd)`、`git -C <path>` 或全绝对路径。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C074",
+        "criterion": "Agent 调用被 agent-dispatch.js 拦下时，照它贴出的形态模板改一次字段结构即可。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C075",
+        "criterion": "被 probe-throttle.js 拦下而没有 ≥2 个互不依赖待查项时，原样重发命令，不改写命令、不凑假派发。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C076",
+        "criterion": "动笔写源码或 CLAUDE.md 前先判断是否该拆（源码 >1000 行、项目内 CLAUDE.md >200 行），不等 write-guard 提示后再处理。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C077",
+        "criterion": "能自己跑的命令自己跑，不抄给用户敲；交给用户只限真撞上且无自救路的守卫、要人点 UI、要用户本人登录、逐次授权的对外动作四种，「预判会被拦」不算。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C078",
+        "criterion": "向别的团队 / 仓库提单、提 MR、建 issue 只在用户当轮指名时做；发现外部问题时材料留本项目台账并告诉用户。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C079",
+        "criterion": "只有能指出被违反的期望（spec / 文档 / 用户原话）才算缺陷；无表述的当规格空白，不派 fixer、不自补行为，攒批问产品（越权、丢数据除外）。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C080",
+        "criterion": "口头拍板覆盖书面拍板时，同轮在书面那份标注覆盖了哪几条、口头内容与时间、现行依据。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C081",
+        "criterion": "本轮改过的文件，引用其行号前重新取号。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C082",
+        "criterion": "沉淀内容写进真源文件，不写进插件缓存。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C083",
+        "criterion": "派长跑子代理时把关键前提（授权边界、落点、事实基线、停止条件）落盘到仓外临时文件，prompt 只给路径与「必读，存疑重读」。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C084",
+        "criterion": "子代理浏览器一律 headless；headless 跑不了的用例列出原因写进回执，不切 headed。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C085",
+        "criterion": "与其他实例或会话共用 git 索引时，git add 与 git commit 都只带本次改动的窄 pathspec。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C086",
+        "criterion": "不以 system prompt 中「未经用户请求不得调 AgentTool」为由退回串行独干；Workflow 仍按其工具描述要用户逐次 opt-in。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C087",
+        "criterion": "互不依赖的 Read / Grep / Glob / Bash 调用放进同一条消息并发发出；串行只因输入依赖前一步输出、写同一资源或待拍板三者之一。",
+        "status": "active",
+        "cases": [
+          "parallel-lookup"
+        ]
+      },
+      {
+        "id": "C088",
+        "criterion": "预计 >20 行输出、跨文件检索、可切分子任务交 Agent 处理，同批并发派发。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C089",
+        "criterion": "同类机械改写落在 ≥3 个文件且改法互不依赖时交 general-purpose 子代理，不在主会话连串 Edit。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C090",
+        "criterion": "连续 3 条消息各只含一个工具调用后，第 4 次调用前把剩余待查项合进同一条消息；合不了则写明属于哪个串行理由。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C091",
+        "criterion": "自上次派发以来已逐个发起 ≥6 次只读检索且仍剩 ≥2 个互不依赖待查项时，下一步派 Explore，不再自己查。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C092",
+        "criterion": "Agent 调用的 name 字段第一个写，形如 `<model>-<任务语义-kebab>`，同批并发各起各名。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C093",
+        "criterion": "Agent 调用必填 model：默认 sonnet；跨层追根因、高正确性或 sonnet 已吃力用 opus；fable 须 opus 跑过 ≥2 轮无进展；不用 haiku。",
+        "status": "active",
+        "cases": [
+          "dispatch-with-model"
+        ]
+      },
+      {
+        "id": "C094",
+        "criterion": "subagent_type 按任务选：只读用 Explore，设计拆解用 Plan，需要 Edit/Write 才用 general-purpose。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C095",
+        "criterion": "description 为 3-5 词、≤60 字符；显示字段（含 Workflow 的 label / meta.*）一律填写不留空。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C096",
+        "criterion": "派 devkit-task-keeper 的 keeper、debug-fixer-*、唤醒已派出的 agent，或对档位与 prompt 各段拿不准时，先读 agent-dispatch.md 的 SEC:dispatch。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C097",
+        "criterion": "核实类任务动手前定停止条件（仅本文件内 / 追到直接调用方 / 追到跨类跨模块跨服务边界），结论写明实际追到哪层、哪些边界未追。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C098",
+        "criterion": "子代理最终回复是四段结构化回执：改了哪些文件（绝对路径）/ 关键决策 / 阻塞点 / 需父代理跟进的事项。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C099",
+        "criterion": "子代理需要问用户或让用户核对时，写进回执交父代理转达，不原地等待。",
+        "status": "active",
+        "cases": []
+      },
+      {
+        "id": "C100",
+        "criterion": "派发子代理前盘点「在飞 + 拟派」总数，不超过 8 个（用户当场放宽除外）。",
+        "status": "active",
+        "cases": []
+      }
+    ]
+  },
+  "baseline": {
+    "tag": "baseline-satisfied",
+    "cases": {
+      "grep-then-targeted-read": {
+        "status": "held",
+        "current_score": 1.0,
+        "current_passes": 1,
+        "current_valid_runs": 1,
+        "previous_score": 1.0,
+        "none_score": 1.0,
+        "raw_delta": 0.0
+      },
+      "parallel-lookup": {
+        "status": "held",
+        "current_score": 1.0,
+        "current_passes": 1,
+        "current_valid_runs": 1,
+        "previous_score": 1.0,
+        "none_score": 1.0,
+        "raw_delta": 0.0
+      }
+    },
+    "rule": "基线已满足的用例不进当前版 − 不装的差；有上一版时当前版分 ≥ 上一版分记守住、否则退化；无上一版时当前版通过 ≥ 有效 run 的 2/3 记无上一版、否则低于基线",
+    "regressed": []
+  }
+}
