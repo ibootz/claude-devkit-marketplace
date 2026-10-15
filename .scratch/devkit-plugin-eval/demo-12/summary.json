@@ -1,0 +1,812 @@
+{
+  "note": "票 12 真实复盘演示：本机最近 30 天会话，只留计数与信号名；会话 id、指针、路径、同会话插件名、已装插件 id 均未入库。",
+  "generated_on": "2026-10-15",
+  "window": {
+    "days": 30
+  },
+  "review_files": 21,
+  "scan": {
+    "main_files": 615,
+    "subagent_files": 1178,
+    "unreadable_files": 0,
+    "bad_lines": 0,
+    "records_counted": 402849,
+    "duplicate_records": 25481,
+    "out_of_window_records": 79458,
+    "entrypoints": {
+      "cli": 463,
+      "sdk-cli": 117
+    },
+    "compact_boundaries": 699,
+    "field_coverage": {
+      "permission_decision_hook": 607,
+      "hook_deny_tool_results": 2237,
+      "deny_trailer": 3134,
+      "deny_without_plugin": 518
+    },
+    "unattributed_injections": {
+      "UserPromptSubmit": 10325,
+      "SessionStart": 154,
+      "PostToolUse": 3,
+      "Stop": 7
+    },
+    "sessions": 580,
+    "claude_code_versions": {
+      "distinct": 18,
+      "min": "2.1.272",
+      "max": "2.1.300"
+    }
+  },
+  "plugins": {
+    "devkit-agent-browser": {
+      "sessions_listed": 498,
+      "sessions_with_signal": 53,
+      "skills": {},
+      "blocks": {},
+      "hook_errors": {},
+      "injections": {
+        "after_compact": 60,
+        "by_event:SessionStart": 108,
+        "total": 108,
+        "via:fingerprint": 108
+      },
+      "compact": {
+        "has_session_start_hook": true,
+        "boundaries_seen": 699,
+        "reinjected_after": 59
+      },
+      "hook_latency_entries": 1,
+      "candidates": [],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 4,
+      "co_loaded_unregistered_count": 46
+    },
+    "devkit-cd-blocker": {
+      "sessions_listed": 0,
+      "sessions_with_signal": 278,
+      "skills": {},
+      "blocks": {
+        "hooks/guards/cd-guard.js#check=cd-guard": {
+          "total": 1530,
+          "subagent": 1028,
+          "after_compact": 298
+        }
+      },
+      "hook_errors": {},
+      "injections": {},
+      "compact": {
+        "has_session_start_hook": false,
+        "boundaries_seen": 699,
+        "reinjected_after": 0
+      },
+      "hook_latency_entries": 0,
+      "candidates": [
+        {
+          "kind": "block",
+          "rule": "hooks/guards/cd-guard.js#check=cd-guard",
+          "count": 1232,
+          "subagent_count": 967,
+          "after_compact": false
+        },
+        {
+          "kind": "block",
+          "rule": "hooks/guards/cd-guard.js#check=cd-guard",
+          "count": 298,
+          "subagent_count": 61,
+          "after_compact": true
+        }
+      ],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 0,
+      "co_loaded_unregistered_count": 0
+    },
+    "devkit-clickable-paths": {
+      "sessions_listed": 0,
+      "sessions_with_signal": 542,
+      "skills": {},
+      "blocks": {},
+      "hook_errors": {
+        "hooks/clickable-paths.js": 2
+      },
+      "injections": {
+        "after_compact": 2233,
+        "by_event:SubagentStart": 1160,
+        "by_event:UserPromptSubmit": 3772,
+        "total": 4932,
+        "via:fingerprint": 1160,
+        "via:label": 3772
+      },
+      "compact": {
+        "has_session_start_hook": false,
+        "boundaries_seen": 699,
+        "reinjected_after": 0
+      },
+      "hook_latency_entries": 2,
+      "candidates": [
+        {
+          "kind": "hook_error",
+          "rule": "hooks/clickable-paths.js",
+          "count": 1,
+          "subagent_count": 1,
+          "after_compact": false
+        },
+        {
+          "kind": "hook_error",
+          "rule": "hooks/clickable-paths.js",
+          "count": 1,
+          "subagent_count": 0,
+          "after_compact": true
+        }
+      ],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 0,
+      "co_loaded_unregistered_count": 0
+    },
+    "devkit-complexity-first": {
+      "sessions_listed": 498,
+      "sessions_with_signal": 0,
+      "skills": {},
+      "blocks": {},
+      "hook_errors": {},
+      "injections": {},
+      "compact": {
+        "has_session_start_hook": false,
+        "boundaries_seen": 699,
+        "reinjected_after": 0
+      },
+      "hook_latency_entries": 0,
+      "candidates": [],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 4,
+      "co_loaded_unregistered_count": 46
+    },
+    "devkit-discipline": {
+      "sessions_listed": 132,
+      "sessions_with_signal": 570,
+      "skills": {},
+      "blocks": {
+        "?#check=agent-dispatch": {
+          "total": 30,
+          "subagent": 0,
+          "after_compact": 29
+        },
+        "?#check=write-guard": {
+          "total": 67,
+          "subagent": 13,
+          "after_compact": 19
+        },
+        "hooks/guards/bash-guard.js#check=bash-guard": {
+          "total": 11,
+          "subagent": 1,
+          "after_compact": 8
+        }
+      },
+      "hook_errors": {
+        "hooks/dispatch-ledger.js": 6,
+        "hooks/guards/agent-dispatch.js": 6,
+        "hooks/guards/bash-guard.js": 8,
+        "hooks/guards/probe-throttle.js": 8,
+        "hooks/guards/write-guard.js": 5,
+        "hooks/working-discipline.js": 17
+      },
+      "injections": {
+        "after_compact": 14370,
+        "by_event:PreToolUse": 19409,
+        "by_event:SessionStart": 1146,
+        "by_event:SubagentStart": 1150,
+        "by_event:UserPromptSubmit": 436,
+        "total": 22141,
+        "via:fingerprint": 21705,
+        "via:label": 436
+      },
+      "compact": {
+        "has_session_start_hook": true,
+        "boundaries_seen": 699,
+        "reinjected_after": 690
+      },
+      "hook_latency_entries": 8,
+      "candidates": [
+        {
+          "kind": "block",
+          "rule": "?#check=write-guard",
+          "count": 48,
+          "subagent_count": 13,
+          "after_compact": false
+        },
+        {
+          "kind": "block",
+          "rule": "?#check=agent-dispatch",
+          "count": 29,
+          "subagent_count": 0,
+          "after_compact": true
+        },
+        {
+          "kind": "block",
+          "rule": "?#check=write-guard",
+          "count": 19,
+          "subagent_count": 0,
+          "after_compact": true
+        },
+        {
+          "kind": "hook_error",
+          "rule": "hooks/working-discipline.js",
+          "count": 9,
+          "subagent_count": 6,
+          "after_compact": false
+        },
+        {
+          "kind": "block",
+          "rule": "hooks/guards/bash-guard.js#check=bash-guard",
+          "count": 8,
+          "subagent_count": 0,
+          "after_compact": true
+        },
+        {
+          "kind": "hook_error",
+          "rule": "hooks/working-discipline.js",
+          "count": 8,
+          "subagent_count": 0,
+          "after_compact": true
+        },
+        {
+          "kind": "hook_error",
+          "rule": "hooks/guards/bash-guard.js",
+          "count": 5,
+          "subagent_count": 0,
+          "after_compact": true
+        },
+        {
+          "kind": "hook_error",
+          "rule": "hooks/guards/probe-throttle.js",
+          "count": 5,
+          "subagent_count": 0,
+          "after_compact": true
+        },
+        {
+          "kind": "hook_error",
+          "rule": "hooks/dispatch-ledger.js",
+          "count": 4,
+          "subagent_count": 0,
+          "after_compact": true
+        },
+        {
+          "kind": "hook_error",
+          "rule": "hooks/guards/agent-dispatch.js",
+          "count": 4,
+          "subagent_count": 0,
+          "after_compact": true
+        },
+        {
+          "kind": "hook_error",
+          "rule": "hooks/guards/write-guard.js",
+          "count": 4,
+          "subagent_count": 0,
+          "after_compact": true
+        },
+        {
+          "kind": "block",
+          "rule": "hooks/guards/bash-guard.js#check=bash-guard",
+          "count": 3,
+          "subagent_count": 1,
+          "after_compact": false
+        },
+        {
+          "kind": "hook_error",
+          "rule": "hooks/guards/bash-guard.js",
+          "count": 3,
+          "subagent_count": 0,
+          "after_compact": false
+        },
+        {
+          "kind": "hook_error",
+          "rule": "hooks/guards/probe-throttle.js",
+          "count": 3,
+          "subagent_count": 0,
+          "after_compact": false
+        },
+        {
+          "kind": "hook_error",
+          "rule": "hooks/dispatch-ledger.js",
+          "count": 2,
+          "subagent_count": 0,
+          "after_compact": false
+        },
+        {
+          "kind": "hook_error",
+          "rule": "hooks/guards/agent-dispatch.js",
+          "count": 2,
+          "subagent_count": 0,
+          "after_compact": false
+        },
+        {
+          "kind": "block",
+          "rule": "?#check=agent-dispatch",
+          "count": 1,
+          "subagent_count": 0,
+          "after_compact": false
+        },
+        {
+          "kind": "hook_error",
+          "rule": "hooks/guards/write-guard.js",
+          "count": 1,
+          "subagent_count": 1,
+          "after_compact": false
+        }
+      ],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 4,
+      "co_loaded_unregistered_count": 43
+    },
+    "devkit-discover-unknowns": {
+      "sessions_listed": 0,
+      "sessions_with_signal": 0,
+      "skills": {},
+      "blocks": {},
+      "hook_errors": {},
+      "injections": {},
+      "compact": {
+        "has_session_start_hook": false,
+        "boundaries_seen": 699,
+        "reinjected_after": 0
+      },
+      "hook_latency_entries": 0,
+      "candidates": [],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 0,
+      "co_loaded_unregistered_count": 0
+    },
+    "devkit-insight": {
+      "sessions_listed": 0,
+      "sessions_with_signal": 52,
+      "skills": {},
+      "blocks": {},
+      "hook_errors": {},
+      "injections": {
+        "after_compact": 85,
+        "by_event:SessionStart": 132,
+        "total": 132,
+        "via:fingerprint": 132
+      },
+      "compact": {
+        "has_session_start_hook": true,
+        "boundaries_seen": 699,
+        "reinjected_after": 85
+      },
+      "hook_latency_entries": 1,
+      "candidates": [],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 0,
+      "co_loaded_unregistered_count": 0
+    },
+    "devkit-omp": {
+      "sessions_listed": 0,
+      "sessions_with_signal": 0,
+      "skills": {},
+      "blocks": {},
+      "hook_errors": {},
+      "injections": {},
+      "compact": {
+        "has_session_start_hook": true,
+        "boundaries_seen": 699,
+        "reinjected_after": 0
+      },
+      "hook_latency_entries": 0,
+      "candidates": [],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 0,
+      "co_loaded_unregistered_count": 0
+    },
+    "devkit-plugin-eval": {
+      "sessions_listed": 0,
+      "sessions_with_signal": 0,
+      "skills": {},
+      "blocks": {},
+      "hook_errors": {},
+      "injections": {},
+      "compact": {
+        "has_session_start_hook": false,
+        "boundaries_seen": 699,
+        "reinjected_after": 0
+      },
+      "hook_latency_entries": 0,
+      "candidates": [],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 0,
+      "co_loaded_unregistered_count": 0
+    },
+    "devkit-portable-shell": {
+      "sessions_listed": 0,
+      "sessions_with_signal": 54,
+      "skills": {},
+      "blocks": {
+        "?": {
+          "total": 6,
+          "subagent": 0,
+          "after_compact": 0
+        }
+      },
+      "hook_errors": {
+        "hooks/portable-shell-lint.js": 1
+      },
+      "injections": {
+        "after_compact": 60,
+        "by_event:SessionStart": 108,
+        "total": 108,
+        "via:fingerprint": 108
+      },
+      "compact": {
+        "has_session_start_hook": true,
+        "boundaries_seen": 699,
+        "reinjected_after": 59
+      },
+      "hook_latency_entries": 2,
+      "candidates": [
+        {
+          "kind": "block",
+          "rule": "?",
+          "count": 6,
+          "subagent_count": 0,
+          "after_compact": false
+        },
+        {
+          "kind": "hook_error",
+          "rule": "hooks/portable-shell-lint.js",
+          "count": 1,
+          "subagent_count": 0,
+          "after_compact": true
+        }
+      ],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 0,
+      "co_loaded_unregistered_count": 0
+    },
+    "devkit-readable-citations": {
+      "sessions_listed": 0,
+      "sessions_with_signal": 542,
+      "skills": {},
+      "blocks": {},
+      "hook_errors": {},
+      "injections": {
+        "after_compact": 2236,
+        "by_event:SubagentStart": 1162,
+        "by_event:UserPromptSubmit": 3775,
+        "total": 4937,
+        "via:fingerprint": 1162,
+        "via:label": 3775
+      },
+      "compact": {
+        "has_session_start_hook": false,
+        "boundaries_seen": 699,
+        "reinjected_after": 0
+      },
+      "hook_latency_entries": 1,
+      "candidates": [],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 0,
+      "co_loaded_unregistered_count": 0
+    },
+    "devkit-ruanyf-style": {
+      "sessions_listed": 42,
+      "sessions_with_signal": 1,
+      "skills": {
+        "devkit-ruanyf-style:ruanyf-document-style-guide": {
+          "tool": 1
+        }
+      },
+      "blocks": {},
+      "hook_errors": {},
+      "injections": {},
+      "compact": {
+        "has_session_start_hook": false,
+        "boundaries_seen": 699,
+        "reinjected_after": 0
+      },
+      "hook_latency_entries": 0,
+      "candidates": [],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 4,
+      "co_loaded_unregistered_count": 37
+    },
+    "devkit-session-auto-title": {
+      "sessions_listed": 0,
+      "sessions_with_signal": 0,
+      "skills": {},
+      "blocks": {},
+      "hook_errors": {},
+      "injections": {},
+      "compact": {
+        "has_session_start_hook": false,
+        "boundaries_seen": 699,
+        "reinjected_after": 0
+      },
+      "hook_latency_entries": 0,
+      "candidates": [],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 0,
+      "co_loaded_unregistered_count": 0
+    },
+    "devkit-spec": {
+      "sessions_listed": 0,
+      "sessions_with_signal": 0,
+      "skills": {},
+      "blocks": {},
+      "hook_errors": {},
+      "injections": {},
+      "compact": {
+        "has_session_start_hook": false,
+        "boundaries_seen": 699,
+        "reinjected_after": 0
+      },
+      "hook_latency_entries": 0,
+      "candidates": [],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 0,
+      "co_loaded_unregistered_count": 0
+    },
+    "devkit-style-adhd": {
+      "sessions_listed": 0,
+      "sessions_with_signal": 0,
+      "skills": {},
+      "blocks": {},
+      "hook_errors": {},
+      "injections": {},
+      "compact": {
+        "has_session_start_hook": true,
+        "boundaries_seen": 699,
+        "reinjected_after": 0
+      },
+      "hook_latency_entries": 0,
+      "candidates": [],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 0,
+      "co_loaded_unregistered_count": 0
+    },
+    "devkit-style-plain-talk": {
+      "sessions_listed": 0,
+      "sessions_with_signal": 0,
+      "skills": {},
+      "blocks": {},
+      "hook_errors": {},
+      "injections": {},
+      "compact": {
+        "has_session_start_hook": true,
+        "boundaries_seen": 699,
+        "reinjected_after": 0
+      },
+      "hook_latency_entries": 0,
+      "candidates": [],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 0,
+      "co_loaded_unregistered_count": 0
+    },
+    "devkit-style-wenyan": {
+      "sessions_listed": 0,
+      "sessions_with_signal": 239,
+      "skills": {},
+      "blocks": {},
+      "hook_errors": {},
+      "injections": {
+        "after_compact": 1700,
+        "by_event:SessionStart": 582,
+        "by_event:UserPromptSubmit": 1885,
+        "total": 2467,
+        "via:fingerprint": 582,
+        "via:label": 1885
+      },
+      "compact": {
+        "has_session_start_hook": true,
+        "boundaries_seen": 699,
+        "reinjected_after": 390
+      },
+      "hook_latency_entries": 1,
+      "candidates": [],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 0,
+      "co_loaded_unregistered_count": 0
+    },
+    "devkit-task-keeper": {
+      "sessions_listed": 0,
+      "sessions_with_signal": 0,
+      "skills": {},
+      "blocks": {},
+      "hook_errors": {},
+      "injections": {},
+      "compact": {
+        "has_session_start_hook": true,
+        "boundaries_seen": 699,
+        "reinjected_after": 0
+      },
+      "hook_latency_entries": 0,
+      "candidates": [],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 0,
+      "co_loaded_unregistered_count": 0
+    },
+    "devkit-token-saver": {
+      "sessions_listed": 0,
+      "sessions_with_signal": 508,
+      "skills": {},
+      "blocks": {},
+      "hook_errors": {},
+      "injections": {
+        "after_compact": 819,
+        "by_event:PreToolUse": 224,
+        "by_event:SessionStart": 1121,
+        "total": 1345,
+        "via:fingerprint": 1345
+      },
+      "compact": {
+        "has_session_start_hook": true,
+        "boundaries_seen": 699,
+        "reinjected_after": 699
+      },
+      "hook_latency_entries": 2,
+      "candidates": [],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 0,
+      "co_loaded_unregistered_count": 0
+    },
+    "devkit-tool": {
+      "sessions_listed": 500,
+      "sessions_with_signal": 238,
+      "skills": {
+        "devkit-tool:cascade-pull": {
+          "slash": 10,
+          "attributed_records": 125,
+          "tool": 1
+        },
+        "devkit-tool:cascade-push": {
+          "slash": 1,
+          "attributed_records": 42,
+          "tool": 1
+        },
+        "devkit-tool:claude-session-launch": {
+          "tool": 3,
+          "attributed_records": 36,
+          "slash": 2
+        },
+        "devkit-tool:commit-push": {
+          "slash": 13,
+          "attributed_records": 315,
+          "tool": 14
+        },
+        "devkit-tool:marketplace-cache-sync": {
+          "tool": 13,
+          "attributed_records": 467,
+          "slash": 16
+        },
+        "devkit-tool:show-me": {
+          "tool": 5,
+          "attributed_records": 113
+        }
+      },
+      "blocks": {},
+      "hook_errors": {
+        "hooks/codegraph-hint.js": 2,
+        "hooks/worktree-cwd-recovery.js": 1
+      },
+      "injections": {
+        "after_compact": 407,
+        "by_event:SessionStart": 107,
+        "by_event:SubagentStart": 161,
+        "by_event:UserPromptSubmit": 674,
+        "total": 942,
+        "via:fingerprint": 268,
+        "via:label": 674
+      },
+      "compact": {
+        "has_session_start_hook": true,
+        "boundaries_seen": 699,
+        "reinjected_after": 59
+      },
+      "hook_latency_entries": 4,
+      "candidates": [
+        {
+          "kind": "hook_error",
+          "rule": "hooks/codegraph-hint.js",
+          "count": 1,
+          "subagent_count": 1,
+          "after_compact": false
+        },
+        {
+          "kind": "hook_error",
+          "rule": "hooks/codegraph-hint.js",
+          "count": 1,
+          "subagent_count": 0,
+          "after_compact": true
+        },
+        {
+          "kind": "hook_error",
+          "rule": "hooks/worktree-cwd-recovery.js",
+          "count": 1,
+          "subagent_count": 0,
+          "after_compact": true
+        }
+      ],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 4,
+      "co_loaded_unregistered_count": 46
+    },
+    "devkit-worktree-flow": {
+      "sessions_listed": 0,
+      "sessions_with_signal": 0,
+      "skills": {},
+      "blocks": {},
+      "hook_errors": {},
+      "injections": {},
+      "compact": {
+        "has_session_start_hook": true,
+        "boundaries_seen": 699,
+        "reinjected_after": 0
+      },
+      "hook_latency_entries": 0,
+      "candidates": [],
+      "compare_hint": {
+        "suggest": false,
+        "reason": "没有离线对照记录，无从比较"
+      },
+      "co_loaded_registered_count": 0,
+      "co_loaded_unregistered_count": 0
+    }
+  }
+}
