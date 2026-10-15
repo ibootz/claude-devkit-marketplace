@@ -369,7 +369,8 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
     - `delta.excluded_baseline_satisfied`：从「当前版 − 不装」规则分差里剔除的回归守护用例。`judge.scores.excluded_baseline_satisfied` 同义，管 AI 评委的差。
     - `rule_subset`（只在 `kind=gate`）：`{cases, excluded_cases, count_with_only}`。`excluded_cases` 是「不跑的用例 → 原因」；`count_with_only=true` 表示 `arm: with-only` 的 grader 计分。
   - **`gate --json` 新增**：`compare_suggestion`（建议跑对照的提示，null 为不提示）、`review_reminder`（距上次复盘的提醒）、`rule_subset_needed`（null 表示该跑规则子集；否则是不跑的原因，如已有可采信依据、单测声明未通过、不在 git 仓）、`rule_subset_threshold`。
-  - **`gate --threshold`**：同 `--run-subset` 用，判「是否通过」的用例分阈值，默认 1.0，即每例全部 run 都过。
+  - **`gate --threshold`**：同 `--run-subset` 用，判「是否通过」的用例分阈值，取值 (0, 1]，越界报参数错误、退出码 2；默认 1.0，即每例全部 run 都过。gate 采信规则子集时 `basis[]` 多一个 `threshold`（该记录所用阈值）；低于 1.0 时「评测依据」那一行显式标出。
+  - **终端摘要**：compare / resume 收尾打印的规则差、AI 评委差，剔除了回归守护用例时都注明「不含 N 个回归守护用例」，N=0 不写。各臂总分含回归守护用例，只在差那一行剔除。
 
 ## 不做的
 
@@ -457,7 +458,8 @@ pre-commit 脚本是本仓脚本：JS、由 node 调起，读工作区里的声�
   1. 规则子集默认每例 3 次，threshold=1.0，即每例全部 run 都过才算过。`gate` 加 `--threshold`，默认 1.0。报告与 gate 输出写明「threshold=1.0：每例全部 run 都过」。
   2. description 与 agent 定义的比较基线取上一版本号的最后一个提交，贴 2.8「升版改动」字面。对照跑完后又改了无关文件、该提示再次出现，属已知噪音，记进票 15 已知缺口，不修。
   3. 打回的草稿：自动起草仍算该条款已有草稿，不重写；显式 `drafts write --clauses Cxxx` 点名时，已打回的草稿不算覆盖，会重写。帮助文字写明。
-  4. 回归守护的退化判据保持严格：当前版通过率低于上一版就标「退化」，3/3→2/3 也报。离线对照报告的回归守护一节写明「每臂 N 次，单次波动也会标退化，请看 trace 判断」。
-  5. probe 用例删掉 `marker-userpromptsubmit` grader（`.scratch/plugin-eval/probe/cases/` 下 4 个）。约束：**eval trace 不收 UserPromptSubmit 注入，不要写判 UserPromptSubmit 注入文字的规则 grader**；注入是否到达由 `injection_check` 核验。起草 prompt 已加同一条约束。
+  4. 回归守护的退化判据保持严格：当前版规则分低于上一版规则分就标「退化」，3/3→2/3 也报。离线对照报告的回归守护一节写明「每臂 N 次，单次波动也会标退化，请看 trace 判断」。
+  5. probe 用例删掉判注入文字的 grader（`.scratch/plugin-eval/probe/cases/` 下 4 个 `marker-userpromptsubmit` 与 1 个 `marker-clickable`；票 01、history-file 的冻结实测记录保留）。约束：**SessionStart 以外的 hook 注入（UserPromptSubmit / SubagentStart / PreToolUse 等）进不了 eval trace，不写判这类注入文字的规则 grader**；注入是否到达由 `injection_check` 核验。起草 prompt 已加同一条约束。
   6. 规则子集里全部选中用例都没有可计分的规则 grader 时，运行记不完整（`complete=false`），原因写「没有可计分的规则 grader」；gate 不采信这次结果，也不报「规则子集未通过」。
   - 两票其余自报暂定口径（11 的 8 条、15 的 9 条）照现状保留，票内标题改为「已定（2026-10-16 主会话复核）」。
+  - 集成审查（结论「修后合并」）后另定：各臂总分含回归守护用例，只在差那一行剔除并注明（报告与终端都注明）；`gate --threshold` 限定 (0, 1]。修订明细见票 11、15 的「集成审查修订」一段。

@@ -91,9 +91,14 @@ Status: resolved
 - 可留后续 2 → 定稿第 1 条：gate 加 `--threshold`（默认 1.0），传给 `gaterun.run_subset`；`gate --json` 多一个字段 `rule_subset_threshold`。以下几处都写「threshold=1.0：每例全部 run 都过」（取自 `gate.threshold_text`）：规则子集 report.md 的「是否通过」一行、`console_lines`、gate 采信规则子集时的提示行、「跑规则子集」建议行。单测 `ThresholdTest`。
 - 可留后续 3：从未复盘时的提醒补一句「复盘只扫登记清单里的插件，未登记需先登记（register）」。单测 `test_never_reviewed_mentions_registry`。
 
-**probe 用例**：`.scratch/plugin-eval/probe/cases/` 下 4 个 `marker-userpromptsubmit` grader（devkit-discipline 3 个、multi 1 个）已删。eval 的 trace 不收 UserPromptSubmit 注入，这类 grader 在任何版本都判不过；注入是否到达由 `injection_check` 核验。历史草稿区 `plugin-evals/devkit-discipline/drafts/` 与仓内其它 `evals/` 下没有同类 grader：按内容 `git grep`、按文件名查找都是 0 命中。
+**probe 用例**：`.scratch/plugin-eval/probe/cases/` 下 5 个判注入文字的 grader 已删：4 个 `marker-userpromptsubmit`（devkit-discipline 3 个、multi 1 个），以及集成审查补出的 multi-plugin 用例里的 `marker-clickable`（匹配 devkit-clickable-paths 在 UserPromptSubmit / SubagentStart 注入的标题）。SessionStart 以外的 hook 注入（UserPromptSubmit / SubagentStart / PreToolUse 等）进不了 eval 的 trace，这类 grader 在任何版本都判不过；注入是否到达由 `injection_check` 核验。除票 01 与 history-file 的冻结实测记录外（`.scratch/devkit-plugin-eval/probe/cases/stub/` 下 1 个、`.scratch/plugin-eval/probe/history-file/cases/` 下 5 个同名 grader，配套 `out/*.json` 记着当时的结果，保留不删），历史草稿区 `plugin-evals/devkit-discipline/drafts/` 与仓内其它 `evals/` 下没有同类 grader。
 
 **集成真跑**：见 [demo-integ-B](../demo-integ-B/README.md)。
+
+**集成审查修订（2026-10-16，结论「修后合并」）**
+
+- multi-plugin 的 `marker-clickable` grader 已删，措辞放宽为「SessionStart 以外的 hook 注入」，见上面「probe 用例」一段。
+- `--threshold` 限定 (0, 1]：越界由 argparse 报参数错误，退出码 2，不开跑。gate 采信 threshold < 1.0 的规则子集时，「评测依据」那一行写「通过的规则子集（**所用 threshold=…：每例各 run 规则分的平均 ≥ threshold，低于默认 1.0**）」，`gate --json` 的 `basis[]` 多一个 `threshold`。单测 `test_cli_threshold_out_of_range_is_usage_error`、`test_basis_line_marks_threshold_below_one`、`test_basis_line_unmarked_at_default_threshold`。
 
 **已知缺口**
 
@@ -102,6 +107,7 @@ Status: resolved
 - Windows 未实测。
 - description 提示可能重复出现：对照跑完后又改了一个无关文件，比较基线仍是上一版，description 那条会再提示一次。B 批集成定稿第 2 条定为已知噪音，不修。
 - 规则子集无人审阅，偶发失败只能重跑；threshold=1.0 下每例 3 次要求全对，偶发失败的概率比 1 次高（`--threshold`、`--runs` 可调）。
+- `compare --threshold` 仍不校验范围（集成审查只点了 gate 那一个）。
 
 **留给 13 / 16 / 17 的接口**
 

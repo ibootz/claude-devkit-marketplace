@@ -100,11 +100,20 @@ Status: resolved
 
 - `drafter.py` 文件头的 tags 说明改成与 `_tags_for` 一致：单条款目标一律 `[discipline, Cxxx]`，能机械判定的文风条款也走这一档，不另打 `style`。
 - `drafts write` 起草中途停止（AI 调用出错）时退出码由 1 改为 2（`drafter.STOPPED_EXIT`）。cli.py 文件头规定 1 只给 gate 的「未过闸」用，环境类错误用 2，文件头同步写明。单测 `test_cli_write_stopped_exit_code_is_2`。
-- 起草约束加一条：grader 只判模型自己的工具调用与回复。trace 里没有 UserPromptSubmit hook 注入的文字，匹配注入文本的 grader 在任何条件下都判不过。单测 `test_prompt_forbids_injection_text_graders`。
+- 起草约束加一条：grader 只判模型自己的工具调用与回复。SessionStart 以外的 hook 注入（UserPromptSubmit / SubagentStart / PreToolUse 等）进不了 trace，不写判这类注入文字的规则 grader，它们在任何条件下都判不过。单测 `test_prompt_forbids_injection_text_graders`。
 
 **集成接线**：`scoring.score_arm` 的 `count_with_only`（票 15）默认 False，`baseline.py` 不传它，基线判据在不装臂里照旧剔除 with-only grader。单测 `test_baseline_never_counts_with_only_graders` 钉住这一点。
 
 **集成真跑**：见 [demo-integ-B](../demo-integ-B/README.md)。
+
+**集成审查修订（2026-10-16，结论「修后合并」）**
+
+1. 两票交汇处补单测，judge.json 改为显式写入。审查用三个变异证明原来没钉住：M1 把 `apply_to_record` 挪回评委字段之前，M2 让 judgepending 重算时不剔除，M3 让 judge.json 不再带剔除后的 scores。
+   - `judge.summarize` 给出 scores 的深拷贝；`compare.finalize_run` 在 `apply_to_record` 之后显式写 `judge_doc['scores'] = copy.deepcopy(rec['judge']['scores'])`，不再靠两边共享同一对象。
+   - 单测 `GuardedCaseJudgeDeltaTest.test_finalize_excludes_guarded_case_in_run_json_and_judge_json`（对照收尾：run.json 与 judge.json 的 `excluded_baseline_satisfied` 都是 `['case-b']`）、`test_reply_rescore_still_excludes_guarded_case`（`pending --reply` 写回评委样本后经 `judgepending._apply` 重算，差仍剔除，为 +1.00；不剔除会是 +0.50）。
+   - 在 /tmp 副本里重做三个变异，跑全量单测，三个都被拦下：M1、M3（删掉显式写入）各被前一条拦下，M2 被后一条拦下。
+2. 终端打印的规则差（`cli.score_line`）与评委差（`judgereport.console_line` 新加「评委差」一段）在剔除了回归守护用例时注明「（不含 N 个回归守护用例）」，N=0 不写；共用 `judgereport.guard_note`。臂分口径不变：各臂总分含回归守护用例，只在差那一行剔除。单测 `test_console_lines_note_excluded_guarded_cases_only_when_any`。
+3. 起草约束措辞放宽：「SessionStart 以外的 hook 注入（UserPromptSubmit / SubagentStart / PreToolUse 等）进不了 trace，不写判这类注入文字的规则 grader」。单测 `test_prompt_forbids_injection_text_graders` 随之更新。
 
 ### 已知缺口
 

@@ -59,8 +59,9 @@ GRADER_NOTE = '''grader（规则判分，不花钱；每个用例 1～4 个，�
 - 守规矩时 grader 通过、违反时不通过。
 - 判 skill 是否被调用：tool_used、tool: Skill、input_match 写 skill 名，并显式写 arm: both（不写 arm 时
   eval 把它当成「插件起效指示」，不装条件下不计分）。
-- grader 只判模型自己的工具调用与回复。trace 里没有 UserPromptSubmit hook 注入的文字，匹配插件注入文本（注入标记、
-  规矩原文）的 grader 在任何条件下都判不过；注入是否到达由评测工具另行核验，用例不用管。'''
+- grader 只判模型自己的工具调用与回复。SessionStart 以外的 hook 注入（UserPromptSubmit / SubagentStart / PreToolUse 等）
+  进不了 trace，不写判这类注入文字（注入标记、规矩原文）的 grader，它们在任何条件下都判不过；注入是否到达由评测工具
+  另行核验，用例不用管。'''
 
 JUDGE_NOTE = '''judge（可选，给 AI 评委的判定标准，0～2 条）：criterion 写一句话，评委读完会话转录据此判「遵守 / 违反 / 不适用」；
 rule 写本用例里与它判同一件事的 grader 名（没有就留空）。'''

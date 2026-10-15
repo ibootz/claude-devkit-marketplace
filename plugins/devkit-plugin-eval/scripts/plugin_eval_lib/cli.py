@@ -74,14 +74,35 @@ def _parser():
     g.add_argument('-j', '--concurrency', type=int, default=3, help='同 --run-subset：eval 并发数，默认 3')
     g.add_argument('--model', help='同 --run-subset：覆盖被测模型（传给 eval --model）')
     g.add_argument('--eval-timeout', type=float, default=0, help='同 --run-subset：eval 超时（分钟），默认 0 不限时')
-    g.add_argument('--threshold', type=float, default=1.0,
-                   help='同 --run-subset：判「是否通过」的用例分阈值，默认 1.0，即每例全部 run 都过')
+    g.add_argument('--threshold', type=_unit_threshold, default=1.0,
+                   help='同 --run-subset：判「是否通过」的用例分阈值，取值 (0, 1]，默认 1.0，即每例全部 run 都过')
 
     clauses.add_parser(sub)
     review.add_parser(sub)
     drafts.add_parser(sub)       # 用例草稿（票 11）
     baseline.add_parser(sub)     # 基线已满足判定（票 11）
     return p
+
+
+def _unit_threshold(text):
+    """gate --threshold：限定在 (0, 1]。0 或负数会让规则子集必然通过，大于 1 永远过不了；越界由 argparse 报参数错误、退出码 2。"""
+    try:
+        v = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError('不是数：%r' % text)
+    if not 0 < v <= 1:     # NaN 也走这里
+        raise argparse.ArgumentTypeError('要在 (0, 1] 之间：%s' % text)
+    return v
+
+
+def score_line(rec):
+    """compare / resume 收尾打印的规则分一行。臂分含回归守护用例、差不含，有剔除时在差后注明。"""
+    fmt = lambda x: '—' if x is None else '%.2f' % x
+    d = rec['delta']
+    return '不装 %s / 当前版 %s / 差 %s%s' % (
+        fmt(rec['arms']['none']['score']), fmt(rec['arms']['current']['score']),
+        '—' if d['overall'] is None else '%+.2f' % d['overall'],
+        judgereport.guard_note(d.get('excluded_baseline_satisfied')))
 
 
 def _print_extra_arms(rec, fmt):
@@ -175,8 +196,7 @@ def main(argv=None):
     rec = res.record
     fmt = lambda x: '—' if x is None else '%.2f' % x
     print('运行目录：%s' % res.run_dir)
-    print('不装 %s / 当前版 %s / 差 %s' % (fmt(rec['arms']['none']['score']), fmt(rec['arms']['current']['score']),
-                                     '—' if rec['delta']['overall'] is None else '%+.2f' % rec['delta']['overall']))
+    print(score_line(rec))
     _print_extra_arms(rec, fmt)
     print('完整：%s；状态：%s；花费（标价估算）：$%.4f' % ('是' if rec['complete'] else '否', rec['review']['status'],
                                                 rec['usage']['cost_usd']))

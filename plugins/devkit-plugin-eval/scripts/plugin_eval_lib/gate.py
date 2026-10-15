@@ -203,6 +203,7 @@ class Assessment:
     reasons: List[str]
     notes: List[str]
     reviewed_at: Optional[str] = None
+    threshold: Optional[float] = None     # 只在规则子集（kind=gate）：该记录判「是否通过」所用的 threshold
 
     def to_dict(self):
         return dict(self.__dict__)
@@ -307,7 +308,8 @@ def assess_run(rec, *, version, plugin_fp, run_id='?'):
         if mixed:
             reasons.append('Claude Code 版本混用（%s）：规则子集无人审阅，不作依据' % '、'.join(versions))
     return Assessment(run_id, kind, plugin.get('version'), not reasons, reasons, notes,
-                      review.get('reviewed_at') if kind == BASIS_COMPARE else None)
+                      review.get('reviewed_at') if kind == BASIS_COMPARE else None,
+                      rec.get('threshold') if kind == BASIS_GATE else None)
 
 
 def load_runs(runs_dir):
@@ -549,6 +551,10 @@ def evaluate(plugin_dir, *, main_ref=None, since=None, platform=None, git=None, 
     return GateResult(passed, data, render(data, target))
 
 
+def _full_threshold(threshold):
+    return isinstance(threshold, (int, float)) and threshold >= 1.0
+
+
 def threshold_text(threshold):
     """报告与 gate 输出里对 threshold 的一句话说明（B 批集成定稿第 1 条）。"""
     if isinstance(threshold, (int, float)) and threshold >= 1.0:
@@ -600,6 +606,8 @@ def render(d, target):
     if d['basis']:
         for a in d['basis']:
             what = '已审的离线对照（审阅于 %s）' % a['reviewed_at'] if a['kind'] == BASIS_COMPARE else '通过的规则子集'
+            if a['kind'] == BASIS_GATE and not _full_threshold(a.get('threshold')):
+                what += '（**所用 %s，低于默认 1.0**）' % threshold_text(a.get('threshold'))
             lines.append('- 采信 runs/%s：%s' % (a['run_id'], what))
             lines += ['  - 提示：%s' % n for n in a['notes']]
     elif d['passed_via_skip']:

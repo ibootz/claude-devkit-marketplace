@@ -28,6 +28,7 @@ source = disagreement / spot-check）。每次判样本之前，先让评委把�
 续跑沿用首跑的 --judge-model 与 --no-judge（记在 run.json 的 environment.judge）。
 阈值、条数留空（null 或不写）即不启用校准。--no-judge 时不读本配置。
 """
+import copy
 import gzip
 import hashlib
 import json
@@ -577,7 +578,7 @@ def summarize(doc):
                                                            'min_samples', 'enabled', 'state', 'note', 'by_source',
                                                            'basis_source', 'call_errors', 'retired_clauses')},
         'warnings': doc.get('warnings') or [],
-        'scores': doc.get('scores'), 'usage': doc.get('usage'), 'flagged': flagged,
+        'scores': copy.deepcopy(doc.get('scores')), 'usage': doc.get('usage'), 'flagged': flagged,
         'arm_labels': {s['arm']: s.get('arm_label') for s in samples},
     }
 

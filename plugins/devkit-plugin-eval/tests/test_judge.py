@@ -12,7 +12,7 @@ from pathlib import Path
 
 import _support
 from _support import tmpdir, write
-from plugin_eval_lib import cli, clauses, compare, judge, judgepending, judgereport, pending, record, registry, resume
+from plugin_eval_lib import baseline, cli, clauses, compare, judge, judgepending, judgereport, pending, record, registry, resume
 from test_compare import FakeEval, passing_preflight
 from test_resume import ScriptedEval
 
@@ -504,6 +504,43 @@ class ResumeOptionsTest(JudgeCompareBase):
         self.assertEqual(doc2['usage']['calls'], sum(len(s['passes']) for s in doc2['samples']) + doc2['gold']['total'])
 
 
+class GuardedCaseJudgeDeltaTest(JudgeCompareBase):
+    """两票交汇处（B 批集成审查应修 1）：回归守护用例不进评委的「当前版 − 不装」差。
+    case-b 打上 baseline-satisfied；评委对 CRIT-A 一律判 fail、对 CRIT-B 一律判 pass：
+    case-a 当前版臂规则过、评委 fail → 分歧待裁定；不装臂两遍 fail → 一致；case-b 两臂都一致 pass。"""
+
+    def setUp(self):
+        super().setUp()
+        baseline.set_flag(self.plugin / 'evals' / 'case-b', True)
+        self.fj = FakeJudge(lambda p, n: 'fail' if criterion_says('CRIT-A')(p) else 'pass')
+
+    def test_finalize_excludes_guarded_case_in_run_json_and_judge_json(self):
+        # 钉住收尾顺序（apply_to_record 在评委字段写好之后）与 judge.json 的显式写入
+        res = self.compare(self.fj)
+        rec, doc = self.run_json(res), self.judge_json(res)
+        self.assertEqual(rec['delta']['excluded_baseline_satisfied'], ['case-b'])
+        self.assertEqual(rec['judge']['scores']['excluded_baseline_satisfied'], ['case-b'])
+        self.assertEqual(doc['scores']['excluded_baseline_satisfied'], ['case-b'])
+        self.assertEqual(doc['scores'], rec['judge']['scores'])
+
+    def test_reply_rescore_still_excludes_guarded_case(self):
+        # 钉住 pending --reply 写回评委样本后的重算（judgepending._apply）
+        res = self.compare(self.fj)
+        page = pending.generate(self.data, 'demo-plugin', now=lambda: T0)
+        nos = [it['no'] for it in page.items if it['type'] == 'judge-disagreement']
+        self.assertTrue(nos)
+        pending.apply_reply(self.data, 'demo-plugin', 'PE1 %s %s %s' % (
+            page.run_id, page.page_id, ' '.join('%dA' % n for n in nos)), now=lambda: T0)
+        rec, doc = self.run_json(res), self.judge_json(res)
+        for scores in (doc['scores'], rec['judge']['scores']):
+            self.assertEqual(scores['excluded_baseline_satisfied'], ['case-b'])
+            # 裁定后 case-a 当前版 1、不装 0；case-b 两臂都是 1，剔除前差会是 0.5
+            self.assertEqual(scores['arms']['current']['cases']['case-a'], 1.0)
+            self.assertAlmostEqual(scores['delta_current_vs_none'], 1.0)
+        report = (res.run_dir / 'report.md').read_text(encoding='utf-8')
+        self.assertIn('差（当前版 − 不装，不含 1 个回归守护用例）：+1.00', report)
+
+
 class PureFunctionTest(unittest.TestCase):
     def test_console_line_covers_three_trust_states_and_no_judge(self):
         base = {'model': 'm', 'samples': 4, 'disagreements': 2, 'spot_checks': 2, 'errors': 0,
@@ -515,6 +552,23 @@ class PureFunctionTest(unittest.TestCase):
         self.assertNotIn('None', judgereport.console_line(dict(base, trusted=None)))
         self.assertEqual(judgereport.console_line({'skipped': 'no-judge'}), 'AI 评委：按 --no-judge 跳过')
         self.assertIsNone(judgereport.console_line(None))
+
+    def test_console_lines_note_excluded_guarded_cases_only_when_any(self):
+        """终端的规则差与评委差：剔除了回归守护用例时注明「不含 N 个」，N=0 不写（B 批集成审查可留后续 1）。"""
+        base = {'model': 'm', 'samples': 4, 'disagreements': 0, 'spot_checks': 3, 'errors': 0,
+                'gold': {'agreement_rate': None}, 'trusted': None}
+        line = judgereport.console_line(dict(base, scores={'delta_current_vs_none': 1.0,
+                                                           'excluded_baseline_satisfied': ['case-b']}))
+        self.assertIn('评委差 +1.00（不含 1 个回归守护用例）；采信（未校准）', line)
+        line = judgereport.console_line(dict(base, scores={'delta_current_vs_none': None,
+                                                           'excluded_baseline_satisfied': []}))
+        self.assertIn('评委差 —；', line)
+        self.assertNotIn('回归守护', line)
+        rec = {'arms': {'none': {'score': 0.61}, 'current': {'score': 1.0}},
+               'delta': {'overall': 0.58, 'excluded_baseline_satisfied': ['a', 'b']}}
+        self.assertEqual(cli.score_line(rec), '不装 0.61 / 当前版 1.00 / 差 +0.58（不含 2 个回归守护用例）')
+        rec['delta'] = {'overall': 0.39}
+        self.assertEqual(cli.score_line(rec), '不装 0.61 / 当前版 1.00 / 差 +0.39')
 
     def test_parse_verdict(self):
         self.assertEqual(judge.parse_verdict('{"verdict":"pass","reason":"ok"}'), ('pass', 'ok'))

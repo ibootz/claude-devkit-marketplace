@@ -21,6 +21,13 @@ def trust_text(j):
     return '采信（未校准）'
 
 
+def guard_note(guarded):
+    """终端「差」后面的注：剔除了 N 个回归守护用例时写「（不含 N 个回归守护用例）」，N=0 时为空串。
+    差不含这些用例、臂分含，两数之差因此不等于差，要注明（B 批集成审查可留后续 1）。"""
+    n = len(guarded or [])
+    return '（不含 %d 个回归守护用例）' % n if n else ''
+
+
 def skipped(j):
     return isinstance(j, dict) and j.get('skipped') == 'no-judge'
 
@@ -39,9 +46,13 @@ def console_line(j):
     if failed(j):
         return 'AI 评委：这一步出错（%s），本次没有评委判分；运行判不完整，续跑时重判' % j['failed']
     rate = (j.get('gold') or {}).get('agreement_rate')
-    return 'AI 评委 %s：样本 %s、分歧 %s、抽检 %s、出错 %s；金标一致率 %s；%s' % (
+    scores = j.get('scores') if isinstance(j.get('scores'), dict) else None
+    d = (scores or {}).get('delta_current_vs_none')
+    delta = '' if scores is None else '评委差 %s%s；' % (
+        '—' if d is None else '%+.2f' % d, guard_note(scores.get('excluded_baseline_satisfied')))
+    return 'AI 评委 %s：样本 %s、分歧 %s、抽检 %s、出错 %s；金标一致率 %s；%s%s' % (
         j.get('model'), j.get('samples'), j.get('disagreements'), j.get('spot_checks'), j.get('errors'),
-        '—' if rate is None else '%.2f' % rate, trust_text(j).replace('**', ''))
+        '—' if rate is None else '%.2f' % rate, delta, trust_text(j).replace('**', ''))
 
 
 def scoring_line(rec):

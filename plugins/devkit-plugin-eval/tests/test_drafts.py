@@ -284,7 +284,8 @@ class DrafterTest(Base):
 
     def test_prompt_forbids_injection_text_graders(self):
         p = drafter.build_prompt(NAME, drafter.gaps(self.repo, NAME, self.plugin)[:1])
-        self.assertIn('trace 里没有 UserPromptSubmit hook 注入的文字', p)
+        self.assertIn('SessionStart 以外的 hook 注入（UserPromptSubmit / SubagentStart / PreToolUse 等）', p)
+        self.assertIn('进不了 trace，不写判这类注入文字', p)
 
     def test_cli_write_stopped_exit_code_is_2(self):
         ai = FakeAI(clause_ai.ClauseAIError('撞订阅用量限制或限流：429'))

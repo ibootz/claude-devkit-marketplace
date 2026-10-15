@@ -13,6 +13,7 @@
 不完整与续跑（票 07）：每跑完一臂写一次检查点 run.json（complete=false），中途退出也留得下；
 收尾在 finalize_run，续跑（resume.py）复用它与 _run_arm，所以这两处的扩展续跑自动带上。
 """
+import copy
 import json
 import shutil
 import sys
@@ -356,6 +357,9 @@ def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp,
         rec['judge'] = {'skipped': 'no-judge'}
     # 基线已满足的用例（票 11）：规则分与 AI 评委的「当前版 − 不装」差都不含它们，改出回归结论；要在 judge 写好之后调
     baseline.apply_to_record(rec, baseline.satisfied_cases(registry.plugin_dir(entry) / 'evals', cases))
+    if judge_doc and isinstance(rec.get('judge'), dict) and isinstance(rec['judge'].get('scores'), dict):
+        # judge.json 的 scores 显式取剔除后的那份：summarize 给的是拷贝，不靠两边共享同一对象
+        judge_doc['scores'] = copy.deepcopy(rec['judge']['scores'])
     rec.update(clauses.record_fields(run_dir))
     if decorate:
         rec = decorate(rec)

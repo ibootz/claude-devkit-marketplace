@@ -464,6 +464,34 @@ class ThresholdTest(Base):
     def test_gate_hint_line_mentions_threshold(self):
         self.assertTrue(any('threshold=1.0：每例全部 run 都过' in ln for ln in self.gate().lines))
 
+    def test_cli_threshold_out_of_range_is_usage_error(self):
+        """--threshold 限定 (0, 1]：越界由 argparse 报参数错误、退出码 2，不开跑。"""
+        for bad in ('0', '-0.5', '1.5', 'nan', 'abc'):
+            err = io.StringIO()
+            with redirect_stdout(io.StringIO()), redirect_stderr(err), \
+                    mock.patch.object(gaterun, 'run_subset', side_effect=AssertionError('不该开跑')):
+                with self.assertRaises(SystemExit) as cm:
+                    cli.main(['--data-dir', str(self.data), 'gate', str(self.r.plugin), '--run-subset',
+                              '--threshold', bad])
+            self.assertEqual(cm.exception.code, 2, bad)
+            self.assertIn('--threshold', err.getvalue())
+        self.assertEqual(cli._parser().parse_args(['gate', 'x', '--threshold', '1']).threshold, 1.0)
+        self.assertEqual(cli._parser().parse_args(['gate', 'x', '--threshold', '0.01']).threshold, 0.01)
+
+    def test_basis_line_marks_threshold_below_one(self):
+        """采信 threshold < 1.0 的规则子集时，「评测依据」那一行显式标出所用 threshold；1.0 时不标。"""
+        self.subset(threshold=0.5)
+        g = self.gate()
+        self.assertTrue(g.passed)
+        line = [ln for ln in g.lines if ln.startswith('- 采信 runs/')][0]
+        self.assertIn('所用 threshold=0.5：每例各 run 规则分的平均 ≥ threshold，低于默认 1.0', line)
+        self.assertEqual(g.data['basis'][0]['threshold'], 0.5)
+
+    def test_basis_line_unmarked_at_default_threshold(self):
+        self.subset()
+        line = [ln for ln in self.gate().lines if ln.startswith('- 采信 runs/')][0]
+        self.assertNotIn('低于默认', line)
+
 
 class NoScorableGraderTest(Base):
     def test_no_scorable_rule_grader_is_incomplete_not_failed(self):
