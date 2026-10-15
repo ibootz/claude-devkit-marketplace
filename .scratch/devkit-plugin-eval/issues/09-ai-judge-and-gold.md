@@ -103,8 +103,11 @@ Status: resolved
 - C 见上面三态。单测 `test_calibration_short_because_of_call_errors_is_incomplete`。
 - D 入库样本只保留 `assistant`（去掉 thinking 块）、`user` 的 tool_result、`result` 三类行，`system/init` 整行不入库。单测 `test_stored_sample_scrubbed_and_deterministic`。
 - 顺手修：`--no-judge` 时 run.json 记 `judge={"skipped": "no-judge"}`、报告写「按 --no-judge 跳过」、不读 judge-config.json；首段「判分：」一行按实际改写；续跑后 usage 合并首跑沿用样本的数据。单测 `test_no_judge_flag_and_no_criteria_skip_judge`。
+- 集成真跑发现：compare 收尾的终端行在 `trusted=null` 时打印「AI 判分不采信：None」，`--no-judge` 时会抛 KeyError；改由 `judgereport.console_line` 按三态与跳过打印。单测 `test_console_line_covers_three_trust_states_and_no_judge`。
 
 **接票 10 的条款清单**：判定标准 frontmatter 加可选键 `clause: C001`，金标记下 `clause`。条款退役被确认时，该条款的金标置 `active=false`（`clauses._deactivate_gold`）；校准时也按 `clauses.retired_ids()` 排除。frontmatter 未知键、`arms` 里的未知臂名：compare 开跑前报错（`judge.check_criteria`）。`rule` 指向的 grader 不存在、条款不在清单里或已退役：记进 judge.json 的 `warnings`，报告「### 判定标准告警」逐条列出。单测 `CriteriaAndClauseTest`、`test_bad_frontmatter_aborts_before_any_eval`。
+
+**集成真跑（2026-10-15）**：devkit-discipline 4.1.0 副本（放在 /tmp 下、不受版本控制的目录，上一版臂因此按「不在 git 仓」退化），用例 `decision-no-ask`、`dispatch-model`，`--runs 1`，`decision-no-ask` 加两条判定标准（`asked-via-tool` 带 `rule` 与 `arms`、`leaves-decision-to-user` 带 `clause: C001`）。运行 `20261015T143739Z-4.1.0-compare`：评委 4 个样本各两遍（8 次调用），分歧 2、抽检 2、出错 0，`trusted=null`（未配置校准）、`warnings` 1 条（C001 尚无清单可核对）；条款清单首次抽取 99 条待确认；待审页 6 项（报告审阅 1、分歧 2、抽检 2、条款清单 1，无复盘类型）。AI 构造回复码 `2B 3B 4A 5A 6B`（不勾报告审阅）写回后读回：4 个金标（`source` 分歧 2、抽检 2，抽检那两条 `clause=C001`），`clause-check.json` 与 run.json 的 `status=rejected`，报告改写为「条款清单变更已打回」。摘要 run.json、report.md 在 `.scratch/devkit-plugin-eval/demo-integ-A/`（写回后的版本；裁定是 AI 演示，不是用户审阅；金标与样本未入库）。花费（标价估算）：eval $0.77、评委 $0.47、条款抽取 $0.86。
 
 **暂定口径（待主会话复核）**
 
