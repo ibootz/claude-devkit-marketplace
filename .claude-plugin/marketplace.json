@@ -178,7 +178,7 @@
       "name": "devkit-plugin-eval",
       "source": "./plugins/devkit-plugin-eval",
       "category": "Development",
-      "description": "插件评测 - 离线对照被测插件装与不装的差，落盘待审报告",
+      "description": "插件评测 - 离线对照装与不装、新旧版的差，会话复盘与发版闸门，待审页人工裁定",
       "version": "0.4.0"
     }
   ]
