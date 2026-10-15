@@ -1,12 +1,13 @@
-"""命令行：register / list / check / compare / resume / pending。
+"""命令行：register / list / check / compare / resume / pending / gate。
 
 退出码：0 成功；2 用法、登记、环境类错误（含未登记、前置检查硬项失败）；3 对照跑完但结果不完整（用例加载失败、run 出错等）。
+gate 另用 1 表示未过闸。
 """
 import argparse
 import json
 import sys
 
-from . import armplan, compare, datadir, evalrun, pending, preflight, registry, resume
+from . import armplan, compare, datadir, evalrun, gate, pending, preflight, registry, resume
 
 
 def _utf8_stdio():
@@ -55,6 +56,12 @@ def _parser():
     rs.add_argument('--eval-timeout', type=float, default=0, help='同 compare --eval-timeout')
 
     pending.add_parser(sub)
+
+    g = sub.add_parser('gate', help='发版闸门：判当前版本能否发布（退出码 0 过闸、1 未过闸、2 用法错误）；推 main 前手动跑')
+    g.add_argument('plugin_dir', help='被测插件目录（含 .claude-plugin/plugin.json）；不要求已登记')
+    g.add_argument('--main-ref', help='查漏检用的 main 分支引用；缺省依次试 origin/main、main、origin/master、master')
+    g.add_argument('--since', metavar='提交', help='漏检起算的提交；缺省取 main 上首次入库 plugin-evals/<插件名>/ 的提交')
+    g.add_argument('--json', action='store_true', help='输出结构化结果')
     return p
 
 
@@ -107,6 +114,8 @@ def _check(args, data_dir):
 def main(argv=None):
     _utf8_stdio()
     args = _parser().parse_args(argv)
+    if args.cmd == 'gate':           # 只读插件目录与仓内 runs/，不用用户级数据目录
+        return gate.main(args)
     try:
         data_dir = datadir.resolve_data_dir(args.data_dir)
         if args.cmd == 'register':
