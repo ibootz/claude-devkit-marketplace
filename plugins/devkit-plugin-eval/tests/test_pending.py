@@ -98,6 +98,24 @@ class ReportReviewTest(unittest.TestCase):
         self.assertEqual(pending.generate(self.env.data, 'demo', run_id=RUN_ID, now=lambda: T0).run_id, RUN_ID)
 
 
+    def test_default_latest_without_items_lists_earlier_pending_runs(self):
+        """拍板 08-2：不带 --run 仍取最新一次；它没有待审项时，提示里逐个列出较早仍待审的运行与 --run 用法。"""
+        later = '20261016T080000Z-1.2.4-compare'
+        make_run(self.env.repo, later)
+        page = pending.generate(self.env.data, 'demo', now=lambda: T0)
+        self.assertEqual(page.run_id, later)
+        pending.apply_reply(self.env.data, 'demo', 'PE1 %s %s 1A' % (later, page.page_id), now=lambda: T1)
+        before = snapshot(self.env.repo)
+        with self.assertRaises(pending.NothingPending) as cm:
+            pending.generate(self.env.data, 'demo', now=lambda: T1)
+        msg = str(cm.exception)
+        self.assertIn(later, msg)                                  # 仍是针对最新一次的结论
+        self.assertIn('pending demo --run %s' % RUN_ID, msg)       # 较早仍待审的逐个列出
+        self.assertEqual(snapshot(self.env.repo), before)          # 只读
+        with self.assertRaises(pending.NothingPending) as cm:      # 显式 --run 不附列表
+            pending.generate(self.env.data, 'demo', run_id=later, now=lambda: T1)
+        self.assertNotIn(RUN_ID, str(cm.exception))
+
 class BadReplyTest(unittest.TestCase):
     def setUp(self):
         self.env = Env(self)

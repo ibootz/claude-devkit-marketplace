@@ -84,6 +84,9 @@ def build_run_record(*, run_id, plugin, arms, delta, cases, incomplete_reasons, 
         'arms': {k: arms.get(k) for k in ARM_ORDER},
         'delta': dict(delta, arm='current', baseline='none'),
         'claude_code_version': _uniq(a.get('claude_version') for a in present),
+        # 各臂首跑与续跑出现过的全部 Claude Code 版本；多于一个即混用（续跑时版本变了，或各臂不同）
+        'claude_code_versions': sorted({v for a in present
+                                        for v in (a.get('claude_versions') or [a.get('claude_version')]) if v}),
         'main_model': main_models.most_common(1)[0][0] if main_models else None,
         'judge_model': None,
         'usage': _sum_usage(present),

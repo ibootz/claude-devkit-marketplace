@@ -150,7 +150,8 @@ def resolve(plugin_dir, current_version, *, base=None, current_name=None, git=No
     if not different:
         now = '当前的 %s' % current_version if current_version is not None else '没写 version'
         return _degraded('no-different-version',
-                         'git 历史里 plugin.json 的版本号一直是%s，没有与它不同的版本' % now, **common)
+                         '新插件首评或从未升过版本号，按基线规则比不装（git 历史里 plugin.json 的版本号一直是%s，'
+                         '没有与它不同的版本）' % now, **common)
     prev_version = different[0][2]
     sha, path, version, name = [h for h in hist if h[2] == prev_version][-1]
     return Resolution(degraded=False, commit=sha, version=version, name=name,

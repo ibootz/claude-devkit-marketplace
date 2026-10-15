@@ -27,6 +27,7 @@ class ScriptedEval:
     """
 
     def __init__(self, sandbox_root, outcomes, fail=None, no_aggregate=(), crash_on=None):
+        self.version, self.model = '2.1.300', 'claude-opus-5-5'   # 之后各次调用产出的 Claude Code 版本与主力模型
         self.sandbox_root = Path(sandbox_root)
         self.outcomes = {k: list(v) for k, v in outcomes.items()}
         self.fail = dict(fail or {})
@@ -55,12 +56,12 @@ class ScriptedEval:
             rs = []
             for i in range(runs):
                 self.seq += 1
-                sb = make_sandbox(self.sandbox_root, 's%d' % self.seq)
+                sb = make_sandbox(self.sandbox_root, 's%d' % self.seq, model=self.model)
                 ok = self.outcomes[(arm, n)].pop(0)
                 err = self.fail.pop((arm, n, i), None)
                 rs.append(run_result({'rule': ok}, error=err, trace_path=str(sb / 'out' / 'trace.jsonl')))
             cases.append((n, GRADERS, rs))
-        (out / 'aggregate-result.json').write_text(json.dumps(aggregate(cases, root=str(arm_dir))), encoding='utf-8')
+        (out / 'aggregate-result.json').write_text(json.dumps(aggregate(cases, root=str(arm_dir), version=self.version)), encoding='utf-8')
         return 0, ''
 
 
@@ -462,6 +463,44 @@ class LegacyTraceDirTest(ResumeTestBase):
                     if 'devkitResumeAttempt' not in r]
         self.assertEqual(sorted(old_dirs), sorted(expected))
         self.assertTrue(any(d.endswith('/current/case-a-3') for d in old_dirs), old_dirs)
+
+
+class ResumeVersionDriftTest(ResumeTestBase):
+    """拍板 07-1：续跑时 Claude Code 版本不同照常合并、全部记下；主力模型不同判不完整，再续跑也合不成完整。"""
+
+    def first(self):
+        fake = ScriptedEval(self.sandboxes, FLAKY, fail={('current', 'case-a', 1): LIMIT_ERROR})
+        return fake, self.compare(fake)
+
+    def test_claude_version_drift_merges_and_records_all_versions(self):
+        fake, first = self.first()
+        fake.version = '2.1.301'
+        self.resume(fake, first.run_dir)
+        rec = self.load(first.run_dir)
+        self.assertTrue(rec['complete'], rec['incomplete_reasons'])
+        cur = rec['arms']['current']
+        self.assertEqual(cur['claude_version'], '2.1.300')                 # 单值字段保留首跑值
+        self.assertEqual(cur['claude_versions'], ['2.1.300', '2.1.301'])
+        self.assertEqual(rec['claude_code_version'], '2.1.300')
+        self.assertEqual(rec['claude_code_versions'], ['2.1.300', '2.1.301'])
+        warnings = rec['resume']['attempts'][-1]['warnings']
+        self.assertTrue(any('Claude Code 版本' in w and '2.1.301' in w for w in warnings), warnings)
+
+    def test_main_model_drift_makes_run_incomplete_even_after_another_resume(self):
+        fake, first = self.first()
+        fake.model = 'claude-sonnet-5-5'
+        res = self.resume(fake, first.run_dir)
+        rec = self.load(first.run_dir)
+        self.assertEqual(res.exit_code, 3)
+        self.assertFalse(rec['complete'])
+        self.assertFalse(rec['passed'])
+        cur = rec['arms']['current']
+        self.assertEqual(cur['main_model'], 'claude-opus-5-5')
+        self.assertEqual(cur['main_models'], ['claude-opus-5-5', 'claude-sonnet-5-5'])
+        self.assertTrue(any('主力模型' in r and '重新对照' in r for r in rec['incomplete_reasons']),
+                        rec['incomplete_reasons'])
+        self.resume(fake, first.run_dir)                                    # 没缺 run 了，再续跑也不能合成完整
+        self.assertFalse(self.load(first.run_dir)['complete'])
 
 
 class CompletenessTest(unittest.TestCase):

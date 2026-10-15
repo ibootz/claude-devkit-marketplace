@@ -357,8 +357,36 @@ def generate(data_dir, name, run_id=None, *, now=None, types=None):
     types = types or _REGISTRY
     now = (now or (lambda: datetime.now(timezone.utc)))()
     repo, run_dir = _find_run(data_dir, name, run_id)
-    with _locked(data_dir, run_dir.name):
-        return _generate(data_dir, name, repo, run_dir, now, types)
+    try:
+        with _locked(data_dir, run_dir.name):
+            return _generate(data_dir, name, repo, run_dir, now, types)
+    except NothingPending as e:
+        # 不带 --run 时仍只取最新一次；它没有待审项，就把较早仍有待审项的运行逐个列出来（拍板 08-2）
+        earlier = [] if run_id is not None else _earlier_with_items(data_dir, repo, run_dir, types)
+        if not earlier:
+            raise
+        lines = ['  - %s（%d 项待判）：pending %s --run %s' % (rid, n, name, rid) for rid, n in earlier]
+        raise NothingPending('%s\n较早的运行里仍有待审项，逐个用 --run 指定生成：\n%s' % (e, '\n'.join(lines))) from None
+
+
+def _earlier_with_items(data_dir, repo, latest_dir, types):
+    """比 latest_dir 早、已结束、仍有待判项的离线对照：[(run_id, 项数)]，按时间先后。只读，不改任何文件。"""
+    out = []
+    for d in sorted(latest_dir.parent.iterdir()):
+        if d.name >= latest_dir.name or not (d / 'run.json').is_file():
+            continue
+        try:
+            rec = _load_run(d)
+            if not isinstance(rec, dict) or rec.get('kind') != 'compare' or _unfinished(rec) \
+                    or resume.RunLock(data_dir, d.name).busy():
+                continue
+            subject = Subject(repo, d, rec)
+            n = sum(len(list(t.collect(subject) or [])) for t in types.all())
+        except Exception:  # noqa: BLE001 —— 只是提示，坏记录或收集出错的运行不列
+            continue
+        if n:
+            out.append((d.name, n))
+    return out
 
 
 class _locked(object):

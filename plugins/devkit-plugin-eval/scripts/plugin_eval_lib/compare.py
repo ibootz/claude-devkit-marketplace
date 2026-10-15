@@ -301,6 +301,9 @@ def finalize_run(arm_records, reasons, *, log, run_id, name, version, plugin_fp,
         if rec['invalid_run_count']:
             reasons.append('%s臂：%d 个 run 出错，判无效不计分%s' % (spec.label, rec['invalid_run_count'],
                                                                resume.usage_limit_note(rec)))
+        if len(rec.get('main_models') or []) > 1:
+            reasons.append('%s臂：续跑时主力模型与首跑不同（%s），前后两段结果不可比，续跑合不成完整；请重新对照'
+                           % (spec.label, ' → '.join(rec['main_models'])))
 
     rec = record.build_run_record(
         run_id=run_id,

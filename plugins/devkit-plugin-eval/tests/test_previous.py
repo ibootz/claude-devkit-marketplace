@@ -96,6 +96,7 @@ class ResolveTest(unittest.TestCase):
         self.assertTrue(res.degraded)
         self.assertEqual(res.reason_kind, 'no-different-version')
         self.assertIn('0.1.0', res.reason)
+        self.assertTrue(res.reason.startswith('新插件首评或从未升过版本号，按基线规则比不装'), res.reason)   # 拍板 05-1
 
     def test_not_in_git_repo_degrades(self):
         d = self.tmp / 'plain' / 'p'
@@ -134,6 +135,7 @@ class ResolveTest(unittest.TestCase):
         self.assertTrue(res.degraded)
         self.assertEqual(res.reason_kind, 'no-different-version')
         self.assertIn('没写 version', res.reason)
+        self.assertIn('新插件首评或从未升过版本号', res.reason)
 
     def test_follows_rename_and_flags_cross_rename(self):
         r = self.repo

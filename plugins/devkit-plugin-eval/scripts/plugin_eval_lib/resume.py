@@ -363,6 +363,14 @@ def _resume_arm(spec, *, old_rec, run_dir, cases, runs, base_ctx, tmp_root, atte
         diff = sorted(new_vals - {rec.get(field)})
         if diff:
             attempt['warnings'].append('%s臂续跑时%s与首跑不同：%s → %s' % (spec.label, what, rec[field], '、'.join(diff)))
+    # 拍板 07-1：单值字段保留首跑值，另记首跑与各次续跑出现过的全部值（按出现先后）。
+    # Claude Code 版本不同照常合并；主力模型不同由 finalize_run 判不完整，再续跑也合不成完整
+    for field, many in (('claude_version', 'claude_versions'), ('main_model', 'main_models')):
+        seen = list(rec.get(many) or ([rec[field]] if rec.get(field) else []))
+        for v in (r.get(field) for r in new_recs):
+            if v and v not in seen:
+                seen.append(v)
+        rec[many] = seen
 
     if merged is None:
         rec.update(score=None, cases={}, invalid_run_count=0, aggregate_result=None, load_issues=no_agg_issues)
