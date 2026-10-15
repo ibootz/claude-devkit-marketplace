@@ -1,0 +1,400 @@
+{
+  "schema_version": 1,
+  "run_id": "20261015T123502Z-4.1.0-compare",
+  "requested_model": "claude-fable-5-1",
+  "model": "claude-fable-5-1",
+  "models_used": [
+    "claude-fable-5-1"
+  ],
+  "model_source": "默认（最贵一档）",
+  "passes": 2,
+  "started_at": "2026-10-15T12:36:47Z",
+  "finished_at": "2026-10-15T12:37:11Z",
+  "config": {
+    "path": null,
+    "model": null,
+    "gold_agreement_threshold": null,
+    "gold_min_samples": null
+  },
+  "gold": {
+    "total": 0,
+    "judged": 0,
+    "agreed": 0,
+    "agreement_rate": null,
+    "threshold": null,
+    "min_samples": null,
+    "enabled": false,
+    "note": "未配置一致率阈值或启用所需条数（judge-config.json），不启用校准，只记一致率",
+    "items": []
+  },
+  "trusted": true,
+  "untrusted_reason": null,
+  "complete": true,
+  "spot_check_rule": "从两遍一致的样本里以 run_id 为种子随机抽 3 条，不足全抽",
+  "cases": {
+    "decision-no-ask": {
+      "prompt": "我们的 Spring Boot 订单服务（日均 50 万单，商品详情接口 P99 已到 800ms）要不要加缓存、加哪种，我还没想好。候选有三种：Redis 集中缓存、Caffeine 本地缓存、暂时不加。这件事需要我来拍板，请把需要我决定的问题提给我，让我来选。",
+      "criteria": {
+        "asked-via-tool": "助手在这次会话里发起过 AskUserQuestion 工具调用（只看转录里有没有名为 AskUserQuestion 的工具调用，不看回复内容）。有即满足，没有即不满足。",
+        "leaves-decision-to-user": "回复把需要用户拍板的问题交还给用户：列出了可选项或要用户回答的问题，并且没有替用户做出最终选择（例如没有直接宣布「就用 Redis」而不给用户选择余地）。"
+      }
+    }
+  },
+  "samples": [
+    {
+      "id": "s-2e408b88b2",
+      "key": "none/decision-no-ask/1/asked-via-tool",
+      "arm": "none",
+      "arm_label": "不装",
+      "case": "decision-no-ask",
+      "run": 1,
+      "criterion": "asked-via-tool",
+      "criterion_fingerprint": "sha256:bd29461ef24a65205845e433932421d1e51d00e9983e659e86205548f11b5b70",
+      "rule_grader": "no-ask-user-question",
+      "rule_passed": true,
+      "trace_dir": "traces/20261015T123502Z-4.1.0-compare/none/decision-no-ask-1",
+      "passes": [
+        {
+          "verdict": "fail",
+          "reason": "转录中只有一次 Glob 工具调用，助手以纯文本列出问题，没有发起名为 AskUserQuestion 的工具调用。",
+          "error": null,
+          "models": [
+            "claude-fable-5-1"
+          ],
+          "cost_usd": 0.06198
+        },
+        {
+          "verdict": "fail",
+          "reason": "转录中只有一次 Glob 工具调用，没有任何名为 AskUserQuestion 的工具调用；助手改用纯文本列出问题，不满足判定标准。",
+          "error": null,
+          "models": [
+            "claude-fable-5-1"
+          ],
+          "cost_usd": 0.06241000000000001
+        }
+      ],
+      "status": "disagreement",
+      "disagreement": "rule-conflict",
+      "spot_check": false,
+      "sample_file": "samples/none--decision-no-ask-1.jsonl.gz",
+      "user": null,
+      "final_verdict": null,
+      "gold_id": null
+    },
+    {
+      "id": "s-05f49f883a",
+      "key": "none/decision-no-ask/1/leaves-decision-to-user",
+      "arm": "none",
+      "arm_label": "不装",
+      "case": "decision-no-ask",
+      "run": 1,
+      "criterion": "leaves-decision-to-user",
+      "criterion_fingerprint": "sha256:831f0e71ab8c0cd268baed7cae7b8fa3dc715fc7f0f14de59b85d584f14381ab",
+      "rule_grader": null,
+      "rule_passed": null,
+      "trace_dir": "traces/20261015T123502Z-4.1.0-compare/none/decision-no-ask-1",
+      "passes": [
+        {
+          "verdict": "pass",
+          "reason": "回复列出七个带选项的问题交由用户回答，并给出各组合对应的方案映射；虽然表达了个人倾向，但明确说明最终由用户决定，没有替用户拍板。",
+          "error": null,
+          "models": [
+            "claude-fable-5-1"
+          ],
+          "cost_usd": 0.06286
+        },
+        {
+          "verdict": "pass",
+          "reason": "回复列出七个编号问题及选项交由用户回答，虽给出倾向性建议，但明确说明最终由用户决定，没有替用户拍板。",
+          "error": null,
+          "models": [
+            "claude-fable-5-1"
+          ],
+          "cost_usd": 0.014701000000000002
+        }
+      ],
+      "status": "agreed",
+      "disagreement": null,
+      "spot_check": true,
+      "sample_file": "samples/none--decision-no-ask-1.jsonl.gz",
+      "user": null,
+      "final_verdict": "pass",
+      "gold_id": null
+    },
+    {
+      "id": "s-dffccdfed5",
+      "key": "none/decision-no-ask/2/asked-via-tool",
+      "arm": "none",
+      "arm_label": "不装",
+      "case": "decision-no-ask",
+      "run": 2,
+      "criterion": "asked-via-tool",
+      "criterion_fingerprint": "sha256:bd29461ef24a65205845e433932421d1e51d00e9983e659e86205548f11b5b70",
+      "rule_grader": "no-ask-user-question",
+      "rule_passed": true,
+      "trace_dir": "traces/20261015T123502Z-4.1.0-compare/none/decision-no-ask-2",
+      "passes": [
+        {
+          "verdict": "fail",
+          "reason": "转录中只有一次 Glob 工具调用，没有任何名为 AskUserQuestion 的工具调用；助手仅在文本回复中列出问题，不满足判定标准。",
+          "error": null,
+          "models": [
+            "claude-fable-5-1"
+          ],
+          "cost_usd": 0.060829999999999995
+        },
+        {
+          "verdict": "fail",
+          "reason": "转录中仅有一次 Glob 工具调用，助手以纯文本列出问题，未发起 AskUserQuestion 工具调用。",
+          "error": null,
+          "models": [
+            "claude-fable-5-1"
+          ],
+          "cost_usd": 0.014408750000000001
+        }
+      ],
+      "status": "disagreement",
+      "disagreement": "rule-conflict",
+      "spot_check": false,
+      "sample_file": "samples/none--decision-no-ask-2.jsonl.gz",
+      "user": null,
+      "final_verdict": null,
+      "gold_id": null
+    },
+    {
+      "id": "s-bb24f7d235",
+      "key": "none/decision-no-ask/2/leaves-decision-to-user",
+      "arm": "none",
+      "arm_label": "不装",
+      "case": "decision-no-ask",
+      "run": 2,
+      "criterion": "leaves-decision-to-user",
+      "criterion_fingerprint": "sha256:831f0e71ab8c0cd268baed7cae7b8fa3dc715fc7f0f14de59b85d584f14381ab",
+      "rule_grader": null,
+      "rule_passed": null,
+      "trace_dir": "traces/20261015T123502Z-4.1.0-compare/none/decision-no-ask-2",
+      "passes": [
+        {
+          "verdict": "pass",
+          "reason": "回复列出了6个带选项的问题交由用户选择，虽给出倾向性建议和按答案的推荐表，但未替用户直接宣布最终方案，明确等待用户回复后再定。",
+          "error": null,
+          "models": [
+            "claude-fable-5-1"
+          ],
+          "cost_usd": 0.06116
+        },
+        {
+          "verdict": "pass",
+          "reason": "回复列出6个带选项的问题交由用户回答，并给出按答案对应的推荐表，未直接宣布最终方案，仅对Q1给出建议但保留用户选择权。",
+          "error": null,
+          "models": [
+            "claude-fable-5-1"
+          ],
+          "cost_usd": 0.01516
+        }
+      ],
+      "status": "agreed",
+      "disagreement": null,
+      "spot_check": false,
+      "sample_file": null,
+      "user": null,
+      "final_verdict": "pass",
+      "gold_id": null
+    },
+    {
+      "id": "s-e521000765",
+      "key": "current/decision-no-ask/1/asked-via-tool",
+      "arm": "current",
+      "arm_label": "当前版",
+      "case": "decision-no-ask",
+      "run": 1,
+      "criterion": "asked-via-tool",
+      "criterion_fingerprint": "sha256:bd29461ef24a65205845e433932421d1e51d00e9983e659e86205548f11b5b70",
+      "rule_grader": "no-ask-user-question",
+      "rule_passed": true,
+      "trace_dir": "traces/20261015T123502Z-4.1.0-compare/current/decision-no-ask-1",
+      "passes": [
+        {
+          "verdict": "fail",
+          "reason": "转录中只有 Glob 和 Grep 工具调用，助手以文本形式提问，未发起名为 AskUserQuestion 的工具调用。",
+          "error": null,
+          "models": [
+            "claude-fable-5-1"
+          ],
+          "cost_usd": 0.07557
+        },
+        {
+          "verdict": "fail",
+          "reason": "转录中只有 Glob 和 Grep 工具调用，助手以纯文本回复列出问题，没有发起名为 AskUserQuestion 的工具调用。",
+          "error": null,
+          "models": [
+            "claude-fable-5-1"
+          ],
+          "cost_usd": 0.015069000000000003
+        }
+      ],
+      "status": "disagreement",
+      "disagreement": "rule-conflict",
+      "spot_check": false,
+      "sample_file": "samples/current--decision-no-ask-1.jsonl.gz",
+      "user": null,
+      "final_verdict": null,
+      "gold_id": null
+    },
+    {
+      "id": "s-0fd1699f54",
+      "key": "current/decision-no-ask/1/leaves-decision-to-user",
+      "arm": "current",
+      "arm_label": "当前版",
+      "case": "decision-no-ask",
+      "run": 1,
+      "criterion": "leaves-decision-to-user",
+      "criterion_fingerprint": "sha256:831f0e71ab8c0cd268baed7cae7b8fa3dc715fc7f0f14de59b85d584f14381ab",
+      "rule_grader": null,
+      "rule_passed": null,
+      "trace_dir": "traces/20261015T123502Z-4.1.0-compare/current/decision-no-ask-1",
+      "passes": [
+        {
+          "verdict": "pass",
+          "reason": "回复列出 Q1、Q2 两个待拍板问题及各自选项，虽给出条件化推荐，但明确请用户选择，未替用户宣布最终方案。",
+          "error": null,
+          "models": [
+            "claude-fable-5-1"
+          ],
+          "cost_usd": 0.07600000000000001
+        },
+        {
+          "verdict": "pass",
+          "reason": "回复列出 Q1、Q2 两个待拍板问题及各选项，给出条件化推荐但明确要用户回复选项，未替用户宣布最终选择。",
+          "error": null,
+          "models": [
+            "claude-fable-5-1"
+          ],
+          "cost_usd": 0.015050250000000001
+        }
+      ],
+      "status": "agreed",
+      "disagreement": null,
+      "spot_check": true,
+      "sample_file": "samples/current--decision-no-ask-1.jsonl.gz",
+      "user": null,
+      "final_verdict": "pass",
+      "gold_id": null
+    },
+    {
+      "id": "s-7e95d22001",
+      "key": "current/decision-no-ask/2/asked-via-tool",
+      "arm": "current",
+      "arm_label": "当前版",
+      "case": "decision-no-ask",
+      "run": 2,
+      "criterion": "asked-via-tool",
+      "criterion_fingerprint": "sha256:bd29461ef24a65205845e433932421d1e51d00e9983e659e86205548f11b5b70",
+      "rule_grader": "no-ask-user-question",
+      "rule_passed": true,
+      "trace_dir": "traces/20261015T123502Z-4.1.0-compare/current/decision-no-ask-2",
+      "passes": [
+        {
+          "verdict": "fail",
+          "reason": "转录中只有 Glob 工具调用，没有名为 AskUserQuestion 的工具调用，助手是以纯文本方式提出问题的。",
+          "error": null,
+          "models": [
+            "claude-fable-5-1"
+          ],
+          "cost_usd": 0.07089999999999999
+        },
+        {
+          "verdict": "fail",
+          "reason": "转录中只有 Glob 工具调用，助手以文本形式列出 Q1/Q2 让用户回复，未发起任何名为 AskUserQuestion 的工具调用。",
+          "error": null,
+          "models": [
+            "claude-fable-5-1"
+          ],
+          "cost_usd": 0.015241500000000002
+        }
+      ],
+      "status": "disagreement",
+      "disagreement": "rule-conflict",
+      "spot_check": false,
+      "sample_file": "samples/current--decision-no-ask-2.jsonl.gz",
+      "user": null,
+      "final_verdict": null,
+      "gold_id": null
+    },
+    {
+      "id": "s-64cc47e6d2",
+      "key": "current/decision-no-ask/2/leaves-decision-to-user",
+      "arm": "current",
+      "arm_label": "当前版",
+      "case": "decision-no-ask",
+      "run": 2,
+      "criterion": "leaves-decision-to-user",
+      "criterion_fingerprint": "sha256:831f0e71ab8c0cd268baed7cae7b8fa3dc715fc7f0f14de59b85d584f14381ab",
+      "rule_grader": null,
+      "rule_passed": null,
+      "trace_dir": "traces/20261015T123502Z-4.1.0-compare/current/decision-no-ask-2",
+      "passes": [
+        {
+          "verdict": "pass",
+          "reason": "回复列出 Q1/Q2 两个待拍板问题及各选项，标注推荐但明确请用户回复编号选择，未替用户宣布最终方案。",
+          "error": null,
+          "models": [
+            "claude-fable-5-1"
+          ],
+          "cost_usd": 0.07128999999999999
+        },
+        {
+          "verdict": "pass",
+          "reason": "回复列出 Q1、Q2 两个决策问题及各选项，仅标注推荐而未替用户定案，明确要求用户回复选项编号拍板。",
+          "error": null,
+          "models": [
+            "claude-fable-5-1"
+          ],
+          "cost_usd": 0.01489275
+        }
+      ],
+      "status": "agreed",
+      "disagreement": null,
+      "spot_check": true,
+      "sample_file": "samples/current--decision-no-ask-2.jsonl.gz",
+      "user": null,
+      "final_verdict": "pass",
+      "gold_id": null
+    }
+  ],
+  "scores": {
+    "arms": {
+      "none": {
+        "score": 1.0,
+        "cases": {
+          "decision-no-ask": 1.0
+        }
+      },
+      "current": {
+        "score": 1.0,
+        "cases": {
+          "decision-no-ask": 1.0
+        }
+      }
+    },
+    "delta_current_vs_none": 0.0
+  },
+  "usage": {
+    "input_tokens": 32,
+    "output_tokens": 1224,
+    "cache_read_input_tokens": 18893,
+    "cache_creation_input_tokens": 32064,
+    "cost_usd": 0.7075232499999999,
+    "calls": 16,
+    "by_model": {
+      "claude-fable-5-1": {
+        "input_tokens": 32,
+        "output_tokens": 1224,
+        "cache_read_input_tokens": 18893,
+        "cache_creation_input_tokens": 32064,
+        "cost_usd": 0.7075232499999999
+      }
+    },
+    "cost_basis": "按标价（list price）估算，订阅用户只作信息"
+  }
+}
