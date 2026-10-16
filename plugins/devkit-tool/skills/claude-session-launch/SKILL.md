@@ -1,6 +1,6 @@
 ---
 name: claude-session-launch
-description: 再起一个 Claude Code 会话来干活——后台会话用 `claude --bg`（立即返回 8 位短 id，配 agents/attach/logs/stop 四个管理命令），要人盯着看的前台会话用两条 osascript 在 iTerm2 里弹新 tab。用户说「起一个后台会话/后台 agent」「并行开几个 claude 跑」「开个新 tab 跑 claude」「让另一个会话去做 X」「怎么看那个后台会话在干什么」「停掉那个后台会话」「claude --bg / claude agents / claude attach / claude logs / claude stop 怎么用」「claude logs 出来一堆乱码转义」「新开的 tab 跑在错的目录里」「pgrep iTerm2 查不到进程」时使用。**起会话之前就读**，别等 cwd 落错仓或 logs 刷出满屏 ANSI 才来。派活给一个**已经存在**的会话是另一件事，走 ListAgents + SendMessage。
+description: 再起一个 Claude Code 会话来干活——后台会话用 `claude --allow-dangerously-skip-permissions --bg -n <名字>`（立即返回 8 位短 id，配 agents/attach/logs/stop 四个管理命令；`-n` 就是 `claude agents` 面板里显示的名字），要人盯着看的前台会话用两条 osascript 在 iTerm2 里弹新 tab。用户说「起一个后台会话/后台 agent」「用 cy 开几个窗口」「给新会话起个名字/指定 claude agents 里显示的名字」「并行开几个 claude 跑」「开个新 tab 跑 claude」「让另一个会话去做 X」「怎么看那个后台会话在干什么」「停掉那个后台会话」「claude --bg / claude agents / claude attach / claude logs / claude stop 怎么用」「claude logs 出来一堆乱码转义」「新开的 tab 跑在错的目录里」「pgrep iTerm2 查不到进程」时使用。**起会话之前就读**，别等 cwd 落错仓或 logs 刷出满屏 ANSI 才来。派活给一个**已经存在**的会话是另一件事，走 ListAgents + SendMessage。
 ---
 
 # 起一个新的 Claude Code 会话
@@ -19,7 +19,7 @@ description: 再起一个 Claude Code 会话来干活——后台会话用 `clau
 失联了。**默认选后台**，只有 Human 明确要「弹出来我盯着」时才走前台——它会抢屏。
 
 以下命令行选项来自本机 `claude --help` / `claude agents --help` 的实际输出（Claude Code
-v2.1.237，macOS）。**引用选项时以当前 `claude --help` 输出为准**，不同版本会增删。
+v2.1.237，macOS；默认启动参数与起名两节于 v2.1.300 复核）。**引用选项时以当前 `claude --help` 输出为准**，不同版本会增删。
 
 ---
 
@@ -28,8 +28,12 @@ v2.1.237，macOS）。**引用选项时以当前 `claude --help` 输出为准**�
 ### 启动（已实测）
 
 ```bash
-claude --bg -n "<会话显示名>" --model sonnet --permission-mode acceptEdits "<初始 prompt>"
+claude --allow-dangerously-skip-permissions --bg -n "<会话显示名>" "<初始 prompt>"
 ```
+
+这条默认命令等于人手敲 `claude --allow-dangerously-skip-permissions`（常被设成 shell 别名，如
+`cy`）再加 `--bg`。别名只在交互式 shell 里展开，Bash 工具里写展开后的全称。用户要指定模型或
+权限模式时，再追加 `--model <别名或全名>` / `--permission-mode <模式>`。
 
 四件必须知道的事：
 
@@ -37,18 +41,31 @@ claude --bg -n "<会话显示名>" --model sonnet --permission-mode acceptEdits 
    的后台会话时，给个占位 prompt（如「待命，等待后续 SendMessage 指令」），起来之后再用
    `SendMessage` 派活。
 2. **会话在当前工作目录下启动**，cwd 与执行命令时一致。要它在别的仓干活，用
-   `(cd /abs/path && claude --bg ...)` 起——**不要发裸 `cd`**（会污染本会话 cwd，且本机
-   devkit-cd-blocker 插件硬拦）。
-3. **`-n` 是显示名，同时是 `SendMessage` 的寻址键**。接受中文（已实测）。**同名 latest wins**
-   ——后建的同名会话会顶掉先建那个的可寻址性，所以同一批并行起多个时名字必须互相可辨（把分片
-   依据写进名字，别都叫 `probe-x`）。
-4. **`--permission-mode` 要按任务实际需要的写域先给够**。后台会话无人值守，没人点权限确认框，
-   给窄了它会卡在那里。可选值：`acceptEdits` / `auto` / `bypassPermissions` / `manual` /
-   `dontAsk` / `plan`。`bypassPermissions` 需配合 `--dangerously-skip-permissions` 或
-   `--allow-dangerously-skip-permissions`（**这一组的实际行为未实测**；它放开全部权限检查，
-   要用先向 Human 取当轮授权，不要自己顺手加上）。
+   `(cd /abs/path && claude --allow-dangerously-skip-permissions --bg ...)` 起——**不要发裸 `cd`**
+   （会污染本会话 cwd，且本机 devkit-cd-blocker 插件硬拦）。
+3. **每个会话都起一个人一眼认得出的名字**，规则见下一节「起名」。
+4. **`--allow-dangerously-skip-permissions` 只是把 bypass 模式设为可切换，不直接开启它**
+   （`claude agents --help` 原文：`Make bypass-permissions mode available ... without defaulting to it`）。
+   会话的初始权限模式跟随用户 settings 的 `permissions.defaultMode`；Human attach 进去后可以按
+   Shift+Tab 切到 bypass。后台会话无人值守，没人点权限确认框，所以默认带上它，Human 接管时不必
+   重起会话。直接**开启** bypass 的写法——`--permission-mode bypassPermissions` 或
+   `--dangerously-skip-permissions`——会放开全部权限检查，要用先向 Human 取当轮授权。
 
 `--model` 接受别名（`sonnet` / `opus` / `fable`）或全名（如 `claude-opus-5`）。
+
+### 起名：`-n` 就是 `claude agents` 面板里的名字（已实测）
+
+`-n` 一个参数同时决定三处，起会话时就给，不留到事后改：
+
+- `claude agents` 面板与 `claude agents --json` 的 `name` 字段；`--help` 原文另列 prompt 输入框、
+  `/resume` 列表与终端标题；
+- `SendMessage` 的寻址键；
+- 会话 jsonl 里的 `custom-title` 与 `agent-name` 两行。2026-10-15 实测 4 个后台会话从启动到结束
+  一直保持 `-n` 给的名字（各 14～16 条记录），装着 devkit-session-auto-title 也没被自动标题覆盖。
+
+名字写成 `<分片依据>-<任务短语>`，如 `票13-产物落盘`、`查配置层-加载顺序`：Human 在面板里扫一眼就
+知道哪个会话在干什么。接受中文。**同名 latest wins**——后建的同名会话会顶掉先建那个的可寻址性，
+同一批并行起多个时把分片依据写进名字，互相可辨。
 
 ### 启动后的返回（已实测，原文照抄）
 
@@ -114,7 +131,7 @@ for s in json.load(sys.stdin):
 
 ```bash
 osascript -e 'tell application "iTerm" to tell current window to create tab with default profile' \
-          -e 'tell application "iTerm" to tell current session of current window to write text "cd /absolute/target/dir && claude -n 会话名"'
+          -e 'tell application "iTerm" to tell current session of current window to write text "cd /absolute/target/dir && claude --allow-dangerously-skip-permissions -n 会话名"'
 ```
 
 `create tab` 之后 `current session of current window` **已经指向新建那个 tab**，不必自己传句柄，
@@ -127,7 +144,8 @@ osascript -e 'tell application "iTerm" to tell current window to create tab with
 `/Users/zhangq/Workspace/mine/claude-devkit-marketplace`——另一个 tab 的目录。
 
 **这个错误不报错**：会话正常启动，只是在错的仓里干活。所以 `write text` 的内容一律写成
-`cd /absolute/target/dir && claude ...`，绝对路径，不省。
+`cd /absolute/target/dir && claude --allow-dangerously-skip-permissions -n <名字> ...`，绝对路径，不省；
+命名规则与后台会话相同。
 
 ### AppleScript 里的应用名是 `iTerm`，不是 `iTerm2`（已实测）
 
@@ -171,7 +189,11 @@ Bash 工具 `run_in_background`」那条约束的管辖对象**，直接前台�
 - **`claude --tmux`**：选项确实存在（`--help` 原文：`Create a tmux session for the worktree
   (requires --worktree). Uses iTerm2 ... --tmux=classic for traditional tmux.`），**依赖
   `--worktree`，单独给无效**。tmux 用户可能有更好的路径，但本机未实测。
-- **`--bg` 配 `bypassPermissions`** 的实际行为。
+- **启动后再改名**：attach 进会话后用 `/rename` 能改标题，但 `claude agents` 面板的名字与 `SendMessage`
+  寻址键是否跟着变未实测。需要改名时优先停掉重起一个带新 `-n` 的会话。
+- **`defaultMode` 不是 `bypassPermissions` 的机器**上，带 `--allow-dangerously-skip-permissions` 起的
+  后台会话初始是什么模式。本机 `defaultMode` 为 `bypassPermissions`，实测 4 个会话都记
+  `permissionMode:"bypassPermissions"`，分不出是 flag 还是 settings 的作用。
 
 要用到上面任何一条，先自己验一次再写进回复，不要照抄这一节的措辞当结论。
 
