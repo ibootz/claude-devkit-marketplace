@@ -189,6 +189,40 @@ print("\n[7] 判据理由文案带得出「为什么」")
 _, reason = pr.url_verdict(rec("0.3.4"), remote_version="0.3.5", remote_sha12="")
 check("版本落后的理由里同时出现新旧版本号", ("0.3.4" in reason and "0.3.5" in reason), True)
 
+print("\n[8] cache_diff：两边路径格式不同也不能把在用版本当孤儿")
+# 实测 Windows：installed_plugins.json 记 C:\...（反斜杠），Git Bash find 给 /c/...，
+# 直接文字比对会把全部在用版本判成「磁盘有、配置未引用」。
+if os.name == "nt":
+    orphans, missing = pr.cache_diff(
+        [r"C:\Users\u\.claude\plugins\cache\m\p\1.0.0"],
+        ["/c/Users/u/.claude/plugins/cache/m/p/1.0.0", "/c/Users/u/.claude/plugins/cache/m/p/0.9.0"],
+    )
+    check("MSYS 形态与反斜杠形态视为同一路径", orphans, ["/c/Users/u/.claude/plugins/cache/m/p/0.9.0"])
+    check("反向检查为空", missing, [])
+    check("盘符大小写不敏感", pr.norm_path("c:/A/b") == pr.norm_path(r"C:\a\B"), True)
+orphans, missing = pr.cache_diff(["/x/m/p/1.0.0/"], ["/x/m/p/1.0.0", "/x/m/p/0.9.0"])
+check("末尾斜杠不影响比对", orphans, ["/x/m/p/0.9.0"])
+_, missing = pr.cache_diff(["/x/m/p/2.0.0"], ["/x/m/p/1.0.0"])
+check("配置引用但磁盘缺失 → missing 非空", missing, ["/x/m/p/2.0.0"])
+
+print("\n[9] loaded_versions：刷新前快照里的版本要从可删清单里剔掉")
+check(
+    "按 (marketplace, plugin, version) 取",
+    pr.loaded_versions({"plugins": {"p@m": [{"version": "1.0.0"}, {"version": "0.9.0"}]}}),
+    {("m", "p", "1.0.0"), ("m", "p", "0.9.0")},
+)
+check("快照缺失 → 空集", pr.loaded_versions(None), set())
+
+print("\n[10] scope_lag_note：项目级记录比全局旧时点名")
+_plugins = {"t@m": [{"scope": "user", "version": "0.130.2"}, {"scope": "project", "version": "0.81.0"}]}
+check("project 落后 user → 有提示", "0.130.2" in pr.scope_lag_note("t@m", _plugins["t@m"][1], _plugins), True)
+check("user 记录自身 → 无提示", pr.scope_lag_note("t@m", _plugins["t@m"][0], _plugins), "")
+check(
+    "只有 project 记录 → 无提示",
+    pr.scope_lag_note("t@m", {"scope": "project", "version": "1"}, {"t@m": [{"scope": "project", "version": "1"}]}),
+    "",
+)
+
 if FAILED:
     print(f"\n{len(FAILED)} 条未通过：")
     for f in FAILED:

@@ -167,6 +167,8 @@ diff <(jq -S . /tmp/ip_before.json) <(jq -S . ~/.claude/plugins/installed_plugin
 
 探测输出里若出现同一个 id 在多个项目目录下**版本号落后好几个大版本**（典型实例：`sdlc@ai-sdlc` 在 12 个项目目录下横跨 `3.3.x` 到 `3.7.x`，市场源已到 `3.12.2`），**照常全部刷新，不停下来询问**。
 
+同一 id 的 project/local 记录与 user 记录版本不同时，探测器在理由后追加「user scope 为 X，该项目内实际加载的是本条 Y」：在那个项目目录里启动的会话加载的是项目级这份，全局刷得再新也不生效。最常见的成因是只跑了不带 `--scope` 的 `claude plugin update <id>`（默认只刷 user scope），实测 `tech-support@tech-support-plugin` 全局 `0.130.2`、工作仓项目级停在 `0.81.0`，在工作仓里排查时看到的一直是旧版行为。
+
 这类落后有两种成因：**确实漏刷**（项目很久没打开过）与**有意钉版**（项目依赖旧版行为）。从配置里区分不出这两者；按用户约定，默认当漏刷处理、一律拉平。代价是有意钉版的项目下次启动时加载的 skill / hook 行为会变，所以刷完必须在报告里**逐条列出跨大版本升级的记录**（id、`projectPath`、旧版本 -> 新版本），让用户能事后发现被顶掉的钉版并自行回退。
 
 **唯一例外**：用户在当轮明确指定某些项目保持旧版时，先从 `/tmp/plugins_to_refresh.txt` 里删掉对应行再跑循环。
@@ -233,38 +235,30 @@ du -sch ~/.claude/plugins/cache/temp_git_*/ | tail -1
 
 **绝对不要按"每个插件保留最新版本、删掉其余"来清理。** 同一插件在不同项目目录下（`scope` 为 `project`）会各自钉住不同版本，"最新"只对当前项目成立。按"保留最新"会删掉其他项目正在使用的缓存，那些项目下次启动会加载失败或被迫重新下载。具体反例（`sdlc@ai-sdlc` 12 条 project 记录横跨 4 个版本等）见 `references/verification-log.md`「多版本钉版反例」。
 
-唯一正确的判据是：把 `installed_plugins.json` 里 `.plugins[][].installPath` 的**全集**作为白名单，白名单之外的三级目录才是候选。注意 `.plugins` 的每个值是**数组**（每个 scope 一条记录，各有自己的 `installPath` / `version`），所以 jq 必须写 `.plugins[][]` 展开两层，只取第一条会把绝大多数在用版本误判成垃圾。
+唯一正确的判据是：把 `installed_plugins.json` 里 `.plugins[][].installPath` 的**全集**作为白名单，`cache/<marketplace>/<plugin>/<version>` 这一层里白名单之外的目录才是候选。`.plugins` 的每个值是**数组**（每个 scope 一条记录，各有自己的 `installPath` / `version`），两层都要展开。
 
-先跑 dry-run，只统计不删除：
+**比对前两边路径必须统一格式，所以这一步用探测器的 `cleanup` 阶段做，不用 `jq` + `find` + `comm` 拼。** Windows 上 `installPath` 记的是 `C:\Users\...`（反斜杠），Git Bash 的 `find` 列出来是 `/c/Users/...`，按文字比对时**每一个在用版本都落进差集**、被当成孤儿。探测器对两边做同一套规范化（盘符形态、分隔符、大小写、末尾斜杠）后再求差集，并顺带完成反向检查与下面「必须剔除的那一项」：
 
 ```bash
-# 白名单：所有 scope 引用到的 installPath
-jq -r '[.plugins[][] | .installPath] | unique | .[]' ~/.claude/plugins/installed_plugins.json | sort > /tmp/cache_whitelist.txt
-# 磁盘实际：cache/<marketplace>/<plugin>/<version> 恰好是第 3 层，temp_git_* 已在 (a) 单独处理故排除
-find ~/.claude/plugins/cache -mindepth 3 -maxdepth 3 -type d -not -path '*/temp_git_*' | sort > /tmp/cache_actual.txt
-# 差集：磁盘有、配置未引用 = 可删候选
-comm -13 /tmp/cache_whitelist.txt /tmp/cache_actual.txt > /tmp/cache_orphan.txt
-echo "白名单 $(wc -l < /tmp/cache_whitelist.txt) / 磁盘 $(wc -l < /tmp/cache_actual.txt) / 可删 $(wc -l < /tmp/cache_orphan.txt)"
-[ -s /tmp/cache_orphan.txt ] && du -sch $(cat /tmp/cache_orphan.txt) | tail -1
-# 反向检查（必须为空）：配置引用了但磁盘不存在
-comm -23 /tmp/cache_whitelist.txt /tmp/cache_actual.txt
+python3 "$PROBE" --stage cleanup     # dry-run：只报告白名单 / 磁盘 / 未引用 / 可删数与体积，可删清单写进 /tmp/cache_orphan.txt
+python3 "$PROBE" --stage cleanup --apply   # 真删
 ```
+
+`--apply` 在两种情况下拒绝删除并 `exit=1`：反向检查非空（配置引用了但磁盘不存在），或第三步的刷新前快照 `/tmp/ip_before.json` 不存在（没法判断哪个版本是本会话正在加载的）。
 
 清理收益随执行频率快速衰减，且大头始终在白名单内的在用版本里。如实告知用户这个量级（典型 10~700M，**不是**预期值），不要暗示清理能显著省空间。两次实测的差集规模对照见 `references/verification-log.md`「缓存清理两次差集规模」。
 
-**反向检查那一行必须输出为空**。若非空，说明有插件的配置指向了磁盘上不存在的缓存目录，缓存状态本身已异常——此时不要删任何东西，先回到第三步重新刷新把实体补齐，再重跑 dry-run。
+**反向检查必须为空**。非空说明有插件的配置指向了磁盘上不存在的缓存目录，缓存状态本身已异常——先回到第三步重新刷新把实体补齐，再重跑 dry-run。
 
-**默认全量清理，无需征询**：反向检查为空且存在差集候选时，直接执行删除，无需停下向用户提问。如实报告清理的目录数与释放的体积即可。**唯一例外**见下方「必须剔除的那一项」。
+**合理性检查**：「未引用」数应远小于「磁盘」数（本机实测 64 个版本目录里 7 个未引用）。两者接近时先怀疑比对本身出了错，不要 `--apply`。
 
-```bash
-xargs rm -rf < /tmp/cache_orphan.txt
-```
+**默认全量清理，无需征询**：dry-run 反向检查为空且存在可删候选时，直接跑 `--apply`，无需停下向用户提问。如实报告清理的目录数与释放的体积即可。
 
-删除的代价：被删版本在需要降级/回滚时要重新从市场源下载，属于可恢复但需要网络。如果用户在当轮明确要求保留回滚版本，才从 `/tmp/cache_orphan.txt` 里手动剔除每个插件最近的 1-2 个版本。
+删除的代价：被删版本在需要降级/回滚时要重新从市场源下载，属于可恢复但需要网络。如果用户在当轮明确要求保留回滚版本，先从 `/tmp/cache_orphan.txt` 里删掉要留的行，再用 `while IFS= read -r orphan_dir; do rm -rf "$orphan_dir"; done < /tmp/cache_orphan.txt` 按剩余清单删，不跑 `--apply`（它会重新计算清单）。
 
-**必须剔除的那一项：本会话正在加载的版本目录。** 上面那条「无需征询」有一条硬除外——孤儿里若有某个 `version` 就是**当前会话加载的那一份**，删掉它不会「下次启动再下载」，而是**本会话此后每轮工具调用都撞 hook 报错**，直到 `/reload-plugins` 把 hook 路径重指到新版。原因是 hook 命令在会话启动时就把 `${CLAUDE_PLUGIN_ROOT}` 展开成了带版本号的绝对路径（形如 `…/devkit-tool/6.21.0/hooks/codegraph-hint.js`），正在跑的进程不会因为配置文件改了而重新解析。
+**必须剔除的那一项：本会话正在加载的版本目录（`cleanup` 阶段已自动剔除，输出里标「保留」）。** 孤儿里若有某个 `version` 就是**当前会话加载的那一份**，删掉它不会「下次启动再下载」，而是**本会话此后每轮工具调用都撞 hook 报错**，直到 `/reload-plugins` 把 hook 路径重指到新版。原因是 hook 命令在会话启动时就把 `${CLAUDE_PLUGIN_ROOT}` 展开成了带版本号的绝对路径（形如 `…/devkit-tool/6.21.0/hooks/codegraph-hint.js`），正在跑的进程不会因为配置文件改了而重新解析。
 
-机械判据：拿第三步存的 `/tmp/ip_before.json` 对照 `/tmp/cache_orphan.txt`——某孤儿的 `<version>` 等于**刷新前**该插件的记录版本，它极可能就是本会话启动时加载的那份，剔掉。
+机械判据（探测器内置）：拿第三步存的 `/tmp/ip_before.json` 对照孤儿——某孤儿的 `(marketplace, plugin, version)` 等于**刷新前**某条记录，它极可能就是本会话启动时加载的那份，剔掉。
 
 剔掉不累积：那个目录下次 sync 时仍在差集里，那时会话已重启或已 reload，会被正常收走。收益也小（实测 8 个孤儿合计 904K），所以为这一条保守剔除不心疼。
 
@@ -286,6 +280,9 @@ xargs rm -rf < /tmp/cache_orphan.txt
 | `--scope project` 回执 `already at the latest version` 但前后 0 行 diff | cwd 隐式定位、不接受路径参数，cwd 不匹配时打印假成功。必须 `cd` 进该记录**自己的** `projectPath`，见第三步 |
 | `cache/` 体积远大于已安装插件之和 | `temp_git_*` 残留。两份配置 grep 计数都为 0 即可整批删，见第五步 (a) |
 | 清理历史版本缓存后某项目插件失效或被迫重新下载 | 按"只保留最新版本"删了。必须用 `.plugins[][].installPath` 全集做白名单差集，见第五步 (b) |
+| Windows 上白名单差集把全部在用版本列成可删 | `installPath` 是 `C:\...`、Git Bash `find` 给 `/c/...`，文字比对永不相等。用 `--stage cleanup`（两边先规范化再比），见第五步 (b) |
+| Windows 上 bash 循环读到的清单是空的或上一轮的 | 原生 Python 把 `/tmp/x` 解析成 `C:\tmp\x`，Git Bash 的 `/tmp` 是 `%TEMP%`。探测器在 Windows 上默认写 `%TEMP%`，与 bash 的 `/tmp` 同一目录；自定义 `--out` 时两边用同一个路径 |
+| 全局插件是新版，在某个项目里用到的却是旧版 | 该项目有 project/local scope 记录钉着旧版，项目级优先加载。只刷 user scope 不会动它。按第二步清单逐条刷，探测器会在理由里标出比 user scope 落后的项目记录 |
 | 一次完整刷新要跑 30~50 分钟 | 没做探测剪枝，把两类固定开销全付了一遍。先跑 `probe-refresh.py` 两阶段（合计约 8.5s），只对真有变化的调 CLI |
 | 并发跑多个 `plugin update` 想加速 | 它们读改写同一 `installed_plugins.json` 且 CLI 内部无文件锁；flock 包住则退化成串行、零加速。加速只能靠减少调用次数 |
 | `timeout 20 git ls-remote` 全部"探测失败"且总耗时几十毫秒 | macOS 默认无 `timeout` 二进制（Homebrew 的叫 `gtimeout`），命令整体 command not found，输出为空被误判。先 `command -v timeout gtimeout` 确认；探测器脚本走 python `subprocess.run(..., timeout=)` |
@@ -313,6 +310,6 @@ xargs rm -rf < /tmp/cache_orphan.txt
 - [ ] 所有循环 / 临时变量都**没有**取名 `path` / `fpath` / `cdpath` / `manpath` 等 zsh 绑定变量名（会静默覆写 `$PATH`，表象是"jq 没装"）
 - [ ] 每条 `claude plugin update` 的输出都在预期的三种正常结束态之一：`already at the latest version`、`updated from X to Y`、`refreshed from source`
 - [ ] 关键插件已走**写后回读**核实：`installed_plugins.json` 的 `installPath`、磁盘上该缓存目录、目录内 `.claude-plugin/plugin.json` 的 `version` 三处一致（只看 CLI 回执不足以证明落盘）
-- [ ] 若执行了第五步清理：确认在第三步刷新**之后**做的；`temp_git_*` 零引用已 grep 核实；历史版本走的是 `.plugins[][].installPath` 白名单差集；反向检查（配置引用但磁盘缺失）输出为空；已自动执行全量清理并报告释放体积（用户明确要求保留回滚版本时除外）；**且已按「必须剔除的那一项」剔掉本会话正在加载的版本目录**（判据：孤儿的 `<version>` 等于 `/tmp/ip_before.json` 里该插件的刷新前版本）
+- [ ] 若执行了第五步清理：确认在第三步刷新**之后**做的；`temp_git_*` 零引用已 grep 核实；历史版本走的是 `--stage cleanup`（路径规范化后的白名单差集，不是 `jq` + `find` + `comm` 文字比对）；反向检查为空、「未引用」数远小于「磁盘」数；已 `--apply` 并报告释放体积（用户明确要求保留回滚版本时除外）；本会话正在加载的版本在输出里标为「保留」
 - [ ] 已明确告知用户让新版本生效的**最小动作**：默认建议 `/reload-plugins`；仅当新版本改动了 `SessionStart` / `SessionEnd` / `PreCompact` 挂载点时才说”必须重启”（判断依据是**同时查两处**：`plugin.json` 的 `hooks` 字段 + `hooks/` 目录下的脚本文件名约定，见第四步检测命令；只查 `plugin.json` 会漏掉目录式 hook，误判”无需重启”）
 - [ ] 生效后的核实看的是**行为**（下一轮 hook 注入文本 / skill 内容确实变了），不是 reload 回执里的插件数量

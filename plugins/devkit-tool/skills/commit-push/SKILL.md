@@ -72,7 +72,7 @@ git push                        # 无 upstream 时 git push -u origin <当前分
 命中插件判据时，提交推送只是半程——本机装着的还是旧缓存。收尾两步：
 
 1. **升版本号再提交**。CLI 判「有无新版」比的是 version，不升则 update 永远 no-op、回执还绿。版本在插件 manifest 与市场清单多处登记，以仓内规约为准（本仓形态：plugin.json ×2 + marketplace.json ×2 四处同步，pre-commit 的 check-versions.js 强制校验）。
-2. **push 完成后刷两层缓存**：`claude plugin marketplace update <marketplace>` 与 `claude plugin update <插件名>@<marketplace>`。判据、url 源坑、project scope 陷阱见 `marketplace-cache-sync` skill，按其流程走。
+2. **push 完成后刷两层缓存**：`claude plugin marketplace update <marketplace>`，再按 `marketplace-cache-sync` 第二、三步刷**该插件的全部安装记录**（user 与各项目目录下的 project/local scope 逐条刷）。只跑不带 `--scope` 的 `claude plugin update <插件名>@<marketplace>` 只刷 user scope，项目级记录照旧钉着老版本，在那些项目里启动的会话加载的仍是旧版。
 
 刷完提示用户：**运行 `/reload-plugins` 刷新当前会话**（skill/hook/agent 热载；仅 SessionStart/SessionEnd/PreCompact 生命周期挂载点变动才需重启会话）。
 

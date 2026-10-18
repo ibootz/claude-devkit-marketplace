@@ -15,6 +15,8 @@
                    .claude-plugin/plugin.json（纯本地，条目 version 仅兜底）；url 独立仓源
                    读远端仓根 .claude-plugin/plugin.json（一次 HTTP GET，不 clone），
                    按远端仓去重后本机只有十几个请求。
+  --stage cleanup  刷新完成之后，用 installPath 全集做白名单、算出 cache/ 下未被引用的历史版本目录。
+                   默认 dry-run 只报告；--apply 才删。两边路径统一规范化后再比，见 norm_path。
 
 输出一律是「给人看的诊断 + 机器可读清单文件」两部分，清单文件路径见 --out 参数。
 """
@@ -23,17 +25,45 @@ import argparse
 import concurrent.futures as futures
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
-PLUGINS_HOME = os.path.expanduser("~/.claude/plugins")
+PLUGINS_HOME = os.path.normpath(os.path.expanduser("~/.claude/plugins"))
 MARKETPLACES = os.path.join(PLUGINS_HOME, "marketplaces")
+CACHE = os.path.join(PLUGINS_HOME, "cache")
 INSTALLED = os.path.join(PLUGINS_HOME, "installed_plugins.json")
 USER_SETTINGS = os.path.expanduser("~/.claude/settings.json")
+
+# 清单文件目录必须与 SKILL.md 里 bash 片段读的 /tmp 是同一个目录。
+# Windows 上原生 Python 把 "/tmp/x" 解析成 C:\tmp\x，而 Git Bash 的 /tmp 映射到 %TEMP%
+# （C:\Users\<u>\AppData\Local\Temp）——两边各读各写，bash 循环会读到不存在或上一轮残留的清单。
+# macOS 的 tempfile.gettempdir() 是 /var/folders/...，不是 /tmp，所以只在 Windows 上换。
+TMP_DIR = tempfile.gettempdir() if os.name == "nt" else "/tmp"
+
+_MSYS_DRIVE = re.compile(r"^/([a-zA-Z])(/|$)")
+
+
+def norm_path(p):
+    """把一条路径规范成可直接做集合比对的形态。
+
+    installed_plugins.json 在 Windows 上记的是 `C:\\Users\\...`，Git Bash 的 find / ls 给出的是
+    `/c/Users/...`，大小写与分隔符也可能不一致。不统一就拿文字比，所有在用版本都会落进
+    「磁盘有、配置未引用」的差集，被当成孤儿删掉。纯函数，便于回归测试。
+    """
+    if not p:
+        return ""
+    if os.name == "nt":
+        m = _MSYS_DRIVE.match(p)
+        if m:
+            p = f"{m.group(1)}:/" + p[m.end():]
+    return os.path.normcase(os.path.normpath(os.path.abspath(p)))
 
 # 自建 GitLab 的 API 需要 PRIVATE-TOKEN。取自环境变量，**值一律不进任何打印或异常文本**；
 # 且只在目标主机与 $GITLAB_HOST 同主机时才附带，避免把内网凭证发给任意第三方主机。
@@ -359,6 +389,23 @@ def stage_market(out_path):
 # ---------------------------------------------------------------- stage: plugin
 
 
+def scope_lag_note(pid, rec, plugins):
+    """project/local 记录与同 id 的 user 记录版本不一致时，返回一段提示；否则返回空串。
+
+    在该项目目录里启动会话时，加载的是这条项目级记录钉的版本，不是全局那份。只刷 user scope
+    的做法（`claude plugin update <id>` 不带 --scope）会让全局一直是新的、项目里一直是旧的，
+    在项目里排查问题时看到的全是旧行为。实测 tech-support@tech-support-plugin：user 0.130.2、
+    工作仓 project 0.81.0。
+    """
+    if rec.get("scope") == "user":
+        return ""
+    user_vers = {r.get("version") for r in plugins.get(pid, []) if r.get("scope") == "user"}
+    user_vers.discard(None)
+    if not user_vers or rec.get("version") in user_vers:
+        return ""
+    return f"（user scope 为 {'/'.join(sorted(user_vers))}，该项目内实际加载的是本条 {rec.get('version')}）"
+
+
 def stage_plugin(out_path, only_enabled=False):
     data = load_json(INSTALLED, {}) or {}
     plugins = data.get("plugins", {})
@@ -451,8 +498,7 @@ def stage_plugin(out_path, only_enabled=False):
         need.append((pid, rec))
         why.append((pid, rec, reason))
 
-    def fmt(rec):
-        return f"{rec.get('scope')}|{rec.get('projectPath') or ''}"
+    why = [(pid, rec, reason + scope_lag_note(pid, rec, plugins)) for pid, rec, reason in why]
 
     with open(out_path, "w", encoding="utf-8") as f:
         for pid, rec in need:
@@ -481,10 +527,123 @@ def stage_plugin(out_path, only_enabled=False):
     return need
 
 
+# ---------------------------------------------------------------- stage: cleanup
+
+
+def cache_diff(whitelist, actual):
+    """白名单差集。返回 (orphans, missing)，两者都是 actual / whitelist 里的**原始**路径。
+
+    orphans：磁盘有、配置未引用 → 可删候选。
+    missing：配置引用了、磁盘不存在 → 缓存状态异常，调用方此时一条都不能删。
+    比对前两边都过 norm_path，原始路径只用于输出与删除。纯函数，便于回归测试。
+    """
+    wl = {norm_path(p) for p in whitelist if p}
+    act = {norm_path(p): p for p in actual}
+    orphans = sorted(p for k, p in act.items() if k not in wl)
+    missing = sorted(p for p in whitelist if p and norm_path(p) not in act)
+    return orphans, missing
+
+
+def loaded_versions(snapshot):
+    """从刷新前快照取 {(marketplace, plugin, version)}——本会话启动时加载的极可能就是这些版本。
+
+    hook 命令在会话启动时已把 ${CLAUDE_PLUGIN_ROOT} 展开成带版本号的绝对路径，删掉这些目录会让
+    本会话此后每次工具调用都撞 hook 报错，直到 /reload-plugins。
+    """
+    out = set()
+    for pid, recs in ((snapshot or {}).get("plugins") or {}).items():
+        plugin, _, mkt = pid.rpartition("@")
+        for r in recs:
+            if r.get("version"):
+                out.add((mkt, plugin, r["version"]))
+    return out
+
+
+def dir_size(d):
+    total = 0
+    for root, _, files in os.walk(d):
+        for f in files:
+            try:
+                total += os.path.getsize(os.path.join(root, f))
+            except OSError:
+                pass
+    return total
+
+
+def stage_cleanup(out_path, before_path, apply):
+    data = load_json(INSTALLED, {}) or {}
+    whitelist = sorted({r.get("installPath") for recs in (data.get("plugins") or {}).values() for r in recs if r.get("installPath")})
+
+    # cache/<marketplace>/<plugin>/<version> 恰好是第 3 层；temp_git_* 由 SKILL.md 第五步 (a) 单独处理。
+    actual = []
+    for mkt in sorted(os.listdir(CACHE)) if os.path.isdir(CACHE) else []:
+        mdir = os.path.join(CACHE, mkt)
+        if mkt.startswith("temp_git_") or not os.path.isdir(mdir):
+            continue
+        for plugin in sorted(os.listdir(mdir)):
+            pdir = os.path.join(mdir, plugin)
+            if not os.path.isdir(pdir):
+                continue
+            for ver in sorted(os.listdir(pdir)):
+                if os.path.isdir(os.path.join(pdir, ver)):
+                    actual.append(os.path.join(pdir, ver))
+
+    orphans, missing = cache_diff(whitelist, actual)
+
+    snapshot = load_json(before_path)
+    loaded = loaded_versions(snapshot)
+    kept, candidates = [], []
+    for p in orphans:
+        rel = os.path.relpath(p, CACHE).replace("\\", "/").split("/")
+        (kept if tuple(rel[:3]) in loaded else candidates).append(p)
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        for p in candidates:
+            f.write(p + "\n")
+
+    size = sum(dir_size(p) for p in candidates)
+    print("=== 阶段三：缓存历史版本清理（白名单差集，路径已统一规范化）===")
+    print(f"  白名单 {len(whitelist)} / 磁盘 {len(actual)} / 未引用 {len(orphans)} / 可删 {len(candidates)}（{size / 1048576:.1f} MiB）")
+    if snapshot is None:
+        print(f"  ⚠ 刷新前快照 {before_path} 不存在，无法剔除本会话正在加载的版本；先按第三步存快照再跑")
+    for p in kept:
+        print(f"  保留（本会话启动时加载的版本）  {p}")
+    for p in candidates:
+        print(f"  可删  {p}")
+    if missing:
+        print(f"\n  ✗ 反向检查非空：{len(missing)} 条配置引用的缓存目录在磁盘上不存在，缓存状态异常，本次一条都不删。")
+        print("    先回到第三步重新刷新把实体补齐，再重跑本阶段。")
+        for p in missing:
+            print(f"    缺失  {p}")
+    print(f"\n可删清单已写入 {out_path}")
+
+    if not apply:
+        print("dry-run：未删除任何目录；确认后加 --apply 执行")
+        return 0
+    if missing or snapshot is None:
+        print("未执行删除：反向检查非空或缺少刷新前快照", file=sys.stderr)
+        return 1
+    failed = []
+    for p in candidates:
+        try:
+            shutil.rmtree(p)
+        except OSError as e:
+            failed.append((p, type(e).__name__))
+    print(f"已删除 {len(candidates) - len(failed)} 个目录，释放约 {size / 1048576:.1f} MiB")
+    for p, err in failed:
+        print(f"  删除失败（{err}）  {p}")
+    return 1 if failed else 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--stage", choices=("market", "plugin"), required=True)
-    ap.add_argument("--out", help="清单输出路径（默认按阶段取 /tmp 下固定名）")
+    ap.add_argument("--stage", choices=("market", "plugin", "cleanup"), required=True)
+    ap.add_argument("--out", help=f"清单输出路径（默认按阶段取 {TMP_DIR} 下固定名）")
+    ap.add_argument(
+        "--before",
+        help=f"cleanup 阶段用的刷新前快照（默认 {os.path.join(TMP_DIR, 'ip_before.json')}）",
+    )
+    ap.add_argument("--apply", action="store_true", help="cleanup 阶段真删（默认只 dry-run）")
     ap.add_argument(
         "--enabled-only",
         action="store_true",
@@ -501,12 +660,21 @@ def main():
         print(f"找不到 {INSTALLED}", file=sys.stderr)
         return 2
 
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
     if args.stage == "market":
-        out = args.out or "/tmp/mkt_to_update.txt"
+        out = args.out or os.path.join(TMP_DIR, "mkt_to_update.txt")
         stage_market(out)
-    else:
-        out = args.out or "/tmp/plugins_to_refresh.txt"
+    elif args.stage == "plugin":
+        out = args.out or os.path.join(TMP_DIR, "plugins_to_refresh.txt")
         stage_plugin(out, only_enabled=args.enabled_only)
+    else:
+        out = args.out or os.path.join(TMP_DIR, "cache_orphan.txt")
+        before = args.before or os.path.join(TMP_DIR, "ip_before.json")
+        return stage_cleanup(out, before, args.apply)
     return 0
 
 

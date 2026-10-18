@@ -374,3 +374,11 @@ PreToolUse:Bash hook error: [node …/cd-blocker/1.0.0/hooks/guards/cd-guard.js]
 不累积：剔掉的目录下次 sync 时仍在差集里，那时会话已重启或已 reload，会被正常收走。
 
 机械判据（已写进正文第五步 (b)）：拿第三步存的 `/tmp/ip_before.json` 对照孤儿清单——某孤儿的 `<version>` 等于**刷新前**该插件的记录版本，它极可能就是本会话启动时加载的那份。
+
+## Windows 路径格式与项目级落后（2026-10，6.27.0）
+
+**白名单差集文字比对失效**：`installed_plugins.json` 的 `installPath` 在 Windows 上是 `C:\Users\momog\.claude\plugins\cache\...`，Git Bash 的 `find ~/.claude/plugins/cache -mindepth 3 -maxdepth 3` 列出的是 `/c/Users/momog/.claude/plugins/cache/...`。`comm` 按文字比，两边没有一行相等，所有在用版本都进了「可删」差集；反向检查同时列出全部白名单，靠它才没删下去。改为 `probe-refresh.py --stage cleanup` 规范化后比对，同一台机器结果：白名单 57 / 磁盘 64 / 未引用 7。
+
+**清单文件不在同一个 /tmp**：原生 Windows Python 里 `os.path.abspath('/tmp/x')` 是 `C:\tmp\x`；Git Bash 的 `/tmp` 经 `cygpath -w /tmp` 是 `C:\Users\momog\AppData\Local\Temp`。探测器旧默认写前者、SKILL.md 的 bash 循环读后者。现在 Windows 上默认写 `tempfile.gettempdir()`（即 `%TEMP%`）。
+
+**项目级记录落后全局 49 个小版本**：`tech-support@tech-support-plugin` user scope `0.130.2`，`C:\Users\momog\workspace\tech-support\tech-support-work` 的 project scope 停在 `0.81.0`。之前的刷新只跑了不带 `--scope` 的 `plugin update`，只动了 user scope；在工作仓里启动的会话加载的一直是 `0.81.0`。探测器现在对这类记录在理由里追加「user scope 为 X，该项目内实际加载的是本条 Y」；`commit-push` 的插件收尾改为按本 skill 逐条刷全部 scope。
