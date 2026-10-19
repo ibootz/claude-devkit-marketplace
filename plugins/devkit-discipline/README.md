@@ -566,6 +566,29 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 4.2.0 压缩时校准后台子代理状态（`hooks/compact-agent-status.js`）
+
+**起因**：2026-10-19 sptalent 会话的一次 auto-compact。子代理 `sonnet-spsd-prod-check` 已完成并投递通知，随后用户中断一次，对话分支回绕，含通知的那段行落进被放弃的分支，既不在压缩保留的消息里，也没进摘要。摘要写成「两个子代理都还在运行」，压缩后主会话三次告诉用户「还在跑」，用户问「你是不是幻觉了」。Claude Code 自己只给压缩时仍在跑的 agent 补 `task_status` 提醒，已投递的不补，所以压缩后的上下文里没有任何反证。同一会话 32 个压缩点里，没有发现「漏掉在飞子代理导致重复派发」的实例。
+
+**为什么不是在压缩提示词里加一句「别丢子代理」**：摘要生成时根本看不到那条完成通知，提示词管不到它看不到的东西。能修的是 hook 扫整份 JSONL（不顺 `parentUuid` 链走，被放弃分支里的行照样在文件里），把状态算出来摆到两处：
+
+| 时机 | 落点 | 作用 |
+|---|---|---|
+| `PreCompact`（matcher `*`） | stdout 纯文本 | Claude Code 2.1.303 把 exit 0 的 stdout 拼成压缩请求末尾的 `Additional Instructions: <stdout>`，默认压缩指令不动；手动、自动、reactive、precomputed 四条压缩路径都拼。子代理自己压缩时这段被丢弃 |
+| `SessionStart`（matcher `compact`） | `additionalContext` | 压缩完成后重扫一次，注入最新表。precomputed 压缩会提前跑 `PreCompact`、提前生成摘要，中间完成的子代理在那份表里还是旧状态，靠这一路纠正 |
+
+**判据**：只认四种结构化行——`Agent` 的 `tool_use`、含 `Async agent launched` 的 `tool_result`、三种通知载体（`queue-operation` 入队、`queued_command` 附件、用户消息）里的 `<task-notification>` 块、`SendMessage` 回执里的 `resumedAgentId`。同一条通知三种载体各出现一次，按块原文去重只取第一次（入队时刻才是真实完成时刻，也防止「完成 → 被唤醒 → 迟到的投递副本」把唤醒的子代理判回已完成）。`prompt_snapshot` 等行里也有 `<task-notification>` 字样，所以不做整行搜索。
+
+**进行中只写成「未见完成通知」**：会话被 resume 时旧进程里的子代理已经不在，却不会补发通知。直接写「运行中」等于把这次的 bug 反过来再造一遍。表里只给可核验的事实：派发时刻、输出文件最后写入时刻。
+
+**列多少**：未见完成通知的全列，已结束的列最近 6 个。没有任何后台子代理时两路都零输出，压缩请求与不装本插件一致。
+
+**成本**：流式按块读、只 parse 含标记子串的行。sptalent 那份 175MB、4.3 万行的 transcript 单次 0.7～0.9 秒，每次压缩跑两次。
+
+**回放验证**：把 sptalent transcript 截到那次压缩之前喂 `PreCompact`，表里两个子代理都判为已完成（摘要当时写的是「都还在运行」）。回归用例 `test/compact-agent-status-verify.js` 26 条。
+
+**未验证**：摘要模型是否照 `Additional Instructions` 写、压缩后主会话是否信这张表，要等下一次真实 auto-compact 观察；改完需重启会话 hook 才加载。
+
 ### 4.1.0 3.3 问法加首行摘要、选项分行与排版规则
 
 **起因**：2026-10-14 用户反馈按 3.3 写的拍板提问「不熟业务的人读不懂」，要求先做人评再改规则。
@@ -1132,12 +1155,15 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/write-guard.js
 
 ```text
 plugins/devkit-discipline/
-├── .claude-plugin/plugin.json          # hook 注册（2 个注入脚本 + 4 个 guard，共 8 处挂载：
+├── .claude-plugin/plugin.json          # hook 注册（3 个注入脚本 + 4 个 guard，共 10 处挂载：
 │                                       #   PreToolUse×3 + PostToolUse×1 + 三个注入时机×1
-│                                       #   + UserPromptSubmit 上多挂一个 dispatch-ledger）
+│                                       #   + UserPromptSubmit 上多挂一个 dispatch-ledger
+│                                       #   + PreCompact、SessionStart:compact 各挂一个 compact-agent-status）
 ├── hooks/
 │   ├── working-discipline.js           # SessionStart / UserPromptSubmit / SubagentStart 注入
 │   │                                   #   + 有图轮次条件注入图片路径清单
+│   ├── compact-agent-status.js         # 4.2.0：PreCompact 给摘要、SessionStart:compact 给压缩后
+│   │                                   #   上下文各一张后台子代理状态表（扫整份 JSONL 现算）
 │   ├── lib/
 │   │   ├── shell-parse.js              #   命令切分/分词/剥引号（只服务 bash-guard；3.26.0 起
 │   │   │                               #   stripSubshells/stripHeredocs 随 cd 检查搬去 devkit-cd-blocker
@@ -1171,7 +1197,8 @@ plugins/devkit-discipline/
 │   ├── guard-verify.js                 # bash-guard / write-guard / agent-dispatch 回归 157 条
 │   │                                   #   （3.26.0 起 cd 用例在 devkit-cd-blocker 插件，这里只留一条
 │   │                                   #   反向断言：裸 cd 必须已经不被 bash-guard 拦）
-│   └── probe-throttle-verify.js        # probe-throttle 回归 45 条（判据两侧都有用例）
+│   ├── probe-throttle-verify.js        # probe-throttle 回归 45 条（判据两侧都有用例）
+│   └── compact-agent-status-verify.js  # compact-agent-status 回归 26 条
 └── README.md
 ```
 

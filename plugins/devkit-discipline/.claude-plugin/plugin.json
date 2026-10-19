@@ -1,7 +1,7 @@
 {
   "name": "devkit-discipline",
-  "version": "4.1.0",
-  "description": "AI 工作纪律 - 纪律分三层注入（SessionStart 会话级 / 每轮零章与自查 / 子代理版），下沉 4 个 guard：3 道硬拦 + 1 道事后提醒，附中文消歧 skill。设计依据与实测见 README",
+  "version": "4.2.0",
+  "description": "AI 工作纪律 - 纪律分三层注入（SessionStart 会话级 / 每轮零章与自查 / 子代理版），下沉 4 个 guard：3 道硬拦 + 1 道事后提醒，压缩时校准子代理状态，附中文消歧 skill。设计依据与实测见 README",
   "author": {
     "name": "zhangq"
   },
@@ -53,6 +53,28 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js"
+          }
+        ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/compact-agent-status.js",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/compact-agent-status.js",
+            "timeout": 30
           }
         ]
       }
