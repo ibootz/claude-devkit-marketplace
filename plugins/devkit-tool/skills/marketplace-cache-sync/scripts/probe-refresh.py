@@ -15,7 +15,8 @@
                    .claude-plugin/plugin.json（纯本地，条目 version 仅兜底）；url 独立仓源
                    读远端仓根 .claude-plugin/plugin.json（一次 HTTP GET，不 clone），
                    按远端仓去重后本机只有十几个请求。
-  --stage cleanup  刷新完成之后，用 installPath 全集做白名单、算出 cache/ 下未被引用的历史版本目录。
+  --stage cleanup  刷新完成之后，用 installPath 全集做白名单、算出 cache/ 下未被引用的历史版本目录，
+                   剔除仍有存活进程在用（.in_use/<pid>）的版本，并收走久未改动的 temp_git_* 残留。
                    默认 dry-run 只报告；--apply 才删。两边路径统一规范化后再比，见 norm_path。
 
 输出一律是「给人看的诊断 + 机器可读清单文件」两部分，清单文件路径见 --out 参数。
@@ -39,6 +40,7 @@ PLUGINS_HOME = os.path.normpath(os.path.expanduser("~/.claude/plugins"))
 MARKETPLACES = os.path.join(PLUGINS_HOME, "marketplaces")
 CACHE = os.path.join(PLUGINS_HOME, "cache")
 INSTALLED = os.path.join(PLUGINS_HOME, "installed_plugins.json")
+KNOWN = os.path.join(PLUGINS_HOME, "known_marketplaces.json")
 USER_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 
 # 清单文件目录必须与 SKILL.md 里 bash 片段读的 /tmp 是同一个目录。
@@ -559,6 +561,61 @@ def loaded_versions(snapshot):
     return out
 
 
+def pid_alive(pid):
+    """进程是否还活着。Windows 上 os.kill(pid, 0) 会调 TerminateProcess 真杀进程，绝不能用，
+    改为一律当作存活（多留一个目录是可恢复的代价，杀掉一个会话不是）。"""
+    if os.name == "nt":
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def in_use_pids(version_dir, alive=pid_alive):
+    """版本目录下 `.in_use/<pid>` 里登记、且进程仍存活的 pid 列表。
+
+    `.in_use/` 由 Claude Code CLI 自己维护：每个加载了这一版的进程写一个以 pid 为名的文件
+    （内容形如 {"pid": 77137, "procStart": "..."}）。刷新前快照只认得出「本会话」那一份，
+    认不出常驻的 `claude agents`、别的项目里开着的会话、以及快照之前就被 autoUpdate 顶掉的版本；
+    这些进程的 hook 路径同样固化在自己加载的版本目录上，删掉一样让它们每次工具调用都报错。
+    `alive` 可注入，便于离线测试。
+    """
+    d = os.path.join(version_dir, ".in_use")
+    if not os.path.isdir(d):
+        return []
+    out = []
+    for name in sorted(os.listdir(d)):
+        pid = None
+        try:
+            with open(os.path.join(d, name), encoding="utf-8") as f:
+                pid = int((json.load(f) or {}).get("pid"))
+        except (OSError, ValueError, TypeError, AttributeError):
+            pid = int(name) if name.isdigit() else None
+        if pid is not None and alive(pid):
+            out.append(pid)
+    return out
+
+
+# temp_git_* 最近一次改动距今超过这个秒数才算残留。clone 进行中目录 mtime 会持续刷新；
+# 市场 clone 超时上限可被 CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS 调到 20 分钟以上，取 2 小时留足余量。
+TEMP_GIT_STALE_SECONDS = 2 * 3600
+
+
+def stale_temp_git(entries, now, threshold=TEMP_GIT_STALE_SECONDS):
+    """从 [(name, mtime)] 里挑出可删的 temp_git_* 名字。纯函数，便于回归测试。
+
+    只按「两份配置零引用」判会把别的进程正在进行的 clone 一起删掉——2026-10-19 实测清理期间
+    又冒出 17 个新的 temp_git_*，其中一个几秒内就自行消失，说明它们是活的。
+    """
+    return sorted(n for n, m in entries if n.startswith("temp_git_") and now - m > threshold)
+
+
 def dir_size(d):
     total = 0
     for root, _, files in os.walk(d):
@@ -595,21 +652,50 @@ def stage_cleanup(out_path, before_path, apply):
     kept, candidates = [], []
     for p in orphans:
         rel = os.path.relpath(p, CACHE).replace("\\", "/").split("/")
-        (kept if tuple(rel[:3]) in loaded else candidates).append(p)
+        reasons = []
+        if tuple(rel[:3]) in loaded:
+            reasons.append("刷新前快照仍引用，本会话启动时可能加载的就是它")
+        pids = in_use_pids(p)
+        if pids:
+            reasons.append(f"仍有存活进程在用 pid={','.join(map(str, pids))}")
+        if reasons:
+            kept.append((p, reasons))
+        else:
+            candidates.append(p)
+
+    # temp_git_*：零引用之外，还要求久未改动，避开别的进程正在进行的 clone
+    tg_entries = []
+    for name in os.listdir(CACHE) if os.path.isdir(CACHE) else []:
+        if name.startswith("temp_git_"):
+            try:
+                tg_entries.append((name, os.path.getmtime(os.path.join(CACHE, name))))
+            except OSError:
+                pass
+    tg_refs = sum("temp_git" in (open(p, encoding="utf-8").read() if os.path.isfile(p) else "") for p in (KNOWN, INSTALLED))
+    tg_stale = [] if tg_refs else stale_temp_git(tg_entries, time.time())
+    tg_paths = [os.path.join(CACHE, n) for n in tg_stale]
 
     with open(out_path, "w", encoding="utf-8") as f:
-        for p in candidates:
+        for p in candidates + tg_paths:
             f.write(p + "\n")
 
     size = sum(dir_size(p) for p in candidates)
+    tg_size = sum(dir_size(p) for p in tg_paths)
     print("=== 阶段三：缓存历史版本清理（白名单差集，路径已统一规范化）===")
     print(f"  白名单 {len(whitelist)} / 磁盘 {len(actual)} / 未引用 {len(orphans)} / 可删 {len(candidates)}（{size / 1048576:.1f} MiB）")
     if snapshot is None:
         print(f"  ⚠ 刷新前快照 {before_path} 不存在，无法剔除本会话正在加载的版本；先按第三步存快照再跑")
-    for p in kept:
-        print(f"  保留（本会话启动时加载的版本）  {p}")
+    for p, reasons in kept:
+        print(f"  保留（{'；'.join(reasons)}）  {p}")
     for p in candidates:
         print(f"  可删  {p}")
+    print(f"\n  temp_git_*：共 {len(tg_entries)} 个，久未改动可删 {len(tg_stale)} 个（{tg_size / 1048576:.1f} MiB）")
+    if tg_refs:
+        print("  ⚠ 配置里出现 temp_git 引用，本次一个 temp_git_* 都不删；先查清是哪条配置在引用")
+    elif len(tg_entries) > len(tg_stale):
+        print(f"  其余 {len(tg_entries) - len(tg_stale)} 个两小时内有改动，可能是别的进程正在 clone，保留")
+    size += tg_size
+    candidates = candidates + tg_paths
     if missing:
         print(f"\n  ✗ 反向检查非空：{len(missing)} 条配置引用的缓存目录在磁盘上不存在，缓存状态异常，本次一条都不删。")
         print("    先回到第三步重新刷新把实体补齐，再重跑本阶段。")

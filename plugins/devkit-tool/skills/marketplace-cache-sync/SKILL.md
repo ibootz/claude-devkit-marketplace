@@ -222,14 +222,14 @@ ls "$ipath/hooks/" 2>/dev/null | grep -iE 'session-start|session-end|pre-compact
 
 **残留数量在两次观测间波动极大，不要把具体数字当预期值，每次都实际 `ls` 一遍。** 同一轮完整刷新之后可能直接命中"无残留"——这类残留不是每次刷新都必然产生，取决于中途是否有克隆被打断，是正常结果，不要以为是命令写错了。两次观测的对照数据见 `references/verification-log.md`「temp_git_* 残留成因与两次观测」。
 
-判定依据是"两份配置里零引用即孤立"：
+先看一眼规模与引用情况（只读）：
 
 ```bash
 grep -c 'temp_git' ~/.claude/plugins/known_marketplaces.json ~/.claude/plugins/installed_plugins.json
 du -sch ~/.claude/plugins/cache/temp_git_*/ | tail -1
 ```
 
-两个文件的计数都是 `0` 才说明这些目录没有任何配置指向它们，可以整批删除。若非 0，先查清是哪条配置在引用，不要删。
+两个文件的计数都是 `0`，说明没有配置指向这些目录；但零引用不等于可删——别的会话正在进行的 clone 同样零引用（2026-10-19 实测，清理期间新冒出 17 个，其中一个几秒内自行消失）。所以 `temp_git_*` 也交给下面 (b) 的 `--stage cleanup` 一起收：它只收**两小时内无改动**的那些，其余标「可能是别的进程正在 clone」保留。配置计数非 0 时它一个都不删，先查清是哪条配置在引用。
 
 #### (b) 未被引用的历史版本目录——必须用白名单差集判定
 
@@ -244,7 +244,7 @@ python3 "$PROBE" --stage cleanup     # dry-run：只报告白名单 / 磁盘 / �
 python3 "$PROBE" --stage cleanup --apply   # 真删
 ```
 
-`--apply` 在两种情况下拒绝删除并 `exit=1`：反向检查非空（配置引用了但磁盘不存在），或第三步的刷新前快照 `/tmp/ip_before.json` 不存在（没法判断哪个版本是本会话正在加载的）。
+`--apply` 在两种情况下拒绝删除并 `exit=1`：反向检查非空（配置引用了但磁盘不存在），或第三步的刷新前快照 `/tmp/ip_before.json` 不存在。同一次运行还会收走 (a) 里久未改动的 `temp_git_*`，清单一并写进 `/tmp/cache_orphan.txt`。
 
 清理收益随执行频率快速衰减，且大头始终在白名单内的在用版本里。如实告知用户这个量级（典型 10~700M，**不是**预期值），不要暗示清理能显著省空间。两次实测的差集规模对照见 `references/verification-log.md`「缓存清理两次差集规模」。
 
@@ -256,11 +256,16 @@ python3 "$PROBE" --stage cleanup --apply   # 真删
 
 删除的代价：被删版本在需要降级/回滚时要重新从市场源下载，属于可恢复但需要网络。如果用户在当轮明确要求保留回滚版本，先从 `/tmp/cache_orphan.txt` 里删掉要留的行，再用 `while IFS= read -r orphan_dir; do rm -rf "$orphan_dir"; done < /tmp/cache_orphan.txt` 按剩余清单删，不跑 `--apply`（它会重新计算清单）。
 
-**必须剔除的那一项：本会话正在加载的版本目录（`cleanup` 阶段已自动剔除，输出里标「保留」）。** 孤儿里若有某个 `version` 就是**当前会话加载的那一份**，删掉它不会「下次启动再下载」，而是**本会话此后每轮工具调用都撞 hook 报错**，直到 `/reload-plugins` 把 hook 路径重指到新版。原因是 hook 命令在会话启动时就把 `${CLAUDE_PLUGIN_ROOT}` 展开成了带版本号的绝对路径（形如 `…/devkit-tool/6.21.0/hooks/codegraph-hint.js`），正在跑的进程不会因为配置文件改了而重新解析。
+**必须剔除的那一项：仍有进程在加载的版本目录（`cleanup` 阶段已自动剔除，输出里标「保留」并写明理由）。** 孤儿里若有某个版本正被某个 Claude Code 进程加载，删掉它不会「下次启动再下载」，而是**那个会话此后每轮工具调用都撞 hook 报错**，直到它 `/reload-plugins`。原因是 hook 命令在会话启动时就把 `${CLAUDE_PLUGIN_ROOT}` 展开成了带版本号的绝对路径（形如 `…/devkit-tool/6.21.0/hooks/codegraph-hint.js`），正在跑的进程不会因为配置文件改了而重新解析。
 
-机械判据（探测器内置）：拿第三步存的 `/tmp/ip_before.json` 对照孤儿——某孤儿的 `(marketplace, plugin, version)` 等于**刷新前**某条记录，它极可能就是本会话启动时加载的那份，剔掉。
+机械判据（探测器内置，命中任一即保留）：
 
-剔掉不累积：那个目录下次 sync 时仍在差集里，那时会话已重启或已 reload，会被正常收走。收益也小（实测 8 个孤儿合计 904K），所以为这一条保守剔除不心疼。
+1. **`.in_use/<pid>` 里有存活进程**——CLI 自己在每个版本目录下为每个加载它的进程写一个以 pid 命名的文件。这是主判据：它覆盖本会话之外的常驻 `claude agents`、别的项目里开着的会话，以及刷新前就已被 autoUpdate 顶掉的版本。Windows 上探活会误杀进程，一律按存活处理。
+2. **刷新前快照 `/tmp/ip_before.json` 仍引用**——某孤儿的 `(marketplace, plugin, version)` 等于刷新前某条记录，兜住没有 `.in_use/` 的老版本 CLI。
+
+只用第 2 条不够：2026-10-19 实测，第 2 条判可删的 24 个里有 3 个仍有存活进程（本会话加载的 `devkit-tool` 6.26.0 在快照之前已被 autoUpdate 顶掉，所以快照里没有它）。证据见 `references/verification-log.md`「快照判据漏掉 3 个在用目录」。
+
+剔掉不累积：那个目录下次 sync 时仍在差集里，那时进程已退出或已 reload，会被正常收走。
 
 ## 已验证的坑
 
@@ -278,7 +283,7 @@ python3 "$PROBE" --stage cleanup --apply   # 真删
 | `for p in $plugins` 整体失败，报 `Plugin "<第一个>" not found` | zsh 默认不做单词分割。改成 `while IFS= read -r p`；无副作用，改好重跑即可 |
 | 只在 project 装过的插件静默 `exit=1` 滚屏而过 | `--scope` 默认 `user`，无 user scope 记录的 id 会 exit=1 但循环不检查退出码。见第三步判定式 |
 | `--scope project` 回执 `already at the latest version` 但前后 0 行 diff | cwd 隐式定位、不接受路径参数，cwd 不匹配时打印假成功。必须 `cd` 进该记录**自己的** `projectPath`，见第三步 |
-| `cache/` 体积远大于已安装插件之和 | `temp_git_*` 残留。两份配置 grep 计数都为 0 即可整批删，见第五步 (a) |
+| `cache/` 体积远大于已安装插件之和 | `temp_git_*` 残留。交给 `--stage cleanup` 收：零引用且两小时内无改动才删，别的进程正在进行的 clone 会保留，见第五步 (a) |
 | 清理历史版本缓存后某项目插件失效或被迫重新下载 | 按"只保留最新版本"删了。必须用 `.plugins[][].installPath` 全集做白名单差集，见第五步 (b) |
 | Windows 上白名单差集把全部在用版本列成可删 | `installPath` 是 `C:\...`、Git Bash `find` 给 `/c/...`，文字比对永不相等。用 `--stage cleanup`（两边先规范化再比），见第五步 (b) |
 | Windows 上 bash 循环读到的清单是空的或上一轮的 | 原生 Python 把 `/tmp/x` 解析成 `C:\tmp\x`，Git Bash 的 `/tmp` 是 `%TEMP%`。探测器在 Windows 上默认写 `%TEMP%`，与 bash 的 `/tmp` 同一目录；自定义 `--out` 时两边用同一个路径 |
@@ -293,7 +298,7 @@ python3 "$PROBE" --stage cleanup --apply   # 真删
 | `claude plugin marketplace remove <name>` 回执里夹着一行 `Also uninstalled N plugin from this marketplace` | 那不是提示而是**真删**：`installed_plugins.json` 里该插件的记录一并消失。迁移 directory 源到 git 源就是这个代价——remove → `marketplace add <git-url>` → 按**迁移前快照**逐条 `plugin install --scope` 重装。项目侧 `enabledPlugins` 声明不会被删，重装即复原，但**装到的是当前最新版**而非原版本，有意钉版的项目会被顶掉 |
 | `marketplace update` / `add` 报 `Git clone timed out after 120s` | 默认超时不够，与网络无关——重试不加变量没用。照报错提示带 `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=300000` 重跑（实测两仓各 3m45s / 3m08s） |
 | `marketplace update` 报 `could not open '…<name>..clone/.git/objects/pack/tmp_pack_*'` 或 `fetch-pack: invalid index-pack output` | **与超时无关**——重试即过，实测重试那次耗时低于 120s 默认值，加超时变量是碰巧。疑似多会话并发 clone 同一路径互踩，成因未确认。失败不留 `..clone` 残留，直接重跑 |
-| 第五步清理后本会话每次工具调用都报 hook 错 | 删掉了本会话**正在加载**的那个版本目录——hook 路径在会话启动时已固化成带版本号的绝对路径，进程不会因配置改动重解析。按第五步 (b)「必须剔除的那一项」从 `/tmp/cache_orphan.txt` 里剔掉，`/reload-plugins` 后下次 sync 自动收 |
+| 第五步清理后某个会话每次工具调用都报 hook 错 | 删掉了那个会话**正在加载**的版本目录——hook 路径在会话启动时已固化成带版本号的绝对路径，进程不会因配置改动重解析。`--stage cleanup` 已按 `.in_use/<pid>` 存活进程与刷新前快照两条判据自动保留；手工删除时也先查 `.in_use/`，见第五步 (b)「必须剔除的那一项」 |
 
 ## 验证清单
 
@@ -310,6 +315,6 @@ python3 "$PROBE" --stage cleanup --apply   # 真删
 - [ ] 所有循环 / 临时变量都**没有**取名 `path` / `fpath` / `cdpath` / `manpath` 等 zsh 绑定变量名（会静默覆写 `$PATH`，表象是"jq 没装"）
 - [ ] 每条 `claude plugin update` 的输出都在预期的三种正常结束态之一：`already at the latest version`、`updated from X to Y`、`refreshed from source`
 - [ ] 关键插件已走**写后回读**核实：`installed_plugins.json` 的 `installPath`、磁盘上该缓存目录、目录内 `.claude-plugin/plugin.json` 的 `version` 三处一致（只看 CLI 回执不足以证明落盘）
-- [ ] 若执行了第五步清理：确认在第三步刷新**之后**做的；`temp_git_*` 零引用已 grep 核实；历史版本走的是 `--stage cleanup`（路径规范化后的白名单差集，不是 `jq` + `find` + `comm` 文字比对）；反向检查为空、「未引用」数远小于「磁盘」数；已 `--apply` 并报告释放体积（用户明确要求保留回滚版本时除外）；本会话正在加载的版本在输出里标为「保留」
+- [ ] 若执行了第五步清理：确认在第三步刷新**之后**做的；`temp_git_*` 交给 `--stage cleanup` 收（零引用且两小时内无改动）；历史版本走的是 `--stage cleanup`（路径规范化后的白名单差集，不是 `jq` + `find` + `comm` 文字比对）；反向检查为空、「未引用」数远小于「磁盘」数；已 `--apply` 并报告释放体积（用户明确要求保留回滚版本时除外）；仍有存活进程在用（`.in_use/<pid>`）或刷新前快照仍引用的版本在输出里标为「保留」
 - [ ] 已明确告知用户让新版本生效的**最小动作**：默认建议 `/reload-plugins`；仅当新版本改动了 `SessionStart` / `SessionEnd` / `PreCompact` 挂载点时才说”必须重启”（判断依据是**同时查两处**：`plugin.json` 的 `hooks` 字段 + `hooks/` 目录下的脚本文件名约定，见第四步检测命令；只查 `plugin.json` 会漏掉目录式 hook，误判”无需重启”）
 - [ ] 生效后的核实看的是**行为**（下一轮 hook 注入文本 / skill 内容确实变了），不是 reload 回执里的插件数量

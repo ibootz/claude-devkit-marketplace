@@ -223,6 +223,37 @@ check(
     "",
 )
 
+print("\n[11] in_use_pids：.in_use/<pid> 里有存活进程的版本目录不能删")
+import json as _json
+import shutil as _shutil
+import tempfile as _tempfile
+
+_tmp = _tempfile.mkdtemp()
+try:
+    _v = os.path.join(_tmp, "m", "p", "1.0.0")
+    os.makedirs(os.path.join(_v, ".in_use"))
+    for _pid in (111, 222):
+        with open(os.path.join(_v, ".in_use", str(_pid)), "w", encoding="utf-8") as _f:
+            _json.dump({"pid": _pid, "procStart": "x"}, _f)
+    with open(os.path.join(_v, ".in_use", "333"), "w", encoding="utf-8") as _f:
+        _f.write("not json")  # 内容坏了退回文件名
+    check("只返回存活的 pid", pr.in_use_pids(_v, alive=lambda p: p in (222, 333)), [222, 333])
+    check("全部已退出 → 空，可删", pr.in_use_pids(_v, alive=lambda p: False), [])
+    check("没有 .in_use 目录 → 空", pr.in_use_pids(os.path.join(_tmp, "m", "p", "0.9.0")), [])
+    check("当前进程自己算存活", pr.pid_alive(os.getpid()), True)
+finally:
+    _shutil.rmtree(_tmp)
+
+print("\n[12] stale_temp_git：两小时内有改动的 temp_git_* 是别的进程正在 clone，保留")
+_now = 1_000_000.0
+_entries = [
+    ("temp_git_1_old", _now - 3 * 3600),
+    ("temp_git_2_fresh", _now - 60),
+    ("other_dir", _now - 10 * 3600),
+]
+check("只挑久未改动的 temp_git_*", pr.stale_temp_git(_entries, _now), ["temp_git_1_old"])
+check("阈值可调", pr.stale_temp_git(_entries, _now, threshold=30), ["temp_git_1_old", "temp_git_2_fresh"])
+
 if FAILED:
     print(f"\n{len(FAILED)} 条未通过：")
     for f in FAILED:

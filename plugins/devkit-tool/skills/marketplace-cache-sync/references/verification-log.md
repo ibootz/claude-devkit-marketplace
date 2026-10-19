@@ -382,3 +382,17 @@ PreToolUse:Bash hook error: [node …/cd-blocker/1.0.0/hooks/guards/cd-guard.js]
 **清单文件不在同一个 /tmp**：原生 Windows Python 里 `os.path.abspath('/tmp/x')` 是 `C:\tmp\x`；Git Bash 的 `/tmp` 经 `cygpath -w /tmp` 是 `C:\Users\momog\AppData\Local\Temp`。探测器旧默认写前者、SKILL.md 的 bash 循环读后者。现在 Windows 上默认写 `tempfile.gettempdir()`（即 `%TEMP%`）。
 
 **项目级记录落后全局 49 个小版本**：`tech-support@tech-support-plugin` user scope `0.130.2`，`C:\Users\momog\workspace\tech-support\tech-support-work` 的 project scope 停在 `0.81.0`。之前的刷新只跑了不带 `--scope` 的 `plugin update`，只动了 user scope；在工作仓里启动的会话加载的一直是 `0.81.0`。探测器现在对这类记录在理由里追加「user scope 为 X，该项目内实际加载的是本条 Y」；`commit-push` 的插件收尾改为按本 skill 逐条刷全部 scope。
+
+## 快照判据漏掉 3 个在用目录（2026-10-19，claude 2.1.303，6.27.0 → 6.27.1）
+
+6.27.0 的 `--stage cleanup` 只按刷新前快照 `/tmp/ip_before.json` 判「在用」。同一轮实测：白名单 52 / 磁盘 81 / 未引用 29，6.27.0 判可删 24 个（135.9 MiB），其中 3 个仍有存活进程登记在 `.in_use/<pid>`：
+
+| 版本目录 | 存活进程 | 快照为什么认不出 |
+|---|---|---|
+| `devkit-tool/6.26.0` | 本会话 + 另外 3 个 | 刷新开始前已被 marketplace autoUpdate 顶成 6.27.0，快照里只有 6.27.0 |
+| `mattpocock-skills/1.2.3` | 9/29 起常驻的 `claude agents` | 早就不在任何记录里，进程一直没重启 |
+| `tech-support/0.122.1` | 10/16 起另一个项目的会话 | 同上 |
+
+`.in_use/` 是 CLI 自己维护的：每个加载该版本的进程写一个以 pid 命名的文件，内容 `{"pid":…,"procStart":…}`；版本被顶掉时另写 `.orphaned_at`（毫秒时间戳）。2.1.301 与 2.1.303 都写。6.27.1 起以「`.in_use/` 里有存活 pid」为主判据，快照判据保留作兜底。修正后同一份数据：可删 21 个、保留 8 个，删后无任何会话报 hook 错。
+
+同轮另一发现：清理期间 `cache/` 下新冒出 17 个 `temp_git_*`（别的会话正在 clone），其中一个几秒内自行消失。旧判据「两份配置零引用即整批删」会把它们一起删掉，6.27.1 起只收两小时内无改动的。
