@@ -31,7 +31,8 @@
     "heal": null,
     "find-skills": null,
     "content-research-writer": null,
-    "prompt-engineering": null
+    "prompt-engineering": null,
+    "devkit-ruanyf-style": null
   },
   "plugins": [
     {
@@ -39,7 +40,7 @@
       "source": "./plugins/devkit-tool",
       "category": "Development",
       "description": "工具技能集：代码库分析、依赖排查、耗时/ROI 报告、submodule 同步推送、提交推送、会话交接、话题可视化等 15 技能",
-      "version": "6.27.1"
+      "version": "6.28.0"
     },
     {
       "name": "devkit-spec",
@@ -60,7 +61,7 @@
       "source": "./plugins/devkit-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒，压缩时校准子代理状态，附中文消歧 skill",
-      "version": "4.2.0"
+      "version": "4.3.0"
     },
     {
       "name": "devkit-agent-browser",
@@ -165,13 +166,6 @@
       "source": "./plugins/devkit-complexity-first",
       "category": "Productivity",
       "description": "复杂度优先 - 动手新增前先证明必要性：搜已有代码/标准库/平台原生，再写最小实现（1 技能）",
-      "version": "2.0.0"
-    },
-    {
-      "name": "devkit-ruanyf-style",
-      "source": "./plugins/devkit-ruanyf-style",
-      "category": "Productivity",
-      "description": "中文技术文档写作规范 - 阮一峰规范七部分：标题/文本/段落/数值/标点/文档体系，写中文文档时套用",
       "version": "2.0.0"
     },
     {
