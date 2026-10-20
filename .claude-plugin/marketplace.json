@@ -61,7 +61,7 @@
       "source": "./plugins/devkit-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒，压缩时校准子代理状态，附中文消歧 skill",
-      "version": "4.3.0"
+      "version": "4.3.1"
     },
     {
       "name": "devkit-agent-browser",

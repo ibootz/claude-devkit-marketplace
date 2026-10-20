@@ -567,6 +567,16 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 4.3.1 七章加「回溯脚本防环」
+
+**起因**：2026-10-19 一个子代理用后台命令跑 `python3 -I - <<'EOF'`，沿 sptalent 会话 jsonl 的 `parentUuid` / `logicalParentUuid` 回溯，循环没有已访问集合。jsonl 的 `compact_boundary` 行的 `logicalParentUuid` 指向它之后的行，构成 6 节点的环，脚本死循环。10 分钟后 Claude Code 把任务判为失败（exit 144），外层 shell 结束，python 被 launchd 收养继续满载 23 小时（累计 CPU 1335 分钟）。macOS 把能耗记在 iTerm2 名下，用户从「iTerm2 异常耗电」倒查才找到它。
+
+**改了什么**：会话级七章加一条「回溯脚本防环」（沿指针跳转的循环带已访问集合，遇到走过的节点打印并退出）；`references/conduct.md` 新增 `SEC:script` 的 7.6，写明环为什么是常态、为什么代价远超一次失败的命令、不触发情形。
+
+**为什么放会话级而不只放 reference**：写这种脚本时 AI 不会觉得「拿不准」，不会主动去读 `conduct.md`，判据必须在场。
+
+**注入长度**：`SessionStart` 4788 → **4986**，仍在 5000 自律线内（原因与机制移进 `conduct.md`，注入只留一句判据）。
+
 ### 4.3.0 解释类回复：3.9 与 3.10 合并成每轮注入的四个固定动作
 
 **起因**：用户反馈 AI 回答业务问题时默认读者熟悉项目，读者没有全局图，解释看不懂。2026-10-19 复盘近 60 天会话，用户真读不懂约 33 次：内部代号未翻译 19 次、缺全局图 9 次、编号引用不自足 3 次、代码细节没翻成业务动作 2 次。
@@ -1233,7 +1243,7 @@ plugins/devkit-discipline/
 │   ├── guard-boundaries.md             #   SEC:guards（四道闸各自的判据与误杀面全文）
 │   ├── expression.md                   #   3.37.0：SEC:ask（正文提问骨架与范例）/ SEC:reply /
 │   │                                   #   SEC:naming / SEC:coherence；不被 guard 读，靠指路
-│   └── conduct.md                      #   3.37.0：七章完整版 SEC:act / SEC:truth / SEC:subagent
+│   └── conduct.md                      #   3.37.0：七章完整版 SEC:act / SEC:truth / SEC:subagent；4.3.1 加 SEC:script
 ├── test/
 │   ├── guard-verify.js                 # bash-guard / write-guard / agent-dispatch 回归 157 条
 │   │                                   #   （3.26.0 起 cd 用例在 devkit-cd-blocker 插件，这里只留一条

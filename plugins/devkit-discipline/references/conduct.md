@@ -76,3 +76,17 @@
 **team 模式**（`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`）：你派的 `Agent` 都成 teammate，teammate 再调 `Agent` 被底层工具硬拒，报错里 "omit the name parameter" 无效、别据它重试。spawn 返回 `Async agent launched successfully` 加纯 agentId 才是可嵌套的传统 subagent。要嵌套就关掉该 flag 重启会话；保留 team 模式则由 lead 代派，并在 teammate 的 prompt 里写明它不能再派。
 
 <!-- /SEC -->
+
+<!-- SEC:script -->
+
+## 7.6 回溯脚本防环
+
+写「沿指针一路跳」的循环时——会话 jsonl 的 `parentUuid` / `logicalParentUuid` 链、链表、依赖图、软链、git 父提交——循环里维护已访问集合，下一个节点已在集合里就打印该节点与已走步数，然后退出。只能设步数上限时，上限取节点总数，撞上限同样打印后退出。
+
+**为什么环是常态**：Claude Code 在会话 jsonl 的压缩处写一行 `compact_boundary`，它的 `parentUuid` 为空，`logicalParentUuid` 可能指向排在它之后的行，那一行的 `parentUuid` 链又回到分界行。2026-10-19 实例：子代理用 `while cur in D: ... cur = parentUuid or logicalParentUuid` 回溯 sptalent 会话，第 116 步进入一个 6 节点的环。
+
+**为什么代价远超一次失败的命令**：这类脚本常以后台命令跑（`python3 -I - <<'EOF'`）。上述实例中 Claude Code 10 分钟后把任务判为失败（exit 144）、外层 shell 已结束，python 却被 launchd 收养后继续满载，空转 23 小时、累计 CPU 1335 分钟。macOS 把它的能耗记在启动它的终端 App 名下，用户看到的只是「iTerm2 异常耗电」，从现象几乎反推不到这条脚本。
+
+**不触发**：按行顺序扫整份文件、不跟指针跳转的循环（`hooks/compact-agent-status.js` 就是这样做的）。
+
+<!-- /SEC -->
