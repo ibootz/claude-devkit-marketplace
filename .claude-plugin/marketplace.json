@@ -32,15 +32,16 @@
     "find-skills": null,
     "content-research-writer": null,
     "prompt-engineering": null,
-    "devkit-ruanyf-style": null
+    "devkit-ruanyf-style": null,
+    "devkit-discover-unknowns": null
   },
   "plugins": [
     {
       "name": "devkit-tool",
       "source": "./plugins/devkit-tool",
       "category": "Development",
-      "description": "工具技能集：代码库分析、依赖排查、耗时/ROI 报告、submodule 同步推送、提交推送、会话交接、话题可视化等 15 技能",
-      "version": "6.28.1"
+      "description": "工具技能集：代码库分析、依赖排查、耗时/ROI 报告、submodule 同步推送、提交推送、会话交接、话题可视化等 16 技能",
+      "version": "6.29.0"
     },
     {
       "name": "devkit-spec",
@@ -69,13 +70,6 @@
       "category": "Productivity",
       "description": "浏览器自动化最佳实践 - agent-browser（Vercel）网页操作/抓取/表单/截图，默认 headless 四护栏，细节见 README",
       "version": "2.0.0"
-    },
-    {
-      "name": "devkit-discover-unknowns",
-      "source": "./plugins/devkit-discover-unknowns",
-      "category": "Productivity",
-      "description": "发现你的未知 - 动手前用盲点扫描/头脑风暴/访谈挖未知，测验默认跳过按需才出",
-      "version": "3.0.0"
     },
     {
       "name": "devkit-portable-shell",

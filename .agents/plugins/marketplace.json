@@ -17,7 +17,7 @@
         "name": "zhangq"
       },
       "category": "Development",
-      "description": "工具技能集：代码库分析、依赖排查、耗时/ROI 报告、submodule 同步推送、提交推送、会话交接、话题可视化等 15 技能",
+      "description": "工具技能集：代码库分析、依赖排查、耗时/ROI 报告、submodule 同步推送、提交推送、会话交接、话题可视化等 16 技能",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "devkit-tool",
       "source": {
@@ -28,7 +28,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "6.28.1"
+      "version": "6.29.0"
     },
     {
       "author": {
@@ -101,24 +101,6 @@
         "authentication": "ON_INSTALL"
       },
       "version": "2.0.0"
-    },
-    {
-      "author": {
-        "name": "zhangq"
-      },
-      "category": "Productivity",
-      "description": "发现你的未知 - 动手前用盲点扫描/头脑风暴/访谈挖未知，测验默认跳过按需才出",
-      "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
-      "name": "devkit-discover-unknowns",
-      "source": {
-        "source": "local",
-        "path": "./plugins/devkit-discover-unknowns"
-      },
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "version": "3.0.0"
     },
     {
       "author": {
