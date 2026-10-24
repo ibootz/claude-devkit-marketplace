@@ -182,6 +182,10 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 动手新增之前先证明必要性的按需决策 skill：按「必要性 → 仓库已有代码/抽象/配置 → 标准库 → 平台原生 → 已有依赖 → 最小新增实现」的顺序穷尽复用路径，命中即停；全不成立才写最小新增，且安全、权限、错误处理、数据完整性、无障碍五类边界逐次保留。需求存在规格空白时要求澄清，不替用户定义业务行为。每次建议输出五项决策记录（方案比较、选择、放弃理由、不可删边界、验证）。1 个 Skill，零 hook、零命令——纯按需，不开就完全不在场。
 
+### 17. devkit-excalidraw-diagram（Excalidraw 图解）
+
+移植自 [coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill)：把概念、架构、流程画成可编辑的 `.excalidraw` 文件——按概念选扇出、汇聚、时间线等视觉模式，技术图嵌真实代码与数据片段——再用 Playwright 渲染成 PNG 回看、迭代修版。只在点名要 Excalidraw 或可编辑白板图时触发，泛泛的「画个图」仍走 `devkit-tool:show-me`。依赖 `uv`，首次需下载一次 Chromium。1 个 Skill，零 hook。上游未附 LICENSE，版权归原作者，不在本仓 MIT 范围内；相对上游的改动与安装步骤见插件 README。
+
 ## 安装
 
 ### Claude Code
@@ -235,6 +239,9 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 # 复杂度优先（按需决策：先复用再新增）
 /plugin install devkit-complexity-first@claude-devkit-marketplace
+
+# Excalidraw 图解（生成可编辑 .excalidraw 图并渲染自检）
+/plugin install devkit-excalidraw-diagram@claude-devkit-marketplace
 ```
 
 ### Codex CLI
@@ -379,7 +386,8 @@ claude-devkit-marketplace/
 │   ├── devkit-readable-citations/
 │   ├── devkit-token-saver/
 │   ├── devkit-complexity-first/
-│   └── devkit-plugin-eval/
+│   ├── devkit-plugin-eval/
+│   └── devkit-excalidraw-diagram/
 ├── .githooks/
 │   └── pre-commit             # 提交前强制跑版本四方校验（需 git config core.hooksPath .githooks）
 ├── scripts/

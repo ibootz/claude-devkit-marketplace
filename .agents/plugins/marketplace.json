@@ -353,6 +353,24 @@
         "authentication": "ON_INSTALL"
       },
       "version": "0.5.0"
+    },
+    {
+      "author": {
+        "name": "zhangq"
+      },
+      "category": "Productivity",
+      "description": "Excalidraw 图解 - 生成可编辑的 .excalidraw 图，渲染 PNG 回看修版（移植自 coleam00）",
+      "homepage": "https://github.com/coleam00/excalidraw-diagram-skill",
+      "name": "devkit-excalidraw-diagram",
+      "source": {
+        "source": "local",
+        "path": "./plugins/devkit-excalidraw-diagram"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "version": "1.0.0"
     }
   ]
 }

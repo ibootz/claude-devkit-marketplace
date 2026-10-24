@@ -1,0 +1,14 @@
+{
+  "name": "devkit-excalidraw-diagram",
+  "version": "1.0.0",
+  "description": "Excalidraw 图解 - 生成可编辑的 .excalidraw 图，Playwright 渲染 PNG 回看修版；需 uv，首次下载 Chromium，见 README",
+  "author": {
+    "name": "zhangq"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Excalidraw Diagram",
+    "shortDescription": "生成可编辑的 Excalidraw 图并渲染自检",
+    "category": "Productivity"
+  }
+}
