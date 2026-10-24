@@ -1,6 +1,6 @@
 ---
 name: claude-session-launch
-description: 再起一个 Claude Code 会话来干活——后台会话用 `claude --allow-dangerously-skip-permissions --bg -n <名字>`（立即返回 8 位短 id，配 agents/attach/logs/stop 四个管理命令；`-n` 就是 `claude agents` 面板里显示的名字），要人盯着看的前台会话用两条 osascript 在 iTerm2 里弹新 tab。用户说「起一个后台会话/后台 agent」「用 cy 开几个窗口」「给新会话起个名字/指定 claude agents 里显示的名字」「并行开几个 claude 跑」「开个新 tab 跑 claude」「让另一个会话去做 X」「怎么看那个后台会话在干什么」「停掉那个后台会话」「claude --bg / claude agents / claude attach / claude logs / claude stop 怎么用」「claude logs 出来一堆乱码转义」「新开的 tab 跑在错的目录里」「pgrep iTerm2 查不到进程」时使用。**起会话之前就读**，别等 cwd 落错仓或 logs 刷出满屏 ANSI 才来。派活给一个**已经存在**的会话是另一件事，走 ListAgents + SendMessage。
+description: 再起一个 Claude Code 会话来干活——后台会话用 `claude --allow-dangerously-skip-permissions --bg -n <名字>`（立即返回 8 位短 id，配 agents/attach/logs/stop 四个管理命令；`-n` 就是 `claude agents` 面板里显示的名字），要人盯着看的前台会话用两条 osascript 在 iTerm2 里弹新 tab。用户说「起一个后台会话/后台 agent」「用 cy 开几个窗口」「给新会话起个名字/指定 claude agents 里显示的名字」「并行开几个 claude 跑」「开个新 tab 跑 claude」「让另一个会话去做 X」「怎么看那个后台会话在干什么」「停掉那个后台会话」「claude --bg / claude agents / claude attach / claude logs / claude stop 怎么用」「claude logs 出来一堆乱码转义」「新开的 tab 跑在错的目录里」「pgrep iTerm2 查不到进程」时使用。**起会话之前就读**，别等 cwd 落错仓或 logs 刷出满屏 ANSI 才来。派活给一个**已经存在**的会话是另一件事，走 ListAgents + SendMessage；要新会话接手本会话上下文，先走 handoff-to 写交接文档。
 ---
 
 # 起一个新的 Claude Code 会话
@@ -155,17 +155,17 @@ app bundle 是 `/Applications/iTerm.app`，`tell application "iTerm"` 正常工�
 
 ---
 
-## 起完之后怎么派活：走既有能力，别另造一套
+## 派活与交接：走既有能力，别另造一套
 
-会话起来之后，给它派活、追加指令、要它回报，一律走 **`ListAgents` 先拿确切名字 →
-`SendMessage` 按名字发**。寻址键是会话名（`-n` 设的那个），不是 session id；**跳过
-`ListAgents` 直接照记忆里的名字发，会撞 `No agent named X is reachable`**。
+- **起完之后追加指令、要它回报**：`ListAgents` 拿确切名字（就是 `-n` 设的那个，不是 8 位 id
+  或 sessionId）→ `SendMessage` 按名字发。跳过 `ListAgents` 照记忆里的名字发，会撞
+  `No agent named X is reachable`。
+- **要新会话接手本会话手上的活**：走 `devkit-tool:handoff-to` 的「新起会话」分支——先写交接
+  文档，再把文档路径写进 `--bg` 的初始 prompt 一步起好，不先起占位会话再 `SendMessage`。交接
+  文档的骨架、去敏、授权边界都在那个 skill 里，本 skill 只管把会话起出来。
 
-`SendMessage` 只传一段纯文本，不带对话历史与文件。要把整个上下文交出去，落盘一份自足文档、
-在消息里给绝对路径，不要试图用消息搬运上下文。
-
-**权限边界是按会话算的**：不要请另一个会话去做本会话已被拦下、或你预计自己权限会拦的动作——
-那是权限洗白，Human 会因此失去他本该看到的那个决定点。
+**权限边界按会话算**：初始 prompt 与 `SendMessage` 里都只写本会话自己也能做的事；本会话已被拦下、
+或预计会被拦的动作交还 Human。借另一个会话去做是权限洗白，Human 会因此失去他本该看到的那个决定点。
 
 ---
 
@@ -201,7 +201,8 @@ Bash 工具 `run_in_background`」那条约束的管辖对象**，直接前台�
 
 ## 什么时候不触发
 
-- **要派活给一个已经存在的会话** → `ListAgents` + `SendMessage`，不必再起一个。
+- **要派活给一个已经存在的会话** → `ListAgents` + `SendMessage`，不必再起一个；要把本会话
+  上下文交给它，走 `devkit-tool:handoff-to`。
 - **要在本会话内并行干活** → 用 `Agent` 工具派子代理，那是同一会话内的并行，成本远低于起一个
   独立会话，且子代理回执直接回到本会话。**判据是：这活要不要一个独立的、跨轮存活的会话身份。**
   不要用起会话代替派子代理。

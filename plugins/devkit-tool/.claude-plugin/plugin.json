@@ -1,6 +1,6 @@
 {
   "name": "devkit-tool",
-  "version": "6.30.0",
+  "version": "6.31.0",
   "description": "工具技能集：代码库分析、依赖排查、大头桶核实、ROI 报告、CLAUDE.md 初始化、codegraph 建图、插件缓存刷新、submodule 同步、提交推送、起会话与交接、孤儿进程清理、订阅恢复、话题可视化、技术文档、挖未知（17）",
   "author": {
     "name": "zhangq"
