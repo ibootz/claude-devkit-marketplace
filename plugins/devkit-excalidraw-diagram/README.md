@@ -40,9 +40,37 @@
 | `references/render_excalidraw.py` | 加 PEP 723 依赖头；新增 `--install-browser`；报错提示改成新命令；stdout/stderr 设 UTF-8 | 上游 `uv sync` 会把 `.venv` 建在 skill 目录里，插件升版本时缓存目录整个被替换，环境跟着丢 |
 | `references/render_template.html` | `@excalidraw/excalidraw` 锁定到 `0.18.0` | 2026-10-24 实测：不锁版本时 esm.sh 解析到 0.18.1，其 `?bundle` 产物引用的一个子模块 404，模块加载不出来，渲染 30 秒超时；锁 0.18.0 后渲染成功（含中文） |
 | `SKILL.md` Modern Aesthetics / Text Rules / Quality Checklist 第 17–18 条；`references/element-templates.md`；`references/json-schema.md` 的 `fontFamily` 行 | 默认画风由上游的直线 + 等宽字体（`roughness: 0`、`fontFamily: 3`）改为手绘（`roughness: 1`、`fontFamily: 5` Excalifont）；代码 / JSON 片段里的文字仍用 `fontFamily: 3` | 1.1.0，用户要默认手绘风；规则放在出图的 skill 里，`show-me` 转调、直接点名、`tech-doc` 配图三条入口拿到同一种画风。同步上游时这几处按本行手动合并 |
+| `SKILL.md` 新增 Asset Libraries 一节；新增 `references/excalidraw_lib.py` | 上游没有素材库能力。1.2.0 新增：画数据库、缓存、队列、负载均衡、云服务这类具体组件时，从 libraries.excalidraw.com 的公共目录取图标插入 | 用户要用公共素材库；见下一节 |
 | `references/pyproject.toml`、`.gitignore`、上游 `README.md` | 未移植 | 依赖已内联进脚本；安装说明并入本文件 |
 
 改配色：编辑 `skills/excalidraw-diagram/references/color-palette.md`，所有图跟着变。
+
+
+## 素材库（1.2.0 起）
+
+画图时，如果节点是具体的技术组件（数据库、缓存、负载均衡、浏览器、某个云服务），AI 会从 Excalidraw 公共素材库取现成图标，不再画带文字的方框。
+
+素材文件不随插件分发，用到时才下载到本机：
+
+| 目录 | 用途 | 查找顺序 |
+|---|---|---|
+| `<项目>/.claude/excalidraw-libraries/` | 团队共用的库，可以提交进项目仓库 | 先查 |
+| `~/.claude/excalidraw-libraries/` | 个人下载的库，所有项目通用 | 后查 |
+
+所有操作都通过 `skills/excalidraw-diagram/references/excalidraw_lib.py` 完成。这个脚本只用 Python 标准库，用 `uv run` 执行：
+
+| 子命令 | 作用 |
+|---|---|
+| `search <关键词>` | 搜公共目录（libraries.excalidraw.com，约 230 个库），目录在本机缓存 24 小时 |
+| `fetch <source 或库名> [--project]` | 下载库文件；带 `--project` 时存进项目目录 |
+| `list` | 列出本机已下载的库 |
+| `items <库>` | 列出库里的条目：序号、名称、元素数、尺寸、条目里的文字 |
+| `preview <库>` | 把全部条目排成带序号的网格，渲染成 PNG。很多库的条目没有名称，要看图挑选 |
+| `insert <场景文件> <库> <条目> --x --y [--width/--height]` | 把条目缩放后插进 `.excalidraw` 文件，自动重新生成 id 并编组；输出 JSON，里面有包围框和可供箭头绑定的元素 id |
+
+自己放库文件：把 `.excalidrawlib` 文件放进上面任一目录即可，v1、v2 两种格式都能读。
+
+许可：公共目录里的库由各作者上传，许可以每个库的说明为准；目录仓库 excalidraw-libraries 本身是 MIT 许可。插件只带脚本，不带任何第三方素材。
 
 
 ## 许可

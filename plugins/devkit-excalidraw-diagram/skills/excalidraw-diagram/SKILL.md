@@ -444,6 +444,29 @@ See `references/element-templates.md` for copy-paste JSON templates for each ele
 
 ---
 
+## Asset Libraries (.excalidrawlib)
+
+A node that stands for a concrete, recognizable thing — database, cache, queue, load balancer, browser, mobile client, a named cloud service — reads faster as a library icon than as a labelled box. Abstract concepts keep the visual patterns above.
+
+Libraries live in `.claude/excalidraw-libraries/` (project, searched first) and `~/.claude/excalidraw-libraries/` (user); the public catalog is libraries.excalidraw.com. Every step goes through one script — library JSON is never hand-copied (one icon is often hundreds of elements with freedraw points):
+
+```bash
+L='<skill-dir>/references/excalidraw_lib.py'
+uv run "$L" list                                  # downloaded libraries
+uv run "$L" search system design                  # catalog search, English keywords
+uv run "$L" fetch rohanp/system-design.excalidrawlib
+uv run "$L" preview rohanp__system-design         # labelled grid PNG of every item
+uv run "$L" insert diagram.excalidraw rohanp__system-design '#6' --x=860 --y=-130 --height=130 --id-prefix db
+```
+
+1. `list` first; `search` + `fetch` only when nothing downloaded fits.
+2. `preview`, then Read the PNG before picking: many libraries have unnamed items (`#0`, `#1`…), and names never show the drawing style. Items are addressed by `#index`, name, or a unique fragment of their name or text.
+3. `insert` once per icon, with a descriptive `--id-prefix`. It edits the scene in place and prints JSON: `bbox` places nearby labels and arrows; `anchor` is the element id that arrows bind to (set the arrow's `startBinding` / `endBinding.elementId` to it and add the arrow to that element's `boundElements`). Negative coordinates take the `=` form (`--y=-130`).
+4. Icons keep their own style. Pass `--roughness 1` only when a crisp icon clashes with the hand-drawn diagram.
+5. Then the normal render-view-fix loop.
+
+---
+
 ## Render & Validate (MANDATORY)
 
 You cannot judge a diagram from JSON alone. After generating or editing the Excalidraw JSON, you MUST render it to PNG, view the image, and fix what you see — in a loop until it's right. This is a core part of the workflow, not a final check.
