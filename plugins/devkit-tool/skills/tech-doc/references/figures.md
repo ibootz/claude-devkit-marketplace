@@ -64,8 +64,8 @@ api[订单服务]:::svc -->|推送任务| mq[消息队列]:::plat
 
 ## 四、选载体
 
-- **默认**：mermaid 源码写进 md。能 diff、能在 MR 里审，GitLab / GitHub / Typora / Obsidian 都渲染。【判断】
-- **用户要手绘风、白板风、Excalidraw，或要发布到不渲染 mermaid 的平台**：出 PNG，源文件（`.mmd` / `.excalidraw`）与 PNG 放在文档旁的 `figures/` 目录，文档里引 PNG。已安装 `devkit-excalidraw-diagram` 时用它生成。
+- **默认**：按 `show-me` 调 `devkit-excalidraw-diagram` 出 Excalidraw 图，`.excalidraw` 与 PNG 放在文档旁的 `figures/` 目录，文档里引 PNG。PNG 在 GitLab / GitHub、Typora、钉钉等在线文档里都能直接显示。【判断】
+- **未安装 `devkit-excalidraw-diagram` 或渲染跑不通**：mermaid 源码写进 md；要发布到不渲染 mermaid 的平台时，先导出 PNG 再引用，源文件 `.mmd` 同放 `figures/`。
 - 一次性给人看、看完即弃的视觉讲解才用 HTML。
 
 ---

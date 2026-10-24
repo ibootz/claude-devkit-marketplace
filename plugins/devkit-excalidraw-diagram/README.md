@@ -31,7 +31,7 @@
 
 ## 相对上游的改动
 
-只改了「在插件里能跑起来」所必需的部分，设计方法论、视觉模式库、配色、元素模板原样保留，方便以后对照上游同步。
+除下表所列（「在插件里能跑起来」所必需的部分与默认手绘画风），设计方法论、视觉模式库、配色原样保留，方便以后对照上游同步。
 
 | 文件 | 改动 | 原因 |
 |---|---|---|
@@ -39,6 +39,7 @@
 | `SKILL.md` Setup / How to Render / First-Time Setup | 去掉 `cd .claude/skills/excalidraw-diagram/references`，改用 `<skill-dir>` 绝对路径与 `uv run <脚本>` | 插件装在缓存目录，不在 `.claude/skills/` 下 |
 | `references/render_excalidraw.py` | 加 PEP 723 依赖头；新增 `--install-browser`；报错提示改成新命令；stdout/stderr 设 UTF-8 | 上游 `uv sync` 会把 `.venv` 建在 skill 目录里，插件升版本时缓存目录整个被替换，环境跟着丢 |
 | `references/render_template.html` | `@excalidraw/excalidraw` 锁定到 `0.18.0` | 2026-10-24 实测：不锁版本时 esm.sh 解析到 0.18.1，其 `?bundle` 产物引用的一个子模块 404，模块加载不出来，渲染 30 秒超时；锁 0.18.0 后渲染成功（含中文） |
+| `SKILL.md` Modern Aesthetics / Text Rules / Quality Checklist 第 17–18 条；`references/element-templates.md`；`references/json-schema.md` 的 `fontFamily` 行 | 默认画风由上游的直线 + 等宽字体（`roughness: 0`、`fontFamily: 3`）改为手绘（`roughness: 1`、`fontFamily: 5` Excalifont）；代码 / JSON 片段里的文字仍用 `fontFamily: 3` | 1.1.0，用户要默认手绘风；规则放在出图的 skill 里，`show-me` 转调、直接点名、`tech-doc` 配图三条入口拿到同一种画风。同步上游时这几处按本行手动合并 |
 | `references/pyproject.toml`、`.gitignore`、上游 `README.md` | 未移植 | 依赖已内联进脚本；安装说明并入本文件 |
 
 改配色：编辑 `skills/excalidraw-diagram/references/color-palette.md`，所有图跟着变。

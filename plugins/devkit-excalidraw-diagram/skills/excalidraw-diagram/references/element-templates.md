@@ -2,6 +2,8 @@
 
 Copy-paste JSON templates for each Excalidraw element type. The `strokeColor` and `backgroundColor` values are placeholders — always pull actual colors from `color-palette.md` based on the element's semantic purpose.
 
+Templates carry the hand-drawn defaults (`roughness: 1`, `fontFamily: 5`). For text inside code / JSON evidence artifacts, switch to `fontFamily: 3`.
+
 ## Free-Floating Text (no container)
 ```json
 {
@@ -12,7 +14,7 @@ Copy-paste JSON templates for each Excalidraw element type. The `strokeColor` an
   "text": "Section Title",
   "originalText": "Section Title",
   "fontSize": 20,
-  "fontFamily": 3,
+  "fontFamily": 5,
   "textAlign": "left",
   "verticalAlign": "top",
   "strokeColor": "<title color from palette>",
@@ -20,7 +22,7 @@ Copy-paste JSON templates for each Excalidraw element type. The `strokeColor` an
   "fillStyle": "solid",
   "strokeWidth": 1,
   "strokeStyle": "solid",
-  "roughness": 0,
+  "roughness": 1,
   "opacity": 100,
   "angle": 0,
   "seed": 11111,
@@ -48,7 +50,7 @@ Copy-paste JSON templates for each Excalidraw element type. The `strokeColor` an
   "fillStyle": "solid",
   "strokeWidth": 2,
   "strokeStyle": "solid",
-  "roughness": 0,
+  "roughness": 1,
   "opacity": 100,
   "angle": 0,
   "seed": 44444,
@@ -75,7 +77,7 @@ Copy-paste JSON templates for each Excalidraw element type. The `strokeColor` an
   "fillStyle": "solid",
   "strokeWidth": 1,
   "strokeStyle": "solid",
-  "roughness": 0,
+  "roughness": 1,
   "opacity": 100,
   "angle": 0,
   "seed": 66666,
@@ -100,7 +102,7 @@ Copy-paste JSON templates for each Excalidraw element type. The `strokeColor` an
   "fillStyle": "solid",
   "strokeWidth": 2,
   "strokeStyle": "solid",
-  "roughness": 0,
+  "roughness": 1,
   "opacity": 100,
   "angle": 0,
   "seed": 12345,
@@ -125,7 +127,7 @@ Copy-paste JSON templates for each Excalidraw element type. The `strokeColor` an
   "text": "Process",
   "originalText": "Process",
   "fontSize": 16,
-  "fontFamily": 3,
+  "fontFamily": 5,
   "textAlign": "center",
   "verticalAlign": "middle",
   "strokeColor": "<text color — match parent shape's stroke or use 'on light/dark fills' from palette>",
@@ -133,7 +135,7 @@ Copy-paste JSON templates for each Excalidraw element type. The `strokeColor` an
   "fillStyle": "solid",
   "strokeWidth": 1,
   "strokeStyle": "solid",
-  "roughness": 0,
+  "roughness": 1,
   "opacity": 100,
   "angle": 0,
   "seed": 11111,
@@ -160,7 +162,7 @@ Copy-paste JSON templates for each Excalidraw element type. The `strokeColor` an
   "fillStyle": "solid",
   "strokeWidth": 2,
   "strokeStyle": "solid",
-  "roughness": 0,
+  "roughness": 1,
   "opacity": 100,
   "angle": 0,
   "seed": 33333,

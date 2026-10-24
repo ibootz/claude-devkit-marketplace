@@ -364,13 +364,11 @@ Colors encode information, not decoration. Every color choice should come from `
 
 ## Modern Aesthetics
 
-For clean, professional diagrams:
+The default look is hand-drawn Excalidraw: sketchy strokes plus the Excalifont handwriting font.
 
 ### Roughness
-- `roughness: 0` — Clean, crisp edges. Use for modern/technical diagrams.
-- `roughness: 1` — Hand-drawn, organic feel. Use for brainstorming/informal diagrams.
-
-**Default to 0** for most professional use cases.
+- `roughness: 1` — Hand-drawn, organic feel. **Default for every element.**
+- `roughness: 0` — Clean, crisp edges. Use only when the user asks for a clean / non-hand-drawn look.
 
 ### Stroke Width
 - `strokeWidth: 1` — Thin, elegant. Good for lines, dividers, subtle connections.
@@ -420,7 +418,7 @@ Position alone doesn't show relationships. If A relates to B, there must be an a
 }
 ```
 
-Settings: `fontSize: 16`, `fontFamily: 3`, `textAlign: "center"`, `verticalAlign: "middle"`
+Settings: `fontSize: 16`, `fontFamily: 5` (Excalifont, hand-drawn), `textAlign: "center"`, `verticalAlign: "middle"`. Text inside code / JSON evidence artifacts uses `fontFamily: 3` (monospace) so code stays aligned.
 
 ---
 
@@ -538,8 +536,8 @@ The render script prints this exact command when Chromium is missing. `uv` itsel
 
 ### Technical
 16. **Text clean**: `text` contains only readable words
-17. **Font**: `fontFamily: 3`
-18. **Roughness**: `roughness: 0` for clean/modern (unless hand-drawn style requested)
+17. **Font**: `fontFamily: 5`; `fontFamily: 3` only inside code / JSON evidence artifacts
+18. **Roughness**: `roughness: 1` on every element (`0` only when the user asked for a clean look)
 19. **Opacity**: `opacity: 100` for all elements (no transparency)
 20. **Container ratio**: <30% of text elements should be inside containers
 
