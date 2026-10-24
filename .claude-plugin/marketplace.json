@@ -174,7 +174,7 @@
       "source": "./plugins/devkit-excalidraw-diagram",
       "category": "Productivity",
       "description": "Excalidraw 图解 - 生成可编辑的 .excalidraw 图，渲染 PNG 回看修版（移植自 coleam00）",
-      "version": "1.2.0"
+      "version": "1.3.0"
     }
   ]
 }

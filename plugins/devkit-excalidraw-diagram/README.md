@@ -41,6 +41,7 @@
 | `references/render_template.html` | `@excalidraw/excalidraw` 锁定到 `0.18.0` | 2026-10-24 实测：不锁版本时 esm.sh 解析到 0.18.1，其 `?bundle` 产物引用的一个子模块 404，模块加载不出来，渲染 30 秒超时；锁 0.18.0 后渲染成功（含中文） |
 | `SKILL.md` Modern Aesthetics / Text Rules / Quality Checklist 第 17–18 条；`references/element-templates.md`；`references/json-schema.md` 的 `fontFamily` 行 | 默认画风由上游的直线 + 等宽字体（`roughness: 0`、`fontFamily: 3`）改为手绘（`roughness: 1`、`fontFamily: 5` Excalifont）；代码 / JSON 片段里的文字仍用 `fontFamily: 3` | 1.1.0，用户要默认手绘风；规则放在出图的 skill 里，`show-me` 转调、直接点名、`tech-doc` 配图三条入口拿到同一种画风。同步上游时这几处按本行手动合并 |
 | `SKILL.md` 新增 Asset Libraries 一节；新增 `references/excalidraw_lib.py` | 上游没有素材库能力。1.2.0 新增：画数据库、缓存、队列、负载均衡、云服务这类具体组件时，从 libraries.excalidraw.com 的公共目录取图标插入 | 用户要用公共素材库；见下一节 |
+| 新增 `references/design-guide.md`；`SKILL.md` 设计流程第 4 步指向它，Quality Checklist 增第 28–34 条，字号改为三档预设，粗线宽 3 改 4；`references/color-palette.md` 整表换色 | 1.3.0 新增。design-guide 汇总 C4 model、Ilograph、Azure / AWS 架构图规范、NN/g、WCAG、Refactoring UI、Excalidraw 源码等来源的作图经验，分准确、排版、配色、字体与强调、容器与图标、箭头、手绘边界七节，每条标明是有出处、推断还是经验值。色板换成 Excalidraw 取色器自带的颜色，描边对白底对比度都在 3:1 以上 | 用户要把网上的专业作图经验并入本 skill；换色板后，用户在编辑器里手改时用的是同一套颜色 |
 | `references/pyproject.toml`、`.gitignore`、上游 `README.md` | 未移植 | 依赖已内联进脚本；安装说明并入本文件 |
 
 改配色：编辑 `skills/excalidraw-diagram/references/color-palette.md`，所有图跟着变。

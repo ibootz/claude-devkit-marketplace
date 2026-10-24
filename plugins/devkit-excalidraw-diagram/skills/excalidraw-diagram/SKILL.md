@@ -197,7 +197,7 @@ For each concept, find the visual pattern that mirrors its behavior:
 For multi-concept diagrams: **each major concept must use a different visual pattern**. No uniform cards or grids.
 
 ### Step 4: Sketch the Flow
-Before JSON, mentally trace how the eye moves through the diagram. There should be a clear visual story.
+Read `references/design-guide.md` now — accuracy (one abstraction level, real names, one-direction verb-labelled arrows, nesting = containment), layout numbers (20px grid, group gaps, zero crossings), color and type limits, orthogonal arrows. Then trace how the eye moves through the diagram and plan coordinates as a column/row table. There should be a clear visual story.
 
 ### Step 5: Generate JSON
 Only now create the Excalidraw elements. **See below for how to handle large diagrams.**
@@ -373,7 +373,7 @@ The default look is hand-drawn Excalidraw: sketchy strokes plus the Excalifont h
 ### Stroke Width
 - `strokeWidth: 1` — Thin, elegant. Good for lines, dividers, subtle connections.
 - `strokeWidth: 2` — Standard. Good for shapes and primary arrows.
-- `strokeWidth: 3` — Bold. Use sparingly for emphasis (main flow line, key connections).
+- `strokeWidth: 4` — Bold. Reserve for the diagram's single accent (main flow line or key connection). These three values are Excalidraw's own presets; other widths have no button in the editor.
 
 ### Opacity
 **Always use `opacity: 100` for all elements.** Use color, size, and stroke width to create hierarchy instead of transparency.
@@ -418,7 +418,9 @@ Position alone doesn't show relationships. If A relates to B, there must be an a
 }
 ```
 
-Settings: `fontSize: 16`, `fontFamily: 5` (Excalifont, hand-drawn), `textAlign: "center"`, `verticalAlign: "middle"`. Text inside code / JSON evidence artifacts uses `fontFamily: 3` (monospace) so code stays aligned.
+Settings: `fontFamily: 5` (Excalifont, hand-drawn), `textAlign: "center"`, `verticalAlign: "middle"`. Text inside code / JSON evidence artifacts uses `fontFamily: 3` (monospace) so code stays aligned.
+
+Font sizes: at most three per diagram, from Excalidraw's presets — title `28` (`36` for a single poster-style diagram), section labels `20`, body and arrow labels `16`. Nothing below 16.
 
 ---
 
@@ -502,6 +504,8 @@ After generating the initial JSON, run this cycle:
 - Sections with too much whitespace next to sections that are too cramped
 - Text too small to read at the rendered size
 - Overall composition feels lopsided or unbalanced
+- Any arrow crossing another arrow (target is zero)
+- Squint test fails: viewed as a thumbnail, the eye lands somewhere other than the intended focal element — lower the contrast where it lands
 
 **4. Fix** — Edit the JSON to address everything you found. Common fixes:
 - Widen containers when text is clipped
@@ -572,3 +576,12 @@ The render script prints this exact command when Chromium is missing. `uv` itsel
 25. **Arrows land correctly**: Arrows connect to intended elements without crossing others
 26. **Readable at export size**: Text is legible in the rendered PNG
 27. **Balanced composition**: No large empty voids or overcrowded regions
+
+### Accuracy & Polish (details in `references/design-guide.md`)
+28. **One abstraction level**; nested shapes are real containment
+29. **Arrows**: one direction each, labelled verb + object in the arrow's direction; no bare "uses"
+30. **Title** names type + scope; **legend** covers every meaning-bearing color, line style, shape, icon
+31. **Color is never the only cue**; ≤ 3–4 semantic fills; every color from `color-palette.md`
+32. **≤ 3 font sizes**, ≤ 2 dominant elements, exactly one accent
+33. **20px grid**; gaps inside a group ≤ half the gaps between groups; same-role shapes same size
+34. **Zero arrow crossings**; architecture / flow arrows orthogonal (`elbowed: true`)

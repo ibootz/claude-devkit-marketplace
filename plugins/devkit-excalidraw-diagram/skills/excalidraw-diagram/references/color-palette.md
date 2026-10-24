@@ -2,6 +2,8 @@
 
 **This is the single source of truth for all colors and brand-specific styles.** To customize diagrams for your own brand, edit this file — everything else in the skill is universal.
 
+Every hex below is a swatch in Excalidraw's own color picker (open-color shades from `packages/common/src/colors.ts`), so a user who opens the file and edits it by hand picks from the same colors. Contrast was checked against WCAG on 2026-10-24: every stroke is ≥ 3:1 against the white canvas, and `#1e1e1e` text is ≥ 9.9:1 on every fill. A replacement color must pass the same two checks (see `design-guide.md` §3).
+
 ---
 
 ## Shape Colors (Semantic)
@@ -10,32 +12,35 @@ Colors encode meaning, not decoration. Each semantic purpose has a fill/stroke p
 
 | Semantic Purpose | Fill | Stroke |
 |------------------|------|--------|
-| Primary/Neutral | `#3b82f6` | `#1e3a5f` |
-| Secondary | `#60a5fa` | `#1e3a5f` |
-| Tertiary | `#93c5fd` | `#1e3a5f` |
-| Start/Trigger | `#fed7aa` | `#c2410c` |
-| End/Success | `#a7f3d0` | `#047857` |
-| Warning/Reset | `#fee2e2` | `#dc2626` |
-| Decision | `#fef3c7` | `#b45309` |
-| AI/LLM | `#ddd6fe` | `#6d28d9` |
-| Inactive/Disabled | `#dbeafe` | `#1e40af` (use dashed stroke) |
-| Error | `#fecaca` | `#b91c1c` |
+| Primary/Neutral | `#a5d8ff` | `#1971c2` |
+| Secondary | `#e7f5ff` | `#1971c2` |
+| Tertiary / infrastructure | `#e9ecef` | `#343a40` |
+| Start/Trigger | `#ffd8a8` | `#e8590c` |
+| End/Success | `#b2f2bb` | `#2f9e44` |
+| Warning/Reset | `#fcc2d7` | `#c2255c` |
+| Decision | `#ffec99` | `#e8590c` |
+| AI/LLM | `#d0bfff` | `#6741d9` |
+| Inactive/Disabled | `#f8f9fa` | `#868e96` (use dashed stroke) |
+| Error | `#ffc9c9` | `#e03131` |
 
-**Rule**: Always pair a darker stroke with a lighter fill for contrast.
+**Rules**:
+- Always pair the darker stroke with the lighter fill. The fills are fills only — never use them as stroke or text color.
+- Decision shares Start's stroke on purpose: Excalidraw's yellow stroke `#f08c00` is only 2.5:1 on white. The diamond shape keeps the two apart.
+- Use at most 3–4 of these purposes in one diagram, plus Tertiary for neutral infrastructure.
 
 ---
 
 ## Text Colors (Hierarchy)
 
-Use color on free-floating text to create visual hierarchy without containers.
+Hierarchy comes from size first (see SKILL.md Text Rules), color second.
 
 | Level | Color | Use For |
 |-------|-------|---------|
-| Title | `#1e40af` | Section headings, major labels |
-| Subtitle | `#3b82f6` | Subheadings, secondary labels |
-| Body/Detail | `#64748b` | Descriptions, annotations, metadata |
-| On light fills | `#374151` | Text inside light-colored shapes |
-| On dark fills | `#ffffff` | Text inside dark-colored shapes |
+| Title | `#1e1e1e` | Diagram title, section headings |
+| Subtitle | `#1971c2` | Subheadings, secondary labels |
+| Body/Detail | `#343a40` | Descriptions, annotations, metadata, arrow labels |
+| On fills | `#1e1e1e` | Text inside any fill above |
+| On dark fills | `#ffffff` | Text inside evidence artifacts |
 
 ---
 
@@ -55,8 +60,9 @@ Used for code snippets, data examples, and other concrete evidence inside techni
 | Element | Color |
 |---------|-------|
 | Arrows | Use the stroke color of the source element's semantic purpose |
-| Structural lines (dividers, trees, timelines) | Primary stroke (`#1e3a5f`) or Slate (`#64748b`) |
-| Marker dots (fill + stroke) | Primary fill (`#3b82f6`) |
+| Structural lines (dividers, trees, timelines) | `#343a40`; secondary lines `#868e96` at `strokeWidth: 1` |
+| Group zones | Fill `#f8f9fa` with `strokeColor: "transparent"`, or dashed `#868e96` outline at `strokeWidth: 1` |
+| Marker dots (fill + stroke) | `#1971c2` |
 
 ---
 
