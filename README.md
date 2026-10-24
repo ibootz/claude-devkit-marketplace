@@ -23,6 +23,7 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 - `marketplace-cache-sync` - 插件市场拉取 + 全部已安装插件缓存刷新（含未启用）
 - `cascade-pull` - 带 submodule 的仓库同步拉取（只处理直接声明的一层，不递归）
 - `cascade-push` - 嵌套 submodule 由内向外逐层提交推送（递归全嵌套树）
+- `tech-doc` - 写给人读的技术文档：判类型、套骨架、生手读得懂的写法、图文分工配图、交付自检；6.30.0 新增
 - `discover-unknowns` - 手动调用的头脑风暴（`/devkit-tool:discover-unknowns`）：盲点扫描、多方向原型发散、一次一问收敛、参考复刻语义；6.29.0 由已删除的 devkit-discover-unknowns 并入
 
 ### 2. devkit-spec
