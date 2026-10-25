@@ -197,6 +197,8 @@ For each concept, find the visual pattern that mirrors its behavior:
 For multi-concept diagrams: **each major concept must use a different visual pattern**. No uniform cards or grids.
 
 ### Step 4: Sketch the Flow
+If the request names a diagram type (C4, sequence, ER, state machine, BPMN, Gantt, mind map, Sankey…), look it up in the **Reference Gallery** below first. Pick the style from **Styles** below.
+
 Read `references/design-guide.md` now — accuracy (one abstraction level, real names, one-direction verb-labelled arrows, nesting = containment), layout numbers (20px grid, group gaps, zero crossings), color and type limits, orthogonal arrows. Then trace how the eye moves through the diagram and plan coordinates as a column/row table. There should be a clear visual story.
 
 ### Step 5: Generate JSON
@@ -364,11 +366,23 @@ Colors encode information, not decoration. Every color choice should come from `
 
 ## Modern Aesthetics
 
-The default look is hand-drawn Excalidraw: sketchy strokes plus the Excalifont handwriting font.
+### Styles
 
-### Roughness
-- `roughness: 1` — Hand-drawn, organic feel. **Default for every element.**
-- `roughness: 0` — Clean, crisp edges. Use only when the user asks for a clean / non-hand-drawn look.
+Four styles. One style per diagram, applied to every element; the default is hand-drawn.
+
+| Style | Pick when the user says | `roughness` | prose `fontFamily` | code / JSON evidence `fontFamily` |
+|---|---|---|---|---|
+| **hand-drawn** (default) | nothing about style; 手绘, sketch, whiteboard | 1 | 5 (Excalifont) | 3 |
+| **clean** | 干净, 正式, clean, formal, client-facing | 0 | 2 (Helvetica) | 3 |
+| **rounded-sans** | 圆体, 柔和, Nunito, rounded font, soft | 0 | 6 (Nunito) | 3 |
+| **mono** | 等宽, 等宽圆角, 工程风, monospace, blueprint | 0 | 3 (Cascadia) | 3 |
+
+Everything else is shared: `fillStyle: "solid"`, rounded corners as in `references/element-templates.md`, colors from `color-palette.md`. To switch an existing diagram's style, change `roughness` on every element and `fontFamily` on every text element, then re-render: widths shift between fonts.
+
+What each style costs, measured on 2026-10-25 by rendering 4 identifier-heavy technical diagrams in every style with this skill's renderer:
+- **clean and rounded-sans:** uppercase `I` and lowercase `l` are the same glyph, so `skuId` reads as `skuld`. On diagrams dense with identifiers (sequence, ER, class, API) where the user wants a non-sketch look without naming a font, draw clean and mention in the reply that mono avoids this misreading.
+- **rounded-sans:** Nunito has no CJK glyphs; Chinese falls back to the system sans-serif, so on a mostly-Chinese diagram it looks almost the same as clean. Only Latin text gets rounded letterforms.
+- **mono:** every identifier stays distinct, but CJK characters take a full 1em each, so size containers from the estimate in Text Rules plus one character of slack. `O` and `0` are hard to tell apart. Cascadia draws `->` as → and `<=` as ≤ (ligatures; the text itself is unchanged).
 
 ### Stroke Width
 - `strokeWidth: 1` — Thin, elegant. Good for lines, dividers, subtle connections.
@@ -418,7 +432,9 @@ Position alone doesn't show relationships. If A relates to B, there must be an a
 }
 ```
 
-Settings: `fontFamily: 5` (Excalifont, hand-drawn), `textAlign: "center"`, `verticalAlign: "middle"`. Text inside code / JSON evidence artifacts uses `fontFamily: 3` (monospace) so code stays aligned.
+Settings: `fontFamily` from the chosen row of **Styles** (`5` for the default hand-drawn style), `textAlign: "center"`, `verticalAlign: "middle"`. Text inside code / JSON evidence artifacts uses `fontFamily: 3` (monospace) in every style so code stays aligned.
+
+Width estimate for sizing containers: each CJK character ≈ 1 × font size, each Latin character ≈ 0.62 × font size (0.6 in monospace); add the container's padding on top.
 
 Font sizes: at most three per diagram, from Excalidraw's presets — title `28` (`36` for a single poster-style diagram), section labels `20`, body and arrow labels `16`. Nothing below 16.
 
@@ -443,6 +459,18 @@ Font sizes: at most three per diagram, from Excalidraw's presets — title `28` 
 ## Element Templates
 
 See `references/element-templates.md` for copy-paste JSON templates for each element type (text, line, dot, rectangle, arrow). Pull colors from `references/color-palette.md` based on each element's semantic purpose.
+
+---
+
+## Reference Gallery
+
+`references/gallery/` holds 69 finished diagrams in 11 categories: architecture (C4, layered, hexagonal, K8s, cloud network, AWS, CQRS, DDD context map, STRIDE threat model, DFD, strangler migration), UML (class, activity, state, use case, sequence), flowchart, swimlane, decision tree, BPMN, ER, data structures (B+ tree, skip list, consistent hashing, LSM), data lineage, protocols (TCP, OAuth PKCE, TLS 1.3, Raft, Saga, packet bit layout), CI/CD, git branches, trace waterfall, flame graph, incident timeline, planning (Gantt, roadmap, kanban, story map, PERT), thinking (mind map, fishbone, 2×2, SWOT, causal loop, Wardley), product (journey map, funnel, test pyramid, Venn, business model canvas, event storming), UI (wireframe, screen flow, component tree), org chart, concept map, and charts. Each entry has a one-line caption, how it was drawn, known flaws, and canvas size.
+
+When the request names a diagram type:
+1. List the entries: `grep -n '^### ' '<skill-dir>/references/gallery/README.md'` — one line each, `### NN 图名（图类型）`.
+2. Read the matching entry (about 10 lines from its heading) and the PNG on its image line, `references/gallery/png/NN-slug.png`.
+3. Borrow the notation, layout skeleton, drawing technique, and canvas size. The content is yours, and so is the style: the gallery is rendered all-monospace with square corners, which is none of the four **Styles**.
+4. Sections `## 12` and `## 13` of the README list what Excalidraw draws badly and the better tool for each (dense dependency graphs → Graphviz / D2, data charts → ECharts / Vega-Lite, frequently changing Gantt → Mermaid, executable BPMN → bpmn.io). For those types, tell the user the better tool before drawing.
 
 ---
 
@@ -563,8 +591,8 @@ The render script prints this exact command when Chromium is missing. `uv` itsel
 
 ### Technical
 16. **Text clean**: `text` contains only readable words
-17. **Font**: `fontFamily: 5`; `fontFamily: 3` only inside code / JSON evidence artifacts
-18. **Roughness**: `roughness: 1` on every element (`0` only when the user asked for a clean look)
+17. **Font**: every prose text element uses the chosen style's `fontFamily` (`5` by default); code / JSON evidence uses `3`
+18. **Roughness**: every element uses the chosen style's `roughness` (`1` by default); one style per diagram
 19. **Opacity**: `opacity: 100` for all elements (no transparency)
 20. **Container ratio**: <30% of text elements should be inside containers
 

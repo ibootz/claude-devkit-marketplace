@@ -60,7 +60,7 @@ All values come from `color-palette.md`; this section is about *how much* and *w
 2. **≤ 2 dominant elements**: the title and one focal element. Everything else is visibly smaller. [sourced: NNg-hierarchy]
 3. **One accent.** Exactly one element or group breaks the pattern — the accent color, or the only `strokeWidth: 4`. An eye lands on the single thing that differs; emphasis everywhere is emphasis nowhere. [sourced: SWD; "only strokeWidth 4" inferred]
 4. **Emphasize by quieting the rest.** Push secondary text to the body color and secondary lines to `strokeWidth: 1` instead of enlarging the hero. Opacity stays 100 (SKILL.md rule). [sourced: RefactoringUI-review]
-5. **Fonts.** `fontFamily: 5` (Excalifont) by default, `3` for code. For a clean look use `2` (Helvetica) for all prose. One prose family per diagram. [sourced: Excalidraw-src, HN-thread]
+5. **Fonts.** The prose font comes from the chosen style in SKILL.md **Styles** (`5` Excalifont by default; `2`, `6`, or `3` for the other styles); code uses `3`. One prose family per diagram. [sourced: Excalidraw-src, HN-thread]
 6. **Squint test after render.** Look at the PNG as a thumbnail: the first place the eye lands must be the intended focal element. If it lands elsewhere, lower the contrast *there*; do not add more weight to the focal element. [sourced: NNg-hierarchy, SWD]
 
 ---
@@ -96,7 +96,7 @@ All values come from `color-palette.md`; this section is about *how much* and *w
 
 1. **`roughness: 1` on every element, never 2, never mixed in one diagram.** Hand-drawn looks cheap when sketchiness piles up (jitter + handwriting + decoration everywhere), not because it is hand-drawn. [inferred: Budd, Wood-2012]
 2. **Quantity by area → `roughness: 0`.** When shape size itself encodes a number, sketchy rendering measurably hurts area judgment. [sourced: Wood-2012]
-3. **Clean look on request.** Hand-drawn reads as "draft / idea". When the user asks for a clean, formal, or client-facing look, switch the whole diagram to `roughness: 0` + `fontFamily: 2`. When the audience is external and the user has not said, keep the default and mention in the reply that a clean version is one switch away. [sourced: HN-thread]
+3. **Non-sketch look on request.** Hand-drawn reads as "draft / idea". When the user asks for a clean, formal, client-facing, rounded, or monospace look, switch the whole diagram to the matching style in SKILL.md **Styles** (clean, rounded-sans, or mono). When the audience is external and the user has not said, keep the default and mention in the reply that another style is one switch away. [sourced: HN-thread]
 4. **No decoration.** No ornamental doodles, stars, or filler shapes. [inferred: Budd]
 
 ---

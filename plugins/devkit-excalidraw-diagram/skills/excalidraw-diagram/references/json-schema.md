@@ -38,7 +38,7 @@ All elements share these:
 | `text` | The display text |
 | `originalText` | Same as text |
 | `fontSize` | Size in pixels (16-20 recommended) |
-| `fontFamily` | 5 = Excalifont, hand-drawn (default); 3 = monospace, only for code / JSON evidence artifacts |
+| `fontFamily` | 5 = Excalifont (hand-drawn style, default); 2 = Helvetica (clean style); 6 = Nunito (rounded-sans style); 3 = Cascadia monospace (mono style, and code / JSON evidence in every style) |
 | `textAlign` | "left", "center", "right" |
 | `verticalAlign` | "top", "middle", "bottom" |
 | `containerId` | ID of parent shape |

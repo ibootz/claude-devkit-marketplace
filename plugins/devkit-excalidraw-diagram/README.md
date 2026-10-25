@@ -42,9 +42,36 @@
 | `SKILL.md` Modern Aesthetics / Text Rules / Quality Checklist 第 17–18 条；`references/element-templates.md`；`references/json-schema.md` 的 `fontFamily` 行 | 默认画风由上游的直线 + 等宽字体（`roughness: 0`、`fontFamily: 3`）改为手绘（`roughness: 1`、`fontFamily: 5` Excalifont）；代码 / JSON 片段里的文字仍用 `fontFamily: 3` | 1.1.0，用户要默认手绘风；规则放在出图的 skill 里，`show-me` 转调、直接点名、`tech-doc` 配图三条入口拿到同一种画风。同步上游时这几处按本行手动合并 |
 | `SKILL.md` 新增 Asset Libraries 一节；新增 `references/excalidraw_lib.py` | 上游没有素材库能力。1.2.0 新增：画数据库、缓存、队列、负载均衡、云服务这类具体组件时，从 libraries.excalidraw.com 的公共目录取图标插入 | 用户要用公共素材库；见下一节 |
 | 新增 `references/design-guide.md`；`SKILL.md` 设计流程第 4 步指向它，Quality Checklist 增第 28–34 条，字号改为三档预设，粗线宽 3 改 4；`references/color-palette.md` 整表换色 | 1.3.0 新增。design-guide 汇总 C4 model、Ilograph、Azure / AWS 架构图规范、NN/g、WCAG、Refactoring UI、Excalidraw 源码等来源的作图经验，分准确、排版、配色、字体与强调、容器与图标、箭头、手绘边界七节，每条标明是有出处、推断还是经验值。色板换成 Excalidraw 取色器自带的颜色，描边对白底对比度都在 3:1 以上 | 用户要把网上的专业作图经验并入本 skill；换色板后，用户在编辑器里手改时用的是同一套颜色 |
+| `SKILL.md` Modern Aesthetics 下的 Roughness 一节改为 Styles 表；Text Rules 加字宽估算；Quality Checklist 第 17–18 条；`references/design-guide.md` 第 4.5、7.3 条；`references/element-templates.md`、`references/json-schema.md` 的 `fontFamily` 说明 | 1.4.0：风格从手绘、干净两种扩到四种，新增圆体（`roughness: 0` + Nunito）与等宽（`roughness: 0` + Cascadia，圆角），每种写明选用说法与实测代价 | 用户要加圆体与等宽圆角两种风格；代价来自 2026-10-25 的风格实测（8 种风格 × 4 类技术图） |
+| 新增 `references/gallery/`（`README.md` + 70 张 PNG）；`SKILL.md` 设计流程第 4 步与新增的 Reference Gallery 一节指向它 | 1.4.0：69 张各类技术图的样例与画法、瑕疵，画指定类型的图时先查对应条目 | 用户要把这套样例图作为画特定技术图时的参照 |
 | `references/pyproject.toml`、`.gitignore`、上游 `README.md` | 未移植 | 依赖已内联进脚本；安装说明并入本文件 |
 
 改配色：编辑 `skills/excalidraw-diagram/references/color-palette.md`，所有图跟着变。
+
+
+## 风格（1.4.0 起四种）
+
+默认手绘。用户说出下表的说法时，整张图换成对应风格，一张图只用一种。
+
+| 风格 | 用户怎么说 | 线条 | 正文字体 | 实测代价 |
+|---|---|---|---|---|
+| 手绘（默认） | 不提风格；「手绘」「草图」 | 手绘抖动 | Excalifont 手写体 | 读起来像草稿 |
+| 干净 | 「干净」「正式」「给客户看」 | 直线 | Helvetica | 大写 I 与小写 l 同形，`skuId` 会读成 `skuld` |
+| 圆体 | 「圆体」「柔和」「Nunito」 | 直线 | Nunito | 同上；Nunito 不带中文字形，中文回退系统黑体，中文为主的图和「干净」几乎一样 |
+| 等宽 | 「等宽」「等宽圆角」「工程风」 | 直线 | Cascadia 等宽 | 标识符不会认错；中文字距偏大，O 与 0 难分，`->` 显示成 → |
+
+四种风格都是圆角框、实心填充、同一套配色；代码与 JSON 片段在任何风格下都用等宽字体。
+
+
+## 参考图库（1.4.0 起）
+
+`skills/excalidraw-diagram/references/gallery/` 收了 69 张图，分 11 类：架构、流程与行为、工程实践、数据与结构、协议与分布式、规划、分析与思考、产品与业务、界面与组织、数据图表。
+每张有一句话图注、画法要点、已知瑕疵和画布尺寸，另有两节写 Excalidraw 画不好什么、哪类图该换什么工具。
+AI 画指定类型的图（C4、时序图、ER 图、BPMN、甘特图……）时先查对应条目、看图，再照它的记号和版式画。
+
+- 图片用等宽直角风渲染，只当版式参照，出图风格仍按上一节选。
+- 插件只带压成 64 色的 PNG（约 6.7 MB），不带 `.excalidraw` 源文件和生成脚本。
+- 图里的业务是虚构电商「青禾商城」。
 
 
 ## 素材库（1.2.0 起）

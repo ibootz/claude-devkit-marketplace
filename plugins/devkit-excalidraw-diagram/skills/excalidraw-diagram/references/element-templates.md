@@ -2,7 +2,7 @@
 
 Copy-paste JSON templates for each Excalidraw element type. The `strokeColor` and `backgroundColor` values are placeholders — always pull actual colors from `color-palette.md` based on the element's semantic purpose.
 
-Templates carry the hand-drawn defaults (`roughness: 1`, `fontFamily: 5`). For text inside code / JSON evidence artifacts, switch to `fontFamily: 3`.
+Templates carry the hand-drawn defaults (`roughness: 1`, `fontFamily: 5`). For another style, swap those two fields per the **Styles** table in SKILL.md. Text inside code / JSON evidence artifacts uses `fontFamily: 3` in every style.
 
 ## Free-Floating Text (no container)
 ```json
