@@ -352,6 +352,11 @@ The URL links should be relative paths from the root of the user's workspace.
 
 第四个环境。它与侧边栏 webview 是**两个不同的宿主**，结论也不同：这里两种绝对 scheme 都能点。
 
+> ⚠️ **2026-10-25 补前提：下表只在终端带 `WT_SESSION` 或 `FORCE_HYPERLINK` 时成立。**
+> Claude Code 2.1.310 的 Windows 版在 VS Code 内置终端里默认**不发 OSC 8**，链接退化成
+> 「标签 (vscode://file/…)」纯文本，一折行就点不动。成因与配法见「2.1.0 启动时检查终端超链接」。
+> 这次实测能点，推断是 VS Code 从 Windows Terminal 里用 `code .` 启动、继承了 `WT_SESSION`（未核实）。
+
 | 形态 | 点击能打开 |
 |---|---|
 | `[X](file:///C:/abs/X.md#42)` | **是** |
@@ -423,11 +428,14 @@ Claude Code 改了变量名，都会落到 `generic` 这一支。
 |---|---|---|---|---|
 | iTerm2 3.6.11（macOS） | ✓ 能跳行 | ✓ | ✗（2026-08-04 测，**待重测**） | 待测 |
 | Windows Terminal（Win11） | ✗ | ✓ 但落不到行 | ✓ 能跳行 | 待测 |
-| **VS Code 内置终端（Win11）** | **✓ 能跳行** | **✓** | **✓ 能跳行** | **✗** |
+| **VS Code 内置终端（Win11）**¹ | **✓ 能跳行** | **✓** | **✓ 能跳行** | **✗** |
 | **cmd.exe / conhost（Win11）** | **✗** | **✓ 但落不到行** | **✓ 能跳行** | **✗** |
 | **Claude Code for VSCode 扩展（Win11）** | **✗** | 待测 | **✗** | **✓ 能跳行** |
 | macOS Terminal.app | 待测 | 待测 | 待测 | 待测 |
 | VS Code md 预览（落盘轨） | ✗ 整条不渲染 | ✗ 整条不渲染 | ✓ 能跳行 | 待测 |
+
+¹ 前提是终端带 `WT_SESSION` 或 `FORCE_HYPERLINK`，否则 Claude Code 不发 OSC 8、整行都退化成纯文本，
+见「2.1.0 启动时检查终端超链接」。
 
 **五个已测环境里不存在一种通吃的形态。** 最接近的是 `vscode://file/` + `:行号`——Windows
 三个终端宿主与 VS Code md 预览全部能跳行，只在 iTerm2（2026-08-04 测）与侧边栏 webview
@@ -447,6 +455,60 @@ VS Code 而不是 Typora；不带 `#` 才交给系统默认 md 应用。本机�
 所以 `file-absolute` 那一支的行号规则补了一句例外：给人看渲染效果的 md 整条不带 `#`。
 只改这一支——另两支（VS Code 集成终端、Windows 终端）点链接本来就进编辑器，不存在这个分叉。
 
+## 2.1.0 启动时检查终端超链接
+
+本插件只决定**链接写成什么形态**，**发不发 OSC 8 超链接**由 Claude Code 自己判定。后者不通过时，
+链接显示成 `base.py:133 (vscode://file/C:/…/base.py:133)` 这种纯文本：能点全靠终端自己的 URL
+文本探测，而 Claude Code 折行时插的是硬换行，长 URL 一折行就被截成两段，后半段点不动。
+
+### 成因（Claude Code 2.1.310 Windows 版二进制，2026-10-25 查）
+
+```js
+if (e) return !(e.length>0 && parseInt(e,10)===0)   // e = FORCE_HYPERLINK
+...
+if ("WT_SESSION" in process.env) return !0;          // 只认 Windows Terminal
+return !1;                                           // Windows 构建到这里就返回 false
+if (l) { switch(l){ ... case "vscode": ... } }       // vscode 那条版本判断成了死代码
+```
+
+外层兜底只再认一张白名单（`ghostty` `Hyper` `kitty` `alacritty` `iTerm.app` `iTerm2`
+`WarpTerminal`、JetBrains 终端、tmux ≥ 3.4），**没有 vscode**。所以 Windows 上：
+
+| 终端 | 默认发 OSC 8 |
+|---|---|
+| Windows Terminal（带 `WT_SESSION`） | 是 |
+| VS Code 内置终端 | **否** |
+| 独立 cmd / PowerShell 窗口（conhost） | **否** |
+| 以上任一 + `FORCE_HYPERLINK=1` | 是 |
+
+### 检查做了什么
+
+`hooks/hyperlink-check.js` 挂 `SessionStart`（matcher `startup|resume|clear`，compact 后不重复），
+只在 Windows 的交互式 CLI 里、判定 Claude Code 不会发 OSC 8 时注入一段说明：让 AI 在第一条回复
+末尾告诉用户，并问要不要代为配置。**hook 本身不写任何文件**，配置由 AI 在用户同意后改。
+
+配到哪里：
+
+| 终端 | 首选 | 备选 |
+|---|---|---|
+| VS Code 内置终端 | VS Code 用户设置 `terminal.integrated.env.windows` 加 `"FORCE_HYPERLINK": "1"`，只影响该终端 | `~/.claude/settings.json` 的 `env` 加同一项，所有终端生效 |
+| cmd / conhost | `~/.claude/settings.json` 的 `env` 加 `"FORCE_HYPERLINK": "1"`（conhost 显示是否正常未实测） | 改用 Windows Terminal |
+
+已设过 `FORCE_HYPERLINK`（值为 `0` 也算，视为用户明确关掉）时不提醒。
+`~/.claude/settings.json` 的 `env` 改动会热加载进 Claude Code 进程，Bash 子进程当场读得到
+（2026-10-25 实测）；渲染侧是否当场切换未测，稳妥起见重启 claude。
+
+回归用例：
+
+```bash
+node plugins/devkit-clickable-paths/hooks/tests/hyperlink-check.test.js
+```
+
+13 条：VS Code 内置终端与 conhost 各自提醒且给对配法；`FORCE_HYPERLINK=1` / `=0`、
+Windows Terminal、从 Windows Terminal 启动的 VS Code、JetBrains、侧边栏扩展、两个关闭开关、
+别的事件名一律静默；空 stdin 按 `SessionStart` 处理；注入正文不含尖括号。判据只在 win32 上
+命中，非 Windows 机器上「该提醒」那几条改为断言静默。
+
 ## 与 devkit-readable-citations 的分工
 
 两个插件都在让引用可跳转，管的东西不重叠，同时装不冲突：
@@ -463,10 +525,14 @@ VS Code 而不是 Typora；不带 `#` 才交给系统默认 md 应用。本机�
 ## 关闭
 
 ```bash
-export CLICKABLE_PATHS=off     # 或 0 / false
+export CLICKABLE_PATHS=off                   # 或 0 / false，整个插件关掉
+export CLICKABLE_PATHS_HYPERLINK_CHECK=off   # 只关启动时的超链接检查，链接注入照旧
 ```
 
-纯注入类 hook，不拦截任何工具调用，失败模式只是「多占了约 1533 字符上下文预算」。
+两个开关也可以写进 `~/.claude/settings.json` 的 `env`。
+
+纯注入类 hook，不拦截任何工具调用，失败模式只是「多占了约 1533 字符上下文预算」，
+以及启动检查误判时会话开头多一句提醒。
 
 ## 已知走不通的路
 
@@ -478,7 +544,8 @@ export CLICKABLE_PATHS=off     # 或 0 / false
   > 未重测；在重测之前非 Windows 平台仍走 `file:`。
 - **VS Code 自带集成终端**：曾记为「这类链接在那里点不动」（microsoft/vscode#242371）。
   **2026-09-19 在 Windows 侧复测已不成立**——那里 `file:` 与 `vscode:` 两种绝对 scheme
-  都能点且能跳行，见「VS Code 内置终端实测」一节。
+  都能点且能跳行，见「VS Code 内置终端实测」一节。前提是终端带 `WT_SESSION` 或 `FORCE_HYPERLINK`，
+  否则 Claude Code 根本不发 OSC 8，见「2.1.0 启动时检查终端超链接」。
   > **别把它与 VS Code 侧边栏的 Claude Code 扩展搞混**，那是另一个宿主、另一套结论：
   > 那里两种绝对路径**都**点不开，只有相对 workspace 根的路径能点。
   > 两者在 `detectHost()` 里由 `CLAUDE_CODE_ENTRYPOINT` 区分，判据顺序不可调换。
@@ -486,12 +553,15 @@ export CLICKABLE_PATHS=off     # 或 0 / false
 
 ## 渲染没生效怎么办
 
-若看到的是 `文件名 (file:///…)` 这种纯文本，说明 Claude Code 的终端能力检测没通过。
-它的二进制里有 `FORCE_HYPERLINK` 与 `supportsHyperlinks`，可试：
+若看到的是 `文件名 (file:///…)` 或 `文件名 (vscode://file/…)` 这种纯文本，说明 Claude Code
+的终端能力检测没通过，强制打开：
 
 ```bash
 export FORCE_HYPERLINK=1
 ```
+
+Windows 上 VS Code 内置终端与独立 cmd / PowerShell 窗口默认都不通过，2.1.0 起会话启动时会
+自动检查并提醒，配法见「2.1.0 启动时检查终端超链接」。
 
 ## Windows 终端与跨平台适配（1.7.0）
 

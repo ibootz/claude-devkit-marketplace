@@ -1,11 +1,22 @@
 {
   "name": "devkit-clickable-paths",
-  "version": "2.0.0",
-  "description": "文件路径写成可点击链接 - 注入格式规约：链接整条裸露不套反引号；对话正文按宿主切形态，落盘 md 恒用 vscode:。CLICKABLE_PATHS=off 可关",
+  "version": "2.1.0",
+  "description": "文件路径写成可点击链接 - 注入格式规约：链接整条裸露不套反引号；对话正文按宿主切形态，落盘 md 恒用 vscode:；Windows 启动时查终端超链接。CLICKABLE_PATHS=off 可关",
   "author": {
     "name": "zhangq"
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/hyperlink-check.js"
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "matcher": "*",

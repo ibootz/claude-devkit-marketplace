@@ -233,7 +233,7 @@
         "name": "zhangq"
       },
       "category": "Productivity",
-      "description": "文件路径可点击 - 裸链接不套反引号；对话正文用 file:、落盘 md 用 vscode:",
+      "description": "文件路径可点击 - 链接整条裸露不套反引号，对话正文按宿主切形态，落盘 md 恒用 vscode:；Windows 启动查超链接",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "devkit-clickable-paths",
       "source": {
@@ -244,7 +244,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "author": {

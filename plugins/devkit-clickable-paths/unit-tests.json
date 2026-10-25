@@ -1,5 +1,6 @@
 {
   "tests": [
-    { "run": ["node", "hooks/tests/clickable-paths.test.js"] }
+    { "run": ["node", "hooks/tests/clickable-paths.test.js"] },
+    { "run": ["node", "hooks/tests/hyperlink-check.test.js"] }
   ]
 }
