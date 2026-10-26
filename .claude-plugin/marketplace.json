@@ -41,7 +41,7 @@
       "source": "./plugins/devkit-tool",
       "category": "Development",
       "description": "工具技能集：代码库分析、依赖排查、耗时/ROI 报告、submodule 同步推送、提交推送、会话交接、话题可视化、技术文档写法等 17 技能",
-      "version": "6.33.0"
+      "version": "6.33.1"
     },
     {
       "name": "devkit-spec",
@@ -174,7 +174,7 @@
       "source": "./plugins/devkit-excalidraw-diagram",
       "category": "Productivity",
       "description": "Excalidraw 图解 - 生成可编辑的 .excalidraw 图，渲染 PNG 回看修版（移植自 coleam00）",
-      "version": "1.4.0"
+      "version": "1.5.0"
     }
   ]
 }

@@ -27,7 +27,7 @@ All elements share these:
 | `fillStyle` | string | "solid", "hachure", "cross-hatch" |
 | `strokeWidth` | number | 1, 2, or 4 |
 | `strokeStyle` | string | "solid", "dashed", "dotted" |
-| `roughness` | number | 0 (smooth), 1 (default), 2 (rough) |
+| `roughness` | number | 0 (smooth: rounded-sans default, clean, mono), 1 (hand-drawn), 2 (rough, unused) |
 | `opacity` | number | 0-100 |
 | `seed` | number | Random seed for roughness |
 
@@ -38,7 +38,7 @@ All elements share these:
 | `text` | The display text |
 | `originalText` | Same as text |
 | `fontSize` | Size in pixels (16-20 recommended) |
-| `fontFamily` | 5 = Excalifont (hand-drawn style, default); 2 = Helvetica (clean style); 6 = Nunito (rounded-sans style); 3 = Cascadia monospace (mono style, and code / JSON evidence in every style) |
+| `fontFamily` | 6 = Nunito (rounded-sans style, default); 5 = Excalifont (hand-drawn style); 2 = Helvetica (clean style); 3 = Cascadia monospace (mono style, and code / JSON evidence in every style) |
 | `textAlign` | "left", "center", "right" |
 | `verticalAlign` | "top", "middle", "bottom" |
 | `containerId` | ID of parent shape |

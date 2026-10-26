@@ -2,7 +2,7 @@
 
 Copy-paste JSON templates for each Excalidraw element type. The `strokeColor` and `backgroundColor` values are placeholders — always pull actual colors from `color-palette.md` based on the element's semantic purpose.
 
-Templates carry the hand-drawn defaults (`roughness: 1`, `fontFamily: 5`). For another style, swap those two fields per the **Styles** table in SKILL.md. Text inside code / JSON evidence artifacts uses `fontFamily: 3` in every style.
+Templates carry the rounded-sans defaults (`roughness: 0`, `fontFamily: 6`). For another style, swap those two fields per the **Styles** table in SKILL.md. Text inside code / JSON evidence artifacts uses `fontFamily: 3` in every style.
 
 ## Free-Floating Text (no container)
 ```json
@@ -14,7 +14,7 @@ Templates carry the hand-drawn defaults (`roughness: 1`, `fontFamily: 5`). For a
   "text": "Section Title",
   "originalText": "Section Title",
   "fontSize": 20,
-  "fontFamily": 5,
+  "fontFamily": 6,
   "textAlign": "left",
   "verticalAlign": "top",
   "strokeColor": "<title color from palette>",
@@ -22,7 +22,7 @@ Templates carry the hand-drawn defaults (`roughness: 1`, `fontFamily: 5`). For a
   "fillStyle": "solid",
   "strokeWidth": 1,
   "strokeStyle": "solid",
-  "roughness": 1,
+  "roughness": 0,
   "opacity": 100,
   "angle": 0,
   "seed": 11111,
@@ -50,7 +50,7 @@ Templates carry the hand-drawn defaults (`roughness: 1`, `fontFamily: 5`). For a
   "fillStyle": "solid",
   "strokeWidth": 2,
   "strokeStyle": "solid",
-  "roughness": 1,
+  "roughness": 0,
   "opacity": 100,
   "angle": 0,
   "seed": 44444,
@@ -77,7 +77,7 @@ Templates carry the hand-drawn defaults (`roughness: 1`, `fontFamily: 5`). For a
   "fillStyle": "solid",
   "strokeWidth": 1,
   "strokeStyle": "solid",
-  "roughness": 1,
+  "roughness": 0,
   "opacity": 100,
   "angle": 0,
   "seed": 66666,
@@ -102,7 +102,7 @@ Templates carry the hand-drawn defaults (`roughness: 1`, `fontFamily: 5`). For a
   "fillStyle": "solid",
   "strokeWidth": 2,
   "strokeStyle": "solid",
-  "roughness": 1,
+  "roughness": 0,
   "opacity": 100,
   "angle": 0,
   "seed": 12345,
@@ -127,7 +127,7 @@ Templates carry the hand-drawn defaults (`roughness: 1`, `fontFamily: 5`). For a
   "text": "Process",
   "originalText": "Process",
   "fontSize": 16,
-  "fontFamily": 5,
+  "fontFamily": 6,
   "textAlign": "center",
   "verticalAlign": "middle",
   "strokeColor": "<text color — match parent shape's stroke or use 'on light/dark fills' from palette>",
@@ -135,7 +135,7 @@ Templates carry the hand-drawn defaults (`roughness: 1`, `fontFamily: 5`). For a
   "fillStyle": "solid",
   "strokeWidth": 1,
   "strokeStyle": "solid",
-  "roughness": 1,
+  "roughness": 0,
   "opacity": 100,
   "angle": 0,
   "seed": 11111,
@@ -162,7 +162,7 @@ Templates carry the hand-drawn defaults (`roughness: 1`, `fontFamily: 5`). For a
   "fillStyle": "solid",
   "strokeWidth": 2,
   "strokeStyle": "solid",
-  "roughness": 1,
+  "roughness": 0,
   "opacity": 100,
   "angle": 0,
   "seed": 33333,

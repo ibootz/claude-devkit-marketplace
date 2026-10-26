@@ -368,19 +368,19 @@ Colors encode information, not decoration. Every color choice should come from `
 
 ### Styles
 
-Four styles. One style per diagram, applied to every element; the default is hand-drawn.
+Four styles. One style per diagram, applied to every element; the default is rounded-sans.
 
 | Style | Pick when the user says | `roughness` | prose `fontFamily` | code / JSON evidence `fontFamily` |
 |---|---|---|---|---|
-| **hand-drawn** (default) | nothing about style; 手绘, sketch, whiteboard | 1 | 5 (Excalifont) | 3 |
+| **rounded-sans** (default) | nothing about style; 圆体, 柔和, Nunito, rounded font, soft | 0 | 6 (Nunito) | 3 |
+| **hand-drawn** | 手绘, 草图, sketch, whiteboard | 1 | 5 (Excalifont) | 3 |
 | **clean** | 干净, 正式, clean, formal, client-facing | 0 | 2 (Helvetica) | 3 |
-| **rounded-sans** | 圆体, 柔和, Nunito, rounded font, soft | 0 | 6 (Nunito) | 3 |
 | **mono** | 等宽, 等宽圆角, 工程风, monospace, blueprint | 0 | 3 (Cascadia) | 3 |
 
 Everything else is shared: `fillStyle: "solid"`, rounded corners as in `references/element-templates.md`, colors from `color-palette.md`. To switch an existing diagram's style, change `roughness` on every element and `fontFamily` on every text element, then re-render: widths shift between fonts.
 
 What each style costs, measured on 2026-10-25 by rendering 4 identifier-heavy technical diagrams in every style with this skill's renderer:
-- **clean and rounded-sans:** uppercase `I` and lowercase `l` are the same glyph, so `skuId` reads as `skuld`. On diagrams dense with identifiers (sequence, ER, class, API) where the user wants a non-sketch look without naming a font, draw clean and mention in the reply that mono avoids this misreading.
+- **clean and rounded-sans:** uppercase `I` and lowercase `l` are the same glyph, so `skuId` reads as `skuld`. On diagrams dense with identifiers (sequence, ER, class, API) where the user named no style, draw the default and mention in the reply that mono avoids this misreading.
 - **rounded-sans:** Nunito has no CJK glyphs; Chinese falls back to the system sans-serif, so on a mostly-Chinese diagram it looks almost the same as clean. Only Latin text gets rounded letterforms.
 - **mono:** every identifier stays distinct, but CJK characters take a full 1em each, so size containers from the estimate in Text Rules plus one character of slack. `O` and `0` are hard to tell apart. Cascadia draws `->` as → and `<=` as ≤ (ligatures; the text itself is unchanged).
 
@@ -432,7 +432,7 @@ Position alone doesn't show relationships. If A relates to B, there must be an a
 }
 ```
 
-Settings: `fontFamily` from the chosen row of **Styles** (`5` for the default hand-drawn style), `textAlign: "center"`, `verticalAlign: "middle"`. Text inside code / JSON evidence artifacts uses `fontFamily: 3` (monospace) in every style so code stays aligned.
+Settings: `fontFamily` from the chosen row of **Styles** (`6` for the default rounded-sans style), `textAlign: "center"`, `verticalAlign: "middle"`. Text inside code / JSON evidence artifacts uses `fontFamily: 3` (monospace) in every style so code stays aligned.
 
 Width estimate for sizing containers: each CJK character ≈ 1 × font size, each Latin character ≈ 0.62 × font size (0.6 in monospace); add the container's padding on top.
 
@@ -492,7 +492,7 @@ uv run "$L" insert diagram.excalidraw rohanp__system-design '#6' --x=860 --y=-13
 1. `list` first; `search` + `fetch` only when nothing downloaded fits.
 2. `preview`, then Read the PNG before picking: many libraries have unnamed items (`#0`, `#1`…), and names never show the drawing style. Items are addressed by `#index`, name, or a unique fragment of their name or text.
 3. `insert` once per icon, with a descriptive `--id-prefix`. It edits the scene in place and prints JSON: `bbox` places nearby labels and arrows; `anchor` is the element id that arrows bind to (set the arrow's `startBinding` / `endBinding.elementId` to it and add the arrow to that element's `boundElements`). Negative coordinates take the `=` form (`--y=-130`).
-4. Icons keep their own style. Pass `--roughness 1` only when a crisp icon clashes with the hand-drawn diagram.
+4. Icons keep their own style. Pass `--roughness 1` only when a crisp icon clashes with a hand-drawn diagram.
 5. Then the normal render-view-fix loop.
 
 ---
@@ -591,8 +591,8 @@ The render script prints this exact command when Chromium is missing. `uv` itsel
 
 ### Technical
 16. **Text clean**: `text` contains only readable words
-17. **Font**: every prose text element uses the chosen style's `fontFamily` (`5` by default); code / JSON evidence uses `3`
-18. **Roughness**: every element uses the chosen style's `roughness` (`1` by default); one style per diagram
+17. **Font**: every prose text element uses the chosen style's `fontFamily` (`6` by default); code / JSON evidence uses `3`
+18. **Roughness**: every element uses the chosen style's `roughness` (`0` by default); one style per diagram
 19. **Opacity**: `opacity: 100` for all elements (no transparency)
 20. **Container ratio**: <30% of text elements should be inside containers
 

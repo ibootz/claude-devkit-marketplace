@@ -31,7 +31,7 @@
 
 ## 相对上游的改动
 
-除下表所列（「在插件里能跑起来」所必需的部分与默认手绘画风），设计方法论、视觉模式库、配色原样保留，方便以后对照上游同步。
+除下表所列（「在插件里能跑起来」所必需的部分与默认画风），设计方法论、视觉模式库、配色原样保留，方便以后对照上游同步。
 
 | 文件 | 改动 | 原因 |
 |---|---|---|
@@ -44,6 +44,7 @@
 | 新增 `references/design-guide.md`；`SKILL.md` 设计流程第 4 步指向它，Quality Checklist 增第 28–34 条，字号改为三档预设，粗线宽 3 改 4；`references/color-palette.md` 整表换色 | 1.3.0 新增。design-guide 汇总 C4 model、Ilograph、Azure / AWS 架构图规范、NN/g、WCAG、Refactoring UI、Excalidraw 源码等来源的作图经验，分准确、排版、配色、字体与强调、容器与图标、箭头、手绘边界七节，每条标明是有出处、推断还是经验值。色板换成 Excalidraw 取色器自带的颜色，描边对白底对比度都在 3:1 以上 | 用户要把网上的专业作图经验并入本 skill；换色板后，用户在编辑器里手改时用的是同一套颜色 |
 | `SKILL.md` Modern Aesthetics 下的 Roughness 一节改为 Styles 表；Text Rules 加字宽估算；Quality Checklist 第 17–18 条；`references/design-guide.md` 第 4.5、7.3 条；`references/element-templates.md`、`references/json-schema.md` 的 `fontFamily` 说明 | 1.4.0：风格从手绘、干净两种扩到四种，新增圆体（`roughness: 0` + Nunito）与等宽（`roughness: 0` + Cascadia，圆角），每种写明选用说法与实测代价 | 用户要加圆体与等宽圆角两种风格；代价来自 2026-10-25 的风格实测（8 种风格 × 4 类技术图） |
 | 新增 `references/gallery/`（`README.md` + 70 张 PNG）；`SKILL.md` 设计流程第 4 步与新增的 Reference Gallery 一节指向它 | 1.4.0：69 张各类技术图的样例与画法、瑕疵，画指定类型的图时先查对应条目 | 用户要把这套样例图作为画特定技术图时的参照 |
+| `SKILL.md` Styles 表、Text Rules、Quality Checklist 第 17–18 条；`references/element-templates.md` 全部模板；`references/design-guide.md` 第 4.5、7.1、7.3 条；`references/json-schema.md` 的 `roughness`、`fontFamily` 行 | 1.5.0：默认风格由手绘改为圆体（`roughness: 0` + `fontFamily: 6` Nunito）；手绘降为点名「手绘」「草图」才用 | 2026-10-26 用户拍板默认用圆体柔和风 |
 | `references/pyproject.toml`、`.gitignore`、上游 `README.md` | 未移植 | 依赖已内联进脚本；安装说明并入本文件 |
 
 改配色：编辑 `skills/excalidraw-diagram/references/color-palette.md`，所有图跟着变。
@@ -51,13 +52,13 @@
 
 ## 风格（1.4.0 起四种）
 
-默认手绘。用户说出下表的说法时，整张图换成对应风格，一张图只用一种。
+默认圆体（1.5.0 起；1.1.0–1.4.0 默认手绘）。用户说出下表的说法时，整张图换成对应风格，一张图只用一种。
 
 | 风格 | 用户怎么说 | 线条 | 正文字体 | 实测代价 |
 |---|---|---|---|---|
-| 手绘（默认） | 不提风格；「手绘」「草图」 | 手绘抖动 | Excalifont 手写体 | 读起来像草稿 |
+| 圆体（默认） | 不提风格；「圆体」「柔和」「Nunito」 | 直线 | Nunito | 大写 I 与小写 l 同形，`skuId` 会读成 `skuld`；Nunito 不带中文字形，中文回退系统黑体，中文为主的图和「干净」几乎一样 |
+| 手绘 | 「手绘」「草图」 | 手绘抖动 | Excalifont 手写体 | 读起来像草稿 |
 | 干净 | 「干净」「正式」「给客户看」 | 直线 | Helvetica | 大写 I 与小写 l 同形，`skuId` 会读成 `skuld` |
-| 圆体 | 「圆体」「柔和」「Nunito」 | 直线 | Nunito | 同上；Nunito 不带中文字形，中文回退系统黑体，中文为主的图和「干净」几乎一样 |
 | 等宽 | 「等宽」「等宽圆角」「工程风」 | 直线 | Cascadia 等宽 | 标识符不会认错；中文字距偏大，O 与 0 难分，`->` 显示成 → |
 
 四种风格都是圆角框、实心填充、同一套配色；代码与 JSON 片段在任何风格下都用等宽字体。
