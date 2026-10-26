@@ -185,7 +185,7 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 ### 17. devkit-excalidraw-diagram（Excalidraw 图解）
 
-移植自 [coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill)：把概念、架构、流程画成可编辑的 `.excalidraw` 文件——按概念选扇出、汇聚、时间线等视觉模式，技术图嵌真实代码与数据片段——再用 Playwright 渲染成 PNG 回看、迭代修版。直接触发只在点名要 Excalidraw 或可编辑白板图时，泛泛的「画个图」先走 `devkit-tool:show-me`；show-me 6.32.0 起画交互、流程、状态图时转调本插件出图（嵌进 md 等文档时引 PNG）。1.2.0 起可从 libraries.excalidraw.com 公共素材库搜索、下载图标并插进图里，素材存本机，不随插件分发；1.3.0 起附一份带出处的作图准则（准确、排版、配色、字体、箭头），色板换成 Excalidraw 取色器自带的颜色。1.4.0 起风格从手绘、干净两种扩到四种（加圆体、等宽），并附 69 张各类技术图的参考图库，画指定类型的图时先查对应样例；1.5.0 起默认风格由手绘改为圆体。依赖 `uv`，首次需下载一次 Chromium。1 个 Skill，零 hook。上游未附 LICENSE，版权归原作者，不在本仓 MIT 范围内；相对上游的改动与安装步骤见插件 README。
+移植自 [coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill)：把概念、架构、流程画成可编辑的 `.excalidraw` 文件——按概念选扇出、汇聚、时间线等视觉模式，技术图嵌真实代码与数据片段——再用 Playwright 渲染成 PNG 回看、迭代修版。直接触发只在点名要 Excalidraw 或可编辑白板图时，泛泛的「画个图」先走 `devkit-tool:show-me`；show-me 6.32.0 起画交互、流程、状态图时转调本插件出图（嵌进 md 等文档时引 PNG）。1.2.0 起可从 libraries.excalidraw.com 公共素材库搜索、下载图标并插进图里，素材存本机，不随插件分发；1.3.0 起附一份带出处的作图准则（准确、排版、配色、字体、箭头），色板换成 Excalidraw 取色器自带的颜色。1.4.0 起风格从手绘、干净两种扩到四种（加圆体、等宽），并附 69 张各类技术图的参考图库，画指定类型的图时先查对应样例；1.5.0 起默认风格由手绘改为圆体；1.6.0 起改已有的图时在原文件上定点修改、重渲染到原路径。依赖 `uv`，首次需下载一次 Chromium。1 个 Skill，零 hook。上游未附 LICENSE，版权归原作者，不在本仓 MIT 范围内；相对上游的改动与安装步骤见插件 README。
 
 ## 安装
 

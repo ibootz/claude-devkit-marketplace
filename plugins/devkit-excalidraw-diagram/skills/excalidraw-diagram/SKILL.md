@@ -1,11 +1,13 @@
 ---
 name: excalidraw-diagram
-description: "把概念、架构、流程画成 Excalidraw 图：生成 `.excalidraw` JSON（按概念选扇出、汇聚、时间线等视觉模式，技术图嵌真实代码与数据片段），再用 Playwright 渲染成 PNG 回看、迭代修版。用户点名要 Excalidraw 图、`.excalidraw` 文件，或要一张能在 excalidraw.com / Obsidian Excalidraw 里继续拖拽编辑的白板图时使用，如「用 excalidraw 画个架构图」「生成一个 .excalidraw 文件」「出张能拖拽改的白板图」「draw this as an Excalidraw diagram」。只说「画个图 / 可视化一下」而没提 Excalidraw 或可编辑白板时，走 devkit-tool:show-me。"
+description: "把概念、架构、流程画成 Excalidraw 图：生成 `.excalidraw` JSON（按概念选扇出、汇聚、时间线等视觉模式，技术图嵌真实代码与数据片段），再用 Playwright 渲染成 PNG 回看、迭代修版。用户点名要 Excalidraw 图、`.excalidraw` 文件，或要一张能在 excalidraw.com / Obsidian Excalidraw 里继续拖拽编辑的白板图时使用，如「用 excalidraw 画个架构图」「生成一个 .excalidraw 文件」「出张能拖拽改的白板图」「draw this as an Excalidraw diagram」；改一张已有的 `.excalidraw` 图时也用，如「把刚才那张图里的 X 改成 Y」「图上再加一步」。只说「画个图 / 可视化一下」而没提 Excalidraw 或可编辑白板时，走 devkit-tool:show-me。"
 ---
 
 # Excalidraw Diagram Creator
 
 Generate `.excalidraw` JSON files that **argue visually**, not just display information.
+
+**Changing a diagram that already exists:** go to **Updating an Existing Diagram**, below Render & Validate, instead of the design process.
 
 **Setup:** If the renderer has not been set up yet, or the user asks to set it up, follow **First-Time Setup** under Render & Validate below.
 
@@ -561,6 +563,31 @@ The render script declares its Python dependencies inline (PEP 723), so `uv run`
 uv run '<skill-dir>/references/render_excalidraw.py' --install-browser
 ```
 The render script prints this exact command when Chromium is missing. `uv` itself must be on PATH; if `uv` is not found, tell the user to install it (https://docs.astral.sh/uv/) rather than falling back to pip. Rendering also needs network access: the HTML template loads `@excalidraw/excalidraw` from esm.sh.
+
+### Handing the Diagram Over
+
+In the reply, link the PNG as a plain markdown link, `[caption](file:///abs/path/topic.png)`: no leading `!`, no `#` fragment. Claude Code's terminal cannot show images, so `![caption](…)` prints as the plain text `caption (url)` and cannot be clicked; the plain link opens the PNG in the system image viewer. Then link the `.excalidraw` source the same way. Inside a markdown document, `![caption](figures/topic.png)` is right: the document's renderer displays it.
+
+---
+
+## Updating an Existing Diagram
+
+When the topic already has a `.excalidraw` file (drawn earlier in this conversation, or sitting where the diagram would be placed), change that file in place and re-render to the same PNG path. Redraw from scratch only when the layout itself changes: most sections move, or the diagram needs a different visual pattern.
+
+In-place edits cost only the changed elements. A full rewrite re-emits the whole JSON (one real diagram's first write was 24 KB) and wipes any changes the user made in an Excalidraw editor.
+
+1. **Locate, then read only those lines.** The file may have changed since you wrote it: saving it in VS Code's Excalidraw editor rewrites the whole file (measured: 24 KB → 58 KB, 2452 lines, one property per line). Grep the current file for line numbers, then Read about 40 lines around each hit with `offset` / `limit`:
+   ```bash
+   grep -n '"id": "<element-id>"\|"text": ".*<keyword>' '<file>.excalidraw'
+   ```
+2. **Edit element by element:**
+   - Text: change `text` and `originalText` together and resize `width` with the Text Rules estimate. Bound text (`containerId` set) may need a wider container.
+   - Move: change `x` / `y` of the shape, its bound text, and the endpoints of arrows bound to it.
+   - Add: new elements get descriptive IDs and an unused seed range; list a new arrow in the `boundElements` of both ends.
+   - Remove: delete the element and every reference to it in other elements' `boundElements` and arrow bindings.
+3. **Re-render and look.** Same render command, same output path, then Read the PNG and run the defect checks from **The Loop** on the changed area and its neighbours.
+
+Keeping the file name and path means links in earlier replies and documents now show the new version.
 
 ---
 

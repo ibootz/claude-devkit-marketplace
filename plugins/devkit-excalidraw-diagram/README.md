@@ -45,6 +45,7 @@
 | `SKILL.md` Modern Aesthetics 下的 Roughness 一节改为 Styles 表；Text Rules 加字宽估算；Quality Checklist 第 17–18 条；`references/design-guide.md` 第 4.5、7.3 条；`references/element-templates.md`、`references/json-schema.md` 的 `fontFamily` 说明 | 1.4.0：风格从手绘、干净两种扩到四种，新增圆体（`roughness: 0` + Nunito）与等宽（`roughness: 0` + Cascadia，圆角），每种写明选用说法与实测代价 | 用户要加圆体与等宽圆角两种风格；代价来自 2026-10-25 的风格实测（8 种风格 × 4 类技术图） |
 | 新增 `references/gallery/`（`README.md` + 70 张 PNG）；`SKILL.md` 设计流程第 4 步与新增的 Reference Gallery 一节指向它 | 1.4.0：69 张各类技术图的样例与画法、瑕疵，画指定类型的图时先查对应条目 | 用户要把这套样例图作为画特定技术图时的参照 |
 | `SKILL.md` Styles 表、Text Rules、Quality Checklist 第 17–18 条；`references/element-templates.md` 全部模板；`references/design-guide.md` 第 4.5、7.1、7.3 条；`references/json-schema.md` 的 `roughness`、`fontFamily` 行 | 1.5.0：默认风格由手绘改为圆体（`roughness: 0` + `fontFamily: 6` Nunito）；手绘降为点名「手绘」「草图」才用 | 2026-10-26 用户拍板默认用圆体柔和风 |
+| `SKILL.md` 新增 Handing the Diagram Over、Updating an Existing Diagram 两节，开头加改图指路，`description` 补改图触发说法 | 1.6.0：回复里 PNG 用普通链接、不加 `!`；同一话题已有图时在原文件上定点改、重渲染到原路径，只有布局整体变化才重画 | 实测 `![图注](file://…png)` 在 Claude Code 终端印成纯文本、点不动；整份重写要重新输出全部 JSON，还会冲掉用户在编辑器里的手改 |
 | `references/pyproject.toml`、`.gitignore`、上游 `README.md` | 未移植 | 依赖已内联进脚本；安装说明并入本文件 |
 
 改配色：编辑 `skills/excalidraw-diagram/references/color-palette.md`，所有图跟着变。

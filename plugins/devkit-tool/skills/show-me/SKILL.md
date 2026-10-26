@@ -145,7 +145,9 @@ plugins/devkit-tool/
 
 HTML 文件一律落系统临时目录（`show-me-<短描述>.html`），不写进仓库：它不是资产，留在工作区会弄脏 `git status`，还可能被顺手提交进去。打开命令 macOS 用 `open`，Windows 用 `start`。
 
-**正文怎么给**：给 PNG 一个**不带 `#` 行号**的 `file://` 链接，用一句话说图里画了什么，再附上 `.excalidraw` 源文件的链接。退回 Mermaid 时给 md 图示文件同样不带 `#` 的链接。不带 `#` 的原因：带了 iTerm2 会按 Semantic History 交给编辑器跳到某行，看到的是源码；不带才交给系统默认应用（看图应用、Typora）渲染打开。
+**正文怎么给**：给 PNG 一个普通 markdown 链接 `[图注](file:///绝对路径/<主题>.png)`——**开头不加 `!`、不带 `#` 行号**——用一句话说图里画了什么，再附上 `.excalidraw` 源文件的链接。退回 Mermaid 时给 md 图示文件同样形态的链接。不加 `!` 的原因：Claude Code 终端显示不了图片，`![图注](…)` 会原样印成纯文本「图注 (url)」，点不动；`![]()` 只在写进 md 文档时用（见第二节载体表）。不带 `#` 的原因：带了 iTerm2 会按 Semantic History 交给编辑器跳到某行，看到的是源码；不带才交给系统默认应用（看图应用、Typora）渲染打开。
+
+**同一话题已有图**：在原 `.excalidraw` 上改、重新渲染到原 PNG 路径，不另起新文件，做法见 `devkit-excalidraw-diagram` 的 Updating an Existing Diagram 一节。原路径不变，此前回复与文档里的链接打开就是新版。
 
 **子代理**：子代理不出 Excalidraw 图——出图要加载该 skill 全文并多轮渲染回看，子代理两样都不具备。子代理把要画的参与方、关系与箭头标签用调用树或箭头图写进回执，由主会话调 `devkit-excalidraw-diagram` 出图。子代理不执行 `open` / `start`——它会抢走屏幕焦点，而子代理不知道 Human 此刻在不在看；由主会话决定什么时候打开。
 
