@@ -1,6 +1,6 @@
 ---
 name: claude-session-launch
-description: 再起一个 Claude Code 会话来干活——后台会话用 `claude --allow-dangerously-skip-permissions --bg -n <名字>`（立即返回 8 位短 id，配 agents/attach/logs/stop 四个管理命令；`-n` 就是 `claude agents` 面板里显示的名字），要人盯着看的前台会话用两条 osascript 在 iTerm2 里弹新 tab。用户说「起一个后台会话/后台 agent」「用 cy 开几个窗口」「给新会话起个名字/指定 claude agents 里显示的名字」「并行开几个 claude 跑」「开个新 tab 跑 claude」「让另一个会话去做 X」「怎么看那个后台会话在干什么」「停掉那个后台会话」「claude --bg / claude agents / claude attach / claude logs / claude stop 怎么用」「claude logs 出来一堆乱码转义」「新开的 tab 跑在错的目录里」「pgrep iTerm2 查不到进程」时使用。**起会话之前就读**，别等 cwd 落错仓或 logs 刷出满屏 ANSI 才来。派活给一个**已经存在**的会话是另一件事，走 ListAgents + SendMessage；要新会话接手本会话上下文，先走 handoff-to 写交接文档。
+description: 再起一个 Claude Code 会话来干活——后台会话用 `claude --allow-dangerously-skip-permissions --bg -n <名字>`（立即返回 8 位短 id，配 agents/attach/logs/stop 四个管理命令；`-n` 就是 `claude agents` 面板里显示的名字），要人盯着看的前台会话用两条 osascript 在 iTerm2 里弹新 tab。用户说「起一个后台会话/后台 agent」「用 cy 开几个窗口」「给新会话起个名字/指定 claude agents 里显示的名字」「并行开几个 claude 跑」「开个新 tab 跑 claude」「让另一个会话去做 X」「怎么看那个后台会话在干什么」「停掉那个后台会话」「claude --bg / claude agents / claude attach / claude logs / claude stop 怎么用」「claude logs 出来一堆乱码转义」「新开的 tab 跑在错的目录里」「pgrep iTerm2 查不到进程」「后台会话改完没合回主分支 / 没推送 / worktree 没清」时使用。**起会话之前就读**，别等 cwd 落错仓或 logs 刷出满屏 ANSI 才来。派活给一个**已经存在**的会话是另一件事，走 ListAgents + SendMessage；要新会话接手本会话上下文，先走 handoff-to 写交接文档。
 ---
 
 # 起一个新的 Claude Code 会话
@@ -40,7 +40,10 @@ claude --allow-dangerously-skip-permissions --bg -n "<会话显示名>" "<初始
 1. **必须带初始 prompt**。`--bg` 没有「空转待命」模式，没有任务内容起不来。只想占一个可寻址
    的后台会话时，给个占位 prompt（如「待命，等待后续 SendMessage 指令」），起来之后再用
    `SendMessage` 派活。
-2. **会话在当前工作目录下启动**，cwd 与执行命令时一致。要它在别的仓干活，用
+2. **会话在当前工作目录下启动**；目录是 git 仓时，Claude Code 会基于主分支另开一个 worktree
+   （`<仓>/.claude/worktrees/<名字>/`）让会话在里面干活，活干完**不会自动合回主分支，也不提交推送**
+   （2026-10-26 用户反馈；`claude agents --json` 里可见后台会话 cwd 落在这类目录）。改仓库文件的活
+   必须在初始 prompt 里写收尾，见下一节「改仓库文件的活：初始 prompt 末尾写收尾」。要它在别的仓干活，用
    `(cd /abs/path && claude --allow-dangerously-skip-permissions --bg ...)` 起——**不要发裸 `cd`**
    （会污染本会话 cwd，且本机 devkit-cd-blocker 插件硬拦）。
 3. **每个会话都起一个人一眼认得出的名字**，规则见下一节「起名」。
@@ -52,6 +55,27 @@ claude --allow-dangerously-skip-permissions --bg -n "<会话显示名>" "<初始
    `--dangerously-skip-permissions`——会放开全部权限检查，要用先向 Human 取当轮授权。
 
 `--model` 接受别名（`sonnet` / `opus` / `fable`）或全名（如 `claude-opus-5`）。
+
+### 改仓库文件的活：初始 prompt 末尾写收尾
+
+后台会话会改仓库文件（写代码、改文档、改配置）时，把下面这段原样追加到初始 prompt 末尾——经
+`handoff-to` 交接起的会话同样追加。尖括号占位由本会话起会话前填好：主仓路径与主分支名本会话
+已知，后台会话自己去猜容易猜错仓或分支。
+
+```text
+收尾（活干完后按序做完，不等指令）：
+1. 提交：在当前分支提交本次全部改动，message 按本仓惯例。
+2. 合回：当前在 worktree 里（git rev-parse --git-dir 与 --git-common-dir 输出不一致即是）时，把临时分支合进主分支：git -C <主仓绝对路径> merge <临时分支>；已在 <主分支名> 上则跳过本步。
+3. 推送：git -C <主仓绝对路径> pull --rebase 后 git -C <主仓绝对路径> push。本步覆盖 devkit-tool:commit-push 里「worktree 只合回、不推远端」那一条。
+4. 清理：git -C <主仓绝对路径> worktree remove <worktree 绝对路径>，再 git -C <主仓绝对路径> branch -d <临时分支>。这一步放最后：worktree 删掉后当前 cwd 随之消失，之后的命令都要用 git -C 指向主仓。
+任一步遇到合并冲突、rebase 冲突、push 被拒、被守卫拦下，停在那一步，把卡在哪一步和报错原文留在会话里等用户处理；分支删除只用 -d，推送不带 --force。
+```
+
+**什么时候不追加**：
+
+- 只读的活（调研、排查、出报告不改仓库文件）——没有可提交的改动。
+- 主分支受发布规约管着（产线分支、只许走 MR / PR 合入）——删掉第 3 步，改成「合回后停下，报告
+  待推送」，推送交还 Human。
 
 ### 起名：`-n` 就是 `claude agents` 面板里的名字（已实测）
 
