@@ -40,9 +40,10 @@ claude --allow-dangerously-skip-permissions --bg -n "<会话显示名>" "<初始
 1. **必须带初始 prompt**。`--bg` 没有「空转待命」模式，没有任务内容起不来。只想占一个可寻址
    的后台会话时，给个占位 prompt（如「待命，等待后续 SendMessage 指令」），起来之后再用
    `SendMessage` 派活。
-2. **会话在当前工作目录下启动**；目录是 git 仓时，Claude Code 会基于主分支另开一个 worktree
-   （`<仓>/.claude/worktrees/<名字>/`）让会话在里面干活，活干完**不会自动合回主分支，也不提交推送**
-   （2026-10-26 用户反馈；`claude agents --json` 里可见后台会话 cwd 落在这类目录）。改仓库文件的活
+2. **会话在当前工作目录下启动**；目录是 git 仓时，会话常在 worktree
+   （`<仓>/.claude/worktrees/<名字>/`）里干活，活干完**不会自动合回主分支，也不提交推送**
+   （`claude agents --json` 里可见后台会话 cwd 落在这类目录；2026-10-26 实测一例是在主仓 checkout
+   启动、会话自己调 `EnterWorktree` 进的 worktree）。改仓库文件的活
    必须在初始 prompt 里写收尾，见下一节「改仓库文件的活：初始 prompt 末尾写收尾」。要它在别的仓干活，用
    `(cd /abs/path && claude --allow-dangerously-skip-permissions --bg ...)` 起——**不要发裸 `cd`**
    （会污染本会话 cwd，且本机 devkit-cd-blocker 插件硬拦）。
@@ -65,11 +66,30 @@ claude --allow-dangerously-skip-permissions --bg -n "<会话显示名>" "<初始
 ```text
 收尾（活干完后按序做完，不等指令）：
 1. 提交：在当前分支提交本次全部改动，message 按本仓惯例。
-2. 合回：当前在 worktree 里（git rev-parse --git-dir 与 --git-common-dir 输出不一致即是）时，把临时分支合进主分支：git -C <主仓绝对路径> merge <临时分支>；已在 <主分支名> 上则跳过本步。
-3. 推送：git -C <主仓绝对路径> pull --rebase 后 git -C <主仓绝对路径> push。本步覆盖 devkit-tool:commit-push 里「worktree 只合回、不推远端」那一条。
-4. 清理：git -C <主仓绝对路径> worktree remove <worktree 绝对路径>，再 git -C <主仓绝对路径> branch -d <临时分支>。这一步放最后：worktree 删掉后当前 cwd 随之消失，之后的命令都要用 git -C 指向主仓。
+2. 回主仓：当前在 worktree 里（git rev-parse --git-dir 与 --git-common-dir 输出不一致即是）时，先记下当前分支名（即临时分支）与 worktree 绝对路径，再调 ExitWorktree {"action":"keep"} 回到 <主仓绝对路径>。这是本段授权的主动调用，不必再问用户。已在 <主分支名> 上则跳过第 2、3、5 步。
+3. 合回：git -C <主仓绝对路径> merge <临时分支>。
+4. 推送：git -C <主仓绝对路径> pull --rebase 后 git -C <主仓绝对路径> push。本步覆盖 devkit-tool:commit-push 里「worktree 只合回、不推远端」那一条。
+5. 清理：git -C <主仓绝对路径> worktree remove <worktree 绝对路径>，再 git -C <主仓绝对路径> branch -d <临时分支>。
+第 3～5 步一律在第 2 步之后跑：会话还处在 worktree 里时，Claude Code 拒绝一切用 -C 指向主仓的 git 命令（报错含 isolated in the worktree）。撞到这条拒绝说明漏了第 2 步，补做第 2 步再重试，它不算下面的停止条件；ExitWorktree 回报没有活动的 worktree 会话、重试仍被拒时，才停下。
 任一步遇到合并冲突、rebase 冲突、push 被拒、被守卫拦下，停在那一步，把卡在哪一步和报错原文留在会话里等用户处理；分支删除只用 -d，推送不带 --force。
 ```
+
+### 教训：worktree 会话里用 `git -C` 回主仓，harness 不放行（2026-10-26 实测）
+
+6.33.x 的收尾模板让后台会话站在 worktree 里直接 `git -C <主仓> merge`。实测改动已提交，合回这一步被
+Claude Code 拒绝，原文：
+
+```
+This session is isolated in the worktree <worktree 路径>, but this command redirects git to the shared checkout via -C. Refusing to run it — a worktree-isolated session's git operations must target its own worktree.
+```
+
+- **谁拦的**：Claude Code harness 内置的 worktree 会话隔离，不是插件 hook；`bypassPermissions` 下照拦，
+  停用哪个插件都绕不过。作用范围是会话进了 worktree 之后，所有指向主仓 checkout 的 git 命令。
+- **唯一出路是先离开隔离**：`ExitWorktree {"action":"keep"}` 回到主仓，再 merge、push、清理。用
+  `action: "remove"` 会连临时分支一起删，此时还没合回，提交就丢了。
+- **授权要写进 prompt**：`ExitWorktree` 的工具描述要求「只在用户要求时调用」。初始 prompt 不点名授权，后台会话
+  即使想到这条路也会停下来问人；后台无人应答，合回、推送、清理就全部搁置。上面模板第 2 步的「本段授权的主动调用」
+  就是为这个写的，改模板时保留。
 
 **什么时候不追加**：
 
