@@ -1,0 +1,5 @@
+# 实验产物（png / .excalidraw 共约百 MB）与生成脚本只留本地，不进公开仓历史；
+# 精选图已入库到 plugins/devkit-excalidraw-diagram/skills/excalidraw-diagram/references/gallery/。
+# 以后要新增入库文件，git add -f。
+*
+!.gitignore
