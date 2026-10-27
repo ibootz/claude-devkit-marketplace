@@ -1,0 +1,4 @@
+# 结论翻转专题的 spec、判定提示词、评测样本与逐条结果只留本地：样本摘自真实会话回复，含内部材料。
+# 落地结论已写进 plugins/devkit-discipline/README.md 的 4.6.0、4.7.0 两节。以后要新增入库文件，git add -f。
+*
+!.gitignore
