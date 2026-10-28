@@ -5,6 +5,7 @@
 1. **常驻注入**：每轮往主会话、以及每次子代理启动时的 context 里，塞入一份可审计、可复用的行为准则；本轮用户贴了截图时，额外附一份可原样复制的图片绝对路径清单
 2. **硬拦截**：派发 subagent 时 `name` / `description` / `model` 等**结构字段**不合规（`PreToolUse` deny）、缺鉴权或实例超限的 `agent-browser` 启动（`PreToolUse` exit 2）、自上次派发以来**逐个**发起的只读检索满 6 次时中断一次（`PreToolUse` deny，可自解除，见第六章）。**「以裸 `cd` 开头污染 cwd 的独立命令」3.26.0 已从本插件拆出**，现由独立插件 `devkit-cd-blocker` 承担，理由见第三章末
 3. **事后提醒**：写入完成后，超 1000 行的源码文件、当前项目内超 200 行的 `CLAUDE.md` 会拿到一条 stderr 提示（`PostToolUse` exit 2）。**它不是拦截**——触发时文件已经落盘，既不回滚也不停住本轮，见第四章
+4. **回合末出处审查**：主会话每轮结束时由 `claude-sonnet-5-5` 判最后一条回复里有没有「无据定论」「能查没查」，有就把理由交回主模型、本轮继续，每轮最多打回一次（`Stop`，见「4.9.0」「4.8.0」「4.7.0」三节）
 
 一个按需 skill（`zh-disambiguate`，中文消歧审计，3.35.0 起）、零命令、零子代理，装了就生效。不修改用户文件：两道 `PreToolUse` 闸只阻断工具调用本身，`PostToolUse` 的 `write-guard` 连"继续往下走"都不阻断。唯一一处会改动工具调用的地方是**缺 `name` 时自动补名**，见第二章。
 
@@ -568,6 +569,31 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 4.9.0 回合末出处审查改成 command 型，对话框不再显示提示词
+
+**做什么**：`Stop` 挂载从 prompt 型换成 command 型 `hooks/stop-audit.js`。判定提示词原样搬进 `hooks/stop-audit-prompt.txt`（与 4.8.0 逐字相同），判定模型仍是 `claude-sonnet-5-5`，由脚本自己用 `claude -p` 调起。判不满足时脚本输出 `{"decision":"block","reason":...}`，harness 把 reason 交回主模型、本轮继续。
+
+**为什么改**：用户反馈每次打回都把约 1200 字的提示词摊在对话框里。Claude Code 2.1.311 对 prompt 型 hook 的打回固定拼成 `[<提示词>]: <reason>`（二进制原文 `` blockingError:`[${Pt}]: ${pt.data.reason}` ``；同一提示词在会话里出现过以后截到前 500 字），没有配置项能关。command 型没有这段：无头会话端到端实测，主模型收到的是 `Stop hook feedback:\n回合末出处审查：…`，只有 reason。
+
+**喂给判定模型的内容变了**：prompt 型由 harness 把**整段会话**发给判定模型；command 型只发本轮的用户提问、本轮工具调用与结果的摘录（每条截 300 字，总量 12000 字，超出时保留最近的）和最后一条回复。拼法与离线评测 `run_eval.py` 相同，包装句也照抄 harness 原文。
+
+**评测（sonnet，每条 2 次，2026-10-28，走 `stop-audit.js` 的同一代码路径）**：
+
+| 样本 | 4.9.0 误拦 | 4.9.0 漏拦 | 4.8.0 误拦 | 4.8.0 漏拦 |
+|---|---|---|---|---|
+| 旧 40 条 | 1/60 | 11/20 | 5/60 | 11/20 |
+| 「能查没查 / 查不了」20 条 | 2/20 | 3/20 | 1/20 | 3/20 |
+
+两版在样本量内持平。单次判定平均 8.8 秒，p90 13.1 秒，最长 18.2 秒（并发 4）。第一次以并发 6 跑时有 23/120 次超过 75 秒被杀，降到并发 4 后为 0，原因没有查清；线上每轮只有一次判定。
+
+**代价**：每次判定的费用沿用 4.8.0 离线评测的实测值，约 $0.02～0.025（两者调用参数相同，输入只差 JSON 的空格）。4.7.0 记的长会话外推约 $2 / 轮，来自「整段会话发给判定模型」，这一项不再存在。
+
+**放行条件**：`stop_hook_active=true`（本轮已打回过一次）时不调模型直接放行，每轮最多打回一次的行为不变。claude 可执行文件找不到、判定超时（75 秒）、退出码非 0、输出解析失败时一律放行。判定子进程带 `DEVKIT_STOP_AUDIT_CHILD=1`、cwd 设在临时目录、`--setting-sources project`，用 `--debug-file` 实测它不跑任何 hook，不会递归。
+
+**关闭**：`DEVKIT_STOP_AUDIT=off`。claude 不在 PATH 或 `~/.local/bin` 里时，用 `DEVKIT_STOP_AUDIT_CLAUDE=<绝对路径>` 指定。Windows 上 npm 装出的 `claude.cmd` 需经 shell 调起，脚本不支持，此时审查静默关闭。
+
+**未核实**：交互界面里这条打回最终长什么样。无头会话里 harness 发的是 `Stop hook error occurred · ctrl+o to see` 通知，提示词不出现在主模型收到的内容里；终端里的显示要重载插件后在真实会话里看。
+
 ### 4.8.0 回合末审查加「能查没查」，打回后要求完整重写
 
 **做什么**：同一个 `Stop` 判定（仍是一次 `claude-sonnet-5-5`）在「无据定论」之外加审第二类「能查没查」——决策性结论标了「未核实 / 没确认 / 待核实 / 推断」，而本轮当场就能查清。四条同时成立才算：会话里用过能查它的工具或只需读本机文件、跑一条只读命令；不需要人回答、授权、跨团队或产线写操作；回复里没写为什么查不了；不是已派出未返回的子代理在查。任一条拿不准不算。两类共用每轮一次打回，reason 按类分条写。
@@ -585,7 +611,7 @@
 
 旧样本多出的 2 次误拦都落在同一条：「其他域有没有人读 `day_summary` 我没查」——按新规则正该打回，原标签是按 4.7.0 规则标的；扣掉后与 4.7.0 持平。新样本 17 次命中全部归到「能查没查」一类，打回理由都含完整重写要求。
 
-**界面上看到的样子**：Claude Code 把 prompt 型 hook 的打回固定显示成 `Stop hook error: [<提示词原文>]: <reason>`——标签写 error、方括号里是未替换 `$ARGUMENTS` 的整段提示词（发给判定模型的版本已替换），这段同样喂回主模型。这是 harness 的固定拼法，配置改不了；4.8.0 提示词比 4.7.0 长约 1/3，这段显示也随之变长。
+**界面上看到的样子**：Claude Code 把 prompt 型 hook 的打回固定显示成 `Stop hook error: [<提示词原文>]: <reason>`——标签写 error、方括号里是未替换 `$ARGUMENTS` 的整段提示词（发给判定模型的版本已替换），这段同样喂回主模型。这是 harness 对 prompt 型 hook 的固定拼法，配置改不了；4.8.0 提示词比 4.7.0 长约 1/3，这段显示也随之变长。4.9.0 改成 command 型后不再显示提示词，见上一节。
 
 ### 4.7.0 回合末出处审查：prompt 型 Stop hook
 
@@ -607,7 +633,7 @@ haiku 在两版措辞间只是把错误从一侧挪到另一侧；sonnet 误拦�
 
 **实测要点**：`model` 必须写完整 id，`haiku` 这类别名报 `unrecognized_model` 后静默放行；长会话超预算时 harness 会截断前文并要求判定模型「证据可能在被省略部分就判不满足」，提示词里已写明本条件只看最后一条回复、不受截断影响。
 
-**关闭**：prompt 型 hook 读不到环境变量，没有单独开关；删掉 `plugin.json` 的 `Stop` 挂载，或停用整个插件。
+**关闭**：prompt 型 hook 读不到环境变量，没有单独开关；删掉 `plugin.json` 的 `Stop` 挂载，或停用整个插件。4.9.0 起可设 `DEVKIT_STOP_AUDIT=off`。
 
 ### 4.6.0 减轻结论翻转：已证实只认本会话证据、决策性结论写明核实深度、更正块
 
@@ -1320,13 +1346,18 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/write-guard.js
 
 ```text
 plugins/devkit-discipline/
-├── .claude-plugin/plugin.json          # hook 注册（3 个注入脚本 + 4 个 guard，共 10 处挂载：
+├── .claude-plugin/plugin.json          # hook 注册（3 个注入脚本 + 4 个 guard + 1 个回合末审查，共 11 处挂载：
 │                                       #   PreToolUse×3 + PostToolUse×1 + 三个注入时机×1
 │                                       #   + UserPromptSubmit 上多挂一个 dispatch-ledger
-│                                       #   + PreCompact、SessionStart:compact 各挂一个 compact-agent-status）
+│                                       #   + PreCompact、SessionStart:compact 各挂一个 compact-agent-status
+│                                       #   + Stop 挂 stop-audit）
 ├── hooks/
 │   ├── working-discipline.js           # SessionStart / UserPromptSubmit / SubagentStart 注入
 │   │                                   #   + 有图轮次条件注入图片路径清单
+│   ├── stop-audit.js                   # 4.9.0：Stop 回合末出处审查。摘本轮工具调用 + 最后一条回复，
+│   │                                   #   自己调 claude -p（sonnet）判定，不满足输出 decision=block；
+│   │                                   #   一切失败放行。提示词在同目录 stop-audit-prompt.txt
+│   ├── stop-audit-prompt.txt           #   判定提示词（与 4.8.0 prompt 型挂载的原文逐字相同）
 │   ├── compact-agent-status.js         # 4.2.0：PreCompact 给摘要、SessionStart:compact 给压缩后
 │   │                                   #   上下文各一张后台子代理状态表（扫整份 JSONL 现算）
 │   ├── lib/
@@ -1363,7 +1394,8 @@ plugins/devkit-discipline/
 │   │                                   #   （3.26.0 起 cd 用例在 devkit-cd-blocker 插件，这里只留一条
 │   │                                   #   反向断言：裸 cd 必须已经不被 bash-guard 拦）
 │   ├── probe-throttle-verify.js        # probe-throttle 回归 45 条（判据两侧都有用例）
-│   └── compact-agent-status-verify.js  # compact-agent-status 回归 26 条
+│   ├── compact-agent-status-verify.js  # compact-agent-status 回归 26 条
+│   └── stop-audit-verify.js            # stop-audit 回归 25 条（判定模型用桩，只测脚本分支与摘录）
 └── README.md
 ```
 

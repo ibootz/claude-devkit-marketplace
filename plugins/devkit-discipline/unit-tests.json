@@ -2,6 +2,7 @@
   "tests": [
     { "run": ["node", "test/guard-verify.js"] },
     { "run": ["node", "test/probe-throttle-verify.js"] },
-    { "run": ["node", "test/compact-agent-status-verify.js"] }
+    { "run": ["node", "test/compact-agent-status-verify.js"] },
+    { "run": ["node", "test/stop-audit-verify.js"] }
   ]
 }
