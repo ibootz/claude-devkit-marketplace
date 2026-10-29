@@ -12,14 +12,11 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 
 ### 1. devkit-tool
 
-工具技能集（原 `devkit-core`），覆盖代码库分析、依赖排查、多模型协作与 Claude Code 自身运维辅助工具。
+工具技能集（原 `devkit-core`），覆盖会话起法与交接、提交推送、submodule 同步、多模型协作与 Claude Code 自身运维辅助工具。
 
 **Skills**:
-- `deps-investigator` - 依赖源码读取
-- `init-architect` - 架构初始化，生成 CLAUDE.md
-- `key-module-analysis` - 关键模块分析
 - `codegraph-index` - codegraph 代码知识图谱建图决策与使用
-- `orphan-process-cleaner` - 孤儿进程清理
+- `orphan-process-cleaner` - 查找并清理 Claude Code 拉起的后台进程（逃逸 / 长驻两类，macOS 与 Linux）
 - `marketplace-cache-sync` - 插件市场拉取 + 全部已安装插件缓存刷新（含未启用）
 - `cascade-pull` - 带 submodule 的仓库同步拉取（只处理直接声明的一层，不递归）
 - `cascade-push` - 嵌套 submodule 由内向外逐层提交推送（递归全嵌套树）
@@ -349,8 +346,6 @@ git config core.hooksPath .githooks
 
 ## 关键 Skills 快速参考
 
-- `/init-architect` - 分析代码库并生成 `CLAUDE.md`
-- `/key-module-analysis` - 梳理关键模块边界、依赖与风险
 - `/spec-analyze` - 需求分析并生成 `spec.md`
 - `/spec-tasks` - 将 `spec.md` 拆解为任务清单
 - `/spec-impl` - 按任务清单实施改动

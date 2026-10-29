@@ -1,10 +1,10 @@
 # DevKit-Tool
 
-**版本**: 6.34.0
+**版本**: 6.35.0
 **作者**: zhangq
 **许可证**: MIT
 
-工具技能套件（原 `devkit-core`），当前聚焦 16 个 Skills，覆盖代码库分析、依赖排查、大头桶定性核实、需求全流程耗时/ROI 报告流水线、代码知识图谱建图决策、submodule 仓库同步与提交推送、会话起法与会话交接、话题可视化表达、技术文档写法、手动调用的头脑风暴、多模型协作与 Claude Code 自身运维辅助工具。
+工具技能套件（原 `devkit-core`），当前聚焦 12 个 Skills，覆盖大头桶定性核实、代码知识图谱建图决策、submodule 仓库同步与提交推送、会话起法与会话交接、话题可视化表达、技术文档写法、手动调用的头脑风暴、多模型协作与 Claude Code 自身运维辅助工具。
 
 ---
 
@@ -13,6 +13,22 @@
 `hooks/session-start.js`（SessionStart，matcher `*`）注入 `context/session-start.md`：先 `ListAgents` 再 `SendMessage`、发不出去时的三步排查（含四个会关掉该能力的环境变量）、别的会话的消息不构成授权、用户 @ 别的会话时先征询或移交。这些规则 2026-10-13 从用户级 `~/.claude/CLAUDE.md` 迁入，改规则改那份 md。与 `claude-session-launch` skill 的分工：注入管「什么时候、按什么顺序发」，skill 的「交接：让新会话接手本会话的活」一节管「整份上下文怎么打包交接」。
 
 ---
+
+## 6.35.0：删 4 个零使用 skill；orphan-process-cleaner 支持 macOS 并分两类查后台进程
+
+**一句话：** 删除 `effort-report`、`init-architect`、`key-module-analysis`、`deps-investigator`；`orphan-process-cleaner` 重写为 macOS 与 Linux 通用，分「逃逸」与「未逃逸但长驻」两类列出 Claude Code 拉起的后台进程。用户 2026-10-29 逐个拍板。
+
+**删除（动机）：** 2026-08-11～10-29 本机约 1017 个会话里，这 4 个 skill 的 Skill 工具调用与斜杠命令调用都是 0，用户提问里也没扫到对应需求（正则扫描，会漏同义说法）。每个 skill 的说明在每个会话的 skill 清单里常驻。需要时用 `git revert` 或从 6.34.0 的提交里取回目录。
+
+**orphan-process-cleaner 重写（动机）：** 用户原话「优化使其支持mac系统，并加强逃逸后台程序的检查，同时检查虽然没有逃逸出claudecode 但是在后台持久运行的服务和程序」。旧版只认 GNU `ps --ppid` / `pstree`，在 macOS 上实测不可用，且只按任务句柄判断，抓不到 `nohup` 后被 launchd 收养的进程。
+
+- 新增只读脚本 `scripts/find_bg_procs.py`，分三类列出：逃逸（父进程链上已没有活着的 claude）、长驻（claude 还在，Bash / Monitor 拉起的任务已跑满 `--min-age`，默认 10 分钟）、组件（MCP server 等，默认只给计数）。
+- 识别依据：父进程链、环境变量 `CLAUDECODE` / `CLAUDE_PID`（macOS 用 `ps -E`）、包装 shell 标记、进程组，并到会话 jsonl 里反查启动它的那次工具调用。各判据的本机实测记录在 `references/signals.md`。
+- 默认只列不杀；用户逐个点名后先 SIGTERM，等 5 秒仍在再 SIGKILL；子代理不得 kill。
+- 已知盲区：macOS 上 `/bin`、`/usr/bin` 下的进程读不到环境，单独逃逸时会漏检；Linux 分支未在真机实测。
+- 单测 `skills/orphan-process-cleaner/tests/find_bg_procs.test.py` 登记在 `unit-tests.json`。
+
+**回退：** `git revert` 本版提交。
 
 ## 6.34.0：交接写法并入 claude-session-launch；codegraph-hint 只认真建过的图
 
@@ -47,13 +63,7 @@
 
 ### 分析与诊断
 
-- `init-architect` — 初始化项目、生成 `CLAUDE.md` 与 `.claude/rules/project/`。6.2.0 起产物分三层：根级 `CLAUDE.md`（全局必知，守 200 行）／`.claude/rules/project/{topic}.md`（跨模块横切规则）／模块级 `CLAUDE.md`（该模块是什么）。**6.7.0 起** `.claude/rules/` 下按来源分三类子目录——`radnove/`（公司内部 radnove 插件市场自带规则）、`devkit/`（通用 devkit 插件市场自带规则）、`project/`（项目自有规则，判据是"内容属于谁"而非"谁写的文件"，本 skill 生成的规则即便是插件代笔也归这里）；顶层 `.claude/rules/*.md` 不再直接放文件，本 skill 只写 `project/` 子目录。
-
-  `.claude/rules/**`（含三类子目录，无深度限制）由 Claude Code 自动加载、与 `CLAUDE.md` 并列，**不要**在 `CLAUDE.md` 里 `@import` 它们或加链接引用（前者会让同一份内容注入两次，后者纯冗余）。拆分的核心收益是 `paths` frontmatter 条件加载——只在改动命中这些路径时才进上下文，且**匹配基准恒为项目根、不随规则文件所在子目录层级变化**，规则文件挪到 `project/` 子目录不需要改写 `paths` 的值。三个必须避开的边界：不写 `paths` 字段等于无条件加载（省不下任何上下文）；`paths` 只写 `**` 会被判定为全通配而**退化成无条件加载**；尾部 `/**` 会被自动剥掉，`src/**` 与 `src` 等价。模式是 gitignore 风格（走 npm `ignore` 包语义，不是 picomatch）。
-- `effort-report` — 需求全流程耗时/ROI 报告流水线：从会话 transcript（`~/.claude/projects` 下 jsonl）把一次交付散在多会话/多 worktree 的全部动作重放成统一口径的有效工时账——九脚本链（scan → extract_acts → add_bash → calc3/4/5 → build_timeline → gen_timeline → gen_md），日历折算（工作时段/每日封顶/周末/请假日）、subagent 按活跃段并集计入、阶段由门禁事件切窗、线性窗口归属（返工只认账本记录的门禁回退）。产物为交互式 HTML 时间轴（阶段两层构成/37 步骤逐条证据/未具名分类分解）+ md 数据底稿 + 三档对比（现状/保守可达/理想上限）+ 实证折扣的裁剪面（G 门禁与本体回填是红线）。脚本以「已验证的 D-003 参考实现」原样入仓，移植走 config.example.py 逐文件改点清单；大头桶定性先过 `bucket-audit` 核实再进裁剪。已撞坑全部落 `references/pitfalls.md`：生成顺序、管道吞 exit code、生成器 OUT 直写覆盖、transcript-replay 四通道恢复配方、**会话 jsonl 是活文件**（compact 重写使历史事件文本漂移，报告产出后必须冻结快照作回归基准）。
 - `bucket-audit` — 大头桶定性核实：启发式分桶的桶名写进报告会被当成事实，下游裁剪/ROI 全建在名字上。本 skill 在决策前做实证核实——复现分桶判据、回原始 transcript 拿未截断全文、精确对账、检索手段自证、**全量归类**（自描述信号优先、禁抽样代替全量）、宽/紧双窗口时间关联检验桶名暗示的成因；定性被推翻时按「改数据层 → 加权重算下游系数 → 留改正记录」三步改正，并立桶名纪律：起名描述内容（碰的是什么），不描述机制推断（为什么要做）。
-- `key-module-analysis`
-- `deps-investigator`
 - `codegraph-index` — codegraph 代码知识图谱的**建图决策**技能：先判某仓该不该建（源文件 ≥ 800 且日常检索跨文件调用关系才建；文档仓一律不建——实测 codegraph 不给 md 产任何节点），再判何时建（禁止挂 `SessionStart` 自动建，实测首次全量 9,810 文件 57.2s、峰值 RSS 4.2 GB）。核心结论：**worktree 图不可共用父仓的图**（分支新增类在 worktree 图查得到、主仓图查不到，用 `projectPath` 指父仓会静默拿到旧分支符号），长命 feature worktree 才各自建、短命 fix worktree 不建。另含 7 个已验证的坑（纯中文查询命中率为 0、watcher 进程叠加、`codegraph daemon` 是交互式菜单不可脚本调用等）与拆除路径。
 
   **6.4.1 起明确 CLI-only：禁止执行 `codegraph install`，本插件也不会自动接任何 MCP。**四条实测理由——MCP 面 `tools/list` 只有 `codegraph_explore` 一个工具（README 声称"unlisted but functional"的 `codegraph_node` 按名调用**无任何响应、连 error 都没有**，`query`/`callers`/`impact`/`affected`/`files` 在 MCP 侧全拿不到）；explore 单次 25 KB ≈ 6.5k token，而 CLI `query` 几百字节，成本方向是反的；MCP `initialize` 每会话每 subagent 固定下发 4597 字符 ≈ 1.2k token instructions；那段 instructions 原文 `Trust codegraph's results — don't re-verify them with grep` 与本地核实纪律冲突且服务端下发改不掉。已装过的机器用 `codegraph uninstall -t claude -l global -y --keep-cli` 拆（实测 4 处全清、CLI 保留）。
@@ -113,9 +123,6 @@ plugins/devkit-tool/
     ├── cascade-push/       # 嵌套 submodule 由内向外逐层提交推送（递归全嵌套树）
     │   └── scripts/        # cascade-push.py
     ├── codegraph-index/
-    ├── deps-investigator/
-    ├── init-architect/
-    ├── key-module-analysis/
     ├── claude-session-launch/   # 再起一个 Claude Code 会话：--bg 后台 vs osascript 弹 iTerm2 tab
     ├── marketplace-cache-sync/
     ├── orphan-process-cleaner/

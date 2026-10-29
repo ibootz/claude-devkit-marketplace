@@ -1,157 +1,91 @@
 ---
 name: orphan-process-cleaner
-description: "查找与清理游离的 Claude Code 子进程——用 run_in_background 启动、因会话压缩/清屏/重启丢失 Task 句柄但仍在运行的后台服务。仅适用于 Linux/WSL（GNU ps/pstree 语法）：macOS 上 `ps --ppid`、`ps -o cmd`、`pstree` 均实测不可用，macOS 场景不要套用本 skill。"
-when_to_use: |
-  用户说"有没有游离进程"、"清理孤儿进程"、"之前启动的服务还在跑"、"会话压缩后丢失了后台任务"、"背景任务引用丢失"、"TaskList 找不到但进程还在"、"cleanup orphan"。
+description: "查找并清理 Claude Code 拉起、仍在后台跑的进程（macOS 与 Linux/WSL；不支持 Windows）。分两类列：逃逸——会话退出、compact、清屏丢了任务句柄，或 nohup/& 后被 launchd/init 收养，父进程链上已没有活着的 claude；长驻——claude 还在，但 run_in_background / Monitor 拉起的 dev server、watch、监听端口的服务已跑很久。自带只读探测脚本，默认只列不杀，用户逐个点名后才 kill。用户说「后台还有什么在跑」「端口被占了是谁」「清理游离进程」「孤儿进程」「会话关了服务还在」「TaskList 找不到但进程还在」「之前起的 dev server 还在吗」时使用。"
 ---
 
-# Orphan Process Cleaner（游离进程清理）
+# 后台进程排查与清理
 
-## 你要做什么
+脚本把当前用户的进程分成三类，后文一律用这三个词：
 
-作为系统侦探，找出所有由 Claude Code 发起但已**失去 TaskList 句柄**的后台服务进程，评估后安全终止。
+| 类别 | 判据 | 默认处置 |
+|---|---|---|
+| **逃逸** | 带 Claude 拉起的标记，但父进程链上已没有活着的 Claude 进程 | 清理候选，逐个问用户 |
+| **长驻** | 父进程链上有活着的 Claude，经 Bash / Monitor 工具的包装 shell 拉起，已跑满 `--min-age`（默认 10 分钟） | 本会话的走 `TaskStop`；别的会话的问用户 |
+| **组件** | 父进程链上有活着的 Claude，但不经包装 shell（MCP server、状态栏、hook 子进程） | 不动 |
 
-## 什么是"游离进程"
+「Claude 拉起的标记」指三者任一：进程环境里的 `CLAUDECODE=1` / `CLAUDE_CODE_SESSION_ID`；自身或祖先命令行含 `shell-snapshots/snapshot-`（工具的包装 shell）；与带标记的进程同属一个组长已退出的进程组。用户终端手动起的服务、brew services / launchctl / Docker / IDE 这类系统级 daemon 不带这些标记，脚本不列——它们不归本 skill 管。
 
-Claude Code 通过 `run_in_background: true` 启动 Bash 任务时，会创建子 zsh 进程。若发生以下任一情况，Task 句柄就会丢失：
-- 会话被压缩（context compression）
-- 用户手动 `/clear`
-- Claude Code 实例重启
-- Worktree 切换导致上下文切断
+## 步骤
 
-此时进程本身仍在运行，但：
-- `TaskList` 中无对应记录
-- `TaskOutput` 无法再获取输出
-- 进程成为"孤儿"，占用端口和内存
+### 1. 跑探测脚本（只读）
 
-## 执行工作流
-
-> **平台边界（已验证）**：以下命令是 GNU `ps`/`pstree` 语法，只适用于 Linux/WSL。macOS 自带 BSD `ps` 不支持 `--ppid` 过滤、不认 `-o cmd` 关键字，且默认不装 `pstree`——本机 macOS 25.5.0 实测三者均报错或未找到命令。macOS 上不要套用本节命令。
-
-### 第一阶段：识别 Claude Code 进程树
+脚本路径是本 skill 加载时显示的 Base directory 拼上 `scripts/find_bg_procs.py`：
 
 ```bash
-# 1. 找出所有 claude 主进程
-ps aux | grep -E "\bclaude\b" | grep -v grep
-
-# 2. 对每个 claude PID，查其直接子 zsh（= 后台任务壳）
-ps -o pid,ppid,stat,cmd --ppid <claude_pid>
-
-# 3. 查看 zsh 下的真实服务进程
-pstree -p <zsh_pid>
+python3 <Base directory>/scripts/find_bg_procs.py            # 逃逸全列，长驻只列跑满 10 分钟的
+python3 <Base directory>/scripts/find_bg_procs.py --min-age 1h
+python3 <Base directory>/scripts/find_bg_procs.py --all      # 另列组件
+python3 <Base directory>/scripts/find_bg_procs.py --json     # 结构化输出
+python3 <Base directory>/scripts/find_bg_procs.py --full     # 命令行不截断
 ```
 
-### 第二阶段：判断是否游离
+脚本只调 `ps`、`lsof`（Linux 缺 lsof 时用 `ss`）与 `/proc`，不发任何信号。Windows 上直接退出码 2，告诉用户到 WSL 里跑。
 
-| 判断条件 | 命令 |
-|----------|------|
-| TaskList 是否有记录 | （在 Claude 内）调用 `TaskList` tool |
-| 父 claude 是否存活 | `ps -p <ppid>` |
-| zsh 是否有 tty | `ps -o tty -p <zsh_pid>`（`?` = 后台，无 tty） |
-| 启动命令是否含 shell-snapshot | `ps -o cmd -p <zsh_pid>` 含 `shell-snapshots/snapshot-*` |
+用户问的是「端口 X 被谁占」：先跑脚本看各组的「监听」字段。端口不在清单里，就是非 Claude 拉起的进程，用 `lsof -nP -iTCP:<port> -sTCP:LISTEN`（Linux：`ss -ltnp 'sport = :<port>'`）报出是谁，处置交用户，本 skill 不清理它。
 
-**游离判定**：`TaskList` 中无对应任务 + zsh 状态为 `Ss`（session leader，无 tty）= 游离进程
+本步完成的标志：三类各几组已知，每组的组根 pid 已拿到。
 
-### 第三阶段：确认服务类型
+### 2. 逐组定处置建议
+
+每组一行 `■ 组根 pid … · <kind 标签> · 已运行 …`，下面依次是判定依据、源 Claude 或所属 Claude、启动时刻与 cwd、会话记录（`~/.claude/projects/` 下的 jsonl 及其最后活动时刻）、启动它的工具调用（仅长驻）、组内成员。按 kind 标签定建议：
+
+| kind 标签 | 建议 |
+|---|---|
+| 脱离后仍在跑的进程（逃逸）+ 源 Claude 进程已退出 | 清理候选。会话记录的「最后活动」早于今天、cwd 是临时目录或已删的 worktree，更倾向清理 |
+| 脱离后仍在跑的进程（逃逸）+ 源 Claude 进程仍在 | 多半是那个会话有意 `nohup` 起的服务，正在用。列给用户，默认不清 |
+| 插件 hook 拉起的常驻进程（`CLAUDE_PLUGIN_ROOT`） | 插件有意常驻（如某插件的 web daemon）。告诉用户是哪个插件的，按该插件自己的停止方式处理；源会话已退出且端口无人用时才作清理候选 |
+| agent-browser / Chrome for Testing | 不 kill：`agent-browser close --all` 后跑 `agent-browser doctor`。直接 kill Chrome 会留下 daemon 与 sidecar 文件；CLI 已卸载时才按 pid 清，且只清命令行含 `chrome-for-testing` 或 `agent-browser` 路径的进程 |
+| GUI 应用（.app） | 不清。这是在 Claude 里用 `code .` 一类命令拉起的应用，用户多半正在用 |
+| Bash/Monitor 工具拉起的任务（长驻） | 会话标「本会话」：先 `TaskList`，句柄还在就 `TaskStop`，不走 kill。别的会话的：「启动它的工具调用」一行写明是 `Bash` 加 `run_in_background`、前台 `Bash` 还是 `Monitor`，前台 Bash 跑满门槛多半是那个会话正等着的长命令，默认不清 |
+
+判定依据里带「弱信号」或「推断」字样的组，向用户转述时原样带上这两个字。
+
+### 3. 把清单给用户，等逐个点名
+
+每组给：组根 pid、包装 shell 里的用户命令（没有包装 shell 就给组根命令行）、已运行时长、启动时刻（带时区）、cwd、监听端口、判定依据、上一步的建议。让用户按 pid 逐个点名要清理的组。「全清」「都杀了」这类不点名的答复，回一句列出将清理的 pid 请用户确认，再执行。
+
+命令行可能带 token、cookie、内部地址，清单只给本地用户看，不贴到工单、群消息等外部系统。
+
+### 4. 清理（仅限用户当轮点名的 pid）
+
+以子代理身份运行时，到第 3 步为止：清单写进回执交父代理，kill 由主会话在用户点名后执行。
 
 ```bash
-# 查看进程树，确认是什么服务
-pstree -p <zsh_pid>
+# ① 核对身份：pid 在列清单与点名之间可能已被复用，命令行与已运行时长要对得上清单
+ps -o pid=,etime=,args= -p <pid,...>
 
-# 常见类型：
-#   java → Spring Boot / Maven 应用
-#   node → 前端 dev server / Node.js 服务
-#   python → FastAPI / Flask 服务
-#   mvn  → Maven 构建
+# ② 先 SIGTERM，给服务优雅退出的机会；组内成员一起点名时，从组根开始一并发
+kill -TERM <pid> ...
+sleep 5
+
+# ③ 还在的才 SIGKILL
+ps -o pid= -p <pid,...> && kill -KILL <仍在的 pid> ...
+
+# ④ 复扫，确认这些组已不在、端口已释放
+python3 <Base directory>/scripts/find_bg_procs.py
 ```
 
-### 第四阶段：安全终止
+逃逸组的成员共享一个组长已退出的进程组时，按 pid 逐个发信号，不用 `kill -- -<pgid>`：进程组里可能有清单外的进程。
 
-```bash
-# 第一步：SIGTERM（优雅关闭，给应用清理机会）
-kill <service_pid>
-sleep 2
+Java 服务常不理 SIGTERM，等满 5 秒仍在就进入第 ③ 步。
 
-# 第二步：确认是否已退出
-ps -p <service_pid> 2>/dev/null || echo "已退出"
+## 不动的进程
 
-# 第三步：若仍存在，SIGKILL
-kill -9 <service_pid>
-```
+- Claude 进程本身（`claude`、`claude daemon`、`bg-pty-host`、`bg-spare`、`~/.local/share/claude/versions/*`），以及组件类。
+- 用户终端手动起的服务、系统级 daemon（brew services、launchctl 加载的、Docker、IDE 后台进程）、别的用户与 root 的进程。用户点名清单外的进程时，先确认那是他自己的、知道后果，再按第 4 步执行。
 
-> 优先终止服务进程本身（java/node），而不是父 zsh 壳：`kill <pid>` 只对目标 PID 生效，杀父 zsh 不保证子进程随之退出（除非改用进程组信号 `kill -- -<pgid>`，本流程未采用）；直接杀服务 PID 才能用 `ps -p <service_pid>` 立即核验结果。
+## 已知盲区
 
-## 快速诊断命令（一键扫描）
-
-```bash
-# 找出所有 claude 发起的后台 zsh（shell-snapshot 特征）
-ps aux | grep "shell-snapshots/snapshot" | grep -v grep | \
-  awk '{print $2, $8, $11}' | head -20
-```
-
-```bash
-# 查看某 claude 进程下的所有子进程树
-pstree -p $(pgrep -x claude | head -1)
-```
-
-## 常见场景
-
-### 场景 1：Java 服务对 SIGTERM 无响应
-
-```bash
-# Spring Boot 某些配置下忽略 SIGTERM
-kill -9 <java_pid>   # 直接用 SIGKILL
-```
-
-### 场景 2：多个 claude 实例（--dangerously-skip-permissions）
-
-```bash
-# 列出所有 claude 实例和它们的 PID
-ps aux | grep "\bclaude\b" | grep -v grep | awk '{print $2, $11, $12}'
-# 检查哪个是当前会话（当前 pts/X），哪个是后台实例
-```
-
-### 场景 3：不确定该不该杀
-
-- 询问用户："PID xxx 是 `java mix2api.jar`，启动于 16:28，确认终止吗？"
-- **永远不要静默终止用户可能关心的服务**
-
-### 场景 4：agent-browser / Chrome-for-Testing 僵尸实例（**跨平台，优先用 CLI**）
-
-headless 下用户看不到浏览器窗口，AI 忘记 `close`、或会话崩溃/压缩（SessionEnd 不在压缩时触发）残留的 agent-browser 守护进程与 Chrome-for-Testing（CFT）实例会持续吃内存。**这类僵尸不套用上面的 `ps --ppid` / `kill` 流程**——agent-browser 自带跨平台的清理 CLI，更安全也更彻底。
-
-```bash
-# 1. 列出活动实例（agent-browser 自带的实例视图，比 ps 数进程树准）
-agent-browser session list
-
-# 2. 关掉所有实例（cross-session 唯一手段；bare close 只关当前 session）
-agent-browser close --all
-
-# 3. 清理残留的 daemon sidecar 文件（stale socket/pid，doctor 会自动清）
-agent-browser doctor
-```
-
-**为什么不用 `kill`**：
-
-- agent-browser 是 client-daemon 架构，daemon 管着 CFT 子进程；直接 `kill -9` chrome 可能留下僵尸 daemon 与 sidecar 文件，下次启动冲突。`close --all` 让 daemon 自己优雅关 CFT，`doctor` 收尾 sidecar。
-- CFT 进程名不一定叫 `chrome`（Chrome for Testing 的 app bundle 与日常 Chrome 不同），`ps aux | grep chrome` 容易误伤用户日常浏览器。
-
-**仍需 `ps` 的场景**：`agent-browser` CLI 本身已不在（卸载了/换机器了），但之前残留的 CFT 进程还在跑。这时按上面的 GNU `ps` 流程定位，但**只 kill 明确属于 CFT 的进程**（看 cmd 含 `chrome-for-testing` 或 `agent-browser` 路径），绝不碰用户日常 Chrome。macOS 上 BSD `ps` 不支持 `--ppid`，改用 `pgrep -fl "chrome-for-testing\|agent-browser"` 定位。
-
-> 本市场的 `devkit-agent-browser` 插件已挂 SessionEnd 钩子（`hooks/session-end-cleanup.js`），会话正常退出时会自动 `close --all` + `doctor`。本场景处理的是钩子没覆盖到的：CLI 被卸载、会话被 `kill -9` 强杀、或压缩后长时间不用导致 daemon 1h idle 自停前用户就想清理。
-
-## 操作约束（必须遵守）
-
-1. **只读扫描**：识别阶段只用 `ps`、`pstree`，不做任何写操作
-2. **必须确认**：终止进程前必须向用户展示进程信息并获得确认
-3. **不终止父 claude**：只清理 claude 发起的**子服务进程**，绝不 kill claude 主进程
-4. **SIGTERM 优先**：先尝试优雅关闭，2 秒内不响应再用 SIGKILL
-
-## 常见错误
-
-| 错误 | 原因 | 修正 |
-|------|------|------|
-| kill 后进程仍存在 | Java 类服务常见（见场景 1），忽略 SIGTERM | 用 `kill -9` |
-| 误杀在用服务 | 未确认是否仍在使用 | 终止前询问用户 |
-| 找不到游离进程 | claude 父进程已退出，孤儿被 init 接管 | `ps aux | grep "shell-snapshots"` |
-| PPID 对不上 | 多层进程嵌套 | 用 `pstree` 追溯根节点 |
+- macOS 上 Apple 自带的二进制（`/bin`、`/usr/bin` 下的 `zsh`、`sleep`、`tail` 等）用 `ps -E` 读不到环境变量。这类进程单独逃逸、又没有带标记的祖先或同进程组成员时，脚本漏检。用户怀疑有漏网的，用 `ps -A -o pid,ppid,pgid,etime,args | awk '$2==1'` 手查，结论标「推断」。
+- Linux / WSL 分支（`/proc/<pid>/environ`、`ss`）按 procps 语法写成，未在真机实测；首次在 Linux 上用时，先拿 `--json` 的输出与 `ps -ef --forest` 对一遍。
+- 每条判据的本机实测命令与输出摘要见 [references/signals.md](references/signals.md)。脚本结果与 `ps` 手查对不上，或要在新平台、新版 Claude Code 上判断脚本是否还可信时读它。
