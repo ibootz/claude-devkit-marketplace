@@ -797,7 +797,7 @@ const SECTION_HOOK_ENFORCED = [
   '',
   '- **`Bash`**（`bash-guard.js`）：只查 `agent-browser` 启动类子命令的登录态与活动实例数（≥4 先 `close`）。裸 `cd` 另由 `devkit-cd-blocker` 硬拦：用 `(cd /abs/path && cmd)` / `git -C <path>` / 全绝对路径',
   HOOK_ENFORCED_AGENT_BULLET,
-  '- **`Write` / `Edit`**（`write-guard.js`）：源码 >1000 行、项目内 `CLAUDE.md` >200 行给提示；挂 `PostToolUse`，**触发时已写完**、不回滚——动笔前就判断该不该拆',
+  '- **`Write` / `Edit`**（`write-guard.js`）：源码 >1000 行、项目内 `CLAUDE.md` >200 行给提示，同一会话同一文件只提醒一次；挂 `PostToolUse`，**触发时已写完**、不回滚——动笔前就判断该不该拆',
   '',
   '三道闸的完整判据、已实测的误杀面与自解除方式见 ' + REF_GUARDS + '。',
 ].join('\n')

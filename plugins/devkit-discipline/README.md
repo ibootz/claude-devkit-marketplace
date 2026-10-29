@@ -4,7 +4,7 @@
 
 1. **常驻注入**：每轮往主会话、以及每次子代理启动时的 context 里，塞入一份可审计、可复用的行为准则；本轮用户贴了截图时，额外附一份可原样复制的图片绝对路径清单
 2. **硬拦截**：派发 subagent 时 `name` / `description` / `model` 等**结构字段**不合规（`PreToolUse` deny）、缺鉴权或实例超限的 `agent-browser` 启动（`PreToolUse` exit 2）、自上次派发以来**逐个**发起的只读检索满 6 次时中断一次（`PreToolUse` deny，可自解除，见第六章）。**「以裸 `cd` 开头污染 cwd 的独立命令」3.26.0 已从本插件拆出**，现由独立插件 `devkit-cd-blocker` 承担，理由见第三章末
-3. **事后提醒**：写入完成后，超 1000 行的源码文件、当前项目内超 200 行的 `CLAUDE.md` 会拿到一条 stderr 提示（`PostToolUse` exit 2）。**它不是拦截**——触发时文件已经落盘，既不回滚也不停住本轮，见第四章
+3. **事后提醒**：写入完成后，超 1000 行的源码文件、当前项目内超 200 行的 `CLAUDE.md` 会拿到一条 stderr 提示（`PostToolUse` exit 2），同一会话同一文件只提醒一次（4.12.0）。**它不是拦截**——触发时文件已经落盘，既不回滚也不停住本轮，见第四章
 4. **回合末出处审查**：主会话每轮结束时由 `claude-sonnet-5-5` 判最后一条回复里有没有「无据定论」「能查没查」，有就把理由交回主模型、本轮继续，每轮最多打回一次（`Stop`，见「4.9.0」「4.8.0」「4.7.0」三节）
 
 一个按需 skill（`zh-disambiguate`，中文消歧审计，3.35.0 起）、零命令、零子代理，装了就生效。不修改用户文件：两道 `PreToolUse` 闸只阻断工具调用本身，`PostToolUse` 的 `write-guard` 连"继续往下走"都不阻断。唯一一处会改动工具调用的地方是**缺 `name` 时自动补名**，见第二章。
@@ -568,6 +568,36 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 4.12.0 write-guard 同一会话同一文件只提醒一次
+
+**改了什么**：`hooks/guards/write-guard.js` 在要输出提醒之前，先按 `session_id` + 文件绝对路径查一张去重表：本会话已对这个文件提醒过，就静默放行（exit 0）；没提醒过，登记后照常 exit 2。阈值、判据、提醒文案不变。注入文字第六章那条与 `references/guard-boundaries.md` 的 `Write` / `Edit` 段补「同一会话同一文件只提醒一次」。顺带把 `bash-guard.js` 缺鉴权提示里失效的「详见 devkit-agent-browser 插件 SKILL.md」改为「详见会话开头注入的浏览器自动化规则」（该 skill 已删，内容并进 `devkit-agent-browser` 每会话开头注入的「浏览器自动化」规则；`test/` 里没有断言依赖那句原文）。
+
+**为什么**：本机 80 天统计（主会话已对照统计原文核实）：
+
+| 指标 | 值 |
+|---|---|
+| 提醒次数 | 189 |
+| 涉及的（会话, 文件）对 | 38 |
+| 其中被提醒 ≥2 次的对 / 这些对共占提醒次数 | 23 / 174 |
+| 单文件单日最多一次 | 54 次（一个 `nas_session_upload.py`） |
+| 提醒后 5 次调用内另写新文件（拆分迹象） | 4/189（2.1%） |
+
+同一文件在同一会话里每改一次就重复一次，只增加噪音，不改变拆分率。用户 2026-10-29 拍板（Q1-c）：先修重复提醒、观察两周（到 2026-11-12），拆分率仍接近 0 再整个删掉这道提醒。
+
+**状态文件**：`<系统临时目录>/devkit-write-guard/<session_id>.json`，一个会话一个文件，内容 `{"v":1,"files":{"<文件绝对路径>":<首次提醒的毫秒时间戳>}}`；`session_id` 里不在 `[A-Za-z0-9_-]` 内的字符换成 `_`、截 64 字。`DEVKIT_WRITE_GUARD_STATE_DIR` 可改目录（测试用）。清理：每次登记新条目时顺带删掉目录里 mtime 超过 7 天的文件；单个会话文件最多 500 条，超出丢最早的。
+
+**失败时照常提醒**：payload 没有 `session_id`、状态目录建不出来或读写失败、文件不是合法 JSON 或结构不对、条目值不是数字，一律当作「没提醒过」。损坏的文件在登记时被整份重写。同一会话并行的两次写可能同时读改写，后写者覆盖前者，最坏多提醒一次。
+
+**代价**：同一会话里文件越写越长也不会再提醒第二次；子代理与主会话共用同一个 `session_id` 时共用一张表（未实测子代理 payload 的 `session_id` 是否与主会话相同）。
+
+**观察期与重开条件**：2026-11-12 重跑同一统计，若提醒后另写新文件的比例仍接近 0（4.12.0 前为 2.1%），删除 `write-guard.js`、`PostToolUse` 挂载、注入第六章那条与 `guard-boundaries.md` 对应段；若明显升高，保留。
+
+**回退**：revert 本版提交即恢复每次提醒；状态文件在临时目录，可直接删 `devkit-write-guard/`。
+
+**测试**：`test/guard-verify.js` 从 160 条增至 189 条，新增 29 条覆盖首次提醒、同会话同文件第二次 / 第三次不提醒、换文件 / 换会话照常提醒、CLAUDE.md 去重、Edit 与 Write 共用一张表、缺 `session_id` 与空串照常提醒、状态文件损坏 / 结构不对 / 值不是时间戳 / 目录建不出来照常提醒、含 `../` 的 `session_id` 不写出状态目录、500 条封顶、7 天过期清理。
+
+**未核实**：子代理的 `session_id` 与主会话是否一致；`/clear`、resume 后 `session_id` 是否保持。
+
 ### 4.11.0 删除串行检索计数闸（probe-throttle）
 
 **改了什么**：删除 `hooks/guards/probe-throttle.js`、它在 `PreToolUse:Agent|Read|Grep|Glob|Bash` 上的挂载与回归用例 `test/probe-throttle-verify.js`（45 条）。注入文字去掉六章那条 bullet 和检查点②里指向它的半句；检查点②的次数改为只由回合开头的「派发账本」（`hooks/dispatch-ledger.js`）报出。能派下一层的子代理不再需要剔除那条，与主会话拿同一份六章。`references/guard-boundaries.md` 改为三道闸。顺带改了 `devkit-worktree-flow` 的 worktree-boundary SKILL.md 里提到「串行检索计数」的一句（该插件升 2.0.1）。
@@ -989,7 +1019,7 @@ AGENT_NAMING_GUARD=off     # 1.11.0 起沿用的旧名，继续有效
 `PreToolUse` + matcher `Bash`。3.26.0 起本 guard 只做一件事：查 `agent-browser` 启动类子命令的四护栏。
 
 ```text
-[L1-BLOCKER] tool=Bash check=bash-guard finding="agent-browser open 缺鉴权机制;headless 下人类无法中途登录授权" hint="启动前先向用户索取账密/token/cookie 并注入:--headers ... 或 --profile <持久化目录> ...;详见 devkit-agent-browser 插件 SKILL.md"
+[L1-BLOCKER] tool=Bash check=bash-guard finding="agent-browser open 缺鉴权机制;headless 下人类无法中途登录授权" hint="启动前先向用户索取账密/token/cookie 并注入:--headers ... 或 --profile <持久化目录> ...;详见会话开头注入的浏览器自动化规则"
 ```
 
 ### 3.27.0：3.1 补一句「标识符读不出语义时去查它的注释」
@@ -1033,7 +1063,7 @@ AGENT_NAMING_GUARD=off     # 1.11.0 起沿用的旧名，继续有效
 | ③登录态复用 | 并入①——缺鉴权判据已覆盖"无 --profile"情形 | 同① |
 | ④安全边界 | tail 无 `--allowed-domains` 且无 `--content-boundaries` | **仅提醒**（不阻断，避免过度拦截纯公开页任务） |
 
-> 完整使用指南（鉴权注入四法、AI Testing profile 创建、snapshot 工作流、反检测）见本市场独立插件 `devkit-agent-browser` 的 SKILL.md。本节只讲 guard 判据。
+> 完整使用指南（鉴权注入四法、AI Testing profile 创建、snapshot 工作流、反检测）见本市场独立插件 `devkit-agent-browser` 每会话开头注入的「浏览器自动化」规则。本节只讲 guard 判据。
 
 判定顺序（沿用 3.6.0 的逐片段独立判定）：切出顶层片段 → 在片段的**命令名位置**认出 `agent-browser`（跳过 `VAR=值` 前缀，接受 `npx` / `bunx` / `pnpm dlx` 转发，命令名按 basename 比对因而 `/usr/local/bin/agent-browser` 也算）→ tail 里含 `--help` / `-h` / `--version` / `-V` 直接放行 → 取 tail 第一个位置参数当子命令，属于**启动类**才继续 → 四护栏逐一判定（①②阻断、④提醒）。
 
@@ -1085,13 +1115,17 @@ agent-browser **无内置并发上限**（官方已确认），`--session` 只�
 
 `PostToolUse` + matcher `Write|Edit`，合并自原 `max-source-lines.js` 与 `claude-md-max-lines.js`。两条检查互斥（一个文件不可能同时是 `.md` 和源码扩展名），合并的收益不在"一次报两条"，而在消除一次进程启动 + 一次重复的 `readFileSync`——`PostToolUse` 每次写文件都触发，这是热路径。
 
+### 同一会话同一文件只提醒一次（4.12.0）
+
+命中阈值后、输出提醒之前先查 `session_id` + 文件绝对路径的去重表，已提醒过就静默放行。动机、状态文件格式、观察期与回退见「4.12.0 write-guard 同一会话同一文件只提醒一次」一节；下文各检查的判据与提醒文案不变，「提醒」指每个（会话, 文件）的首次提醒。
+
 ### 先修正一条被广泛误读的断言：它不拦，也不停
 
 3.6.0 之前，本章标题、注入文本六章、以及 `write-guard.js` 自己的注释都写着"会被拦"。**这是错的**，而且错得有代价（见本文档「3.6.0 审计」一节）。真实行为是：hook 挂在 `PostToolUse`，触发时**文件已经落盘**，本 guard 既不回滚这次写入、也不停住本轮，只是把一句 stderr 喂回给 Claude 当附加上下文，**这一轮继续往下走**。
 
 三条实测证据（`write-guard.js:11-22`）：
 
-1. **它没有、也无法做回滚**。整份 `hooks/guards/write-guard.js` 只有两处 `readFileSync`（读 stdin、读目标文件），零个 `fs` 写操作。审计连续 6 次拦同一个 12436 行文件后复核该文件的 md5 与 mtime——**未变**。顺带说明 `finding` 里那个行数本身就是证据：它是**读落盘后的文件**数出来的（`write-guard.js:217`），能数出来就说明已经写进去了。
+1. **它没有、也无法做回滚**。整份 `hooks/guards/write-guard.js` 只有两处 `readFileSync`（读 stdin、读目标文件），对目标文件零个 `fs` 写操作（4.12.0 起另写系统临时目录里的去重状态文件，不碰目标文件）。审计连续 6 次拦同一个 12436 行文件后复核该文件的 md5 与 mtime——**未变**。顺带说明 `finding` 里那个行数本身就是证据：它是**读落盘后的文件**数出来的（`write-guard.js:217`），能数出来就说明已经写进去了。
 2. **Claude Code 2.1.220 二进制里的明文**：`On PostToolUse, the reason is fed back to Claude and the turn continues.`
 3. **真能停住回合的是 JSON 顶层 `continue: false`**（配 `stopReason`），而本文件走的是 `process.stderr.write` + `process.exit(2)`，压根不输出 JSON。
 
@@ -1332,7 +1366,7 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/write-guard.js
 - 与 `devkit-cd-blocker` 插件：**独立 `cd` 拦截 3.26.0 从本插件迁出到它那里**，动因（两条约束顶死时需要一个开关）与代价（`Bash` 变成两道闸）见第三章末。`hooks/lib/shell-parse.js` 在两个插件里各有一份**物理副本**——插件之间不能 `require` 对方的路径，各自装在独立的 plugin 缓存目录下、路径不可预测且版本可能不同。两份**导出面已经不同**（本插件只留 `splitSegments` / `tokenize` / `stripQuotes`，那边只留 `splitSegments` / `stripSubshells` / `stripHeredocs`），**不要"顺手统一"**；改了共有函数则手动同步，改完两边各跑一次自己的回归套件。
 - cd 检查的完整迁移链路：原本在 `devkit-core`（现已更名 `devkit-tool`）的 `block-cd.js` → 本插件 1.3.0 迁入并在 3.0.0 并进 `bash-guard.js` → 3.26.0 迁出到 `cd-blocker`。`devkit-tool` 自 5.1.0 起不再内置任何 hook。1.3.0 同批删除的 `guard-full-read.js`（大文件全文读取拦截）因与「精确读文件」注入纪律重复，未一并迁入。
 - `write-guard.js` 与另一个插件 `quality-lint` 的 md 200 行检查是同类思路（`PostToolUse` 上挂 Write/Edit、`[L1-BLOCKER]` 输出格式）但各自独立实现——两个插件归属不同、不互相依赖。**关于两者效力等级是否相同，本仓无法核实**：2026-07-31 全盘检索时本机未安装 `quality-lint` 插件本体（只在若干项目里留下 `.quality-lint-state.json` 状态文件），既读不到它的源码也读不到它的 README。若那边的文案写的是"拦截"而实现同样挂在 `PostToolUse`，就与本插件 3.6.0 修掉的是同一类效力虚高，值得那边自己核一次——但这句只是推断，不是本仓验证过的结论。
-- `bash-guard.js` 的 agent-browser 检查管四道护栏（①鉴权 ②实例上限 ④安全边界提醒），不涉及浏览器自动化能力本身；怎么用对见独立插件 `devkit-agent-browser` 的 SKILL.md。本插件只在缺鉴权 / 实例超限时硬拦，不管值本身是否合法（如 `--profile` 指向哪个目录走各会话 memory / CLAUDE.md 约定）。
+- `bash-guard.js` 的 agent-browser 检查管四道护栏（①鉴权 ②实例上限 ④安全边界提醒），不涉及浏览器自动化能力本身；怎么用对见独立插件 `devkit-agent-browser` 每会话开头注入的「浏览器自动化」规则。本插件只在缺鉴权 / 实例超限时硬拦，不管值本身是否合法（如 `--profile` 指向哪个目录走各会话 memory / CLAUDE.md 约定）。
 - 与 output style 类插件（`devkit-style-wenyan` / `devkit-style-plain-talk` / `devkit-style-adhd`）：判据是「换一种语体，这条还成立吗」，成立的归本插件、风格插件只留指针。3.37.0 起问法、回复骨架、名词来源、七章都在本插件，停用任何风格插件不影响它们；风格插件只定语体与四要素用段落还是清单。
 - 钉钉 dws CLI 写授权由 `radnove-core` 插件的 `pre-tool-use-dws-write.sh` 承担（`permissionDecision: "ask"`），本插件不再重复注入。
 

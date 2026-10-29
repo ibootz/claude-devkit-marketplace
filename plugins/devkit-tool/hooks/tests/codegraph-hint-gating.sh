@@ -4,6 +4,8 @@
 # （未建图 worktree / 无图仓 / 非仓目录）。两条曾经判错的边界各留一条用例：
 #   - submodule 的 gitdir 同时含 modules 与 worktrees（`.git/modules/<sub>/worktrees/<sub>`）
 #   - 未建图 worktree 不得认领父仓的图（父仓图里是另一个分支的符号）
+#   - 6.34.0：光有 .codegraph/ 目录不算图，要有 .codegraph/codegraph.db（codegraph 自身判据）；
+#     非仓目录上溯到家目录即停——~/.codegraph 是 codegraph 的配置目录，旧版 682 个注入回合里 553 个误触发于此
 # 跑法：bash hooks/tests/codegraph-hint-gating.sh
 
 set -u
@@ -11,18 +13,26 @@ HOOK="$(cd "$(dirname "$0")/.." && pwd)/codegraph-hint.js"
 B="$(mktemp -d "${TMPDIR:-/tmp}/codegraph-hint.XXXXXX")"
 trap 'rm -rf "$B"' EXIT
 
-mkdir -p "$B/repo/.git" "$B/repo/.codegraph"
+mkdir -p "$B/repo/.git" "$B/repo/.codegraph"; : > "$B/repo/.codegraph/codegraph.db"
 mkdir -p "$B/repo/sub/deep"; echo "gitdir: $B/repo/.git/modules/sub" > "$B/repo/sub/.git"
 mkdir -p "$B/repo/.wt/W/sub"; echo "gitdir: $B/repo/.git/worktrees/W" > "$B/repo/.wt/W/.git"
 echo "gitdir: $B/repo/.git/modules/sub/worktrees/sub" > "$B/repo/.wt/W/sub/.git"
-mkdir -p "$B/repo/.wt/G/.codegraph" "$B/repo/.wt/G/sub"
+mkdir -p "$B/repo/.wt/G/.codegraph" "$B/repo/.wt/G/sub"; : > "$B/repo/.wt/G/.codegraph/codegraph.db"
 echo "gitdir: $B/repo/.git/worktrees/G" > "$B/repo/.wt/G/.git"
 echo "gitdir: $B/repo/.git/modules/sub/worktrees/sub" > "$B/repo/.wt/G/sub/.git"
 mkdir -p "$B/repo2/.git"
+# 只提交了 .codegraph/.gitignore、本机没建图的仓
+mkdir -p "$B/repo3/.git" "$B/repo3/.codegraph"; : > "$B/repo3/.codegraph/.gitignore"
+# 伪家目录：~/.codegraph 照本机实测内容摆（配置目录，无 codegraph.db）；home2 的 .codegraph 故意带
+# codegraph.db，验证「家目录即停」不靠 codegraph.db 判据兜底；家目录下真建了图的仓照常注入
+mkdir -p "$B/home/.codegraph/daemons" "$B/home/multi/a"
+: > "$B/home/.codegraph/telemetry.json"; : > "$B/home/.codegraph/update-check.json"
+mkdir -p "$B/home/proj/.git" "$B/home/proj/.codegraph" "$B/home/proj/src"; : > "$B/home/proj/.codegraph/codegraph.db"
+mkdir -p "$B/home2/.codegraph" "$B/home2/multi"; : > "$B/home2/.codegraph/codegraph.db"
 
 pass=0; fail=0
-t() { # $1=cwd $2=inject|silent $3=label
-  n=$(printf '%s' "{\"cwd\":\"$1\"}" | node "$HOOK" 2>/dev/null | wc -c | tr -d ' ')
+t() { # $1=cwd $2=inject|silent $3=label [$4=HOME]
+  n=$(printf '%s' "{\"cwd\":\"$1\"}" | HOME="${4:-$HOME}" node "$HOOK" 2>/dev/null | wc -c | tr -d ' ')
   got=$([ "$n" -gt 0 ] && echo inject || echo silent)
   if [ "$got" = "$2" ]; then pass=$((pass+1)); printf 'PASS %-8s %s\n' "$got" "$3"
   else fail=$((fail+1)); printf 'FAIL %-8s %s (期望 %s)\n' "$got" "$3" "$2"; fi
@@ -36,6 +46,11 @@ t "$B/repo/.wt/G"     inject "已建图 worktree"
 t "$B/repo/.wt/G/sub" inject "已建图 worktree 内 submodule（gitdir 含 modules+worktrees）"
 t "$B/repo2"          silent "无图独立仓"
 t "/tmp"              silent "非仓目录"
+t "$B/repo3"          silent "只有 .codegraph/.gitignore、无 codegraph.db → 不算图"
+t "$B/home/multi/a"   silent "家目录下非仓目录 → 不认 ~/.codegraph 配置目录" "$B/home"
+t "$B/home"           silent "cwd 就是家目录 → 不认 ~/.codegraph" "$B/home"
+t "$B/home2/multi"    silent "家目录 .codegraph 带 codegraph.db 也不看（上溯到家目录即停）" "$B/home2"
+t "$B/home/proj/src"  inject "家目录下已建图仓 → 照常注入" "$B/home"
 
 # hookEventName 回声：双挂 UserPromptSubmit + SubagentStart 共用本脚本，输出的
 # hookEventName 写死任一个都会让另一路**静默失效**（不报错、只是不生效），故两侧各留一条。

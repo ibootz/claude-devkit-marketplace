@@ -221,6 +221,102 @@ check(
   run(WRITE_GUARD, { tool_name: 'Write', tool_input: {}, cwd: PROJECT }).code
 )
 
+// ── write-guard / 同一会话同一文件只提醒一次（4.12.0）──────────────────
+// 去重按 session_id + 文件绝对路径，状态落 DEVKIT_WRITE_GUARD_STATE_DIR（这里指到 fixture 下，
+// 不碰真实临时目录）。上面的老用例 payload 没有 session_id，等于不去重，行为不变。
+const WG_STATE = path.join(FIXTURE_ROOT, 'wg-state')
+const WG_ENV = { DEVKIT_WRITE_GUARD_STATE_DIR: WG_STATE }
+
+function writeS(label, sessionId, filePath, expect, env) {
+  const payload = { tool_name: 'Write', tool_input: { file_path: filePath }, cwd: PROJECT }
+  if (sessionId !== undefined) payload.session_id = sessionId
+  const r = run(WRITE_GUARD, payload, env || WG_ENV)
+  check(label, expect, r.code, r.err)
+  return r
+}
+
+writeS('去重: 首次提醒', 'sess-a', F.over1000, BLOCK)
+writeS('去重: 同会话同文件第二次不提醒', 'sess-a', F.over1000, PASS)
+writeS('去重: 同会话同文件第三次仍不提醒', 'sess-a', F.over1000, PASS)
+writeS('去重: 同会话换文件照常提醒', 'sess-a', F.bigMjs, BLOCK)
+writeS('去重: 换会话同文件照常提醒', 'sess-b', F.over1000, BLOCK)
+writeS('去重: CLAUDE.md 首次提醒', 'sess-a', F.claudeMd201, BLOCK)
+writeS('去重: CLAUDE.md 同会话第二次不提醒', 'sess-a', F.claudeMd201, PASS)
+writeS('去重: 阈值内文件不受影响且不占去重表', 'sess-a', F.exact1000, PASS)
+writeS('去重: Edit 与 Write 共用一张表', 'sess-a', F.over1000, PASS)
+{
+  const r = run(
+    WRITE_GUARD,
+    { tool_name: 'Edit', tool_input: { file_path: F.bigSh }, cwd: PROJECT, session_id: 'sess-a' },
+    WG_ENV
+  )
+  check('去重: Edit 首次提醒', BLOCK, r.code, r.err)
+  const r2 = run(
+    WRITE_GUARD,
+    { tool_name: 'Write', tool_input: { file_path: F.bigSh }, cwd: PROJECT, session_id: 'sess-a' },
+    WG_ENV
+  )
+  check('去重: Edit 提醒过后 Write 同文件不再提醒', PASS, r2.code, r2.err)
+}
+writeS('去重: 缺 session_id 照常提醒(第一次)', undefined, F.over1000, BLOCK)
+writeS('去重: 缺 session_id 照常提醒(第二次)', undefined, F.over1000, BLOCK)
+writeS('去重: session_id 为空串照常提醒', '', F.over1000, BLOCK)
+
+// 状态文件格式：一个会话一个 json，登记绝对路径
+{
+  const sf = path.join(WG_STATE, 'sess-a.json')
+  let st = null
+  try {
+    st = JSON.parse(fs.readFileSync(sf, 'utf8'))
+  } catch (_) {}
+  check(
+    '去重: 状态文件格式 {v:1, files:{绝对路径:时间戳}}',
+    true,
+    !!st && st.v === 1 && typeof st.files[F.over1000] === 'number' && typeof st.files[F.claudeMd201] === 'number'
+  )
+}
+
+// 状态文件损坏 / 结构不对 / 目录不可用：一律照常提醒，且不崩
+fs.writeFileSync(path.join(WG_STATE, 'sess-bad.json'), '{not json')
+writeS('去重: 状态文件不是合法 JSON 时照常提醒', 'sess-bad', F.over1000, BLOCK)
+writeS('去重: 损坏后已被重写，下一次不再提醒', 'sess-bad', F.over1000, PASS)
+fs.writeFileSync(path.join(WG_STATE, 'sess-shape.json'), JSON.stringify({ files: ['x'] }))
+writeS('去重: 状态文件结构不对时照常提醒', 'sess-shape', F.over1000, BLOCK)
+fs.writeFileSync(path.join(WG_STATE, 'sess-val.json'), JSON.stringify({ v: 1, files: { [F.over1000]: 'yes' } }))
+writeS('去重: 条目值不是时间戳时照常提醒', 'sess-val', F.over1000, BLOCK)
+{
+  const blocker = put(path.join(FIXTURE_ROOT, 'wg-not-a-dir'), 'x')
+  writeS('去重: 状态目录建不出来时照常提醒', 'sess-c', F.over1000, BLOCK, { DEVKIT_WRITE_GUARD_STATE_DIR: path.join(blocker, 'sub') })
+}
+{
+  // session_id 含路径分隔符：落盘文件名被净化，状态文件不会跑出状态目录
+  writeS('去重: 含 ../ 的 session_id 首次提醒', '../evil/id', F.over1000, BLOCK)
+  writeS('去重: 含 ../ 的 session_id 第二次不提醒', '../evil/id', F.over1000, PASS)
+  check('去重: 含 ../ 的 session_id 不会写出状态目录', false, fs.existsSync(path.join(FIXTURE_ROOT, 'evil')))
+}
+
+// 体积上限与过期清理
+{
+  const big = {}
+  for (let i = 0; i < 600; i++) big[`/fake/file-${i}.js`] = i + 1
+  fs.writeFileSync(path.join(WG_STATE, 'sess-big.json'), JSON.stringify({ v: 1, files: big }))
+  writeS('去重: 超大状态文件里没有的文件照常提醒', 'sess-big', F.over1000, BLOCK)
+  const st = JSON.parse(fs.readFileSync(path.join(WG_STATE, 'sess-big.json'), 'utf8'))
+  check('去重: 单会话条目数封顶 500', 500, Object.keys(st.files).length)
+  check('去重: 封顶时丢最早的、保留新登记的', true, typeof st.files[F.over1000] === 'number' && st.files['/fake/file-0.js'] === undefined)
+}
+{
+  const old = path.join(WG_STATE, 'sess-old.json')
+  const fresh = path.join(WG_STATE, 'sess-fresh.json')
+  fs.writeFileSync(old, JSON.stringify({ v: 1, files: {} }))
+  fs.writeFileSync(fresh, JSON.stringify({ v: 1, files: {} }))
+  const eightDays = new Date(Date.now() - 8 * 24 * 3600 * 1000)
+  fs.utimesSync(old, eightDays, eightDays)
+  writeS('去重: 清理过期状态文件时本次仍照常提醒', 'sess-prune', F.over1000, BLOCK)
+  check('去重: 超过 7 天的状态文件被清掉', false, fs.existsSync(old))
+  check('去重: 7 天内的状态文件保留', true, fs.existsSync(fresh))
+}
+
 // ── 派发账本（dispatch-ledger.js，3.12.0 新增）────────────────────────
 //
 // 它是纯注入 hook，失败是静默的——没有断言就没人发现它已经不数数了。

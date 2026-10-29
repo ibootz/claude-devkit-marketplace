@@ -313,7 +313,7 @@ function main() {
     // 护栏①缺鉴权 → 阻断
     if (ab.missingAuth) {
       findings.push(`agent-browser ${ab.subcommand} 缺鉴权机制;headless 下人类无法中途登录授权`)
-      hints.push('启动前先向用户索取账密/token/cookie 并注入:--headers {"Authorization":"Bearer <token>"} 注入 token(推荐,origin 作用域),或 --profile <持久化目录> 复用登录态(推荐建独立 AI Testing Chrome profile),或 --state <文件> 加载已保存凭据;详见 devkit-agent-browser 插件 SKILL.md')
+      hints.push('启动前先向用户索取账密/token/cookie 并注入:--headers {"Authorization":"Bearer <token>"} 注入 token(推荐,origin 作用域),或 --profile <持久化目录> 复用登录态(推荐建独立 AI Testing Chrome profile),或 --state <文件> 加载已保存凭据;详见会话开头注入的浏览器自动化规则')
     }
     // 护栏②实例超限 → 阻断
     if (ab.tooManyInstances) {

@@ -1,6 +1,6 @@
 # 持久化 profile：选目录与避坑
 
-> 运行时决策细节。SKILL.md 只留「同一 profile 路径不能被两个实例同时打开」一句核心，本文件讲清目录选择、SingletonLock 机制、独立 profile 建法。需要选 `--profile` 目录、撞到 SingletonLock、或用户还没有独立 profile 时读本文件。
+> 运行时决策细节。会话开头的注入（`context/session-start.md`）只留「同一 profile 路径不能被两个实例同时打开」一句核心，本文件讲清目录选择、SingletonLock 机制、独立 profile 建法。需要选 `--profile` 目录、撞到 SingletonLock、或用户还没有独立 profile 时读本文件。
 
 `--profile` 是复用登录态的首选方式，但**传什么值**与**指向哪个目录**直接影响成败。
 

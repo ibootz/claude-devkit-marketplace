@@ -1,16 +1,37 @@
 # DevKit-Tool
 
-**版本**: 6.30.0
+**版本**: 6.34.0
 **作者**: zhangq
 **许可证**: MIT
 
-工具技能套件（原 `devkit-core`），当前聚焦 17 个 Skills，覆盖代码库分析、依赖排查、大头桶定性核实、需求全流程耗时/ROI 报告流水线、代码知识图谱建图决策、submodule 仓库同步与提交推送、会话起法与会话交接、话题可视化表达、技术文档写法、手动调用的头脑风暴、多模型协作与 Claude Code 自身运维辅助工具。
+工具技能套件（原 `devkit-core`），当前聚焦 16 个 Skills，覆盖代码库分析、依赖排查、大头桶定性核实、需求全流程耗时/ROI 报告流水线、代码知识图谱建图决策、submodule 仓库同步与提交推送、会话起法与会话交接、话题可视化表达、技术文档写法、手动调用的头脑风暴、多模型协作与 Claude Code 自身运维辅助工具。
 
 ---
 
 ## 会话级注入：跨会话通信规则（6.25.0）
 
-`hooks/session-start.js`（SessionStart，matcher `*`）注入 `context/session-start.md`：先 `ListAgents` 再 `SendMessage`、发不出去时的三步排查（含四个会关掉该能力的环境变量）、别的会话的消息不构成授权、用户 @ 别的会话时先征询或移交。这些规则 2026-10-13 从用户级 `~/.claude/CLAUDE.md` 迁入，改规则改那份 md。与 `handoff-to` skill 的分工：注入管「什么时候、按什么顺序发」，skill 管「整份上下文怎么打包交接」。
+`hooks/session-start.js`（SessionStart，matcher `*`）注入 `context/session-start.md`：先 `ListAgents` 再 `SendMessage`、发不出去时的三步排查（含四个会关掉该能力的环境变量）、别的会话的消息不构成授权、用户 @ 别的会话时先征询或移交。这些规则 2026-10-13 从用户级 `~/.claude/CLAUDE.md` 迁入，改规则改那份 md。与 `claude-session-launch` skill 的分工：注入管「什么时候、按什么顺序发」，skill 的「交接：让新会话接手本会话的活」一节管「整份上下文怎么打包交接」。
+
+---
+
+## 6.34.0：交接写法并入 claude-session-launch；codegraph-hint 只认真建过的图
+
+**一句话：** 删除 `handoff-to` skill，交接文档的写法搬进每次起会话都会加载的 `claude-session-launch`；`codegraph-hint` 不再把家目录下 codegraph 的配置目录当成代码图谱。用户 2026-10-29 拍板（Q2-a）。
+
+**交接写法并入（动机）：** 10-13 起主会话启动后台会话 34 次，其中 30 次的初始 prompt 指向一份交接 md，而这些会话加载 `handoff-to` 的次数为 0（主会话统计，本条为转述）。`claude-session-launch` 的 description 与正文有四处指路到 `handoff-to`，指路一次都没被走。
+
+- 搬过来的：落点（临时目录 `claude-handoff/`）、四条内容规则（只给指针、去敏、断言标已实测 / 未实测、用户原话照引）、文档骨架与完成判据、初始 prompt 的消息格式、改仓库文件时追加收尾段、用户让新会话直接开工时的替换、不借交接绕过权限。现在是 `claude-session-launch` 的「交接：让新会话接手本会话的活」一节。
+- 压缩掉的：「交给已在运行的会话」分支 80 天零使用，只留一段——同样写文档，`ListAgents` 取注册名后 `SendMessage` 发「路径 + 三行摘要 + 必读指令」，云端或 Remote Control 会话贴全文。`ListAgents` 模糊匹配表、回执行、Codex 下的排查清单删去（排查顺序仍在 `context/session-start.md`）。
+- 不再能用的：`/devkit-tool:handoff-to <会话名>` 这条斜杠命令。
+
+**codegraph-hint 误触发（动机）：** 旧判据从 cwd 逐级向上找 `.codegraph/` 目录，遇到 git 仓根或 worktree 才停。cwd 不在 git 仓里时（如多个仓的父目录）一路走到家目录，命中 `~/.codegraph`——那是 codegraph 自己的配置目录，本机实测里面只有 `daemons/`、`beta-signup.json`、`telemetry.json`、`update-check.json`。682 个注入回合里 553 个是这样误触发的（主会话统计，转述）。
+
+- 新判据一：`.codegraph/codegraph.db` 是文件才算建过图。这是 codegraph 自己的判据——1.6.2 源码 `directory.js` 的 `isInitialized` 注释原文 `Must have codegraph.db, not just .codegraph folder`（已实测读到）。
+- 新判据二：上溯到 `os.homedir()` 即停，不看家目录自己的 `.codegraph`。
+- 连带变化（已实测）：本机一个只提交了 `.codegraph/.gitignore`、没在本机建图的仓，以及一个 `.codegraph/` 里只有 `graph.db`（不是 `codegraph.db`）的仓，旧版会注入、新版不注入。codegraph 1.6.2 的代码里搜不到 `graph.db`，推断那份库不是当前版本 codegraph 产出的，CLI 也用不上它。
+- 回归用例 13 → 18 条，新增 5 条：只有 `.gitignore` 的 `.codegraph/`、家目录下的非仓目录、cwd 就是家目录、家目录 `.codegraph` 里放了 `codegraph.db` 也不看、家目录下已建图的仓照常注入。前 4 条在旧版 hook 上实测失败。
+
+**回退：** `git revert <本次提交>`，`handoff-to` 目录与旧判据一并恢复。只想临时关掉 codegraph 注入时设 `CODEGRAPH_HINT=off`。
 
 ---
 
@@ -37,12 +58,11 @@
 
   **6.4.1 起明确 CLI-only：禁止执行 `codegraph install`，本插件也不会自动接任何 MCP。**四条实测理由——MCP 面 `tools/list` 只有 `codegraph_explore` 一个工具（README 声称"unlisted but functional"的 `codegraph_node` 按名调用**无任何响应、连 error 都没有**，`query`/`callers`/`impact`/`affected`/`files` 在 MCP 侧全拿不到）；explore 单次 25 KB ≈ 6.5k token，而 CLI `query` 几百字节，成本方向是反的；MCP `initialize` 每会话每 subagent 固定下发 4597 字符 ≈ 1.2k token instructions；那段 instructions 原文 `Trust codegraph's results — don't re-verify them with grep` 与本地核实纪律冲突且服务端下发改不掉。已装过的机器用 `codegraph uninstall -t claude -l global -y --keep-cli` 拆（实测 4 处全清、CLI 保留）。
 
-  6.4.2 起配套一个**纯注入 hook** `hooks/codegraph-hint.js`：cwd 归属的仓已建图时注入两行（强化用 codegraph、抑制拿 `Grep`/`Glob` 全仓搜符号与为找代码而整读文件），未建图的仓输出 **0 字节**。6.5.0 起**双挂 `UserPromptSubmit` + `SubagentStart`**——前者只到主会话，子代理由 `Agent`/`Task` 编程派发、收不到它；实证某会话主会话收到 20 次而全项目 23 份 transcript 里 codegraph 实调为 0（真正检索的是子代理）。两路共用同一脚本，输出的 `hookEventName` 从入参回声，写死任一个都会让另一路静默失效。gating 向上找 `.codegraph/` 时读 `.git` 文件的 gitdir 区分边界——`/modules/` 穿过（父仓建图会把 submodule 源码一并索引）、`/worktrees/` 停（未建图 worktree 不得认领父仓那份属于另一分支的图）。`CODEGRAPH_HINT=off` 关闭；`bash hooks/tests/codegraph-hint-gating.sh` 跑 13 条回归。
+  6.4.2 起配套一个**纯注入 hook** `hooks/codegraph-hint.js`：cwd 归属的仓已建图时注入两行（强化用 codegraph、抑制拿 `Grep`/`Glob` 全仓搜符号与为找代码而整读文件），未建图的仓输出 **0 字节**。6.5.0 起**双挂 `UserPromptSubmit` + `SubagentStart`**——前者只到主会话，子代理由 `Agent`/`Task` 编程派发、收不到它；实证某会话主会话收到 20 次而全项目 23 份 transcript 里 codegraph 实调为 0（真正检索的是子代理）。两路共用同一脚本，输出的 `hookEventName` 从入参回声，写死任一个都会让另一路静默失效。gating 向上找 `.codegraph/` 时读 `.git` 文件的 gitdir 区分边界——`/modules/` 穿过（父仓建图会把 submodule 源码一并索引）、`/worktrees/` 停（未建图 worktree 不得认领父仓那份属于另一分支的图）。6.34.0 起「建过图」只认 `.codegraph/codegraph.db` 文件（光有 `.codegraph/` 目录不算），非仓目录上溯到家目录即停。`CODEGRAPH_HINT=off` 关闭；`bash hooks/tests/codegraph-hint-gating.sh` 跑 18 条回归。
 
 ### 协作与辅助
 
-- `claude-session-launch` — 再起一个 Claude Code 会话干活时的两条路与选型判据：`claude --bg`（被 `claude agents` 托管，有 8 位短 id、`attach` / `logs` / `stop`）对上 osascript 弹 iTerm2 tab（普通 TTY 进程，Claude Code 侧零管控入口）。**选型要害是「托管」而不是「顺手」**。默认启动命令带 `--allow-dangerously-skip-permissions`（等同常见别名 `cy`，只让 bypass 可切换、不直接开启）；`-n` 给的名字就是 `claude agents` 面板里显示的名字与 `SendMessage` 寻址键，起会话时就按 `<分片依据>-<任务短语>` 起名。后台会话在 git 仓里会被放进基于主分支的 worktree、干完不自动合回，所以改仓库文件的活要在初始 prompt 末尾追加收尾段（提交 → `ExitWorktree {"action":"keep"}` 回主仓 → 合回主分支 → 推送 → 删 worktree 与临时分支，冲突或被拒即停）。教训一条（6.33.3 起写进 skill）：会话还在 worktree 里时，harness 拒绝一切用 `git -C` 指向主仓的命令，6.33.x 旧模板因此在合回这一步必然失败；`ExitWorktree` 的工具描述要求只在用户要求时调用，所以收尾段里要写明这是授权的主动调用。含四个实测坑：`claude logs <id>` 是满屏 ANSI 的 TTY 快照、不能贴给人也不能喂下游（结构化只走 `claude agents --json`）；判前后台看 `kind`（取值 `background` / `interactive`）而**不是** `type` / `mode`（那两个键根本不存在，拿它们判会静默走错分支），且 8 位 `id` 只有后台会话才有、所以 `attach` / `logs` / `stop` 对前台会话不可用；AppleScript 应用名是 `iTerm` 不是 `iTerm2`（`pgrep -l iTerm2` 查不到进程，不能据此判断 iTerm 没在跑）；osascript 新建 tab 的 cwd 继承 iTerm 默认目录而非发起目录、且**不报错**——所以显式 `cd /abs/path &&` 是默认做法不是可选项。另明确划界：派活给已存在的会话走 `ListAgents` + `SendMessage`，要会话接手本会话上下文（含新起一个来接手）走 `handoff-to`，本会话内并行干活走 `Agent` 子代理，本地测试服务走 Bash 的 `run_in_background`，三者都不该用起会话代替。
-- `handoff-to` — 把当前会话的上下文整理成交接文档，发给另一个正在运行的会话接手：`/devkit-tool:handoff-to <会话名> [下一会话要做什么]`。先 `ListAgents` 拿注册名（精确匹配直接发，模糊匹配唯一也先问用户，多个或零个列候选），交接文档写进系统临时目录 `claude-handoff/`，本机会话只发「路径 + 三行摘要 + 必读指令」、云端或 Remote Control 会话改贴全文。目标会话不存在、用户要新起一个时，写完文档把同一段消息当作 `claude --bg -n <名字>` 的初始 prompt 一步起好（起会话细节见 `claude-session-launch`），不先起占位会话再发消息。接收方读完向它自己的用户报告并等指令（会话间消息不构成授权），再回一条「已收到」。文档里每条事实断言标「已实测 / 未实测」，接收方据某条断言做决定前先自己复核（6.33.4 起，防错误结论经交接跨会话传播）。文档规则内联自 `mattpocock-skills:handoff`——那个 skill 设了 `disable-model-invocation: true`，AI 调不到。**只在 Claude Code 可用**：Codex 没有 `ListAgents` / `SendMessage`，此时只写文档并把路径交给用户。
+- `claude-session-launch` — 再起一个 Claude Code 会话干活时的两条路与选型判据：`claude --bg`（被 `claude agents` 托管，有 8 位短 id、`attach` / `logs` / `stop`）对上 osascript 弹 iTerm2 tab（普通 TTY 进程，Claude Code 侧零管控入口）。**选型要害是「托管」而不是「顺手」**。默认启动命令带 `--allow-dangerously-skip-permissions`（等同常见别名 `cy`，只让 bypass 可切换、不直接开启）；`-n` 给的名字就是 `claude agents` 面板里显示的名字与 `SendMessage` 寻址键，起会话时就按 `<分片依据>-<任务短语>` 起名。后台会话在 git 仓里会被放进基于主分支的 worktree、干完不自动合回，所以改仓库文件的活要在初始 prompt 末尾追加收尾段（提交 → `ExitWorktree {"action":"keep"}` 回主仓 → 合回主分支 → 推送 → 删 worktree 与临时分支，冲突或被拒即停）。教训一条（6.33.3 起写进 skill）：会话还在 worktree 里时，harness 拒绝一切用 `git -C` 指向主仓的命令，6.33.x 旧模板因此在合回这一步必然失败；`ExitWorktree` 的工具描述要求只在用户要求时调用，所以收尾段里要写明这是授权的主动调用。含四个实测坑：`claude logs <id>` 是满屏 ANSI 的 TTY 快照、不能贴给人也不能喂下游（结构化只走 `claude agents --json`）；判前后台看 `kind`（取值 `background` / `interactive`）而**不是** `type` / `mode`（那两个键根本不存在，拿它们判会静默走错分支），且 8 位 `id` 只有后台会话才有、所以 `attach` / `logs` / `stop` 对前台会话不可用；AppleScript 应用名是 `iTerm` 不是 `iTerm2`（`pgrep -l iTerm2` 查不到进程，不能据此判断 iTerm 没在跑）；osascript 新建 tab 的 cwd 继承 iTerm 默认目录而非发起目录、且**不报错**——所以显式 `cd /abs/path &&` 是默认做法不是可选项。另明确划界：派活给已存在的会话走 `ListAgents` + `SendMessage`，要会话接手本会话上下文（含新起一个来接手）先按本 skill 的「交接：让新会话接手本会话的活」写交接文档（6.34.0 起由 `handoff-to` 并入），本会话内并行干活走 `Agent` 子代理，本地测试服务走 Bash 的 `run_in_background`，三者都不该用起会话代替。
 - `show-me` — 把当前话题画给用户看，而不是用散文搬运形状。6.20.0 借鉴 [humanlayer/skills](https://github.com/humanlayer/skills) 的同名 skill（MIT），译为中文并适配本仓约定。核心是**按「要讲的是什么」选最小够用的那一种视图**：讲逻辑用伪代码、讲运行时控制流用调用树、讲 UI 结构用组件树、讲文件职责用浅文件树、讲交互与数据流用 Mermaid、讲「变了什么」用 diff（且 diff 的形状要跟话题对齐——讲组件改动就 diff 组件树，不要一律 diff 源码）、大半是新写的才贴整块代码。相较上游补了三处本地约定：HTML 产物固定落 `/tmp/show-me-<短描述>.html` 不写进仓库（避免弄脏 `git status` 与误提交）；`open` 只由主会话在 Human 在场时执行，子代理只回绝对路径不抢屏幕（与 `subagent-browser-headless` 同源）；代码块内部路径原样写裸路径、正文提到文件才套 devkit-clickable-paths 链接。6.28.0 起本 skill 只管**怎么画**（视图、载体、落点），**什么时候画**一律由 `devkit-discipline` 4.3.0 每轮注入的「画图」决定（6.29.1 起与回复类型脱钩、按回答内容判：4 个及以上参与方的流转、3 步及以上的跨服务步骤、3 个及以上分支、方案或改动的改前改后、用户同一话题第二次说没看懂），删去了原「什么时候不触发」一节与 description 里的场景式 / 判据式触发，避免两处画图规则互相打架；用户说「画出来」时照样直接调用。同版新增四种视图（带实值的走查、对比表、时间线、复现命令）、载体选择（留作资产的图用 md，HTML 只做一次性视觉讲解）与落点规则（持久事实且有工作项目录时写 `<工作项目录>/diagrams/<主题>.md`、不自动提交；否则落临时目录并建议沉淀路径，用户同意再挪）。diff 示例由四组减为一组。6.28.1 载体表把对比表、时间线等行 × 列的对照单列为「正文的 markdown 表格」（代码块里用空格对齐列，中英文混排必错位），时间线示例改为表格；Mermaid 一节写明不贴进回复正文，一律写进 md 文件给链接。6.32.0 交互、控制流、状态流转改画 Excalidraw 图：调 `devkit-excalidraw-diagram` 出 `.excalidraw` 加同名 PNG，嵌进 md 等文档时一律引 PNG（落文档旁 `figures/`），工作项目录与临时目录的落点同步改为 `.excalidraw` + `.png`；子代理不出图，只回结构由主会话画；未安装该插件或渲染跑不通时退回 Mermaid。`tech-doc` 的 `references/figures.md` 默认载体同步改为 Excalidraw PNG。
 - `tech-doc` — 写给人读的技术文档时的类型、骨架、写法、配图与交付自检，6.30.0 新增，由 2026-10-23 至 10-24 两轮技术文档调研沉淀而来。五步：按读者此刻要什么判类型（Diátaxis 四类加分析报告、设计文档与方案、README 与导读三类）→ 套 `references/doc-types.md` 里对应骨架 → 按「零上下文读者也读得懂」写正文（先全景后细节、术语先教后用、结论分组、断言分强度、更正改回原处）→ 按图文分工配图（图注先行、≤7 个方框、箭头全标注、首图下图例、全篇按角色统一配色，细则在 `references/figures.md`）→ 交付前逐条自检。每条规则标【有出处】【推断】【判断】，来源与原文在 `references/sources.md`。单张图的载体与落点仍归 `show-me`，Excalidraw 成品图归 `devkit-excalidraw-diagram`，写给 AI 的文档归 `writing-for-agents`。触发除 description 外由 `devkit-discipline` 4.5.0 每轮自查第 1 条点名：md 受众判定为人或人机混合时调用。
 - `discover-unknowns` — 手动调用的头脑风暴：`/devkit-tool:discover-unknowns [目标]`。设了 `disable-model-invocation: true`，只在用户敲命令时触发，AI 不自调、不主动提议。需求还模糊时动手前挖**未知**（用户意图与 Claude 手上上下文的差距），四种手法按处境挑：盲点扫描（陌生领域列出没意识到的未知 + 更好的问题清单）、发散（3–4 个风格迥异方向，可视化做成假数据单 HTML）、收敛（一次一问，先问会改架构的问题，每问附默认答案）、参考（先复述语义对齐，再复刻语义不逐行翻译）；收尾出结论摘要。已安装 superpowers 时优先委派 `superpowers:brainstorming`。6.29.0 由已删除的 `devkit-discover-unknowns` 插件并入：原插件的每轮注入 hook `unknowns-radar` 与 `discover-unknowns` / `quiz` 两个 skill 不再提供，原 `brainstorm` skill 改名为本 skill，盲点扫描与参考两个手法并入。源自 Anthropic 博客 [*A field guide to Claude Fable 5: Finding your unknowns*](https://claude.com/blog/a-field-guide-to-claude-fable-finding-your-unknowns)。Codex 是否识别 `disable-model-invocation` 未核实。
@@ -84,7 +104,7 @@ plugins/devkit-tool/
 ├── .claude-plugin/plugin.json
 ├── hooks/
 │   ├── codegraph-hint.js   # 纯注入（双挂 UserPromptSubmit + SubagentStart）：已建图仓才输出两行 codegraph 引导
-│   └── tests/codegraph-hint-gating.sh    # gating 回归用例（13 条，判据两侧都覆盖）
+│   └── tests/codegraph-hint-gating.sh    # gating 回归用例（18 条，判据两侧都覆盖）
 ├── tests/
 │   └── probe-refresh-url-criterion.test.py  # url 源判据回归（27 条，纯离线不发请求）
 └── skills/
@@ -97,7 +117,6 @@ plugins/devkit-tool/
     ├── init-architect/
     ├── key-module-analysis/
     ├── claude-session-launch/   # 再起一个 Claude Code 会话：--bg 后台 vs osascript 弹 iTerm2 tab
-    ├── handoff-to/         # 当前上下文整理成交接文档，发给指定的已在运行会话
     ├── marketplace-cache-sync/
     ├── orphan-process-cleaner/
     ├── show-me/            # 把当前话题画给用户看：选最小够用的一种视图

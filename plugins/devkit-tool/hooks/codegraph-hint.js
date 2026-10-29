@@ -4,7 +4,7 @@
 // 未建图的仓输出 0 字节 —— 建不建图是用户的决定，本 hook 不劝建、不做阈值扫描。
 //
 // Trigger: UserPromptSubmit（主会话每轮） + SubagentStart（每个子代理启动时）
-// Output:  additionalContext → 注入到对应上下文（无 .codegraph/ 时无输出）
+// Output:  additionalContext → 注入到对应上下文（找不到 .codegraph/codegraph.db 时无输出）
 // Opt-out: 环境变量 CODEGRAPH_HINT=off（或 0 / false）时不注入
 //
 // 为什么必须双挂（2026-08-04 实测，勿改回单挂）：
@@ -27,12 +27,31 @@
 //   - `.git` 是**文件**且 gitdir 指向 `.../modules/X` → submodule，**继续上溯**。父仓
 //     建图时会把 submodule 源码一并索引（实测 sptalentsdapi 的 1,893 个 java 文件就在
 //     父仓图里），所以在 submodule 内干活时该注入。
+// 「建过图」的判据（6.34.0 起）：`.codegraph/codegraph.db` 是文件，光有 `.codegraph/` 目录不算。
+//   - 这是 codegraph 自己的判据：其 directory.js 的 isInitialized 写着
+//     `Must have codegraph.db, not just .codegraph folder`（codegraph 1.6.2 实测源码）。
+//   - 光有目录的反例（本机实测）：`~/.codegraph` 是 codegraph 的用户级配置目录，只有
+//     daemons/、beta-signup.json、telemetry.json、update-check.json；仓里提交了
+//     `.codegraph/.gitignore` 却没在本机建图的目录只有那一个文件。旧判据把两者都当图。
+// 家目录边界：上溯到 os.homedir() 即停，不看家目录自己的 `.codegraph`（那是配置目录，不是图）。
+//   旧版在非 git 目录（如多仓的父目录）里一路走到家目录、命中 `~/.codegraph`，
+//   682 个注入回合里 553 个是这样误触发的（2026-10-29 主会话统计）。
 // 判据与阈值见同插件 skill：codegraph-index。
 
 'use strict'
 
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
+
+// 建过图才算：与 codegraph 自身 isInitialized 同一判据（不验 schema，那要开 SQLite）
+function hasGraph(dir) {
+  try {
+    return fs.statSync(path.join(dir, '.codegraph', 'codegraph.db')).isFile()
+  } catch {
+    return false
+  }
+}
 
 function readStdinSync() {
   try {
@@ -66,15 +85,13 @@ function gitBoundaryKind(dir) {
   return 'repo'
 }
 
-// 从 startDir 逐级向上找 .codegraph/；submodule 可穿过，独立仓根与 worktree 边界即停
+// 从 startDir 逐级向上找建过图的目录；submodule 可穿过，独立仓根、worktree 边界与家目录即停
 function findGraphRoot(startDir) {
   let dir = path.resolve(startDir)
+  const home = path.resolve(os.homedir())
   for (let i = 0; i < 64; i++) {
-    try {
-      if (fs.statSync(path.join(dir, '.codegraph')).isDirectory()) return dir
-    } catch {
-      /* 无 .codegraph，继续 */
-    }
+    if (dir === home) return null
+    if (hasGraph(dir)) return dir
     const kind = gitBoundaryKind(dir)
     if (kind === 'repo' || kind === 'worktree') return null
     const parent = path.dirname(dir)

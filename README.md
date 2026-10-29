@@ -4,7 +4,7 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 
 ## 概述
 
-本市场包含 **19 个插件**（以两份市场清单为准），覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论、输出风格、插件评测等场景。下面的编号清单只有 16 节——`devkit-clickable-paths` 与 `devkit-token-saver` 至今只登记在市场清单与目录树里，没有单独的介绍段落，属于既有遗漏；`devkit-plugin-eval`（插件离线对照评测）尚在开发，介绍段落随它的使用说明一并补上。
+本市场包含 **19 个插件**（以两份市场清单为准），覆盖核心开发、规范驱动工作流、技能生态、多模型协作、AI 工作纪律、浏览器自动化、协作方法论、输出风格、插件评测等场景。下面的编号清单只有 16 节——`devkit-clickable-paths` 至今只登记在市场清单与目录树里，没有单独的介绍段落，属于既有遗漏；`devkit-plugin-eval`（插件离线对照评测）尚在开发，介绍段落随它的使用说明一并补上。
 
 原 `devkit-git`、`devkit-dev`、`devkit-issue` 已从市场移除，不再作为独立插件提供。
 
@@ -70,9 +70,9 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 ### 6. devkit-agent-browser（浏览器自动化最佳实践）
 
-基于 [Vercel agent-browser](https://github.com/vercel-labs/agent-browser)（headless 浏览器自动化 CLI，Rust + CDP 直连 Chrome-for-Testing）的使用指令。**默认 headless 运行**，用四道机制替代"看到浏览器窗口"的监督。1 个 Skill（`agent-browser`），零 hook——硬护栏由 `devkit-discipline` 的 `bash-guard` 承担（避免两插件抢同一道 Bash 闸）。
+基于 [Vercel agent-browser](https://github.com/vercel-labs/agent-browser)（headless 浏览器自动化 CLI，Rust + CDP 直连 Chrome-for-Testing）的使用指令。**默认 headless 运行**，用四道机制替代"看到浏览器窗口"的监督。零 Skill，2 个 hook：SessionStart 注入使用规则（鉴权盘点、实例上限、安全参数），SessionEnd 清理残留实例；硬护栏由 `devkit-discipline` 的 `bash-guard` 承担（避免两插件抢同一道 Bash 闸）。
 
-- **鉴权前置**：首次 open 目标站点前必须先向用户索取账密/token/cookie 并注入（`--headers` / `--profile` / `--state` / `auth save`）；headless 下人类无法中途登录授权
+- **鉴权前置**：首次 open 目标站点前先盘点本机已有的 profile、`auth list`、凭据 CLI 与项目免登入口，全空才向用户索取账密/token/cookie 并注入（`--headers` / `--profile` / `--state` / `auth save`）；headless 下人类无法中途登录授权
 - **实例上限 4**：全局最多 4 个并发实例（agent-browser 无内置并发上限，guard 查 `session list` 强制）
 - **登录态复用**：持久化 `--profile`，跨会话不重登；推荐独立 AI Testing profile 防抢 SingletonLock
 - **snapshot + 标注截图**：headless 下靠 `snapshot -i`（拿 `@eN` refs）+ `screenshot --annotate` 回看每步，不靠肉眼盯窗口
@@ -385,7 +385,6 @@ claude-devkit-marketplace/
 │   ├── devkit-worktree-flow/
 │   ├── devkit-cd-blocker/
 │   ├── devkit-readable-citations/
-│   ├── devkit-token-saver/
 │   ├── devkit-complexity-first/
 │   ├── devkit-plugin-eval/
 │   └── devkit-excalidraw-diagram/

@@ -9,10 +9,11 @@
 // 只读一次盘、只起一个进程。
 //
 // 【它不是拦截器，是事后提醒——2026-07-31 审计实测确认】
-// 本 hook 挂在 **PostToolUse**，触发时文件**已经落盘**：第 149 行 readFileSync 读到的
+// 本 hook 挂在 **PostToolUse**，触发时文件**已经落盘**：main() 里那处 readFileSync 读到的
 // 就是写入后的内容（finding 里报的行数本身即证据）。三条实测证据：
-//   1. 本文件全文只有两处 readFileSync（读 stdin、读目标文件），无任何 fs 写操作，
-//      不做也无法做回滚。审计连续 6 次拦同一个 12436 行文件后复核 md5 与 mtime 未变。
+//   1. 本文件对目标文件只有一处 readFileSync，不写、不回滚（4.12.0 起另写系统临时目录
+//      里的去重状态文件，见下文，与目标文件无关）。审计连续 6 次拦同一个 12436 行文件后
+//      复核 md5 与 mtime 未变。
 //   2. Claude Code 2.1.220 二进制明文：`On PostToolUse, the reason is fed back to
 //      Claude and the turn continues.`
 //   3. 真能停住回合的是 JSON 顶层 `continue: false`（配 stopReason），而本文件走
@@ -98,16 +99,35 @@
 // stderr 只是作为附加上下文喂给 Claude。Claude 看到提示后应当拆分 / 精简，而不是
 // 无视继续在同一文件里堆内容。
 //
+// 【同一会话同一文件只提醒一次（4.12.0）】
+// 本机 80 天实测：提醒 189 次，只涉及 38 个（会话, 文件）对；其中 23 对被提醒 >=2 次、
+// 共占 174 次（一个 .py 文件一天 54 次）。提醒后 5 次调用内另写新文件（拆分迹象）仅
+// 4/189。同一文件在同一会话里每改一次就重复一次，只是噪音。
+// 做法：命中阈值、要输出提醒之前，按 session_id + 文件绝对路径查一张去重表，已提醒过
+// 就静默放行（exit 0），没提醒过就登记后照常 exit 2。
+// - 状态文件：`<系统临时目录>/devkit-write-guard/<session_id>.json`，一个会话一个文件，
+//   内容 {"v":1,"files":{"<绝对路径>":<首次提醒的毫秒时间戳>}}；目录可用环境变量
+//   DEVKIT_WRITE_GUARD_STATE_DIR 改（测试用）。
+// - 清理：每次登记新条目时顺带删掉目录里 mtime 超过 7 天的状态文件；单个会话文件最多
+//   500 条，超出丢最早的。
+// - 退回照常提醒：payload 没有 session_id、状态目录或文件读写失败、文件不是预期 JSON
+//   结构——一律当作「没提醒过」。宁可多提醒，不可因为状态文件崩溃或漏提醒。
+// - 并发：同一会话并行的两次写可能同时读改写，后写者覆盖前者，最坏多提醒一次。
+// - 观察期：用户 2026-10-29 拍板先修重复提醒、观察到 2026-11-12，拆分率仍接近 0 再整个
+//   删除本 guard；回退（恢复每次提醒）见 README「4.12.0」一节。
+//
 // 【放行场景（两条检查共用）】
 // - tool_name 不是 Write / Edit
 // - file_path 缺失、文件读取失败（如竞态被删除）—— 基础设施异常不误拦
+// - 同一会话内该文件已提醒过一次（见上）
 //
-// Input: JSON on stdin with tool_name / tool_input.file_path / cwd
+// Input: JSON on stdin with tool_name / tool_input.file_path / cwd / session_id
 // Exit 0 = 放行; Exit 2 = 阻断
 
 'use strict'
 
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 
 const SOURCE_LINE_LIMIT = 1000
@@ -167,6 +187,77 @@ function projectRelative(filePath, cwd) {
   return toPosix(rel)
 }
 
+// ── 同一会话同一文件只提醒一次 ────────────────────────────────────────
+const STATE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const STATE_MAX_ENTRIES = 500
+
+function stateDir() {
+  return process.env.DEVKIT_WRITE_GUARD_STATE_DIR || path.join(os.tmpdir(), 'devkit-write-guard')
+}
+
+// 删掉状态目录里 mtime 超过 TTL 的文件；逐个 try，任何失败都忽略。
+function pruneStale(dir, keepFile) {
+  const now = Date.now()
+  let names = []
+  try {
+    names = fs.readdirSync(dir)
+  } catch (_) {
+    return
+  }
+  for (const name of names) {
+    const full = path.join(dir, name)
+    if (full === keepFile) continue
+    try {
+      if (now - fs.statSync(full).mtimeMs > STATE_TTL_MS) fs.unlinkSync(full)
+    } catch (_) {
+      // 忽略：被别的进程先删了、权限问题等
+    }
+  }
+}
+
+// 返回 true = 该提醒（并已登记）；false = 本会话已对这个文件提醒过。
+// 任何异常、缺 session_id 一律返回 true（照常提醒）。
+function claimReminder(sessionId, absPath) {
+  try {
+    if (typeof sessionId !== 'string') return true
+    const safeId = sessionId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64)
+    if (!safeId) return true
+
+    const dir = stateDir()
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
+    const file = path.join(dir, `${safeId}.json`)
+
+    let files = {}
+    try {
+      const parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+      if (parsed && parsed.files && typeof parsed.files === 'object' && !Array.isArray(parsed.files)) {
+        files = parsed.files
+      }
+    } catch (_) {
+      // 文件不存在或内容损坏：按空表处理，下面登记时会整份重写
+    }
+
+    if (typeof files[absPath] === 'number') return false
+
+    files[absPath] = Date.now()
+    const keys = Object.keys(files)
+    if (keys.length > STATE_MAX_ENTRIES) {
+      keys
+        .sort((a, b) => (Number(files[a]) || 0) - (Number(files[b]) || 0))
+        .slice(0, keys.length - STATE_MAX_ENTRIES)
+        .forEach((k) => delete files[k])
+    }
+
+    const tmp = `${file}.${process.pid}.tmp`
+    fs.writeFileSync(tmp, JSON.stringify({ v: 1, files }), { mode: 0o600 })
+    fs.renameSync(tmp, file)
+    pruneStale(dir, file)
+    return true
+  } catch (_) {
+    return true
+  }
+}
+
 function isGenerated(posixPath, basename) {
   return GENERATED_PATH_PATTERN.test(posixPath) || GENERATED_NAME_PATTERN.test(basename)
 }
@@ -223,7 +314,15 @@ function main() {
   const lineCount = countLines(content)
   const relPath = path.relative(cwd, filePath) || filePath
 
-  if (isSource && lineCount > SOURCE_LINE_LIMIT) {
+  const overSource = isSource && lineCount > SOURCE_LINE_LIMIT
+  const overClaudeMd = isClaudeMd && lineCount > CLAUDE_MD_LINE_LIMIT
+  if (!overSource && !overClaudeMd) process.exit(0)
+
+  // 同一会话同一文件只提醒一次：已提醒过就静默放行
+  const absPath = path.resolve(cwd, filePath)
+  if (!claimReminder(payload.session_id, absPath)) process.exit(0)
+
+  if (overSource) {
     process.stderr.write(
       `[L1-BLOCKER] file=${relPath} check=write-guard ` +
         `finding="${lineCount} lines exceeds source limit ${SOURCE_LINE_LIMIT}" ` +
@@ -232,7 +331,7 @@ function main() {
     process.exit(2)
   }
 
-  if (isClaudeMd && lineCount > CLAUDE_MD_LINE_LIMIT) {
+  if (overClaudeMd) {
     process.stderr.write(
       `[L1-BLOCKER] file=${relPath} check=write-guard ` +
         `finding="${lineCount} lines exceeds CLAUDE.md limit ${CLAUDE_MD_LINE_LIMIT}" ` +
