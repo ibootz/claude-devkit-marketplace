@@ -569,6 +569,16 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 4.9.1 主模型走第三方端点时，判定仍用本机 Claude 登录跑 sonnet
+
+**改了什么**：判定子进程原先原样继承主会话的环境变量。`ANTHROPIC_BASE_URL` 指向非 `api.anthropic.com` 的地址时（DeepSeek 等 Anthropic 兼容端点），子进程现在剥掉 `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_API_KEY` / `ANTHROPIC_CUSTOM_HEADERS` 与各 `ANTHROPIC_*MODEL` 覆盖，判定改走本机的 Claude 登录。官方地址、未设端点、Bedrock / Vertex 不动。
+
+**为什么改**（用户 2026-10-29 拍板 1a）：原样继承时判定请求带着 `claude-sonnet-5-5` 发到第三方。实测把端点指向不可达地址，脚本耗满 75 秒后静默放行；第三方若把模型名映射成自家模型，判定会跑在没评测过的模型上，本轮摘录也发给了第三方（这一支未实测）。改后同一实验 5 秒内正常打回。
+
+**代价**：本机没有 Claude 登录的机器上判定子进程会失败，按 fail-open 放行，等于没审（失败多快未实测）。第三方会话的本轮摘录发给 Anthropic。
+
+**线上耗时实测（2026-10-29，近 3 天 157 次 4.9.0 判定，取自会话记录里 `stop_hook_summary` 的 `durationMs`）**：中位 7.3 秒，p90 16.1 秒，8 次超过 30 秒，其中 6 次耗满 75 秒被杀（静默放行）。超时样本主模型既有 `claude-opus-5-5` 也有 `deepseek-flash`，且在不同会话里集中于同几分钟，更像 API 侧当时变慢，单次超时的根因没查清（子进程输出被丢弃）。单次拆解：`claude -p` 冷启动约 2～4 秒；结构化输出固定 2 轮 API 调用；判定子进程继承用户 settings 里的 `CLAUDE_CODE_EFFORT_LEVEL=high`，同一输入 high 约 9～12 秒、low 约 7～12 秒（各 3 次，波动大）；继承的 `API_TIMEOUT_MS=600000` 让卡住的请求等到 75 秒才被杀。
+
 ### 4.9.0 回合末出处审查改成 command 型，对话框不再显示提示词
 
 **做什么**：`Stop` 挂载从 prompt 型换成 command 型 `hooks/stop-audit.js`。判定提示词原样搬进 `hooks/stop-audit-prompt.txt`（与 4.8.0 逐字相同），判定模型仍是 `claude-sonnet-5-5`，由脚本自己用 `claude -p` 调起。判不满足时脚本输出 `{"decision":"block","reason":...}`，harness 把 reason 交回主模型、本轮继续。

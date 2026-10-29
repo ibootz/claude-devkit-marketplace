@@ -1,6 +1,6 @@
 {
   "name": "devkit-discipline",
-  "version": "4.9.0",
+  "version": "4.9.1",
   "description": "AI 工作纪律 - 纪律分三层注入（会话级 / 每轮 / 子代理），3 道硬拦 + 1 道事后提醒 + 回合末出处审查（Stop），压缩时校准子代理状态，附中文消歧 skill。见 README",
   "author": {
     "name": "zhangq"

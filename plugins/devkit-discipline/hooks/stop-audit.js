@@ -172,6 +172,30 @@ function resolveClaude() {
   return null
 }
 
+// 主会话走第三方 Anthropic 兼容端点（ANTHROPIC_BASE_URL 指向 DeepSeek 等）时，子进程若原样继承，
+// 判定请求会带着 claude-sonnet-5-5 发到第三方：要么被拒（2026-10-29 实测端点不可达时耗满 75 秒后
+// 静默放行），要么被映射成第三方模型跑出未评测的判定，还把本轮摘录发给第三方。
+// 用户拍板（2026-10-29，1a）：此时剥掉端点、凭据与模型覆盖，判定固定走本机的 Claude 登录；
+// 本机没有 Claude 登录时子进程报错、本脚本按 fail-open 放行。官方地址与 Bedrock / Vertex 不动。
+const THIRD_PARTY_KEYS = [
+  'ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_CUSTOM_HEADERS',
+  'ANTHROPIC_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+]
+
+function isThirdPartyBaseUrl(u) {
+  if (!u) return false
+  try { return new URL(u).hostname !== 'api.anthropic.com' } catch { return true }
+}
+
+function childEnv(parentEnv) {
+  const env = { ...parentEnv, DEVKIT_STOP_AUDIT_CHILD: '1' }
+  if (isThirdPartyBaseUrl(parentEnv.ANTHROPIC_BASE_URL)) {
+    for (const k of THIRD_PARTY_KEYS) delete env[k]
+  }
+  return env
+}
+
 function judge(claudeBin, input) {
   const p = spawnSync(claudeBin, [
     '-p', '--model', MODEL, '--system-prompt', SYS,
@@ -183,7 +207,7 @@ function judge(claudeBin, input) {
     encoding: 'utf8',
     timeout: CHILD_TIMEOUT_MS,
     cwd: os.tmpdir(),
-    env: { ...process.env, DEVKIT_STOP_AUDIT_CHILD: '1' },
+    env: childEnv(process.env),
     maxBuffer: 16 * 1024 * 1024,
   })
   if (p.error || p.status !== 0 || !p.stdout) return null
@@ -217,4 +241,4 @@ if (require.main === module) {
   process.exit(0)
 }
 
-module.exports = { buildContextLines, buildJudgeInput, userPromptText, cut, resolveClaude, judge }
+module.exports = { buildContextLines, buildJudgeInput, userPromptText, cut, resolveClaude, judge, childEnv }

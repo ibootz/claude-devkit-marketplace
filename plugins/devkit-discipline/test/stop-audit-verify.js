@@ -144,6 +144,19 @@ const jsonl = (rows) => rows.map((r) => JSON.stringify(r)).join('\n') + '\n'
   check('判定输入：带 harness 同款问句与 transcript 包装', s.startsWith('<transcript>\n[user]: 问\n\n[assistant]: 结论：X 不存在。\n</transcript>') && s.includes('Condition: A {'), s.slice(0, 200))
 }
 
+{
+  const { childEnv } = require(HOOK)
+  const third = { PATH: '/bin', ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic', ANTHROPIC_AUTH_TOKEN: 't', ANTHROPIC_API_KEY: 'k', ANTHROPIC_MODEL: 'deepseek-chat', ANTHROPIC_DEFAULT_SONNET_MODEL: 'deepseek-chat' }
+  const e1 = childEnv(third)
+  check('第三方端点 → 剥掉端点、凭据与模型覆盖', !('ANTHROPIC_BASE_URL' in e1) && !('ANTHROPIC_AUTH_TOKEN' in e1) && !('ANTHROPIC_API_KEY' in e1) && !('ANTHROPIC_MODEL' in e1) && !('ANTHROPIC_DEFAULT_SONNET_MODEL' in e1), JSON.stringify(e1))
+  check('第三方端点 → 其它变量与防递归标记保留', e1.PATH === '/bin' && e1.DEVKIT_STOP_AUDIT_CHILD === '1', JSON.stringify(e1))
+  const e2 = childEnv({ ANTHROPIC_BASE_URL: 'https://api.anthropic.com', ANTHROPIC_API_KEY: 'k' })
+  check('官方地址 → 原样继承', e2.ANTHROPIC_BASE_URL === 'https://api.anthropic.com' && e2.ANTHROPIC_API_KEY === 'k', JSON.stringify(e2))
+  const e3 = childEnv({ ANTHROPIC_API_KEY: 'k' })
+  check('未设端点 → API key 原样继承', e3.ANTHROPIC_API_KEY === 'k', JSON.stringify(e3))
+  check('端点写错（解析不了）→ 按第三方处理', !('ANTHROPIC_BASE_URL' in childEnv({ ANTHROPIC_BASE_URL: 'not a url' })))
+}
+
 fs.rmSync(DIR, { recursive: true, force: true })
 console.log(`stop-audit: ${pass} passed, ${fail} failed`)
 process.exit(fail === 0 ? 0 : 1)
