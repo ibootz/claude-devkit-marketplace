@@ -51,7 +51,7 @@ function run(input, env = {}) {
   const r = spawnSync('node', [HOOK], {
     input: typeof input === 'string' ? input : JSON.stringify(input),
     encoding: 'utf8',
-    env: { ...process.env, DEVKIT_STOP_AUDIT: '', DEVKIT_STOP_AUDIT_CHILD: '', DEVKIT_STOP_AUDIT_CLAUDE: STUB, STUB_LOG: log, ...env },
+    env: { ...process.env, DEVKIT_STOP_AUDIT: '', DEVKIT_STOP_AUDIT_CHILD: '', DEVKIT_STOP_AUDIT_CLAUDE: STUB, DEVKIT_STOP_AUDIT_LOG: path.join(DIR, 'default-audit.log'), STUB_LOG: log, ...env },
   })
   return { status: r.status, stdout: r.stdout, called: fs.existsSync(log) }
 }
@@ -155,6 +155,20 @@ const jsonl = (rows) => rows.map((r) => JSON.stringify(r)).join('\n') + '\n'
   const e3 = childEnv({ ANTHROPIC_API_KEY: 'k' })
   check('未设端点 → API key 原样继承', e3.ANTHROPIC_API_KEY === 'k', JSON.stringify(e3))
   check('端点写错（解析不了）→ 按第三方处理', !('ANTHROPIC_BASE_URL' in childEnv({ ANTHROPIC_BASE_URL: 'not a url' })))
+  const e4 = childEnv({ CLAUDE_CODE_EFFORT_LEVEL: 'high', API_TIMEOUT_MS: '600000' })
+  check('子进程推理强度固定 medium、不继承用户的 high', e4.CLAUDE_CODE_EFFORT_LEVEL === 'medium', JSON.stringify(e4))
+  check('子进程单次请求超时固定 25 秒、不继承用户的 600 秒', e4.API_TIMEOUT_MS === '25000', JSON.stringify(e4))
+}
+
+// ---- 失败日志 ----
+{
+  const logFile = path.join(DIR, 'audit.log')
+  run(base, { STUB_MODE: 'exit1', DEVKIT_STOP_AUDIT_LOG: logFile })
+  run(base, { STUB_MODE: 'garbage', DEVKIT_STOP_AUDIT_LOG: logFile })
+  run(base, { STUB_MODE: 'pass', DEVKIT_STOP_AUDIT_LOG: logFile })
+  const rows = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : []
+  check('失败日志：退出码非 0 与输出不是 JSON 各记一行，判定成功不记', rows.length === 2 && rows[0].kind === 'exit-nonzero' && rows[0].status === 1 && rows[1].kind === 'bad-json', JSON.stringify(rows))
+  check('失败日志：带耗时与截断后的 stdout', typeof rows[1]?.ms === 'number' && rows[1].stdout === 'not json', JSON.stringify(rows[1]))
 }
 
 fs.rmSync(DIR, { recursive: true, force: true })

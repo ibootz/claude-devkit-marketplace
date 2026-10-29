@@ -16,7 +16,8 @@
 // 4. ok=false 时 stdout 输出 {"decision":"block","reason":...}，harness 把 reason 交回主模型、
 //    本轮继续；其余一切情形（判定满足、超时、claude 找不到、输出解析失败）放行。
 //
-// 【失灵时怎样】一律放行（fail-open），不会出现永久打回：最坏情形是本轮没审。
+// 【失灵时怎样】一律放行（fail-open），不会出现永久打回：最坏情形是本轮没审。判定子进程
+// 超时、退出码非 0、输出解析不了时，原因追加到 $TMPDIR/devkit-stop-audit.log。
 // 子进程带 DEVKIT_STOP_AUDIT_CHILD=1、cwd 设在临时目录、--setting-sources project（不读用户
 // settings，也就不装用户启用的插件），双重防止判定会话自己再触发 Stop hook 形成递归。
 // 2026-10-28 用 --debug-file 实测：这样起的判定会话不跑任何 hook（`0 hooks still pending`），
@@ -34,7 +35,10 @@ const path = require('path')
 const { spawnSync } = require('child_process')
 
 const MODEL = 'claude-sonnet-5-5'
-const CHILD_TIMEOUT_MS = 75000
+const CHILD_TIMEOUT_MS = 35000
+const CHILD_API_TIMEOUT_MS = 25000
+const CHILD_EFFORT = 'medium'
+const LOG_MAX_BYTES = 512 * 1024
 const CUT = 300
 const CONTEXT_BUDGET = 12000
 const MAX_TRANSCRIPT_BYTES = 8 * 1024 * 1024
@@ -188,15 +192,36 @@ function isThirdPartyBaseUrl(u) {
   try { return new URL(u).hostname !== 'api.anthropic.com' } catch { return true }
 }
 
+// 判定子进程不继承用户的推理强度与单次请求超时（用户拍板 2026-10-29，1b 改 medium）：
+// 线上 157 次判定里 6 次耗满 75 秒，子进程继承了 settings 里的 API_TIMEOUT_MS=600000，
+// 卡住的请求只能等外层超时杀掉；继承的 effort=high 也拉长了每次判定。
 function childEnv(parentEnv) {
-  const env = { ...parentEnv, DEVKIT_STOP_AUDIT_CHILD: '1' }
+  const env = { ...parentEnv, DEVKIT_STOP_AUDIT_CHILD: '1', CLAUDE_CODE_EFFORT_LEVEL: CHILD_EFFORT, API_TIMEOUT_MS: String(CHILD_API_TIMEOUT_MS) }
   if (isThirdPartyBaseUrl(parentEnv.ANTHROPIC_BASE_URL)) {
     for (const k of THIRD_PARTY_KEYS) delete env[k]
   }
   return env
 }
 
+// 判定失败（超时、退出码非 0、输出解析不了）时放行，原因追加到本地日志，供事后查为什么没审。
+// 日志超过 LOG_MAX_BYTES 时清空重写。DEVKIT_STOP_AUDIT_LOG 可改落点（测试用）。
+function logFailure(kind, p, ms) {
+  try {
+    const file = process.env.DEVKIT_STOP_AUDIT_LOG || path.join(os.tmpdir(), 'devkit-stop-audit.log')
+    const line = JSON.stringify({
+      at: new Date().toISOString(), kind, ms,
+      status: p.status, signal: p.signal, error: p.error ? String(p.error.code || p.error.message) : undefined,
+      stderr: p.stderr ? cut(p.stderr) : undefined, stdout: p.stdout ? cut(p.stdout) : undefined,
+    }) + '\n'
+    let size = 0
+    try { size = fs.statSync(file).size } catch { /* 首次写 */ }
+    if (size > LOG_MAX_BYTES) fs.writeFileSync(file, line)
+    else fs.appendFileSync(file, line)
+  } catch { /* 日志写不了不影响放行 */ }
+}
+
 function judge(claudeBin, input) {
+  const t0 = Date.now()
   const p = spawnSync(claudeBin, [
     '-p', '--model', MODEL, '--system-prompt', SYS,
     '--setting-sources', 'project',
@@ -210,8 +235,14 @@ function judge(claudeBin, input) {
     env: childEnv(process.env),
     maxBuffer: 16 * 1024 * 1024,
   })
-  if (p.error || p.status !== 0 || !p.stdout) return null
-  const j = JSON.parse(p.stdout)
+  const ms = Date.now() - t0
+  if (p.error || p.status !== 0 || !p.stdout) {
+    logFailure(p.error && p.error.code === 'ETIMEDOUT' ? 'timeout' : p.error ? 'spawn-error' : 'exit-nonzero', p, ms)
+    return null
+  }
+  let j
+  try { j = JSON.parse(p.stdout) } catch { logFailure('bad-json', p, ms); return null }
+  if (!j.structured_output) logFailure('no-structured-output', p, ms)
   return j.structured_output || null
 }
 
