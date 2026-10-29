@@ -37,9 +37,8 @@
 | `Agent` | `PreToolUse` | `guards/agent-dispatch.js` | （2.0.0 已合并 `agent-naming.js`） |
 | `Bash` | `PreToolUse` | `guards/bash-guard.js` | `block-cd.js` + `agent-browser-launch.js`（**cd 那半 3.26.0 又拆了出去**，见第三章末） |
 | `Write` / `Edit` | `PostToolUse` | `guards/write-guard.js` | `max-source-lines.js` + `claude-md-max-lines.js` |
-| **不按对象**：`Agent` / `Read` / `Grep` / `Glob` / `Bash` 的**节奏** | `PreToolUse` | `guards/probe-throttle.js`（3.24.0 新增） | 无（新判据，见第六章） |
 
-最后一行是这条拓扑原则的唯一例外，如实记下来：`probe-throttle` 拦的不是"某个工具的某种用法"，而是**跨工具的行为节奏**（连续多少次没派发），所以它必然与 `Agent`、`Bash` 两道对象闸共享 matcher。代价是 `Bash` 要过两道闸；换来的是这个判据压根无法挂到任何单一对象上——它的输入是"自上次 `Agent` 以来的调用序列"，不是某一次调用的字段。
+3.24.0～4.10.0 期间表里还有一行不按对象、按行为节奏拦的 `guards/probe-throttle.js`，是这条拓扑原则唯一的例外；4.11.0 按线上实测删除，见「4.11.0」一节。
 
 ---
 
@@ -463,7 +462,7 @@
 |---|---|---|
 | 判据与触发条件（哪个字段必填、档位怎么选、四段式有哪四段） | 常驻注入 | 仍常驻 |
 | 形态模板（可整体照抄的调用 JSON、六字段表、命名细则、5.6 六项的实证） | 常驻注入，约 8.3k | `references/agent-dispatch.md`，由 `agent-dispatch.js` 在 deny 时读 `SEC` 标记原文附在 finding 后 |
-| 四道闸各自的判据与误杀面 | 常驻注入，约 1.7k | `references/guard-boundaries.md`，撞闸时各 guard 自己的 finding 已给细则 |
+| 三道闸各自的判据与误杀面 | 常驻注入，约 1.7k | `references/guard-boundaries.md`，撞闸时各 guard 自己的 finding 已给细则 |
 
 **为什么 deny 时注入比常驻更划算**：AI 真派错的那一刻，正是它最需要模板的时刻，而那时 finding 是它必然读到的东西——常驻注入换来的「每轮都在场」对一件低频事付了全额。`deny()` 现在统一过 `withRefTemplate()`，读不到 reference 文件就只发 finding（fail-open），不因为文件缺失而改变拦截判定。
 
@@ -568,6 +567,31 @@
 **注入长度**（基线是 3.35.0，即新增 3.11 之后的值）：`SessionStart` 4782 → **4650**（−132）、`UserPromptSubmit` 2106 → **2125**（+19，每轮自查第 4 条多了 skill 名）、`SubagentStart` 4714 → **4633** / 3877 → **3801**。这是当前值。
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
+
+### 4.11.0 删除串行检索计数闸（probe-throttle）
+
+**改了什么**：删除 `hooks/guards/probe-throttle.js`、它在 `PreToolUse:Agent|Read|Grep|Glob|Bash` 上的挂载与回归用例 `test/probe-throttle-verify.js`（45 条）。注入文字去掉六章那条 bullet 和检查点②里指向它的半句；检查点②的次数改为只由回合开头的「派发账本」（`hooks/dispatch-ledger.js`）报出。能派下一层的子代理不再需要剔除那条，与主会话拿同一份六章。`references/guard-boundaries.md` 改为三道闸。顺带改了 `devkit-worktree-flow` 的 worktree-boundary SKILL.md 里提到「串行检索计数」的一句（该插件升 2.0.1）。
+
+**为什么**：本机 2026-08-11～10-29 的 965 个主会话、63069 次检索调用实测（分析脚本只留本地）：
+
+| 指标 | 值 |
+|---|---|
+| 拦截次数 | 1427 |
+| 拦截后下一步：原样重发 / 改写后继续自己查 / 立刻派发 | 850（60%）/ 470（33%）/ 55（3.9%） |
+| 拦截后 3 次调用内派发 | 122（8.5%） |
+| 对照：任一检索调用之后下一次是派发 | 2.0%（1247/62272） |
+| 第 4、5 次计数提示之后下一次是派发 | 2.3%（488/21325） |
+| 拦截后的计数提示之后下一次是派发 | 1.4%（355/24539） |
+| 串行检索段 ≥6 次的占比 / 段长 p90 | 41% / 29 |
+| 有计数提示的会话 / 每会话注入字数中位 / 单会话最多 | 858 / 2239 / 275508（该会话提示 2419 次） |
+
+计数提示与对照无差。拦截把「下一次就派发」从 2.0% 提到 3.9%，约 55 次拦截才多换来 1 次派发，而每次拦截都让模型多跑一个带整段上下文的往返。3.24.0 上线时（2026-08-05）的理由「决策时刻的一次强制中断，效果远超回合开头的一行数字」没有被数据支持。用户 2026-10-29 拍板「1a」：提示与拦截整个删掉。
+
+**代价**：主会话连续检索不再有任何强制中断，检查点②只靠每轮注入与派发账本提醒。
+
+**未核实**：会话记录最早到 08-11，晚于上线，没有上线前的对照；提示与拦截只出现在长串行段，有选择偏差；派发子代理是否真省下主会话上下文没有测。
+
+**回退**：revert 本版提交。
 
 ### 4.10.0 判定子进程固定推理强度 medium、收紧超时、失败原因写日志
 
@@ -984,7 +1008,7 @@ AGENT_NAMING_GUARD=off     # 1.11.0 起沿用的旧名，继续有效
 
 **动因是两条约束在一条真实路径上顶死**：从 worktree 会话改主仓的常驻产物时，写侧约束要求先 `cd` 到主仓，而 cd 判据把独立 `cd` 判为阻断、它给的两种改法（绝对路径 / 子 shell）**在定义上都不改变会话 cwd**——两条都成立、交集为空。这不是判据 bug，是两条规则的适用范围真的撞上了。合并在一个 hook 里时想关掉 cd，只有两条路：连 `agent-browser` 四护栏一起关，或停掉整个纪律注入插件。拆出来之后，撞上顶死的项目单独停用 `devkit-cd-blocker` 即可，其余约束不受影响。
 
-**代价如实记住**：`Bash` 现在有两道闸（本 guard + `devkit-cd-blocker` 的 `cd-guard.js`），两个插件同装时同一条命令的两类违规**不再一次报清**，AI 可能改完一处才看见另一处。这正是 3.0.0 收敛挂载拓扑要消除的多轮往返——上面那张拓扑表里「一个对象只有一道闸」在 `Bash` 上因此有了第二个例外（第一个是 `probe-throttle`）。换到的是可单独停用。
+**代价如实记住**：`Bash` 现在有两道闸（本 guard + `devkit-cd-blocker` 的 `cd-guard.js`），两个插件同装时同一条命令的两类违规**不再一次报清**，AI 可能改完一处才看见另一处。这正是 3.0.0 收敛挂载拓扑要消除的多轮往返——上面那张拓扑表里「一个对象只有一道闸」在 `Bash` 上因此有了例外（3.24.0～4.10.0 期间还有另一个例外 `probe-throttle`，4.11.0 已删）。换到的是可单独停用。
 
 **纪律与拦截分属两处**：`cwd 干净`这条纪律仍在本插件的注入文本里（六章 `Bash` 条目）——写 Bash 一律 `(cd /abs/path && cmd)` / `git -C <path> <cmd>` / 全绝对路径。停用 `devkit-cd-blocker` 只去掉机械拦截，不去掉纪律。
 
@@ -1162,66 +1186,9 @@ BLOCK | <本仓>/docs/research/../../../../<别处>/ccg-workflow/CLAUDE.md（对
 
 ---
 
-## 六、拦截：`probe-throttle` 守检索节奏（3.24.0 新增）
+## 六、（已删除）`probe-throttle` 守检索节奏
 
-**要解决的问题**：注入文本从 3.12.0 起就在写检查点②（自上次派发以来串行检索 ≥6 次且仍有 ≥2 个独立待查项就该派 `Explore`），3.15.0 又加了 `dispatch-ledger.js` 把数字现算出来。两者都有效果，但都落在**回合开头**——而"这一步该自己查还是派出去"这个决定发生在 AI 即将发起第 N 次 `Read` 的那一瞬间。摆在回合开头的数字，到那一瞬间已经隔了十几次工具调用。
-
-`probe-throttle.js` 把同一个判据搬到那一瞬间：
-
-| 串行检索次数 | 动作 | 强度 |
-|---|---|---|
-| 1-3 | 什么都不做 | 零成本、零输出 |
-| 4-5 | 注一行实时计数（`additionalContext`） | 纯注入 |
-| 6（本段首次） | `permissionDecision: "deny"`，finding 给两条出路 | 硬拦，**可自解除** |
-| 6 以后（本段已拦过） | 回到注一行 | 纯注入 |
-
-### 它是减速带，不是墙
-
-deny 那一刻就把 `deniedSinceDispatch` 置真，所以**同一段内不会拦第二次**。AI 若确认手上只剩 1 个待查项，原样重发刚才那次调用即通过——不必改写命令、不必绕道，也不该为过闸凑一个假派发（finding 里明写了这三句）。
-
-这个形态是刻意选的。检查点②是**合取判据**：次数那一半 harness 能算，"还有没有 ≥2 个互不依赖的待查项"那一半只存在于 AI 脑内、transcript 里没有任何字段能提取。`dispatch-ledger.js` 的文件头因此写着"只对可算的那一半做 deny 会误杀"，并据此选了纯注入。3.24.0 改变的不是那个判断，而是**误杀的代价**：把"做对了却过不去"降级成"重发一次同样的调用"，代价从阻断变成一次往返。用户在 2026-08-05 拍板接受这个代价，理由是决策时刻的一次强制中断，效果远超回合开头的一行数字。
-
-### 最严重的假阳性面：不能惩罚正确的并行
-
-同一条消息里并发 5 个 `Read` 会连触发 5 次 `PreToolUse`。若按纯次数判定，第 6 次就把**正确的并行行为**拦下——而并行恰恰是零章要推的行为，奖惩正好反了。
-
-故判据收窄为「**串行**次数」：距上次记账不足 `BATCH_WINDOW_MS`（1000ms）的调用判为同批，只计数、不 deny、不注入。回归用例里"同批并发 8 次一次都不 deny"是这条的守门用例，它红了说明奖惩反了。
-
-这也让闸与规则同向：**合并调用既是检查点①的正解，也天然不撞②的闸**。想避开这道闸的唯一办法，正好是本插件想要的行为。
-
-### 时间窗是本文件唯一的非纯计数判据
-
-`BATCH_WINDOW_MS` 依赖系统时钟，同一输入在不同时序下可得不同结论——严格说不满足 `hook-restraint.md` 里"同一输入永远得到同一结论"。仍然采用它的理由：**它只在减少 deny 的方向上起作用**，不会凭它多拦任何一次。取 1000ms 的依据是两个数量级的差——同批 hook 触发间隔在百毫秒内，而 AI 逐个发起调用之间必须经过一次模型往返（秒级）。
-
-### 自己记账，不回读 transcript
-
-这是与已被摘除的 `md-audience-declaration.js`（第五章那个死局）的关键区别。那个 hook 要回答"AI 之前说过什么"，只能读 transcript，于是撞上「同一条 message 里的 text 块在它自己的 tool_use 触发 hook 时读不到」。`probe-throttle` 不需要历史：**它自己就在每一次工具调用上被触发**，把计数写进 `$TMPDIR/wd-probe-ledger/<session_id>.json` 即可。判据因此不依赖任何外部数据结构（transcript 行格式、JSONL 字段名），不存在"上游改格式导致永久拒绝"这条路径。
-
-顺带也快得多：每次读写一个几十字节的 JSON，而 `dispatch-ledger.js` 每轮要尾读最多 8MB 的 JSONL。
-
-### 三道熔断
-
-1. **单段一次**：`deniedSinceDispatch`，`Agent` 派发时解除。
-2. **单会话上限**：`MAX_DENIES = 3`，超过后只注入不拦。`Agent` 派发**不重置**这个计数（否则派一次就能重开三次拦截额度）。
-3. **fail-open**：state 读写失败、payload 缺字段、任何异常 → 静默 `exit 0`，既不 deny 也不注入。`$TMPDIR` 被系统清理时计数归零，最坏结果是少提示一次。
-
-### 子代理一律放行，注入文本也随之剔除那条
-
-`payload.agent_id` 仅在 hook 从子代理内部触发时存在（2.1.220 二进制里该字段的 `describe` 原文：*Present only when the hook fires from within a subagent*）。带它就直接返回，连计数都不做。两个理由：嵌套深度上限 2 层，第 2 层压根不许再派，拦它等于卡死；第 1 层的检索本身就是父代理派发的产物，要求它再派下一层是反向激励。
-
-对应地，注入文本第六章那条 bullet 被抽成 `HOOK_ENFORCED_PROBE_BULLET`，子代理版（`SECTION_HOOK_ENFORCED_SUBAGENT`）剔除它。**向子代理描述一条对它不存在的闸，等于教它去规避一个不会发生的拦截**——这条与 `Agent` 那条 bullet 的剔除理由相反（那条是因为 `Explore` / `Plan` 没有 `Agent` 工具），但处置相同。
-
-### 已知不覆盖的面
-
-- 用 `WebFetch` / MCP 工具 / `TaskOutput` 做检索不计数（`PROBE_TOOLS` 只有四个内建只读工具）。
-- 同批 hook 并发读写同一 state 文件会丢失更新，计数偏小 → 少拦。方向保守，未做文件锁。
-- `Bash` 一律计入，不区分只读与写操作。与 `dispatch-ledger.js` 同口径——要区分就得解析命令语义，那正是 `bash-guard` 实测 19 类漏报的老路。
-
-### 回归用例
-
-`test/probe-throttle-verify.js`，45 条，判据两侧都有：一侧是"串行满 6 次要拦住"，另一侧是"同批并发 8 次、子代理、非 `PreToolUse` 事件、`Write`、熔断后、state 不可写、坏 JSON、损坏 state 都不许拦"。用 `spawnSync` 喂 JSON 到 stdin，不经 shell。
-
-测串行不靠 `sleep`：直接把 state 里的 `lastAt` 改写成 5 秒前——那是 hook 读到的唯一时间输入，改它等价于"上一次调用发生在很久以前"，比 sleep 快且确定。用例还核对 `DENY_AT` 与注入文本里"≥6 次只读检索"这句字面一致，防的正是实证 5 那类文案漂移（hook 效力与描述它的文案分别演进，谁都不会自动核对另一方）。
+3.24.0 新增，4.11.0 删除。删除动机与实测数字见「4.11.0 删除串行检索计数闸」一节；原设计说明（计数口径、同批判定窗口、三道熔断）在 git 历史里：`git log -- plugins/devkit-discipline/hooks/guards/probe-throttle.js`。
 
 ---
 
@@ -1254,7 +1221,7 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/working-discipline.js
    ↓    UserPromptSubmit → 零（并行优先）+ 派发字段判据 + 每轮自查 4 条 + 解释类回复  实测约 2.8k 字符
    ↓                       + 经 lib/prompt-images.js 扫 payload：有图才追加路径清单
    ↓    SubagentStart    → 零(精简)、一、二（含子代理专用三条）、三、五（字段判据）、六
-   ↓                       （缺四、七，且六里剔除 probe-throttle 那条）           实测 4614 字符
+   ↓                       （缺四、七）           实测 4614 字符
    ↓                       （Explore / Plan 再缺五与六里的 Agent 那条             实测 3782 字符）
    ↓                       + 开头的执行侧要求：结构化回执 + 核实类任务交代追踪深度
    ↓    未识别事件        → 回退 UserPromptSubmit（三者中最小的一份，回退错了只多注入 1.1k）
@@ -1403,18 +1370,15 @@ plugins/devkit-discipline/
 │       ├── bash-guard.js               # PreToolUse:Bash —— agent-browser 启动四护栏
 │       │                               #   （①鉴权 ②实例上限 ④安全边界），一次报清；
 │       │                               #   裸 cd 那半 3.26.0 已拆去 devkit-cd-blocker 插件
-│       ├── write-guard.js              # PostToolUse:Write|Edit —— 源码 >1000 行 / 本项目内
-│       │                               #   CLAUDE.md >200 行；事后提醒，不回滚也不停轮
-│       └── probe-throttle.js           # PreToolUse:Agent|Read|Grep|Glob|Bash —— 串行只读检索
-│                                       #   满 4 次报数、满 6 次 deny 一次（自解除）；state 落
-│                                       #   $TMPDIR，同批并发不计、子代理直接放行
+│       └── write-guard.js              # PostToolUse:Write|Edit —— 源码 >1000 行 / 本项目内
+│                                       #   CLAUDE.md >200 行；事后提醒，不回滚也不停轮
 ├── references/                         # 3.31.0 新增：从常驻注入下沉的形态模板真源。
 │   │                                   #   段落用 `<!-- SEC:name -->` … `<!-- /SEC -->` 分界，
 │   │                                   #   guard 按名读原文注入，不手抄第二份
 │   ├── agent-dispatch.md               #   SEC:agent-call（可整体照抄的调用 JSON + 六字段表 +
 │   │                                   #   prompt 四段式）/ SEC:naming（命名规范全文）/
 │   │                                   #   SEC:dispatch（五章展开：类型、档位、5.6 六项实证）
-│   ├── guard-boundaries.md             #   SEC:guards（四道闸各自的判据与误杀面全文）
+│   ├── guard-boundaries.md             #   SEC:guards（三道闸各自的判据与误杀面全文）
 │   ├── expression.md                   #   3.37.0：SEC:ask（正文提问骨架与范例）/ SEC:reply /
 │   │                                   #   SEC:naming / SEC:coherence；不被 guard 读，靠指路
 │   └── conduct.md                      #   3.37.0：七章完整版 SEC:act / SEC:truth / SEC:subagent；4.3.1 加 SEC:script
@@ -1422,13 +1386,12 @@ plugins/devkit-discipline/
 │   ├── guard-verify.js                 # bash-guard / write-guard / agent-dispatch 回归 157 条
 │   │                                   #   （3.26.0 起 cd 用例在 devkit-cd-blocker 插件，这里只留一条
 │   │                                   #   反向断言：裸 cd 必须已经不被 bash-guard 拦）
-│   ├── probe-throttle-verify.js        # probe-throttle 回归 45 条（判据两侧都有用例）
 │   ├── compact-agent-status-verify.js  # compact-agent-status 回归 26 条
 │   └── stop-audit-verify.js            # stop-audit 回归 25 条（判定模型用桩，只测脚本分支与摘录）
 └── README.md
 ```
 
-`hooks/dispatch-ledger.js`（3.15.0）单挂 `UserPromptSubmit`，与注入主脚本并列：它要尾读最多 8MB 的 JSONL，失败面（文件不存在 / 超大 / 行损坏）与纯文本拼装完全不同，混在一个脚本里会让静态注入跟着挂。3.24.0 起它与 `probe-throttle.js` 分工明确——**账本报累计值（回合开头），闸报串行值并在过线时中断（决策时刻）**。
+`hooks/dispatch-ledger.js`（3.15.0）单挂 `UserPromptSubmit`，与注入主脚本并列：它要尾读最多 8MB 的 JSONL，失败面（文件不存在 / 超大 / 行损坏）与纯文本拼装完全不同，混在一个脚本里会让静态注入跟着挂。4.11.0 删除 `probe-throttle.js` 后，检查点②的次数只由它在回合开头报出。
 
 3.0.0 删除的文件：`guards/external-write-readback.js`、`guards/nonascii-path.js`、`guards/md-audience-declaration.js`、`lib/transcript.js`、`lib/notify-once.js`（判据靠猜或只服务已删 guard）；`guards/block-cd.js`、`guards/agent-browser-launch.js` 合并进 `bash-guard.js`；`guards/max-source-lines.js`、`guards/claude-md-max-lines.js` 合并进 `write-guard.js`。更早的 `agent-naming.js`（1.11.0）已在 2.0.0 并入 `agent-dispatch.js`。
 
@@ -1442,7 +1405,6 @@ plugins/devkit-discipline/
 - 调整 agent-browser 启动类与白名单子命令 → 同文件的 `LAUNCH_SUBCOMMANDS` / `ALLOWLIST_SUBCOMMANDS`（两者并成 `ALL_KNOWN_SUBCOMMANDS`）/ `HELP_FLAGS` / `URL_PATTERN` / `ENV_ASSIGN_PATTERN`；四护栏判据在 `AUTH_FLAGS` / `AUTH_ENV_PATTERNS`（①鉴权）、`INSTANCE_LIMIT` / `countActiveInstances()`（②实例上限，测试桩 `WD_AB_INSTANCE_COUNT`）、`hasSafetyBoundary()`（④安全边界）
 - 调整行数阈值 / 源码扩展名 / 排除路径 → 编辑 `hooks/guards/write-guard.js` 里的 `SOURCE_LINE_LIMIT` / `CLAUDE_MD_LINE_LIMIT` / `SOURCE_EXTENSIONS` / `GENERATED_PATH_PATTERN` / `GENERATED_NAME_PATTERN` / `RULES_DIR_PREFIX`（3.6.0 起 CLAUDE.md 的排除判据由旧常量 `EXCLUDED_SEGMENT_PATTERN` 那种"路径任意位置包含"改成了这个"项目内相对路径前缀"，旧常量已不存在）
 - 调整截图路径的提取与条件注入 → 改 `hooks/lib/prompt-images.js` 的 `IMAGE_TAG_PATTERN` / `BARE_IMAGE_PATH_PATTERN`，或 `hooks/working-discipline.js` 的 `buildImageEvidence()`
-- 调整检索节奏闸 → 编辑 `hooks/guards/probe-throttle.js` 里的 `NOTICE_AT`（起报数的串行次数）/ `DENY_AT`（中断线，**改它必须同步注入文本里"≥6 次只读检索"那句**，回归用例会核对两者一致）/ `MAX_DENIES`（单会话熔断）/ `BATCH_WINDOW_MS`（同批判定窗口，调大等于更宽容）/ `PROBE_TOOLS` / `DISPATCH_TOOLS`；`WD_PROBE_STATE_DIR` 只供回归用例隔离 state，不要在正常使用中设它
 - 调整派发账本的报数时机 → 编辑 `hooks/dispatch-ledger.js` 里的 `MIN_CALLS` / `NUDGE_AT` / `PROBE_LIMIT` / `MAX_BYTES`
 
 > **判据是硬阻断行为的一部分，AI 不得自行修改。** 按仓库规则 `.claude/rules/project/hook-restraint.md` 第 4 条：发现判据有问题**只报不改**，把可复现的输入与实际输出交给用户拍板。

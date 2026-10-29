@@ -62,7 +62,7 @@
       "source": "./plugins/devkit-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒 + 回合末出处审查，附中文消歧 skill",
-      "version": "4.10.0"
+      "version": "4.11.0"
     },
     {
       "name": "devkit-agent-browser",
@@ -132,7 +132,7 @@
       "source": "./plugins/devkit-worktree-flow",
       "category": "Development",
       "description": "主分支保护 + worktree 隔离边界 - 默认走 worktree，进入后写哪份/怎么退，撞闸怎么自救",
-      "version": "2.0.0"
+      "version": "2.0.1"
     },
     {
       "name": "devkit-cd-blocker",

@@ -437,7 +437,7 @@ const SECTION_PARALLEL_TURN = [
   '**默认并发**：发调用前盘点哪些互不依赖（判据：后一个的输入是否要前一个的输出），不依赖的一律并发，按成本三档：(1) 同一条消息发多个 `Read` / `Grep` / `Glob` / `Bash`，最优先；(2) 预计 >20 行的输出、跨文件检索、可切分子任务交 `Agent`，同批并发；(3) 同类机械改写落在 **≥3 个文件**且改法互不依赖时交 `general-purpose`——判据是文件数不是难度，主会话连串 `Edit` 会把每处 diff 吃进上下文（实测 4 分钟 15 连 `Edit` 触发一次 auto-compact）。**串行只有三个理由**：输入依赖前一步输出 / 写同一资源 / 待用户拍板。',
   '',
   '**检查点①（合并）**：连续 3 条消息各只有一个工具调用时，第 4 次调用前把剩余待查项合进同一条消息；合不了就写明属于哪个串行理由。',
-  '**检查点②（派发，①不顶替②）**：自上次派发以来你已逐个发起 **≥6 次只读检索**，且还剩 **≥2 个互不依赖的待查项** → 下一步派 `Explore`，不再自己查。次数由 harness 现算（每轮「派发账本」、`probe-throttle.js` 第 4 次起报数、第 6 次拦一次），你只答后一半。同一条消息里并发的调用只算一次，所以把独立待查项合进一条消息，既满足①也不撞②的闸。',
+  '**检查点②（派发，①不顶替②）**：自上次派发以来你已逐个发起 **≥6 次只读检索**，且还剩 **≥2 个互不依赖的待查项** → 下一步派 `Explore`，不再自己查。次数由每轮「派发账本」现算，你只答后一半。',
   '两个检查点都以**外部可见的产物**为准：①是那条多调用消息，②是 `Agent` 调用本身。',
 ].join('\n')
 
@@ -790,9 +790,6 @@ const SECTION_DISPATCH = [
 const HOOK_ENFORCED_AGENT_BULLET =
   '- **`Agent`**（`agent-dispatch.js`）：只校验 `model` / `name` / `description` 的结构，不扫 `prompt`；拦下时贴出形态模板，照它改一次即可'
 
-const HOOK_ENFORCED_PROBE_BULLET =
-  '- **只读检索节奏**（`probe-throttle.js`）：检查点②的计数闸（判据在每轮注入）。**是减速带不是墙**——没有 ≥2 个互不依赖待查项时原样重发即放行，不必改写命令、不凑假派发'
-
 const SECTION_HOOK_ENFORCED = [
   '## 六、hook 在时机点强制的规则（撞到时给完整细则）',
   '',
@@ -800,10 +797,9 @@ const SECTION_HOOK_ENFORCED = [
   '',
   '- **`Bash`**（`bash-guard.js`）：只查 `agent-browser` 启动类子命令的登录态与活动实例数（≥4 先 `close`）。裸 `cd` 另由 `devkit-cd-blocker` 硬拦：用 `(cd /abs/path && cmd)` / `git -C <path>` / 全绝对路径',
   HOOK_ENFORCED_AGENT_BULLET,
-  HOOK_ENFORCED_PROBE_BULLET,
   '- **`Write` / `Edit`**（`write-guard.js`）：源码 >1000 行、项目内 `CLAUDE.md` >200 行给提示；挂 `PostToolUse`，**触发时已写完**、不回滚——动笔前就判断该不该拆',
   '',
-  '四道闸的完整判据、已实测的误杀面与自解除方式见 ' + REF_GUARDS + '。',
+  '三道闸的完整判据、已实测的误杀面与自解除方式见 ' + REF_GUARDS + '。',
 ].join('\n')
 
 // 剔除指定 bullet 的派生版本。前言里刻意不写"共几道闸"，正是为了让派生版无需改动前言
@@ -813,16 +809,10 @@ function withoutBullets(section, bullets) {
   return section.split('\n').filter((line) => !drop.has(line)).join('\n')
 }
 
-// 子代理版：去掉 `probe-throttle` 那条（它对子代理直接放行，见该常量上方注释）。
-const SECTION_HOOK_ENFORCED_SUBAGENT = withoutBullets(SECTION_HOOK_ENFORCED, [HOOK_ENFORCED_PROBE_BULLET])
-
-// 再去掉 `Agent` 那条——它指向字段判据那一节，而派不出下一层的 agent 类型
+// 派不出下一层的子代理版：去掉 `Agent` 那条——它指向字段判据那一节，而派不出下一层的 agent 类型
 // （`Explore` / `Plan`）不会收到那一节，留着会变成一条指向空处的引用。
 // 这类 agent 也压根触发不了 agent-dispatch：它们的工具集里没有 `Agent`。
-const SECTION_HOOK_ENFORCED_NO_DISPATCH = withoutBullets(SECTION_HOOK_ENFORCED, [
-  HOOK_ENFORCED_PROBE_BULLET,
-  HOOK_ENFORCED_AGENT_BULLET,
-])
+const SECTION_HOOK_ENFORCED_NO_DISPATCH = withoutBullets(SECTION_HOOK_ENFORCED, [HOOK_ENFORCED_AGENT_BULLET])
 
 // ── 条件注入：本轮用户给了截图 ──────────────────────────────────────
 //
@@ -926,9 +916,8 @@ const SECTION_PARALLEL_SUB = [
 // 判据常驻、模板落在撞闸那一刻，比两份都常驻省 4k 且投放时机更准。
 // 注 2：SECTION_HOOK_ENFORCED 必须进子代理版——子代理的工具调用同样触发
 // PreToolUse / PostToolUse guard（hook payload 里带 agent_id 标识），撞到的拦截与主会话一致。
-// **唯一的例外是 probe-throttle**（3.24.0）：它拿 agent_id 当放行判据，对子代理压根不生效，
-// 故子代理走 SECTION_HOOK_ENFORCED_SUBAGENT（已剔除那条）。这里不能图省事复用完整版——
-// 向子代理描述一条对它不存在的闸，等于教它去规避一个不会发生的拦截。
+// 3.24.0～4.10.0 的例外 probe-throttle（对子代理直接放行，子代理版因此剔除那条）已在 4.11.0 删除，
+// 能派下一层的子代理现在与主会话拿同一份。
 // 注 3：章节编号与主版保持一致（子代理版故意跳号：零、一、二、三、五、六，缺四；`Explore` /
 // `Plan` 再缺五，见下方 canDispatch。同一字符串单一真相源，避免同一条规则出现两套编号）。
 // 注 4（3.18.0）：语言令必须置顶复述，不能只靠下方 SECTION_EXPRESSION 的 3.5。根因是两路
@@ -993,7 +982,7 @@ function buildSubagentPrompt(event) {
     SECTION_EXPRESSION,
     '',
     ...dispatchSections,
-    dispatches ? SECTION_HOOK_ENFORCED_SUBAGENT : SECTION_HOOK_ENFORCED_NO_DISPATCH,
+    dispatches ? SECTION_HOOK_ENFORCED : SECTION_HOOK_ENFORCED_NO_DISPATCH,
   ].join('\n')
 }
 
