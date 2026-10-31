@@ -183,6 +183,13 @@
       "category": "Development",
       "description": "结论交付前的证伪内环：盲问派独立证伪者、比对判红，提示写 ultraverify 即开",
       "version": "0.3.0"
+    },
+    {
+      "name": "devkit-impeccable",
+      "source": { "source": "url", "url": "https://github.com/pbakaus/impeccable" },
+      "category": "Design",
+      "description": "前端设计技能 - 反 AI 味、UI 审计与打磨（外部源：pbakaus/impeccable）",
+      "version": "4.8.0"
     }
   ]
 }

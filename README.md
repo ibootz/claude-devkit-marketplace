@@ -318,7 +318,7 @@ git config core.hooksPath .githooks
 
 **为什么必须挂成 hook**：这个脚本和上面这段说明早就存在，下方「添加新插件」第 5 步也写着「跑一下」，但那 8 处漂移证明靠文档提醒的实际执行率是零。防护要生效，必须挂在会响的时机点上。
 
-检查项包括版本四方不一致、市场清单漏登记、清单里有条目但 `plugins/` 下无对应目录（幽灵条目）。远程源插件（`source` 为 `{"source":"github",...}`）自动豁免——它们没有本地 `plugin.json`，且 `install-codex.js` 只从本地 `plugins/<name>/` 目录安装，所以不登记到 Codex 清单是有意设计而非遗漏。本市场目前没有远程源插件（`mattpocock-skills` 已于 2026-08-01 移除），这条豁免逻辑保留待用。
+检查项包括版本四方不一致、市场清单漏登记、清单里有条目但 `plugins/` 下无对应目录（幽灵条目）。远程源插件（`source` 为 `{"source":"github",...}` 或 `{"source":"url",...}` 等非本地路径对象）自动豁免——它们没有本地 `plugin.json`，且 `install-codex.js` 只从本地 `plugins/<name>/` 目录安装，所以不登记到 Codex 清单是有意设计而非遗漏。本市场目前唯一的远程源插件是 `devkit-impeccable`（`source` 为 `{"source":"url",...}`，指向 pbakaus/impeccable 仓库根）；`mattpocock-skills` 已于 2026-08-01 移除，豁免逻辑保留。
 
 `--fix` **只对齐 `version` 字段，不动 `description`**：描述该写什么需要人工判断，机器对齐只会把陈旧描述固化下来，修完仍需自行确认市场清单里的描述是否同步。
 
@@ -382,8 +382,8 @@ claude-devkit-marketplace/
    - 有 hook 的：写在 `hooks/hooks.json`（`{"description": "...", "hooks": {...}}`），不要内联进 `plugin.json`
    - 对于 MCP 插件：`.mcp.json`（或 `.claude-plugin/plugin.json` + `.mcp.json`）
 3. 在 `.claude-plugin/marketplace.json` 中添加插件条目（Claude Code 市场清单）
-4. **同时**在 `.agents/plugins/marketplace.json` 中添加对应条目（Codex 市场清单，`scripts/install-codex.js` 读的是这一份）——只有远程源插件（`source` 为 `{"source":"github",...}`）可以不登记，因为 `install-codex.js` 只从本地 `plugins/<name>/` 目录安装
-5. 建 `plugins/<名>/.codex-plugin/plugin.json`（不写 hooks 字段，Codex 按默认路径读 `hooks/hooks.json`），**版本号与 `.claude-plugin` 侧保持一致**
+4. **同时**在 `.agents/plugins/marketplace.json` 中添加对应条目（Codex 市场清单，`scripts/install-codex.js` 读的是这一份）——只有远程源插件（`source` 为非本地路径对象，如 `{"source":"github",...}` / `{"source":"url",...}`）可以不登记，因为 `install-codex.js` 只从本地 `plugins/<name>/` 目录安装
+5. 若该插件也发布到 Codex，建 `plugins/<名>/.codex-plugin/plugin.json`（不写 hooks 字段，Codex 按默认路径读 `hooks/hooks.json`），**版本号与 `.claude-plugin` 侧保持一致**
 6. 跑 `node scripts/check-versions.js` 确认四处版本登记一致（漏改是本仓库反复出现的遗漏，见下方「版本一致性检查」）。设过 `git config core.hooksPath .githooks` 的话，提交时会自动跑这一步并在不一致时拦下
 
 ### 本地测试
