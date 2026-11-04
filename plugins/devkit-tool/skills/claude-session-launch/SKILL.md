@@ -1,6 +1,6 @@
 ---
 name: claude-session-launch
-description: 再起一个 Claude Code 会话来干活，或把本会话上下文交接给新会话——后台会话用 `claude --allow-dangerously-skip-permissions --bg -n <名字>`（立即返回 8 位短 id，配 agents/attach/logs/stop 四个管理命令；`-n` 就是 `claude agents` 面板里显示的名字），要人盯着看的前台会话用两条 osascript 在 iTerm2 里弹新 tab。用户说「起一个后台会话/后台 agent」「用 cy 开几个窗口」「给新会话起个名字/指定 claude agents 里显示的名字」「并行开几个 claude 跑」「开个新 tab 跑 claude」「让另一个会话去做 X」「怎么看那个后台会话在干什么」「停掉那个后台会话」「claude --bg / claude agents / claude attach / claude logs / claude stop 怎么用」「claude logs 出来一堆乱码转义」「新开的 tab 跑在错的目录里」「pgrep iTerm2 查不到进程」「后台会话改完没合回主分支 / 没推送 / worktree 没清」时使用；要别的会话接手本会话的活时同样用——「开个新会话接着做这个」「交接给新会话」「把上下文传给 X 会话」「handoff 给 X」，交接文档的写法就在本 skill 里。**起会话之前就读**，别等 cwd 落错仓或 logs 刷出满屏 ANSI 才来。只派活给一个**已经存在**的会话、不交上下文时，直接 ListAgents + SendMessage。
+description: 再起一个 Claude Code 会话来干活，或把本会话上下文交接给新会话——后台会话用 `claude --allow-dangerously-skip-permissions --bg -n <名字>`（立即返回 8 位短 id，配 agents/attach/logs/stop 四个管理命令；`-n` 就是 `claude agents` 面板里显示的名字），要人盯着看的前台会话用两条 osascript 在 iTerm2 里弹新 tab。用户说「起一个后台会话/后台 agent」「用 cy 开几个窗口」「给新会话起个名字/指定 claude agents 里显示的名字」「起一个走 glm/别的模型或第三方网关的会话」「给新会话指定模型或 settings 配置文件」「并行开几个 claude 跑」「开个新 tab 跑 claude」「让另一个会话去做 X」「怎么看那个后台会话在干什么」「停掉那个后台会话」「claude --bg / claude agents / claude attach / claude logs / claude stop 怎么用」「claude logs 出来一堆乱码转义」「新开的 tab 跑在错的目录里」「pgrep iTerm2 查不到进程」「后台会话改完没合回主分支 / 没推送 / worktree 没清」时使用；要别的会话接手本会话的活时同样用——「开个新会话接着做这个」「交接给新会话」「把上下文传给 X 会话」「handoff 给 X」，交接文档的写法就在本 skill 里。**起会话之前就读**，别等 cwd 落错仓或 logs 刷出满屏 ANSI 才来。只派活给一个**已经存在**的会话、不交上下文时，直接 ListAgents + SendMessage。
 ---
 
 # 起一个新的 Claude Code 会话
@@ -33,7 +33,8 @@ claude --allow-dangerously-skip-permissions --bg -n "<会话显示名>" "<初始
 
 这条默认命令等于人手敲 `claude --allow-dangerously-skip-permissions`（常被设成 shell 别名，如
 `cy`）再加 `--bg`。别名只在交互式 shell 里展开，Bash 工具里写展开后的全称。用户要指定模型或
-权限模式时，再追加 `--model <别名或全名>` / `--permission-mode <模式>`。
+权限模式时，再追加 `--model <别名或全名>` / `--permission-mode <模式>`；涉及换模型网关或换
+settings 配置文件的，照下一节「指定模型与模型配置文件」的已实测命令办，环境变量要先清。
 
 四件必须知道的事：
 
@@ -55,7 +56,50 @@ claude --allow-dangerously-skip-permissions --bg -n "<会话显示名>" "<初始
    重起会话。直接**开启** bypass 的写法——`--permission-mode bypassPermissions` 或
    `--dangerously-skip-permissions`——会放开全部权限检查，要用先向 Human 取当轮授权。
 
-`--model` 接受别名（`sonnet` / `opus` / `fable`）或全名（如 `claude-opus-5`）。
+### 指定模型与模型配置文件（--settings / --model，已实测）
+
+子会话要走非默认模型（如 GLM 网关）时，用 `--settings` 换配置文件、`--model` 点名。两个模板都
+经 2026-11-04 对照实验实测（macOS）。
+
+走 GLM 网关——settings.glm.json 的 env 键写全了定向所需变量：`ANTHROPIC_BASE_URL=http://127.0.0.1:3000`、
+`ANTHROPIC_AUTH_TOKEN`、四个 `ANTHROPIC_DEFAULT_*_MODEL` 全套映射到 `glm-5.3` / `glm-5.3-flash`。
+settings 单独就能把会话定向到 GLM 网关：
+
+```bash
+claude --allow-dangerously-skip-permissions --settings /Users/zhangq/.claude/settings.glm.json --bg -n "<会话名>" "<初始 prompt>"
+```
+
+父 shell 没导出 GLM 环境变量时此式单独生效（反向对照实测：glm settings + 清掉全部 GLM 环境变量，
+会话仍走 glm-5.3）；父 shell 已导出同组变量时正好同向，叠加无害。
+
+切回官方 opus——父 shell 带 GLM 环境变量时必须先清（见下面坑 1），再指默认 settings 与模型：
+
+```bash
+env -u ANTHROPIC_BASE_URL -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_DEFAULT_FABLE_MODEL -u ANTHROPIC_DEFAULT_HAIKU_MODEL -u ANTHROPIC_DEFAULT_OPUS_MODEL -u ANTHROPIC_DEFAULT_SONNET_MODEL -u CLAUDE_CODE_EFFORT_LEVEL claude --allow-dangerously-skip-permissions --settings /Users/zhangq/.claude/settings.json --model claude-opus-5-5 --bg -n "<会话名>" "<初始 prompt>"
+```
+
+前 6 个变量管网关与模型映射，末个 `CLAUDE_CODE_EFFORT_LEVEL` 是推理强度，一并清掉防继承。
+
+**坑 1 · 进程里已导出的 ANTHROPIC_* 环境变量优先于 settings 文件——只换 `--settings` 不清环境
+变量，模型仍走旧网关。** `--settings` 只能带来「文件 env 键里写的变量」，压不过父进程已导出的
+环境变量。2026-11-04 对照实测：父会话 shell 继承同组 GLM 变量时，用默认 settings.json（env 键里
+没有任何 `ANTHROPIC_*` 变量、`model: opus`）且不清环境变量启动，会话 jsonl 里 `model=glm-5.3`；
+同一命令前缀加 `env -u` 清上述 7 个变量并加 `--model claude-opus-5-5` 再启动，
+`model=claude-opus-5-5`。从带 `ANTHROPIC_*` 环境变量的 shell 里起「默认配置」会话，必须 `env -u`
+逐个清掉。
+
+起完验证模型真去了目标网关：grep 会话 jsonl 里 `"model"` 的取值分布。jsonl 落在
+`~/.claude/projects/` 下以会话启动目录命名的子目录里（目录绝对路径中的 `/` 全替换成 `-`，如
+`-Users-zhangq-Workspace-mine-claude-devkit-marketplace`），文件名 `<sessionId>.jsonl`（sessionId
+取 `claude agents --json` 的 `sessionId` 字段）。在启动目录里跑下面这条，取最新一份：
+
+```bash
+grep -o '"model":"[^"]*"' "$(ls -t ~/.claude/projects/$(pwd | sed 's:/:-:g')/*.jsonl | head -1)" | sort | uniq -c | sort -rn
+```
+
+分布里应是目标模型（如 `glm-5.3` / `claude-opus-5-5`）；仍大量出现旧网关模型名就是环境变量没清
+干净。任意 settings 文件与模型同理替换：换 `--settings` 路径定向对应网关/账号；`--model` 接受别名
+（`sonnet` / `opus` / `fable`）或全名（如 `claude-opus-5-5`）。
 
 ### 改仓库文件的活：初始 prompt 末尾写收尾
 
@@ -131,17 +175,17 @@ backgrounded · 338e6c99 · 测试启动bg对话
 | `claude agents --json` | **脚本消费的唯一正路**。打印活动会话 JSON 数组，**不需要 TTY** | 加 `--all` 才含已完成的后台会话；`--cwd <path>` 只看某目录下起的后台会话 |
 | `claude agents` | 交互式列表 | **需要 TTY**，在工具调用里不可用 |
 | `claude attach <id>` | 在当前终端接管 | 会占住当前终端，交给 Human 自己敲 |
-| `claude logs <id>` | 看最近输出 | **见下面第 1 个坑** |
+| `claude logs <id>` | 看最近输出 | **见下面坑 2** |
 | `claude stop <id>` | 停掉 | |
 
-### 两个实测坑
+### 实测坑
 
-**坑 1 · `claude logs <id>` 是 TTY 快照原文，满屏 ANSI 转义。** 输出里塞满
+**坑 2 · `claude logs <id>` 是 TTY 快照原文，满屏 ANSI 转义。** 输出里塞满
 `[?2026h`、`[38;2;215;119;87m` 这类序列，一次 `tail -30` 就是几千字符的转义噪音——
 **不要把它直接贴给 Human，也不要喂给下游程序**。要结构化数据走 `claude agents --json`；
 要人看就让 Human 自己 `claude attach <id>`。
 
-**坑 2 · 判断前台/后台看 `kind`，不是 `type` 或 `mode`。** `type` 与 `mode` 这两个键在会话
+**坑 3 · 判断前台/后台看 `kind`，不是 `type` 或 `mode`。** `type` 与 `mode` 这两个键在会话
 对象里**根本不存在**（已实测），拿它们判断会静默拿到 `None` 然后走错分支。
 
 ### `claude agents --json` 的实测字段（2026-08-20，11 个真实会话，v2.1.237）
