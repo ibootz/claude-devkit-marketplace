@@ -1,0 +1,17 @@
+{
+  "description": "UserPromptSubmit：提示里出现整词 ultraverify（反引号内不算）时注入一段话，要求本轮交付前加载 ultraverify skill；不出现则无输出。只注入不拦截。",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/keyword-trigger.js",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
