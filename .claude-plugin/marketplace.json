@@ -175,7 +175,7 @@
       "source": "./plugins/devkit-ultraverify",
       "category": "Development",
       "description": "结论交付前的证伪内环：盲问派独立证伪者、比对判红，提示写 ultraverify 即开",
-      "version": "0.1.0"
+      "version": "0.2.0"
     }
   ]
 }
