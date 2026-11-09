@@ -21,7 +21,9 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 - `cascade-pull` - 带 submodule 的仓库同步拉取（只处理直接声明的一层，不递归）
 - `cascade-push` - 嵌套 submodule 由内向外逐层提交推送（递归全嵌套树）
 - `tech-doc` - 写给人读的技术文档：判类型、套骨架、生手读得懂的写法、图文分工配图、交付自检；6.30.0 新增
-- `discover-unknowns` - 手动调用的头脑风暴（`/devkit-tool:discover-unknowns`）：盲点扫描、多方向原型发散、一次一问收敛、参考复刻语义；6.29.0 由已删除的 devkit-discover-unknowns 并入
+- `discover-unknowns` - 开工前或做到一半时挖未知的头脑风暴：用户手动调用（`/devkit-tool:discover-unknowns`），6.37.0 起 AI 撞上一组会改变做法、只有用户能答的未知时也会自行调用；盲点扫描、多方向原型发散、一次一问收敛、参考复刻语义；6.29.0 由已删除的 devkit-discover-unknowns 并入
+- `new-thing-understand` - 看懂一个新事物：多角度专业文章（导读、本质、机制、坐标、融会贯通）+ 检验检查点，分速览 / 标准 / 深入三档；6.38.0 新增
+- `new-thing-leverage` - 萃取访谈后出纳入、融入方案，把新事物接进自己的系统；6.38.0 新增
 
 ### 2. devkit-spec
 

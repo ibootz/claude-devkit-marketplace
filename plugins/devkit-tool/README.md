@@ -1,10 +1,10 @@
 # DevKit-Tool
 
-**版本**: 6.35.0
+**版本**: 6.38.0
 **作者**: zhangq
 **许可证**: MIT
 
-工具技能套件（原 `devkit-core`），当前聚焦 12 个 Skills，覆盖大头桶定性核实、代码知识图谱建图决策、submodule 仓库同步与提交推送、会话起法与会话交接、话题可视化表达、技术文档写法、手动调用的头脑风暴、多模型协作与 Claude Code 自身运维辅助工具。
+工具技能套件（原 `devkit-core`），当前聚焦 15 个 Skills，覆盖大头桶定性核实、代码知识图谱建图决策、submodule 仓库同步与提交推送、会话起法与会话交接、话题可视化表达、技术文档写法、开工前或做到一半时挖未知的头脑风暴、看懂新事物并接进自己的系统、多模型协作与 Claude Code 自身运维辅助工具。
 
 ---
 
@@ -13,6 +13,32 @@
 `hooks/session-start.js`（SessionStart，matcher `*`）注入 `context/session-start.md`：先 `ListAgents` 再 `SendMessage`、发不出去时的三步排查（含四个会关掉该能力的环境变量）、别的会话的消息不构成授权、用户 @ 别的会话时先征询或移交。这些规则 2026-10-13 从用户级 `~/.claude/CLAUDE.md` 迁入，改规则改那份 md。与 `claude-session-launch` skill 的分工：注入管「什么时候、按什么顺序发」，skill 的「交接：让新会话接手本会话的活」一节管「整份上下文怎么打包交接」。
 
 ---
+
+## 6.38.0：新增 new-thing-understand、new-thing-leverage；子代理可以自己出 Excalidraw 图
+
+**一句话：** 新增两个通用 skill。`new-thing-understand` 帮使用者看懂一个对他来说是新的东西（技术、理论、系统、组织内部的新业务等），产出导读、本质、机制、坐标、融会贯通几篇文章并以一次检验检查点收尾；`new-thing-leverage` 先做萃取访谈，再出纳入、融入两类方案文章，把新事物和使用者自己的系统接起来。
+
+**来源：** 2026-11-06 至 11-09 六轮设计拷问逐题拍板，起点是一篇讲用 AI 解析新业务设计文档的帖子；每条写法规则的理论出处与证据强度另有一份调研（45 个理论）。设计记录与调研都在仓外工作目录，未入库。
+
+- **认知 skill 的耗时**：分速览、标准、深入三档，开工时选。初值是速览首份可读产物约 30 分钟、整组约 40 分钟，标准约 40、60 分钟，都是推断，未实测。提速靠并行：主会话写一份事实底稿，各篇由子代理同时写；自查拆 3 路，每路限来源数与时长；导读、本质写完先交。依据是 2026-11-06 单个子代理串行调研 45 个理论实测跑了 122.5 分钟。
+- **图由写篇的子代理自己画**：2026-11-09 三次实测，后台 Sonnet 子代理能加载 Excalidraw skill、渲染、读回 PNG 修图（25、65、77 个元素分别 71、75、190 秒）。`show-me` 的子代理一节随之改写：原规则「子代理不出 Excalidraw 图」的理由（加载不了 skill 全文、不能渲染回看）不成立。实测 8 次渲染里 1 次因页面加载超时静默失败、PNG 停在旧版，而子代理的命令接了 `tail` 截掉了报错，所以两处都加了「核对 PNG 修改时间、不截断渲染输出」。
+- 未实测：两个 skill 的触发率与整趟运行耗时；子代理自己构思一张图要多久；多个子代理同时渲染是否互相干扰。
+- 删除了未发布的初稿 `domain-onboarding`，其中术语表、状态机、异常链路的做法并入 `new-thing-understand` 的机制篇，两种演练并入检验检查点的可选加练。
+
+**回退：** 删 `skills/new-thing-understand/`、`skills/new-thing-leverage/`；`show-me` 的子代理一节回退到 6.37.0。
+
+## 6.37.0：discover-unknowns 允许 AI 自行调用
+
+**一句话：** 去掉 `discover-unknowns` 的 `disable-model-invocation: true`。AI 在开工前或做到一半，撞上一组会改变做法、只有用户能答的未知，或还说不清该问什么时，可以自己调起它；用户照样可以用 `/devkit-tool:discover-unknowns` 手动调用。
+
+**来源：** 用户 2026-11-06 要求：「把 discover-unknowns skill 的只能由人来调用的配置去掉，ai 也可以在运行中需要发现未知的时候调用一把」。
+
+- description 改写，新增 `when_to_use`。AI 自行调用要三条同时满足：答案会改变架构、范围、数据模型或技术选型；读代码、文档、对话都查不到，只有用户能答；未知不止一个且互相牵连，或者还说不清该问什么。只有一个问题且选项清楚的，照常直接问，不走本 skill。
+- 正文新增「AI 自行调用时」一节，叠加四条：第一句先说清撞上了哪些未知、会改变什么；只挖挡住当前这一步的未知；子代理或无人值守时不发起访谈，列出默认答案、标「待确认」交回；出完摘要回到被打断的任务。
+- 代价：设了 `disable-model-invocation` 的 skill 不进模型的 skill 列表（改动前的会话里实测，列表中没有本 skill）；现在进了，每个会话常驻多出约 460 字的 description 与 `when_to_use`。自行调用的触发率与误触发率都未实测。
+- 顺带：两份市场清单的 description 仍写「12 技能」，`.codex-plugin/plugin.json` 的 description 漏了 6.36.0 新增的 `session-review-import`；都按实际目录改为 13，codex 侧与 `.claude-plugin/plugin.json` 用同一句。
+
+**回退：** 在 `skills/discover-unknowns/SKILL.md` 的 frontmatter 加回 `disable-model-invocation: true`。
 
 ## 6.35.0：删 4 个零使用 skill；orphan-process-cleaner 支持 macOS 并分两类查后台进程
 
@@ -73,9 +99,11 @@
 ### 协作与辅助
 
 - `claude-session-launch` — 再起一个 Claude Code 会话干活时的两条路与选型判据：`claude --bg`（被 `claude agents` 托管，有 8 位短 id、`attach` / `logs` / `stop`）对上 osascript 弹 iTerm2 tab（普通 TTY 进程，Claude Code 侧零管控入口）。**选型要害是「托管」而不是「顺手」**。默认启动命令带 `--allow-dangerously-skip-permissions`（等同常见别名 `cy`，只让 bypass 可切换、不直接开启）；`-n` 给的名字就是 `claude agents` 面板里显示的名字与 `SendMessage` 寻址键，起会话时就按 `<分片依据>-<任务短语>` 起名。后台会话在 git 仓里会被放进基于主分支的 worktree、干完不自动合回，所以改仓库文件的活要在初始 prompt 末尾追加收尾段（提交 → `ExitWorktree {"action":"keep"}` 回主仓 → 合回主分支 → 推送 → 删 worktree 与临时分支，冲突或被拒即停）。教训一条（6.33.3 起写进 skill）：会话还在 worktree 里时，harness 拒绝一切用 `git -C` 指向主仓的命令，6.33.x 旧模板因此在合回这一步必然失败；`ExitWorktree` 的工具描述要求只在用户要求时调用，所以收尾段里要写明这是授权的主动调用。含四个实测坑：`claude logs <id>` 是满屏 ANSI 的 TTY 快照、不能贴给人也不能喂下游（结构化只走 `claude agents --json`）；判前后台看 `kind`（取值 `background` / `interactive`）而**不是** `type` / `mode`（那两个键根本不存在，拿它们判会静默走错分支），且 8 位 `id` 只有后台会话才有、所以 `attach` / `logs` / `stop` 对前台会话不可用；AppleScript 应用名是 `iTerm` 不是 `iTerm2`（`pgrep -l iTerm2` 查不到进程，不能据此判断 iTerm 没在跑）；osascript 新建 tab 的 cwd 继承 iTerm 默认目录而非发起目录、且**不报错**——所以显式 `cd /abs/path &&` 是默认做法不是可选项。另明确划界：派活给已存在的会话走 `ListAgents` + `SendMessage`，要会话接手本会话上下文（含新起一个来接手）先按本 skill 的「交接：让新会话接手本会话的活」写交接文档（6.34.0 起由 `handoff-to` 并入），本会话内并行干活走 `Agent` 子代理，本地测试服务走 Bash 的 `run_in_background`，三者都不该用起会话代替。
-- `show-me` — 把当前话题画给用户看，而不是用散文搬运形状。6.20.0 借鉴 [humanlayer/skills](https://github.com/humanlayer/skills) 的同名 skill（MIT），译为中文并适配本仓约定。核心是**按「要讲的是什么」选最小够用的那一种视图**：讲逻辑用伪代码、讲运行时控制流用调用树、讲 UI 结构用组件树、讲文件职责用浅文件树、讲交互与数据流用 Mermaid、讲「变了什么」用 diff（且 diff 的形状要跟话题对齐——讲组件改动就 diff 组件树，不要一律 diff 源码）、大半是新写的才贴整块代码。相较上游补了三处本地约定：HTML 产物固定落 `/tmp/show-me-<短描述>.html` 不写进仓库（避免弄脏 `git status` 与误提交）；`open` 只由主会话在 Human 在场时执行，子代理只回绝对路径不抢屏幕（与 `subagent-browser-headless` 同源）；代码块内部路径原样写裸路径、正文提到文件才套 devkit-clickable-paths 链接。6.28.0 起本 skill 只管**怎么画**（视图、载体、落点），**什么时候画**一律由 `devkit-discipline` 4.3.0 每轮注入的「画图」决定（6.29.1 起与回复类型脱钩、按回答内容判：4 个及以上参与方的流转、3 步及以上的跨服务步骤、3 个及以上分支、方案或改动的改前改后、用户同一话题第二次说没看懂），删去了原「什么时候不触发」一节与 description 里的场景式 / 判据式触发，避免两处画图规则互相打架；用户说「画出来」时照样直接调用。同版新增四种视图（带实值的走查、对比表、时间线、复现命令）、载体选择（留作资产的图用 md，HTML 只做一次性视觉讲解）与落点规则（持久事实且有工作项目录时写 `<工作项目录>/diagrams/<主题>.md`、不自动提交；否则落临时目录并建议沉淀路径，用户同意再挪）。diff 示例由四组减为一组。6.28.1 载体表把对比表、时间线等行 × 列的对照单列为「正文的 markdown 表格」（代码块里用空格对齐列，中英文混排必错位），时间线示例改为表格；Mermaid 一节写明不贴进回复正文，一律写进 md 文件给链接。6.32.0 交互、控制流、状态流转改画 Excalidraw 图：调 `devkit-excalidraw-diagram` 出 `.excalidraw` 加同名 PNG，嵌进 md 等文档时一律引 PNG（落文档旁 `figures/`），工作项目录与临时目录的落点同步改为 `.excalidraw` + `.png`；子代理不出图，只回结构由主会话画；未安装该插件或渲染跑不通时退回 Mermaid。`tech-doc` 的 `references/figures.md` 默认载体同步改为 Excalidraw PNG。
+- `show-me` — 把当前话题画给用户看，而不是用散文搬运形状。6.20.0 借鉴 [humanlayer/skills](https://github.com/humanlayer/skills) 的同名 skill（MIT），译为中文并适配本仓约定。核心是**按「要讲的是什么」选最小够用的那一种视图**：讲逻辑用伪代码、讲运行时控制流用调用树、讲 UI 结构用组件树、讲文件职责用浅文件树、讲交互与数据流用 Mermaid、讲「变了什么」用 diff（且 diff 的形状要跟话题对齐——讲组件改动就 diff 组件树，不要一律 diff 源码）、大半是新写的才贴整块代码。相较上游补了三处本地约定：HTML 产物固定落 `/tmp/show-me-<短描述>.html` 不写进仓库（避免弄脏 `git status` 与误提交）；`open` 只由主会话在 Human 在场时执行，子代理只回绝对路径不抢屏幕（与 `subagent-browser-headless` 同源）；代码块内部路径原样写裸路径、正文提到文件才套 devkit-clickable-paths 链接。6.28.0 起本 skill 只管**怎么画**（视图、载体、落点），**什么时候画**一律由 `devkit-discipline` 4.3.0 每轮注入的「画图」决定（6.29.1 起与回复类型脱钩、按回答内容判：4 个及以上参与方的流转、3 步及以上的跨服务步骤、3 个及以上分支、方案或改动的改前改后、用户同一话题第二次说没看懂），删去了原「什么时候不触发」一节与 description 里的场景式 / 判据式触发，避免两处画图规则互相打架；用户说「画出来」时照样直接调用。同版新增四种视图（带实值的走查、对比表、时间线、复现命令）、载体选择（留作资产的图用 md，HTML 只做一次性视觉讲解）与落点规则（持久事实且有工作项目录时写 `<工作项目录>/diagrams/<主题>.md`、不自动提交；否则落临时目录并建议沉淀路径，用户同意再挪）。diff 示例由四组减为一组。6.28.1 载体表把对比表、时间线等行 × 列的对照单列为「正文的 markdown 表格」（代码块里用空格对齐列，中英文混排必错位），时间线示例改为表格；Mermaid 一节写明不贴进回复正文，一律写进 md 文件给链接。6.32.0 交互、控制流、状态流转改画 Excalidraw 图：调 `devkit-excalidraw-diagram` 出 `.excalidraw` 加同名 PNG，嵌进 md 等文档时一律引 PNG（落文档旁 `figures/`），工作项目录与临时目录的落点同步改为 `.excalidraw` + `.png`；子代理不出图，只回结构由主会话画；未安装该插件或渲染跑不通时退回 Mermaid。6.38.0 起子代理可以自己出图（实测能加载 skill、渲染、回看），渲染后核对 PNG 修改时间、不截断渲染输出。`tech-doc` 的 `references/figures.md` 默认载体同步改为 Excalidraw PNG。
 - `tech-doc` — 写给人读的技术文档时的类型、骨架、写法、配图与交付自检，6.30.0 新增，由 2026-10-23 至 10-24 两轮技术文档调研沉淀而来。五步：按读者此刻要什么判类型（Diátaxis 四类加分析报告、设计文档与方案、README 与导读三类）→ 套 `references/doc-types.md` 里对应骨架 → 按「零上下文读者也读得懂」写正文（先全景后细节、术语先教后用、结论分组、断言分强度、更正改回原处）→ 按图文分工配图（图注先行、≤7 个方框、箭头全标注、首图下图例、全篇按角色统一配色，细则在 `references/figures.md`）→ 交付前逐条自检。每条规则标【有出处】【推断】【判断】，来源与原文在 `references/sources.md`。单张图的载体与落点仍归 `show-me`，Excalidraw 成品图归 `devkit-excalidraw-diagram`，写给 AI 的文档归 `writing-for-agents`。触发除 description 外由 `devkit-discipline` 4.5.0 每轮自查第 1 条点名：md 受众判定为人或人机混合时调用。
-- `discover-unknowns` — 手动调用的头脑风暴：`/devkit-tool:discover-unknowns [目标]`。设了 `disable-model-invocation: true`，只在用户敲命令时触发，AI 不自调、不主动提议。需求还模糊时动手前挖**未知**（用户意图与 Claude 手上上下文的差距），四种手法按处境挑：盲点扫描（陌生领域列出没意识到的未知 + 更好的问题清单）、发散（3–4 个风格迥异方向，可视化做成假数据单 HTML）、收敛（一次一问，先问会改架构的问题，每问附默认答案）、参考（先复述语义对齐，再复刻语义不逐行翻译）；收尾出结论摘要。已安装 superpowers 时优先委派 `superpowers:brainstorming`。6.29.0 由已删除的 `devkit-discover-unknowns` 插件并入：原插件的每轮注入 hook `unknowns-radar` 与 `discover-unknowns` / `quiz` 两个 skill 不再提供，原 `brainstorm` skill 改名为本 skill，盲点扫描与参考两个手法并入。源自 Anthropic 博客 [*A field guide to Claude Fable 5: Finding your unknowns*](https://claude.com/blog/a-field-guide-to-claude-fable-finding-your-unknowns)。Codex 是否识别 `disable-model-invocation` 未核实。
+- `discover-unknowns` — 开工前或做到一半时挖未知的头脑风暴：用户用 `/devkit-tool:discover-unknowns [目标]` 手动调用；6.37.0 起 AI 撞上一组会改变做法、只有用户能答的未知，或还说不清该问什么时，也会自行调用，子代理或无人值守时只列默认答案交回、不发起访谈（此前设了 `disable-model-invocation: true`，只能手动）。需求还模糊时动手前挖**未知**（用户意图与 Claude 手上上下文的差距），四种手法按处境挑：盲点扫描（陌生领域列出没意识到的未知 + 更好的问题清单）、发散（3–4 个风格迥异方向，可视化做成假数据单 HTML）、收敛（一次一问，先问会改架构的问题，每问附默认答案）、参考（先复述语义对齐，再复刻语义不逐行翻译）；收尾出结论摘要。已安装 superpowers 时优先委派 `superpowers:brainstorming`。6.29.0 由已删除的 `devkit-discover-unknowns` 插件并入：原插件的每轮注入 hook `unknowns-radar` 与 `discover-unknowns` / `quiz` 两个 skill 不再提供，原 `brainstorm` skill 改名为本 skill，盲点扫描与参考两个手法并入。源自 Anthropic 博客 [*A field guide to Claude Fable 5: Finding your unknowns*](https://claude.com/blog/a-field-guide-to-claude-fable-finding-your-unknowns)。
+- `new-thing-understand` — 看懂一个新事物：开工一次问齐（资料、使用者背景、进步陈述、落点、档位），资料清点与冲突预检、自查一手来源（四种来源标签），主会话写事实底稿后由子代理并行写导读、本质、机制、坐标、融会贯通并自己画 Excalidraw 图，主会话回看后做一次检验检查点（讲给人听或答机制题，先答后馈，盲区回填）。6.38.0 新增。
+- `new-thing-leverage` — 把看懂的新事物接进使用者自己的系统：先接上认知产物（缺就调 `new-thing-understand` 补最小集），按 10 项模板做萃取访谈，再按目的出纳入、融入方案文章，每篇止于方案级（2～3 条路径、推荐、事前验尸、待对齐清单）。6.38.0 新增。
 - `commit-push` — 提交推送一步做完，不反问「要不要提交推送」：调用即当轮授权。普通仓走 commit → `git pull --rebase` → push（先提交再变基的原因：`git pull --rebase` 拒绝带未暂存变更运行）；worktree 里只提交、`--no-ff` 合回主分支、清理 worktree 与临时分支、不推远端；`.gitmodules` 存在时转介 `cascade-pull` / `cascade-push`；改的是 Claude Code 插件源（仓根有 marketplace.json 且改动在 `plugins/**`）时收尾刷缓存：先升版本号（CLI 判新比 version，不升则 update 恒 no-op）、push 后走两层刷新并提示用户运行 `/reload-plugins`。
 - `orphan-process-cleaner`
 - `marketplace-cache-sync` — 市场源 + 已安装插件缓存两层同步，含缓存清理。6.27.1 起清理阶段以版本目录下 `.in_use/<pid>` 里仍存活的进程为主判据保留在用版本（6.27.0 只看刷新前快照，实测会删掉常驻 `claude agents`、别的项目会话、以及快照前已被 autoUpdate 顶掉的本会话版本共 3 个在用目录），`temp_git_*` 也改由清理阶段收、只收两小时内无改动的（别的会话正在进行的 clone 同样零引用）。6.27.0 起历史版本清理改由 `probe-refresh.py --stage cleanup` 做：两边路径先规范化再求白名单差集（Windows 上 `installPath` 是 `C:\...`、Git Bash `find` 给 `/c/...`，文字比对会把全部在用版本判成可删），并自动剔除本会话正在加载的版本、反向检查非空或缺刷新前快照时拒删；探测器在 Windows 上把清单写进 `%TEMP%`，与 Git Bash 的 `/tmp` 对齐；第二步对比 user scope 落后的项目级记录点名「该项目内实际加载的是旧版」。`commit-push` 的插件收尾同步改为刷全部 scope。6.22.0 起第二步默认连未启用的安装记录一起刷（禁用的插件下次重新启用时不再加载旧版；只刷已启用的加 `--enabled-only`），project scope 跨大版本落后也直接刷、不再停下询问，改为在报告里逐条列出。6.17.0 修正了 url 独立仓源的剪枝判据：原先比 `gitCommitSha`，而 CLI 比的是**远端仓根 `.claude-plugin/plugin.json` 的 `version`**（`gitCommitSha` 从不参与），实测 54 条被判待刷的 url 源记录 54 条回执全是 `already at the latest version`、白付 22.5 分钟；改成一次 HTTP GET 取远端 manifest（不 clone，按 `(url, revision)` 去重后 110 条记录只发 15 个请求、0.8s），同一批数据从 73 条待刷降到 4 条、与真跑一遍的结果 100% 吻合。同时修掉「`source` 钉了 `sha` 却去探 `ref` 的 HEAD」这个结构性误判，并把「候选端点全部 404」与「探测失败」分开——前者是确定答案（仓里没 manifest），跟着 CLI 回落去比 sha。判据两侧共 27 条离线断言在 `tests/probe-refresh-url-criterion.test.py`。6.2.1 起修正了「让新版本生效」的判据：默认 `/reload-plugins` 即可（实测能热载 skill / agent / hook 脚本与新增的 `PreToolUse` / `PostToolUse` / `UserPromptSubmit` 挂载点），**只有** `SessionStart` / `SessionEnd` / `PreCompact` 这类生命周期挂载点变动才必须重启会话——`/reload-plugins` 不重放生命周期事件，否则会出现「每轮注入已是新版指针、它引用的静态主体却从未投放」的割裂状态。6.2.2 起补上 project/local scope 插件的刷新：常规刷新循环默认只处理 `user` scope，只装在项目目录下（`project`/`local` scope）的插件会静默刷新失败且无任何报错提示；新增按 (id, projectPath) 逐条 `cd` 进目标项目再刷新的写法，并记录了 `--scope project` 靠 cwd 隐式定位、cwd 不匹配时静默假成功的陷阱。
@@ -128,7 +156,9 @@ plugins/devkit-tool/
     ├── orphan-process-cleaner/
     ├── show-me/            # 把当前话题画给用户看：选最小够用的一种视图
     ├── tech-doc/           # 给人读的技术文档：判类型、套骨架、写法、配图、交付自检
-    ├── discover-unknowns/  # 手动调用的头脑风暴：动手前挖未知（disable-model-invocation）
+    ├── discover-unknowns/  # 头脑风暴：开工前或做到一半时挖未知（用户手动或 AI 自行调用）
+    ├── new-thing-understand/  # 看懂一个新事物：多篇文章 + 检验检查点
+    ├── new-thing-leverage/    # 萃取访谈后出纳入、融入方案
     ├── commit-push/        # 提交推送一步做完（worktree 合回 / cascade 转介 / 插件缓存收尾）
     └── restore-subscription/    # 自定义模型场景切回订阅鉴权（三层污染源 + daemon 替换）
 ```

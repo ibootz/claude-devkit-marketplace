@@ -149,7 +149,7 @@ HTML 文件一律落系统临时目录（`show-me-<短描述>.html`），不写�
 
 **同一话题已有图**：在原 `.excalidraw` 上改、重新渲染到原 PNG 路径，不另起新文件，做法见 `devkit-excalidraw-diagram` 的 Updating an Existing Diagram 一节。原路径不变，此前回复与文档里的链接打开就是新版。
 
-**子代理**：子代理不出 Excalidraw 图——出图要加载该 skill 全文并多轮渲染回看，子代理两样都不具备。子代理把要画的参与方、关系与箭头标签用调用树或箭头图写进回执，由主会话调 `devkit-excalidraw-diagram` 出图。子代理不执行 `open` / `start`——它会抢走屏幕焦点，而子代理不知道 Human 此刻在不在看；由主会话决定什么时候打开。
+**子代理**：子代理可以自己出 Excalidraw 图——先调 `devkit-excalidraw-diagram` 加载全文，渲染后 Read PNG 回看再修。渲染偶尔因页面加载超时静默失败、PNG 停在旧版，所以每次渲染后核对 PNG 修改时间晚于本次渲染开始，渲染命令的输出原样看完、不接 `tail` / `head`。多张图要统一时，主会话在派发说明里写死配色、命名与落点，收回后逐张看图。子代理不执行 `open` / `start`——它会抢走屏幕焦点，而子代理不知道 Human 此刻在不在看；由主会话决定什么时候打开。
 
 ## 排版约定
 
