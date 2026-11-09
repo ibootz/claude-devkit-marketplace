@@ -199,5 +199,6 @@ settings 等于卸载保护，却会制造“仍受保护”的错觉。
 
 ## Codex 侧
 
-`.codex-plugin/plugin.json` 已登记，但 hooks 为 Claude Code 专有。Codex 侧只有 skill 指引，
-没有机械门控或 AskUserQuestion 授权状态机。
+`.codex-plugin/plugin.json` 已登记。hook 注册在 `hooks/hooks.json`，Codex 0.167 会按默认路径识别并在首次 `/hooks` 审核信任后加载。
+Codex 没有 AskUserQuestion，本轮审批状态机在 Codex 下无从写入，主分支直写只能改走 worktree；
+各 matcher 在 Codex 下能否命中对应工具（未实测）以 Codex 的工具名为准。

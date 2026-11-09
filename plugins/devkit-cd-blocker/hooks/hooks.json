@@ -1,0 +1,16 @@
+{
+  "description": "PreToolUse(Bash)：命令以裸 cd 开头会污染会话 cwd 时 deny，并回灌可照抄的改法；CD_GUARD=off 单次放行。",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/cd-guard.js"
+          }
+        ]
+      }
+    ]
+  }
+}

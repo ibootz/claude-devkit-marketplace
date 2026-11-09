@@ -34,6 +34,9 @@
 - agent description 需要具备可靠触发的示例（参考 plugin-dev 的 agent-development 规范）。
 
 ### Hooks
+- hook 一律注册在 `plugins/<name>/hooks/hooks.json`（`{"description": "...", "hooks": {...}}`），Claude Code 与 Codex 都按这个默认路径加载。`.claude-plugin/plugin.json` 与 `.codex-plugin/plugin.json` 都不写 `hooks` 字段：写内联对象 Codex 不识别；写 `"hooks": "./hooks/hooks.json"` 会让 Claude Code 报重复加载。
+- 不要建插件根目录 `plugin.json`、不要把 hooks 内联进清单——Codex 0.167 实测两者都会让 hook 不被识别。
+- 宿主是 Codex 时 `PreToolUse` 的 `permissionDecision: "ask"` 不生效（视为 hook 失败、工具照常执行）。需要用户确认的闸，在 Codex 下改输出 `deny` 并要求用户同意后带 `DEVKIT_CONFIRMED=1` 重跑；宿主判别：环境变量 `PLUGIN_ROOT` 非空或输入 JSON 含 `turn_id` → Codex。参照 `plugins/devkit-task-keeper/hooks/lib/debug_worktree_destroy_guard.py`。
 - 优先使用 prompt-based hooks；如需 command hooks，必须明确输入/输出 JSON schema。
 - 所有 hooks 脚本必须做到：
   - 失败可解释（明确 deny/block 的原因）

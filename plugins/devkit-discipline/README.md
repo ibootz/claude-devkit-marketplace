@@ -716,7 +716,7 @@ haiku 在两版措辞间只是把错误从一侧挪到另一侧；sonnet 误拦�
 
 **实测要点**：`model` 必须写完整 id，`haiku` 这类别名报 `unrecognized_model` 后静默放行；长会话超预算时 harness 会截断前文并要求判定模型「证据可能在被省略部分就判不满足」，提示词里已写明本条件只看最后一条回复、不受截断影响。
 
-**关闭**：prompt 型 hook 读不到环境变量，没有单独开关；删掉 `plugin.json` 的 `Stop` 挂载，或停用整个插件。4.9.0 起可设 `DEVKIT_STOP_AUDIT=off`。
+**关闭**：prompt 型 hook 读不到环境变量，没有单独开关；删掉 `hooks/hooks.json` 的 `Stop` 挂载，或停用整个插件。4.9.0 起可设 `DEVKIT_STOP_AUDIT=off`。
 
 ### 4.6.0 减轻结论翻转：已证实只认本会话证据、决策性结论写明核实深度、更正块
 
@@ -1006,7 +1006,7 @@ AGENT_DISPATCH_GUARD=off   # 大小写不敏感，设为 off 即整条门禁放�
 AGENT_NAMING_GUARD=off     # 1.11.0 起沿用的旧名，继续有效
 ```
 
-想永久关闭就从 `.claude-plugin/plugin.json` 的 `PreToolUse` 里删掉这条 hook 注册；想放宽某类 agent，把它的 `subagent_type` 加进 `EXEMPT_SUBAGENT_TYPES`。
+想永久关闭就从 `hooks/hooks.json` 的 `PreToolUse` 里删掉这条 hook 注册；想放宽某类 agent，把它的 `subagent_type` 加进 `EXEMPT_SUBAGENT_TYPES`。
 
 ### Known Limitation：`Workflow` 内部的 `label` 拦不到
 
@@ -1376,7 +1376,9 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/write-guard.js
 
 ```text
 plugins/devkit-discipline/
-├── .claude-plugin/plugin.json          # hook 注册（3 个注入脚本 + 4 个 guard + 1 个回合末审查，共 11 处挂载：
+├── .claude-plugin/plugin.json          # Claude Code 清单（不含 hooks）
+├── .codex-plugin/plugin.json           # Codex 清单（不含 hooks）
+├── hooks/hooks.json                    # hook 注册（3 个注入脚本 + 4 个 guard + 1 个回合末审查，共 11 处挂载：
 │                                       #   PreToolUse×3 + PostToolUse×1 + 三个注入时机×1
 │                                       #   + UserPromptSubmit 上多挂一个 dispatch-ledger
 │                                       #   + PreCompact、SessionStart:compact 各挂一个 compact-agent-status

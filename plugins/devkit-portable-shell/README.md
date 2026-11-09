@@ -54,4 +54,4 @@ Linux 与 macOS 的命令行工具链存在真实分裂，同一段脚本在一�
 
 - 仅对**文件写入类工具**（Write/Edit/MultiEdit）生成的 shell 脚本生效，不拦截 `Bash` 工具的临时命令，避免噪声。
 - Hook 只读脚本文本做静态扫描，不修改任何用户文件，无副作用。
-- Hook 为 Claude Code 专有机制，Codex 侧不生效（本插件无 skill，故 Codex 无对应能力）。
+- Hook 注册在 `hooks/hooks.json`，Codex 0.167 按默认路径识别，首次需在 `/hooks` 审核信任；Codex 的写文件工具名与 `Write|Edit|MultiEdit` 不同，lint 在 Codex 下是否命中未实测。

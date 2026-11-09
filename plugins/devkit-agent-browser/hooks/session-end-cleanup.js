@@ -19,7 +19,7 @@
 //    但退出结果不受影响：exit code 被 Ps() 的 try/catch 吞掉，超时也只是 abort 掉它
 // 4. 任何异常都 exit 0：清理是尽力而为，绝不能让清理失败阻断会话关闭
 //
-// 【本脚本必须在 1.5s 内退出，且 plugin.json 的 timeout 帮不上忙】
+// 【本脚本必须在 1.5s 内退出，且 hooks/hooks.json 的 timeout 帮不上忙】
 // CC 2.1.220 的退出流程 Ps() 给全部 SessionEnd hook 一个共享预算：
 //   await n(t, {...r, signal: AbortSignal.timeout(getSessionEndHookTimeoutMs())})
 // 超时不是"脚本失败"，是 ABORT_ERR，用户看到的字面量就是 "Hook cancelled"。
@@ -30,7 +30,7 @@
 //     for(let o of n)for(let i of o.hooks)if(i.timeout&&i.timeout*1000>t)t=i.timeout*1000;
 //     return Math.max(M$o,Math.min(t,PFy))}          // M$o=1500 下限 / PFy=60000 上限
 // Fie() 取 initialHooksConfig ← pas() ← us().hooks（settings.json 合并结果）；
-// Wne() 取 mainThreadAgentHooks。**plugin.json 里声明的 timeout 两处都读不到**，
+// Wne() 取 mainThreadAgentHooks。**插件 hook 配置里声明的 timeout 两处都读不到**（当时写在 plugin.json，现搬到 hooks/hooks.json，同理），
 // 于是 t=0、预算恒为下限 1500ms。1.1.1 曾据"声明 timeout: 15 即可"修过一次，
 // 那个前提是错的——15 一直没生效，每次退出照样报 Hook cancelled。
 // 1.1.3 已把 plugin.json 里那条死配置删掉，别再往回加：读不到的字段留着只会让下一个
@@ -42,7 +42,7 @@
 // 同步部分只剩 close --all，实测总耗时 < 0.1s，远低于 1.5s 下限。
 //
 // 改动本文件时守住这条：**同步执行的命令总耗时必须 < 1.5s**。新增耗时命令一律
-// 走 runDetached，不要靠调 plugin.json 的 timeout 或 TIMEOUT_MS 解决——前者无效，
+// 走 runDetached，不要靠调 hooks/hooks.json 的 timeout 或 TIMEOUT_MS 解决——前者无效，
 // 后者只管单条 execSync 自己的上限、管不了共享预算。
 // （另一条出路是在 settings.json 的 env 里设 CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS，
 //   见 kcn 首行；但那要每台机各配一次，插件侧不该依赖它。）

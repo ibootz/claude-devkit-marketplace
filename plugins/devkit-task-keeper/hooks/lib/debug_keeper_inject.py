@@ -84,7 +84,7 @@ try:
 except Exception:
     keeper_paths = None
 
-# 只伺候这一个 agent_type。plugin.json 的 matcher 已经按它过滤了，这里再查一次是双保险：
+# 只伺候这一个 agent_type。hooks/hooks.json 的 matcher 已经按它过滤了，这里再查一次是双保险：
 # 万一将来 matcher 语义变化或配置写错，也不会把 debug 队列的清单灌给每一个子代理。
 TARGET_AGENT_TYPE = "devkit-task-keeper:debug-keeper"
 

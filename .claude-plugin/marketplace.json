@@ -42,7 +42,7 @@
       "source": "./plugins/devkit-tool",
       "category": "Development",
       "description": "工具技能集：submodule 同步推送、提交推送、会话起法与交接、话题可视化、技术文档写法、新事物认知与为我所用等 15 技能",
-      "version": "6.38.0"
+      "version": "6.39.0"
     },
     {
       "name": "devkit-spec",
@@ -56,98 +56,98 @@
       "source": "./plugins/devkit-omp",
       "category": "Development",
       "description": "Oh my pi (omp) CLI 集成 - 在 CC/Codex 里用 omp 做编码、审查、搜索",
-      "version": "3.0.0"
+      "version": "3.1.0"
     },
     {
       "name": "devkit-discipline",
       "source": "./plugins/devkit-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒 + 回合末出处审查，附中文消歧 skill",
-      "version": "4.12.0"
+      "version": "4.13.0"
     },
     {
       "name": "devkit-agent-browser",
       "source": "./plugins/devkit-agent-browser",
       "category": "Productivity",
       "description": "浏览器自动化最佳实践 - agent-browser（Vercel）网页操作/抓取/表单/截图，默认 headless 四护栏，细节见 README",
-      "version": "2.1.0"
+      "version": "2.2.0"
     },
     {
       "name": "devkit-portable-shell",
       "source": "./plugins/devkit-portable-shell",
       "category": "Development",
       "description": "跨平台交付 - 会话注入脚本 macOS/Windows 双通规则；lint GNU/BSD 不可移植 shell 写法",
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "name": "devkit-task-keeper",
       "source": "./plugins/devkit-task-keeper",
       "category": "Productivity",
       "description": "多实例 keeper 并行托管 debug/杂务两队列：一 bug 一实例，原子认领 + 合并锁 + 登记前查重、转出互链",
-      "version": "5.0.0"
+      "version": "5.1.0"
     },
     {
       "name": "devkit-style-plain-talk",
       "source": "./plugins/devkit-style-plain-talk",
       "category": "Productivity",
       "description": "说人话输出风格 - 一语中的、几句话讲明白、能表格不成段，启停即切换",
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "name": "devkit-style-adhd",
       "source": "./plugins/devkit-style-adhd",
       "category": "Productivity",
       "description": "ADHD 友好输出风格 - 首行给动作、多步编号、每轮重述进度。复刻自 i-have-adhd",
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "name": "devkit-style-wenyan",
       "source": "./plugins/devkit-style-wenyan",
       "category": "Productivity",
       "description": "文言极简输出风格 - 文言语法压缩、字形简体，代码与告警原样，启停即切换",
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "name": "devkit-insight",
       "source": "./plugins/devkit-insight",
       "category": "Productivity",
       "description": "教学洞察附加件 - 技术判断处给 ★ Insight 框，可与任意输出风格叠加",
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "name": "devkit-session-auto-title",
       "source": "./plugins/devkit-session-auto-title",
       "category": "Productivity",
       "description": "会话标题跟随话题 - 轮数或工作量到阈值即后台重算，补内建只命名一次的缺口",
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "name": "devkit-clickable-paths",
       "source": "./plugins/devkit-clickable-paths",
       "category": "Productivity",
       "description": "文件路径可点击 - 链接整条裸露不套反引号，对话正文按宿主切形态，落盘 md 恒用 vscode:；Windows 启动查超链接",
-      "version": "2.1.0"
+      "version": "2.2.0"
     },
     {
       "name": "devkit-worktree-flow",
       "source": "./plugins/devkit-worktree-flow",
       "category": "Development",
       "description": "主分支保护 + worktree 隔离边界 - 默认走 worktree，进入后写哪份/怎么退，撞闸怎么自救",
-      "version": "2.0.1"
+      "version": "2.1.0"
     },
     {
       "name": "devkit-cd-blocker",
       "source": "./plugins/devkit-cd-blocker",
       "category": "Development",
       "description": "独立 cd 拦截 - 裸 cd 污染会话 cwd 时硬拦并给改法模板，可按项目单独停用",
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "name": "devkit-readable-citations",
       "source": "./plugins/devkit-readable-citations",
       "category": "Productivity",
       "description": "引用别处章节要免跳可读 - 带标题原文与20字提要，对话正文按宿主切形态、落盘走相对路径",
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "name": "devkit-complexity-first",
@@ -161,7 +161,7 @@
       "source": "./plugins/devkit-plugin-eval",
       "category": "Development",
       "description": "插件评测 - 离线对照装与不装、新旧版的差，会话复盘与发版闸门，待审页人工裁定",
-      "version": "0.5.0"
+      "version": "0.5.1"
     },
     {
       "name": "devkit-excalidraw-diagram",
@@ -175,7 +175,7 @@
       "source": "./plugins/devkit-ultraverify",
       "category": "Development",
       "description": "结论交付前的证伪内环：盲问派独立证伪者、比对判红，提示写 ultraverify 即开",
-      "version": "0.2.0"
+      "version": "0.2.1"
     }
   ]
 }

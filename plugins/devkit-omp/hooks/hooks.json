@@ -1,0 +1,27 @@
+{
+  "description": "SessionStart / UserPromptSubmit 注入 omp 编排协议；默认关闭，设 OMP_PROTOCOL_ENABLED 才生效。",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/orchestrator-protocol-init.js"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/orchestrator-protocol-remind.js"
+          }
+        ]
+      }
+    ]
+  }
+}

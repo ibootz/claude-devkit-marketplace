@@ -65,7 +65,7 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 - 检测：GNU(Linux) 与 BSD(macOS) 之间 13 类不可移植写法——`sed -i` / `readlink -f` / `date -d` / `find -printf` / `grep -P` / `stat -c` / `declare -A` / `mapfile` / `${var^^}` / `mktemp` 无模板 / `realpath` / `echo -e` / `xargs -r`
 - 机理：命中即通过 stderr + `exit 2` 把「违规点 + 可移植改法」回灌给 Claude 促其修正（文件已写入，不回滚）
 - 关闭：`PORTABLE_SHELL_LINT=off`
-- Hook 为 Claude Code 专有机制，Codex 侧不生效
+- Codex 侧：hook 能被识别（见下方「Codex CLI」），但 Codex 写文件的工具名与 `Write|Edit|MultiEdit` 不同，lint 是否命中未实测
 
 ### 6. devkit-agent-browser（浏览器自动化最佳实践）
 
@@ -252,67 +252,35 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 codex plugin marketplace add ibootz/claude-devkit-marketplace
 ```
 
-#### 通过插件目录安装
-
-在 Codex CLI 中打开插件目录，浏览并安装：
-
-```
-codex                          # 启动 Codex CLI
-/plugins                       # 打开插件目录
-```
-
-在插件目录中：
-1. 切换到 "claude-devkit-marketplace" 市场标签
-2. 浏览或搜索插件
-3. 选择插件并点击安装
-
-#### 通过脚本安装（推荐 — 含 hooks/agents 自动注入）
-
-Codex CLI 通过插件目录安装时，skills 能正常加载，但 hooks 和 agents 不会自动注入到活跃配置。
-本市场提供安装脚本解决这个问题，同时安装 skills、hooks 和 agents 到 Codex 的目标路径。
-
-**前提条件**：Node.js >= 14
+#### 安装插件
 
 ```bash
-# 进入市场目录
-cd path/to/claude-devkit-marketplace
-
-# 安装所有插件到当前项目（项目级）
-node scripts/install-codex.js --all
-
-# 安装所有插件到用户目录（用户级，全局生效）
-node scripts/install-codex.js --all --scope=user
-
-# 交互式选择要安装的插件
-node scripts/install-codex.js
-
-# 只安装指定插件
-node scripts/install-codex.js --plugins=devkit-tool,devkit-omp
-
-# 预览模式（不实际修改文件）
-node scripts/install-codex.js --all --dry-run
+codex plugin add <插件名>@claude-devkit-marketplace
+# 例：codex plugin add devkit-tool@claude-devkit-marketplace
 ```
 
-**安装范围**：
-- 项目级（默认）：写入当前项目目录的 `.codex/`、`.agents/skills/`
-- 用户级（`--scope=user`）：写入用户主目录的 `~/.codex/`、`~/.agents/skills/`
+也可以在 Codex CLI 里输入 `/plugins` 打开插件目录，切到 claude-devkit-marketplace 标签后选装。
 
-**安装内容**：
-- **Skills**：所有 9 个插件的技能目录
-- **Hooks**：devkit-omp 的 SessionStart/UserPromptSubmit 钩子、devkit-discipline 的 UserPromptSubmit 注入钩子（devkit-portable-shell 的 PostToolUse lint 钩子为 Claude Code 专有，Codex 侧不生效；devkit-tool 自 5.1.0 起不再内置任何 hook）
-- **Agents**：devkit-omp 的 3 个子代理（omp-explore、omp-plan、omp-task）
+#### 首次使用：在 `/hooks` 里审核信任
 
-#### 卸载
+带 hook 的插件装好后，hook 默认处于未信任状态、不会执行。启动 Codex 后输入 `/hooks`，逐条审核并信任；
+插件升级后 hook 定义有变动的，要再审核一次。
+
+#### Codex 下与 Claude Code 的差异
+
+- **hook 从哪里读**：每个插件的 `hooks/hooks.json`。插件清单（`.claude-plugin/plugin.json`、`.codex-plugin/plugin.json`）里不写 hooks。
+- **不加载插件的 `agents/`**：Codex 不支持插件子代理，`SubagentStart` 的 matcher 按 Codex 自己的 agent 类型匹配，插件 agent 名不会命中。
+- **没有确认弹框**：Codex 的 `PreToolUse` 只认 `deny` / `allow`。`devkit-task-keeper` 里原本弹框确认的那道闸（对 DBG worktree 强制删除）在 Codex 下改为直接拦截，用户在当轮同意后，AI 在命令最前面加 `DEVKIT_CONFIRMED=1 ` 重跑即放行。
+- 各 hook 的 matcher（如 `Write|Edit`、`AskUserQuestion`）在 Codex 下能否命中，取决于 Codex 的工具名，大部分未实测。
+
+#### 旧安装脚本 `install-codex.js`（不再推荐）
+
+`node scripts/install-codex.js` 是 `codex plugin add` 能加载插件 hook 之前的变通办法：把 skills、hooks、agents 复制到 `.codex/`、`.agents/skills/`（`--scope=user` 时是用户主目录下的同名目录）。
+**不要和 `codex plugin add` 同时用**——两边都会注册同一批 hook，每条执行两次。已经用脚本装过的，先卸载再改用 `codex plugin add`：
 
 ```bash
-# 卸载所有已安装的插件
-node scripts/uninstall-codex.js --all
-
-# 卸载指定插件
-node scripts/uninstall-codex.js --plugins=devkit-omp
-
-# 预览卸载内容
-node scripts/uninstall-codex.js --all --dry-run
+node scripts/uninstall-codex.js --all          # 卸载脚本装的全部内容
+node scripts/uninstall-codex.js --all --dry-run  # 先预览要删什么
 ```
 
 ### 版本一致性检查
@@ -364,7 +332,7 @@ claude-devkit-marketplace/
 ├── .claude-plugin/
 │   └── marketplace.json       # 市场配置文件
 ├── .agents/plugins/
-│   └── marketplace.json       # Codex 市场配置文件（install-codex.js 读这一份）
+│   └── marketplace.json       # Codex 市场配置文件（codex plugin marketplace add 读这一份）
 ├── plugins/
 │   ├── devkit-tool/
 │   ├── devkit-spec/
@@ -388,8 +356,8 @@ claude-devkit-marketplace/
 ├── .githooks/
 │   └── pre-commit             # 提交前强制跑版本四方校验（需 git config core.hooksPath .githooks）
 ├── scripts/
-│   ├── install-codex.js       # 安装插件到 Codex CLI
-│   ├── uninstall-codex.js     # 从 Codex CLI 卸载插件
+│   ├── install-codex.js       # 旧的 Codex 安装脚本（不再推荐，见「Codex CLI」）
+│   ├── uninstall-codex.js     # 卸载旧脚本装进 Codex 的内容
 │   └── check-versions.js      # 版本四方一致性检查
 ├── README.md
 └── AGENTS.md
@@ -402,10 +370,11 @@ claude-devkit-marketplace/
 1. 在 `plugins/` 目录下创建新的插件目录
 2. 按照插件规范创建必要的配置文件
    - 对于普通插件：`.claude-plugin/plugin.json`、`skills/`、`commands/` 等
+   - 有 hook 的：写在 `hooks/hooks.json`（`{"description": "...", "hooks": {...}}`），不要内联进 `plugin.json`
    - 对于 MCP 插件：`.mcp.json`（或 `.claude-plugin/plugin.json` + `.mcp.json`）
 3. 在 `.claude-plugin/marketplace.json` 中添加插件条目（Claude Code 市场清单）
 4. **同时**在 `.agents/plugins/marketplace.json` 中添加对应条目（Codex 市场清单，`scripts/install-codex.js` 读的是这一份）——只有远程源插件（`source` 为 `{"source":"github",...}`）可以不登记，因为 `install-codex.js` 只从本地 `plugins/<name>/` 目录安装
-5. 若该插件也发布到 Codex，建 `plugins/<名>/.codex-plugin/plugin.json`，**版本号与 `.claude-plugin` 侧保持一致**
+5. 建 `plugins/<名>/.codex-plugin/plugin.json`（不写 hooks 字段，Codex 按默认路径读 `hooks/hooks.json`），**版本号与 `.claude-plugin` 侧保持一致**
 6. 跑 `node scripts/check-versions.js` 确认四处版本登记一致（漏改是本仓库反复出现的遗漏，见下方「版本一致性检查」）。设过 `git config core.hooksPath .githooks` 的话，提交时会自动跑这一步并在不一致时拦下
 
 ### 本地测试

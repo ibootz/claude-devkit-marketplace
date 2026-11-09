@@ -17,7 +17,7 @@
         "name": "zhangq"
       },
       "category": "Development",
-      "description": "工具技能集：submodule 同步推送、提交推送、会话起法与交接、话题可视化、技术文档写法、插件缓存刷新等 13 技能",
+      "description": "工具技能集：submodule 同步推送、提交推送、会话起法与交接、话题可视化、技术文档写法、新事物认知与为我所用等 15 技能",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "devkit-tool",
       "source": {
@@ -28,7 +28,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "6.38.0"
+      "version": "6.39.0"
     },
     {
       "author": {
@@ -64,7 +64,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "3.0.0"
+      "version": "3.1.0"
     },
     {
       "author": {
@@ -82,7 +82,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "4.12.0"
+      "version": "4.13.0"
     },
     {
       "author": {
@@ -100,7 +100,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.1.0"
+      "version": "2.2.0"
     },
     {
       "author": {
@@ -118,7 +118,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "author": {
@@ -136,7 +136,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "5.0.0"
+      "version": "5.1.0"
     },
     {
       "author": {
@@ -154,7 +154,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "author": {
@@ -172,7 +172,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "author": {
@@ -190,7 +190,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "author": {
@@ -208,7 +208,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "author": {
@@ -226,7 +226,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "author": {
@@ -244,14 +244,14 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.1.0"
+      "version": "2.2.0"
     },
     {
       "author": {
         "name": "zhangq"
       },
       "category": "Development",
-      "description": "文件路径可点击 - 链接整条裸露不套反引号，对话正文按宿主自适应切形态，落盘 md 恒用 vscode: 可跳",
+      "description": "主分支保护 + worktree 隔离边界 - 默认走 worktree，进入后写哪份/怎么退，撞闸怎么自救",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "devkit-worktree-flow",
       "source": {
@@ -262,7 +262,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.0.1"
+      "version": "2.1.0"
     },
     {
       "author": {
@@ -280,14 +280,14 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "author": {
         "name": "zhangq"
       },
       "category": "Productivity",
-      "description": "引用别处章节要免跳可读 - 带标题原文与20字提要，链接分绝对/相对两轨",
+      "description": "引用别处章节要免跳可读 - 带标题原文与20字提要，对话正文按宿主切形态、落盘走相对路径",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "devkit-readable-citations",
       "source": {
@@ -298,7 +298,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "author": {
@@ -334,7 +334,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "0.5.0"
+      "version": "0.5.1"
     },
     {
       "author": {
@@ -370,7 +370,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "0.1.0"
+      "version": "0.2.1"
     }
   ]
 }

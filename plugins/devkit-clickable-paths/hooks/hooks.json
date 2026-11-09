@@ -1,0 +1,38 @@
+{
+  "description": "UserPromptSubmit 与 SubagentStart 注入「文件路径写成可点击链接」规约；SessionStart 在 Windows 上检查终端超链接支持。",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/hyperlink-check.js"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/clickable-paths.js"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/clickable-paths.js"
+          }
+        ]
+      }
+    ]
+  }
+}

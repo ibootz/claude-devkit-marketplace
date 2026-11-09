@@ -1,0 +1,27 @@
+{
+  "description": "SessionStart 注入交付脚本 macOS/Windows 双通规则；Write/Edit/MultiEdit 写出 shell 后 lint 不可移植写法。",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.js"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/portable-shell-lint.js"
+          }
+        ]
+      }
+    ]
+  }
+}

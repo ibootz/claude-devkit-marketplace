@@ -117,10 +117,10 @@ const cases = [
     check: (c) => (c.length <= ANCHOR_BUDGET ? null : `短锚 ${c.length} 字符，超出 ${ANCHOR_BUDGET}`),
   },
   {
-    name: 'plugin.json 两个事件都用 node 调 .js，不再引用 .sh',
-    run: () => fs.readFileSync(path.join(PLUGIN_ROOT, '.claude-plugin', 'plugin.json'), 'utf8'),
+    name: 'hooks/hooks.json 两个事件都用 node 调 .js，不再引用 .sh',
+    run: () => fs.readFileSync(path.join(PLUGIN_ROOT, 'hooks', 'hooks.json'), 'utf8'),
     check: (raw) => {
-      if (raw.includes('.sh')) return 'plugin.json 仍引用 .sh'
+      if (raw.includes('.sh')) return 'hooks/hooks.json 仍引用 .sh'
       const hooks = JSON.parse(raw).hooks
       for (const [event, file] of [
         ['SessionStart', 'session-start.js'],

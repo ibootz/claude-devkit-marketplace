@@ -65,7 +65,7 @@ if [ ! -d "$DELIVERY/.keeper/_main/chore" ]; then ok "delivery 侧 chore/ 未被
 else bad "delivery 侧 chore/ 不应被 fixer 补建" "不存在" "存在"; fi
 rm -rf "$DELIVERY" "$FIXER" 2>/dev/null
 
-echo "[73] 补建当轮不重复注入待拍板计数：debug 与 chore 都缺失，按 plugin.json 真实顺序先跑 debug 快照再跑 chore 快照"
+echo "[73] 补建当轮不重复注入待拍板计数：debug 与 chore 都缺失，按 hooks/hooks.json 真实顺序先跑 debug 快照再跑 chore 快照"
 T="$(newtmpdir)"; : > "$T/.git"
 mkdir -p "$T/.keeper/_main/decisions"
 printf -- '---\nblocking: true\n---\n\n需要拍板 X\n' > "$T/.keeper/_main/decisions/2026-08-03-1000-debug-keeper.md"

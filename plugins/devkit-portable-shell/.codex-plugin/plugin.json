@@ -1,0 +1,13 @@
+{
+  "name": "devkit-portable-shell",
+  "version": "2.1.0",
+  "description": "跨平台交付 - SessionStart 注入交付脚本 macOS/Windows 双通规则；Write/Edit 生成 shell 时 lint 不可移植写法（PORTABLE_SHELL_LINT=off 关 lint）",
+  "author": {
+    "name": "zhangq"
+  },
+  "interface": {
+    "displayName": "DevKit 跨平台交付",
+    "shortDescription": "交付脚本 macOS/Windows 双通",
+    "category": "Development"
+  }
+}

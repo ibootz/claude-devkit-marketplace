@@ -19,7 +19,7 @@
 #   hook 条目，各自独立 stdout 才安全，混在同一次 stdout 会让 JSON 解析失败。
 #
 # 【判定细则】见 lib/debug_worktree_push_guard.py 模块头注释。
-# 【怎么关闭】删掉 plugin.json hooks 里本脚本对应的条目，或让本脚本无条件 exit 0。改完需重启 cc。
+# 【怎么关闭】删掉 hooks/hooks.json 里本脚本对应的条目，或让本脚本无条件 exit 0。改完需重启 cc。
 
 set -uo pipefail
 

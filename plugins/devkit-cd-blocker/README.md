@@ -147,16 +147,18 @@ guard 与这类跨插件误伤。遇到别的插件 cwd 探测与你的语法不
 
 ```text
 devkit-cd-blocker/
-├── .claude-plugin/plugin.json          # 只注册一个 PreToolUse(Bash) hook
+├── .claude-plugin/plugin.json          # Claude Code 清单（不含 hooks）
+├── .codex-plugin/plugin.json           # Codex 清单（不含 hooks）
 ├── hooks/
+│   ├── hooks.json                      # 只注册一个 PreToolUse(Bash) hook
 │   ├── guards/cd-guard.js              # 判据与文案，全部在这里
 │   └── lib/shell-parse.js              # splitSegments / stripSubshells / stripHeredocs
 ├── tests/cd-guard.test.js              # 35 条回归，判据两侧齐全
 └── README.md
 ```
 
-没有 `.codex-plugin/`：本插件全部效力来自 `PreToolUse`，那是 Claude Code 专有机制，Codex 侧
-装了也不生效，不做无效登记。
+2.1.0 起补了 `.codex-plugin/`：hook 注册搬到 `hooks/hooks.json` 后 Codex 0.167 能识别这条
+`PreToolUse(Bash)`（首次需在 `/hooks` 审核信任）；本插件只输出 deny，不依赖 Codex 不支持的 ask。
 
 ## 改判据后必跑回归
 

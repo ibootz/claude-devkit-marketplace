@@ -343,7 +343,7 @@ X 的语义」，不要改写成「修复 X」**——改写一次，这条就�
 主会话在这条闭环里只当转接口：把 keeper 的转出请求转给 chore-keeper、把产品
 答复转回 keeper，不亲手改任何条目文件（`.keeper/` 的写权限归 keeper）。
 
-## 8. 配套 hook（devkit-task-keeper 插件内，与 `plugin.json` 注册一致）
+## 8. 配套 hook（devkit-task-keeper 插件内，与 `hooks/hooks.json` 注册一致）
 
 | hook 文件 | 时机 | 作用 |
 |---|---|---|

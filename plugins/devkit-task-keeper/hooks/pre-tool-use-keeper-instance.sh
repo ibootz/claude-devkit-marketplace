@@ -22,7 +22,7 @@
 #   （devkit-discipline 的 `agent-dispatch.js`）各自独立注册、各自独立 stdout，
 #   互不干扰。
 #
-# 【怎么关闭】删掉 plugin.json hooks 里本脚本对应的条目，或让本脚本无条件 exit 0。
+# 【怎么关闭】删掉 hooks/hooks.json 里本脚本对应的条目，或让本脚本无条件 exit 0。
 #   改完需重启 cc。
 
 set -uo pipefail

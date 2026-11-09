@@ -1,0 +1,14 @@
+{
+  "name": "devkit-task-keeper",
+  "version": "5.1.0",
+  "description": "多实例 keeper 并行托管 debug/杂务两队列：一条 bug 一个实例，原子认领 + 合并锁，登记前跨队列查重，规格空白转出互链，细节见 README",
+  "author": {
+    "name": "zhangq"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "DevKit Task Keeper",
+    "shortDescription": "debug/杂务两队列多实例托管",
+    "category": "Productivity"
+  }
+}

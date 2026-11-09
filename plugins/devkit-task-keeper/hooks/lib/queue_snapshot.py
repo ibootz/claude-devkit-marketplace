@@ -250,7 +250,7 @@ def find_queue(start, spec):
 def _sibling_queue_names():
     """补建时要一起建的队列子目录名（`debug` 与 `chore`）。
 
-    **为什么两个一起建**：`plugin.json` 的 UserPromptSubmit 里 debug 快照**先于**
+    **为什么两个一起建**：`hooks/hooks.json` 的 UserPromptSubmit 里 debug 快照**先于**
     chore 快照执行，而 debug 侧「是否代为注入待拍板计数」的判据是
     `os.path.isdir(<交付>/chore)`（见本文件 `render_injection` 之后那段）。若补建
     时只建自己那个，debug 那轮跑完时 `chore/` 仍不存在 → debug 判 chore 未启用、

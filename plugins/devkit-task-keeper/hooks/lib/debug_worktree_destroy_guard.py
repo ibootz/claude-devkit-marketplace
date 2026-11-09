@@ -61,8 +61,22 @@ push——没有任何合法场景需要弹框，直接 deny 收工即可。这�
 事件的 `cwd` 字段是否匹配（cwd 由 harness 提供，是 AI 发起这条命令时所在的
 目录）。两处都没有 → 放行——与 push 守卫同一保守原则：宁可漏放（回到没有
 本守卫之前的现状），也不无凭无据弹框打扰 Human。
+
+【Codex 宿主：ask 改为 deny + 确认标记】Codex 的 PreToolUse 只认 deny / allow，
+返回 ask 被当成 hook 失败、命令照常执行（官方文档，未实测）——等于本守卫失效。
+所以宿主是 Codex 时，命中后改走：
+  - 命令里出现独立 token `DEVKIT_CONFIRMED=1`（shell 赋值前缀，如
+    `DEVKIT_CONFIRMED=1 rm -rf <worktree>`）→ 视为用户已在当轮同意，输出全空放行；
+  - 否则输出 permissionDecision=deny，理由 = 原 ask 文案 + CODEX_TAIL 尾注，
+    要 AI 把要确认的内容转告用户、得到当轮同意后加标记重跑。
+宿主判别（is_codex_host）：环境变量 PLUGIN_ROOT 非空，或事件 JSON 含 turn_id 键
+→ Codex；否则 Claude。依据：Claude Code 2.1.319 的 hook 环境只设
+CLAUDE_PLUGIN_ROOT、不设 PLUGIN_ROOT，PreToolUse 输入也没有 turn_id（实测）；
+Codex 两者都给（官方文档）。不用 CODEX_* 前缀判——用户环境里本就可能有
+CODEX_TIMEOUT 这类变量。Claude 宿主下行为不变：照旧输出 ask，标记也不起作用。
 """
 import json
+import os
 import re
 import sys
 
@@ -83,6 +97,9 @@ GIT_CLEAN = re.compile(
     r"(?:^|[\s;|&(])git\s+(?:-[A-Za-z-]+(?:[= ]\S+)?\s+)*clean\b"
 )
 RM_CMD = re.compile(r"(?:^|[\s;|&(])rm\s")
+
+# Codex 宿主下的确认标记：命令里以独立 token 出现即算（见模块头注释）
+CONFIRM_TOKEN = re.compile(r"(?<!\S)DEVKIT_CONFIRMED=1(?!\S)")
 
 
 def _short_opt_chars(command):
@@ -139,6 +156,15 @@ REASON = """针对 `.keeper/<交付id>/debug/<DBG-id>/worktree/` 目录执行了
     `Fail` 提示里教的「先 rm -rf 该目录再重跑 supply」），那么强制删除是文档
     记载的合法手段——确认目录里确实没有未提交的修复内容之后，请放行。"""
 
+CODEX_TAIL = """
+
+Codex 不支持确认弹框，这一步已改为拦截。把上面要确认的内容原样转告用户，等用户在当轮明确同意后，在命令最前面加 `DEVKIT_CONFIRMED=1 ` 重跑。用户没有同意就不要加这个标记。"""
+
+
+def is_codex_host(ev):
+    """PLUGIN_ROOT 非空或事件含 turn_id → Codex；否则 Claude。"""
+    return bool(os.environ.get("PLUGIN_ROOT")) or "turn_id" in ev
+
 
 def main():
     try:
@@ -167,11 +193,19 @@ def main():
     if target is None:
         return  # 命令与 cwd 都没有目标目录的字面量，不是本守卫的管辖范围
 
+    reason = REASON % target
+    decision = "ask"
+    if is_codex_host(ev):
+        if CONFIRM_TOKEN.search(command):
+            return  # 用户已在当轮同意，AI 带标记重跑 → 放行
+        decision = "deny"
+        reason += CODEX_TAIL
+
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
-            "permissionDecision": "ask",
-            "permissionDecisionReason": REASON % target,
+            "permissionDecision": decision,
+            "permissionDecisionReason": reason,
         }
     }, ensure_ascii=False))
 

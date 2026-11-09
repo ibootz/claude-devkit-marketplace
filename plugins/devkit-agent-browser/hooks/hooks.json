@@ -1,0 +1,27 @@
+{
+  "description": "SessionStart 注入 agent-browser 选型与独立实例规则；SessionEnd 清理本会话起的浏览器实例。",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.js"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.js"
+          }
+        ]
+      }
+    ]
+  }
+}

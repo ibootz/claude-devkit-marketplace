@@ -245,12 +245,16 @@ function installSkills(pluginName, targetSkillsDir, dryRun) {
 
 // ─── Install Hooks ───────────────────────────────────────────────────────────
 function installHooks(pluginName, targetHooksJson, dryRun) {
+  // hook 注册在插件的 hooks/hooks.json（{"description", "hooks"} 形态）；2026-11-09 之前内联在
+  // .claude-plugin/plugin.json 的 hooks 字段，那份形态作为回落保留。两者顶层都有 hooks 键。
+  const hooksJsonPath = path.join(MARKETPLACE_ROOT, 'plugins', pluginName, 'hooks', 'hooks.json');
   const pluginJsonPath = path.join(MARKETPLACE_ROOT, 'plugins', pluginName, '.claude-plugin', 'plugin.json');
-  if (!fs.existsSync(pluginJsonPath)) return { installed: [], skipped: true };
+  const sourcePath = fs.existsSync(hooksJsonPath) ? hooksJsonPath : pluginJsonPath;
+  if (!fs.existsSync(sourcePath)) return { installed: [], skipped: true };
 
   let pluginJson;
   try {
-    pluginJson = JSON.parse(fs.readFileSync(pluginJsonPath, 'utf-8'));
+    pluginJson = JSON.parse(fs.readFileSync(sourcePath, 'utf-8'));
   } catch (e) {
     return { installed: [], skipped: true, error: e.message };
   }

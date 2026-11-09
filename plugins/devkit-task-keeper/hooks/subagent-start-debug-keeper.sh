@@ -13,7 +13,7 @@
 #   同一段注入分别出现 1/2/3 次），不是只在首次 Agent 派出时触发一次——这正是本 hook
 #   能治「登记完被新需求挤掉、忘了捡回来派」那个症状的前提。
 #
-# 【matcher】plugin.json 里按 agent_type 精确匹配 `devkit-task-keeper:debug-keeper`。
+# 【matcher】hooks/hooks.json 里按 agent_type 精确匹配 `devkit-task-keeper:debug-keeper`。
 #   **不要写 `*`**——那会把 debug 队列的漏派清单灌给本机每一个子代理（同插件的
 #   chore-keeper、sdlc-writer，以及其他插件的、以及主会话派出的所有 Explore/general-purpose），
 #   纯噪音。python 侧还会再查一次 agent_type 做双保险。

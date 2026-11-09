@@ -1,6 +1,6 @@
 {
   "name": "devkit-ultraverify",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "结论交付前的证伪内环：盲问派独立证伪者、比对判红、改稿最多两轮、证不实就升级。提示里写 ultraverify 即开启，见 README",
   "author": {
     "name": "zhangq"

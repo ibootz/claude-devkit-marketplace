@@ -1,0 +1,28 @@
+{
+  "description": "SessionStart 注入文言极简输出风格全文；UserPromptSubmit 每轮补一段短锚。",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.js",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit.js",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

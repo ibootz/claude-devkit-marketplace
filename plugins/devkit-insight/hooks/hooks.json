@@ -1,0 +1,17 @@
+{
+  "description": "SessionStart 注入 ★ Insight 框规则：在做了技术判断的地方附一个教学洞察框。",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.js",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

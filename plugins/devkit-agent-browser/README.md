@@ -61,6 +61,6 @@ headless 浏览器下人类看不到画面、无法中途授权或纠错，盲�
 | headless 工作流、snapshot / refs 纪律、命令速查 | 不搬，`agent-browser skills get core` 已讲 |
 | 鉴权注入四法表、`--confirm-actions` / `--action-policy`、CDP 警告、三层清理与 SessionEnd 1.5s 预算说明、常见错误表 | 不搬；需要时看 `git show` 历史版本 |
 
-**代价：** Codex 侧按插件目录安装时原本只能拿到这个 skill，删除后该安装方式不再带任何内容；走 `node scripts/install-codex.js` 安装时 SessionStart hook 会挂上（Codex 是否执行它、是否收 `additionalContext` 未核实）。
+**代价：** Codex 侧按插件目录安装时原本只能拿到这个 skill，删除后该安装方式不再带任何内容；走 `node scripts/install-codex.js` 安装时 SessionStart hook 会挂上（Codex 是否执行它、是否收 `additionalContext` 未核实）。2.2.0 起 hook 注册搬到 `hooks/hooks.json`，`codex plugin add` 安装后 Codex 0.167 能识别 SessionStart / SessionEnd 两条（需在 `/hooks` 审核信任），`additionalContext` 是否生效仍未核实。
 
 **回退：** `git revert` 本次提交，或从上一版恢复 `skills/agent-browser/` 整个目录并把注入最后一条改回「鉴权盘点、实例上限、安全边界的完整做法在 agent-browser skill 里，启动浏览器前读它」。

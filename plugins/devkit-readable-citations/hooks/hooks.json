@@ -1,0 +1,27 @@
+{
+  "description": "UserPromptSubmit 与 SubagentStart 注入「引用别处章节要自足」规约。",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/readable-citations.js"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/readable-citations.js"
+          }
+        ]
+      }
+    ]
+  }
+}
