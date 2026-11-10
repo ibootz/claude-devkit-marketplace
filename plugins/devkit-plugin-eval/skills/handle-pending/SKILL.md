@@ -1,9 +1,11 @@
 ---
 name: handle-pending
-description: 处理 devkit-plugin-eval 的待审页：用户贴回以 PE1 开头的回复码时写回裁定，或用户要看还有哪些待审项时生成、重开待审页。覆盖离线对照报告、AI 评委分歧与抽检、条款清单变更、用例草稿、会话复盘候选几类待审项。用户贴「PE1 …」、说「待审页勾完了」「还有哪些待审」「打开待审页」「审一下这次对照报告」时使用。跑对照、复盘、闸门本身归 run-eval。
+description: 处理 devkit-plugin-eval 的待审页：用户贴回以 PE1 开头的回复码时写回裁定，或用户要看还有哪些待审项时生成、重开待审页。覆盖离线对照报告、AI 评委分歧与抽检、条款清单变更、用例草稿、会话复盘候选几类待审项。用户贴「PE1 …」、说「待审页勾完了」「还有哪些待审」「打开待审页」「审一下这次对照报告」时使用。跑对照、复盘、闸门本身归 run-eval。仅适用于 Claude Code。
 ---
 
 # 处理待审（devkit-plugin-eval）
+
+> **Codex 下不适用**：下面命令里的 `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}` 只在 Claude Code 加载 skill 时替换成绝对路径，评测数据也落在 Claude Code 的插件数据目录。在 Codex 里不要跑本 skill 的命令，改到 Claude Code 会话里做。
 
 本插件只有一个 Python 命令行。每条命令都这样起头，下文简写为 `<pe>`：
 

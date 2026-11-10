@@ -10,6 +10,7 @@ description: >-
   receipts 与截图入库，只有 fixer worktree 等四类本机产物排除在外）。**主会话在本流程里只做三件事：截图落盘（如果用户附了图）→ 把原话转给
   debug-keeper → 立刻回到原任务。** 不做 triage、不写 issue 文件、不派 fixer、
   不对账，这些全部由 debug-keeper 在独立上下文里完成，避免打断主会话手上的工作。
+  仅适用于 Claude Code。
 when_to_use: |
   用户报 bug / 缺陷 / 报错 / 白屏 / 崩溃 / 数据不对 / 点了没反应，或说「登记这个
   问题」「triage 一下」「这条插队」「启用 debug 队列」「这些 bug 一起修」，或在
@@ -20,6 +21,8 @@ when_to_use: |
 ---
 
 # Debug 队列（主会话侧 · 你只做三件事）
+
+> **Codex 下不适用**：本流程靠 `Agent` 派发插件 agents/ 里的 debug-keeper、靠 `SendMessage` 续派，Codex 没有这两个工具、也不加载 agents/。在 Codex 里由主会话直接定位与修复；要看已有队列进度用 tk-board（加 `--link-style code`）。
 
 ## 0. 职责边界：为什么主会话几乎什么都不做
 

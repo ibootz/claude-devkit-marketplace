@@ -1,6 +1,7 @@
 {
   "tests": [
     { "run": ["node", "tests/main-branch-guard.test.js"] },
-    { "run": ["node", "tests/round-approval.test.js"] }
+    { "run": ["node", "tests/round-approval.test.js"] },
+    { "run": ["node", "tests/codex-host.test.js"] }
   ]
 }

@@ -147,6 +147,8 @@ HTML 文件一律落系统临时目录（`show-me-<短描述>.html`），不写�
 
 **正文怎么给**：给 PNG 一个普通 markdown 链接 `[图注](file:///绝对路径/<主题>.png)`——**开头不加 `!`、不带 `#` 行号**——用一句话说图里画了什么，再附上 `.excalidraw` 源文件的链接。退回 Mermaid 时给 md 图示文件同样形态的链接。不加 `!` 的原因：Claude Code 终端显示不了图片，`![图注](…)` 会原样印成纯文本「图注 (url)」，点不动；`![]()` 只在写进 md 文档时用（见第二节载体表）。不带 `#` 的原因：带了 iTerm2 会按 Semantic History 交给编辑器跳到某行，看到的是源码；不带才交给系统默认应用（看图应用、Typora）渲染打开。
 
+**在 Codex 里**改写成 inline code 绝对路径，如 `` `/tmp/claude-diagrams/<主题>.png` ``，`.excalidraw` 源文件同样写法：Codex 只把 inline code 里的路径识别成可点击，`[图注](file:///…)` 在它的 TUI 里只渲染成「图注 (路径)」纯文本。
+
 **同一话题已有图**：在原 `.excalidraw` 上改、重新渲染到原 PNG 路径，不另起新文件，做法见 `devkit-excalidraw-diagram` 的 Updating an Existing Diagram 一节。原路径不变，此前回复与文档里的链接打开就是新版。
 
 **子代理**：子代理可以自己出 Excalidraw 图——先调 `devkit-excalidraw-diagram` 加载全文，渲染后 Read PNG 回看再修。渲染偶尔因页面加载超时静默失败、PNG 停在旧版，所以每次渲染后核对 PNG 修改时间晚于本次渲染开始，渲染命令的输出原样看完、不接 `tail` / `head`。多张图要统一时，主会话在派发说明里写死配色、命名与落点，收回后逐张看图。子代理不执行 `open` / `start`——它会抢走屏幕焦点，而子代理不知道 Human 此刻在不在看；由主会话决定什么时候打开。

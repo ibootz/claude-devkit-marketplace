@@ -55,6 +55,17 @@
 // **渲染成蓝色可点的样子、点下去没反应**的链接——不报错、不告警，与上面第四种漏套
 // 同一类失效，只是成因在宿主而不在写法。1.9.0 起先探宿主再选形态，判据见 detectHost()。
 //
+// 【为什么 2.3.0 加 Codex 分支】
+// 同一份插件也装进 Codex，而 Codex 的点击机制与 Claude Code 正相反（2026-11-10 读 openai/codex
+// main 源码取得）：系统提示 `codex-rs/protocol/src/prompts/base_instructions/default.md`
+// 明令「Use inline code to make file paths clickable」「Do not use URIs like file://,
+// vscode://, or https://」「Do not provide range of lines」；TUI 的
+// `codex-rs/tui/src/markdown_render.rs` 把本地文件 markdown 链接渲染成「标签 (路径)」纯文本，
+// 只给 http/https 发 OSC 8。于是 Claude 侧这套「整条裸露的 file:// 链接、不准套反引号」在
+// Codex 里恰好教成点不动的形态。Codex 下改注入 inline code 规则：仓内写相对仓库根的路径、
+// 仓外写绝对路径、`:行号`（用户 2026-11-10 拍板）。落盘 md 那一轨不跟宿主变，照旧。
+// 宿主判据见 isCodex()；Claude 侧四个宿主的输出逐字不变，由 tests/golden-claude 钉住。
+//
 // 【机制依赖（都已实测）】
 //   1. Claude Code 的 markdown 渲染器对 `file:` scheme 有专用处理：解析成绝对路径、
 //      **保留 `#片段`**、显示文本取方括号标签；终端支持超链接时发 OSC 8 序列。
@@ -83,6 +94,7 @@
 // Trigger: UserPromptSubmit（主会话） + SubagentStart（每个子代理）
 // Output:  additionalContext → 注入到对应代理的上下文
 // Opt-out: 环境变量 CLICKABLE_PATHS=off（或 0 / false）时不注入
+// Host:    Codex（PLUGIN_ROOT 非空或入参含 turn_id）走 buildCodexGuidance()，其余走 buildGuidance()
 
 'use strict'
 
@@ -92,6 +104,14 @@ const path = require('path')
 // 只回声这两个事件名。payload 里出现别的值时直接静默退出，
 // 避免把任意字符串原样回声进 hookSpecificOutput。
 const ALLOWED_EVENTS = new Set(['UserPromptSubmit', 'SubagentStart'])
+
+// Codex 判据：环境变量 PLUGIN_ROOT 非空，或 hook 入参含 turn_id。Claude Code 的 hook 环境
+// 只设 CLAUDE_PLUGIN_ROOT、入参没有 turn_id；Codex 两样都给（它也设 CLAUDE_PLUGIN_ROOT，
+// 所以不能拿那个判）。不用 CODEX_* 前缀判——用户环境里本就可能有 CODEX_TIMEOUT 之类。
+// 与 devkit-task-keeper 的 debug_worktree_destroy_guard.py 同一判据。
+function isCodex(env, payload) {
+  return Boolean(env.PLUGIN_ROOT) || Boolean(payload && Object.prototype.hasOwnProperty.call(payload, 'turn_id'))
+}
 
 // 宿主环境探测。判据全部取自 Claude Code 与终端**自己注入**的环境变量，
 // 2026-09-20 在四个宿主里逐一实采得到，对照表见 README 的「宿主判别表」。
@@ -107,7 +127,8 @@ const ALLOWED_EVENTS = new Set(['UserPromptSubmit', 'SubagentStart'])
 // 三个都不命中时落到 'generic'：cmd.exe / conhost、远程 SSH、CI，以及未来 Claude Code
 // 改了变量名的情况。generic 不是「未知所以不给链接」，而是「用在最多宿主里验证过的那种」，
 // 见 pickInlineForm()。
-function detectHost(env) {
+function detectHost(env, payload) {
+  if (isCodex(env, payload)) return 'codex'
   if (env.CLAUDE_CODE_ENTRYPOINT === 'claude-vscode') return 'vscode-webview'
   if (env.TERM_PROGRAM === 'vscode' || env.VSCODE_INJECTION === '1') return 'vscode-terminal'
   if (env.WT_SESSION) return 'windows-terminal'
@@ -127,6 +148,7 @@ function detectHost(env) {
 // 实测可用，**同一次实测里 vscode: 走不通**。macOS 侧至今没有新数据推翻这条，
 // 把它一并切成 vscode: 会拿一个已验证可用的配置去换一个没验证过的。
 function pickInlineForm(host, platform) {
+  if (host === 'codex') return 'codex-inline'
   if (host === 'vscode-webview') return 'workspace-relative'
   return platform === 'win32' ? 'vscode-absolute' : 'file-absolute'
 }
@@ -252,7 +274,7 @@ function keeperQueues(startDir) {
           for (const [queue, file] of [['debug', 'issue.md'], ['chore', 'item.md']]) {
             const qdir = `${keeper}/${d.name}/${queue}`
             try {
-              if (fs.statSync(qdir).isDirectory()) out.push({ queue, file, dir: qdir })
+              if (fs.statSync(qdir).isDirectory()) out.push({ queue, file, dir: qdir, root: dir })
             } catch {
               /* 该队列尚未建，跳过 */
             }
@@ -268,6 +290,58 @@ function keeperQueues(startDir) {
     /* 探测失败一律降级为「没有队列」，不让 hook 因此报错 */
   }
   return out
+}
+
+// Codex 宿主的整份注入。与 buildGuidance() 分开写而不是往里塞分支：Claude 那份的骨架
+// （四种漏套、「不套反引号」）在 Codex 下全部反过来，共用骨架只会让两边互相拉扯。
+// 共享的只有落盘 md 那一轨（PERSISTED_*）与适用面清单的口径。
+function buildCodexGuidance(queues) {
+  const lines = [
+    '# 文件路径写成可点击的 inline code（devkit-clickable-paths · Codex）',
+    '',
+    '对话正文每提到一个本机文件，就把路径单独写成一段 inline code：`src/app.ts:42`。' +
+      'Codex 只把 inline code 里的路径渲染成可点击；markdown 链接在 Codex 里显示成' +
+      '「标签 (路径)」纯文本，点不动。',
+    '',
+    '- 仓内文件写**相对仓库根**的路径，如 `plugins/x/hooks/guard.js:42`；仓外文件写以斜杠开头的' +
+      '绝对路径，如 `/Users/me/notes/todo.md:3`。',
+    '- 行号跟在 `:` 后面（可再跟 `:列号`），只写一个起始行，不写行号范围；整个文件没有具体行号时' +
+      '只写路径。',
+    '- 一段 inline code 只放一条路径，路径前不加 `file://`、`vscode://`、`https://` 这类 URI 前缀，' +
+      '外面不包 markdown 链接。',
+    '- 一句话提到三个文件就写三段。表格单元格、列表项、四要素的「现场证据」段、' +
+      '转述子代理回执的那几行，都是对话正文，照写。',
+    '- **队列编号同样是文件**：`DBG-140` / `CHR-014` 是队列条目的别名，说到编号就写那条条目文件的' +
+      '路径，后面紧跟括号写 ≤20 字问题简述，让人不点开也知道这条讲什么。debug 编号对应 ' +
+      '`issue.md`，chore 编号对应 `item.md`，两个文件名不可互换。条目归档后路径多一层归档批次目录，' +
+      '先 `ls` 确认再写。',
+    '',
+    '判据：你读过、搜过、列过目录、或工具结果里出现过的文件 = 存在，照上面写。' +
+      '拿不准存在性时先 `ls` 确认；确认不到就只写文件名，不编造路径。',
+    '',
+    '与 devkit-discipline 3.3 四要素、devkit-readable-citations 的关系：它们要的' +
+      ' `path/to/file.ext:行号` 正是这个形态，写一次同时满足两边。',
+    '',
+    '**落盘 md 用另一个形态，整条裸露**：' + PERSISTED_SAMPLE +
+      '——写进文件的 md 里提到本机文件时用这个形态，行号跟在 `:` 后面（可再跟一个 `:` 与列号）。' +
+      PERSISTED_WHY +
+      '引用另一份 md 文档的章节仍走相对路径加标题锚点（devkit-readable-citations 那一条）。',
+    '',
+    '以下场合路径按原样写，不套本条：代码块与命令行内部、commit message、代码与注释、' +
+      '派给子代理的 prompt、提交给外部系统的内容（工单/评论/消息）、不在本机的路径' +
+      '（他人仓库、报错原文、纯举例）。',
+  ]
+
+  if (queues.length) {
+    lines.push('', '本项目实际存在的队列路径（已从磁盘探到，相对仓库根，逐字照抄这个形状）：')
+    for (const q of queues) {
+      const sample = q.queue === 'debug' ? 'DBG-140' : 'CHR-014'
+      const rel = path.relative(q.root, q.dir).replace(/\\/g, '/')
+      lines.push(`- ${q.queue}：\`${rel}/${sample}/${q.file}:1\`（≤20 字问题简述）`)
+    }
+  }
+
+  return lines.join('\n')
 }
 
 function buildGuidance(spec, queues) {
@@ -346,9 +420,11 @@ function main() {
   }
 
   const cwd = payload.cwd || process.cwd()
-  const host = detectHost(process.env)
-  const spec = inlineSpec(pickInlineForm(host, process.platform), cwd)
-  const prompt = buildGuidance(spec, keeperQueues(cwd))
+  const host = detectHost(process.env, payload)
+  const form = pickInlineForm(host, process.platform)
+  const prompt = form === 'codex-inline'
+    ? buildCodexGuidance(keeperQueues(cwd))
+    : buildGuidance(inlineSpec(form, cwd), keeperQueues(cwd))
 
   const output = {
     hookSpecificOutput: {

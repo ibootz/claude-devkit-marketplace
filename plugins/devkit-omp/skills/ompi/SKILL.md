@@ -4,11 +4,14 @@ description: >
   指挥 omp 命名子代理（omp-explore / omp-plan / omp-task）执行实际工作。
   你作为 Orchestrator 只负责理解需求、拆解任务、派发子代理、审阅结果；
   所有读文件、写代码、搜索、分析、规划等动手工作必须通过 Agent 工具委托给对应命名子代理。
+  仅适用于 Claude Code。
 when_to_use: |
   触发词：调用 omp、使用 omp 子代理、omp 编码、omp 探索、omp 规划、omp 重构、omp 实现。
 ---
 
 # 通过 omp 命名子代理完成任务
+
+> **Codex 下不适用**：本 skill 靠 `Agent` 工具派发插件 agents/ 里的三个命名子代理，Codex 没有 `Agent` 工具、也不加载插件的 agents/。在 Codex 里由主会话自己完成探索、规划与编码，本 skill 以下内容不适用。
 
 **你 = Orchestrator**：理解需求、拆解任务、选择子代理、撰写派发 prompt、审阅结果、做决策。
 **omp 命名子代理 = Worker**：在独立上下文中通过 omp CLI 执行实际操作（探索 / 规划 / 编码）。

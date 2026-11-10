@@ -1,9 +1,11 @@
 ---
 name: run-eval
-description: 用 devkit-plugin-eval 评测一个 Claude Code 插件：登记被测插件、跑离线对照（不装 / 上一版 / 当前版臂）、续跑不完整的对照，以及会话复盘、发版闸门、起草用例这些跑动作。用户说「评一下 X 插件」「跑离线对照」「这版插件比上一版好还是差」「发版前过一下闸门」「跑会话复盘」，或命令输出出现「建议跑对照」时使用。待审页与 PE1 回复码归 handle-pending；skill-creator 的 evals.json 与 skill 触发率优化不归本 skill。
+description: 用 devkit-plugin-eval 评测一个 Claude Code 插件：登记被测插件、跑离线对照（不装 / 上一版 / 当前版臂）、续跑不完整的对照，以及会话复盘、发版闸门、起草用例这些跑动作。用户说「评一下 X 插件」「跑离线对照」「这版插件比上一版好还是差」「发版前过一下闸门」「跑会话复盘」，或命令输出出现「建议跑对照」时使用。待审页与 PE1 回复码归 handle-pending；skill-creator 的 evals.json 与 skill 触发率优化不归本 skill。仅适用于 Claude Code。
 ---
 
 # 跑评测（devkit-plugin-eval）
+
+> **Codex 下不适用**：下面命令里的 `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}` 只在 Claude Code 加载 skill 时替换成绝对路径，评测数据也落在 Claude Code 的插件数据目录。在 Codex 里不要跑本 skill 的命令，改到 Claude Code 会话里做。
 
 本插件只有一个 Python 命令行。每条命令都这样起头，下文简写为 `<pe>`：
 

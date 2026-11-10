@@ -11,8 +11,12 @@ when_to_use: |
 ## 一条命令，把输出原样给用户
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/tk-board/scripts/board.py"
+python3 "<本 skill 目录>/scripts/board.py"
 ```
+
+本文命令里的 `scripts/...` 相对本 SKILL.md 所在目录：先拼上本 skill 目录（SKILL.md 所在目录）
+的绝对路径再执行，不要按当前工作目录解析。**在 Codex 里加 `--link-style code`**：编号列改出
+inline code 路径（Codex 只认这种可点击形态），默认的 `file://` 链接在 Codex 里点不开。
 
 脚本从当前工作目录往上找队列（与两个 hook 用同一份 `keeper_paths` 判据），输出一份
 完整的 markdown。**把它原样贴给用户，不要复述、不要挑几条讲、不要自己重新排版**——
@@ -101,7 +105,7 @@ python3 .../board.py --queue-dir <worktree根>/.keeper/<交付id>/debug
 
 ```bash
 # 人/AI 读：每条一行，无漏派时输出「无漏派」
-python3 "${CLAUDE_PLUGIN_ROOT}/skills/tk-board/scripts/pending_dispatch.py"
+python3 "<本 skill 目录>/scripts/pending_dispatch.py"
 
 # 机器读：JSON，含 id/priority/difficulty/summary 与总数
 python3 .../pending_dispatch.py --json

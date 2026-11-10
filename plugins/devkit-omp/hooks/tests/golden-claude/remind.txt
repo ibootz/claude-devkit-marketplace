@@ -1,0 +1,1 @@
+{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"<omp-reminder>\nomp 协议已激活（完整版见 SessionStart）。\n\n决策标准：机械化执行，还是需要思考/判断/编排？\n\n- 在想（分析/设计/编排/审阅/定位上下文）→ 自己做\n- 想好只需执行，或执行量大（长输出/多文件/批量修改）→ Agent 工具派发 omp-explore/omp-plan/omp-task，不自拼 `omp -p`\n</omp-reminder>"}}

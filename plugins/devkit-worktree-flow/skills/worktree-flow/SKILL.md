@@ -5,6 +5,8 @@ description: 在 main/master 分支改文件或 git commit 时，默认走「开
 
 # 主分支保护流程（worktree-flow）
 
+> **Codex 下**：没有 `EnterWorktree` / `ExitWorktree` / `AskUserQuestion`。开 worktree 用 `git -C <仓根> worktree add .claude/worktrees/<名字> -b <临时分支>`，合回与清理照下文的 git 命令；没有本轮直写授权通道，撞闸只能走 worktree。
+
 ## 判据与两条路径
 
 当前仓分支逐字等于 `main` 或 `master`，且要改仓内文件或执行 `git commit` 时触发。默认选

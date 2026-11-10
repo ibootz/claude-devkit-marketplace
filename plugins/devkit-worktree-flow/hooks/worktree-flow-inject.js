@@ -5,6 +5,11 @@
 //
 // UserPromptSubmit 只触达主会话，SubagentStart 单独触达子代理，SessionStart 覆盖启动与 compact。
 // 输出的 hookEventName 必须回声白名单内的入参事件，否则其中一路会静默失效。
+//
+// Codex 宿主（2.2.0 加）：Codex 没有 `EnterWorktree` / `ExitWorktree` / `AskUserQuestion`，
+// 本轮审批状态机也无从写入（它靠 PostToolUse(AskUserQuestion) 落凭据）。所以 Codex 下注入
+// CONTEXT_CODEX：同样的四步改用 `git worktree` 命令，直写授权那一段换成「Codex 下没有
+// 本轮授权通道，只能走 worktree」。Claude 侧 CONTEXT 逐字不变，见 tests/codex-host.test.js。
 
 'use strict'
 
@@ -64,6 +69,39 @@ const CONTEXT = `# 主分支保护（devkit-worktree-flow）
 **Bash 已知漏报**：守卫只机械识别 \`git commit\`；\`sed -i\`、重定向、\`tee\`、heredoc、
 解释器内部写文件虽可能过闸，未经本轮授权仍不得在 main/master 使用。`
 
+// Codex 宿主判据：环境变量 PLUGIN_ROOT 非空或入参含 turn_id（与 devkit-task-keeper 的
+// debug_worktree_destroy_guard.py 同一判据；不用 CLAUDE_PLUGIN_ROOT，Codex 也设它）。
+function isCodex(payload) {
+  return Boolean(process.env.PLUGIN_ROOT) ||
+    Boolean(payload && typeof payload === 'object' &&
+      Object.prototype.hasOwnProperty.call(payload, 'turn_id'))
+}
+
+// Codex 版：步骤与豁免照抄 Claude 版的语义，只把工具调用换成 git 命令；不给直写申请路径。
+const CONTEXT_CODEX = `# 主分支保护（devkit-worktree-flow）
+
+**main / master 默认不落笔**：这两个分支上的写文件与 \`git commit\` 会被 PreToolUse 拒绝。
+
+默认走四步：
+
+1. \`git -C <仓根> worktree add .claude/worktrees/<名字> -b <临时分支>\`，名字遵循 \`<仓名短名>-<功能词1>-<功能词2>-<功能词3>\`；功能最多 3 个词，不足不补。
+   仓名取仓根目录名并转为 lowercase \`kebab-case\`；删除 \`fix\`、\`feat\`、\`task\`、\`worktree\` 等无辨识度前缀；同名冲突时仅追加 4 位短 hash。
+2. 在 worktree 目录内改与提交（命令带 \`git -C <worktree 路径>\` 或绝对路径）。
+3. 回到仓根 \`git -C <仓根> merge --no-ff <临时分支>\`。
+4. \`git -C <仓根> worktree remove <worktree 路径>\`，再
+   \`git -C <仓根> branch -d <临时分支>\`。临时分支不 push remote。
+
+**Codex 下没有本轮直写授权通道**：Claude Code 侧靠授权弹框落本轮凭据，Codex 没有这条路，
+撞闸就走上面四步。\`WORKTREE_GUARD=off\` 是独立的全局关闭开关，不是 Human 本轮授权；AI 不得自行启用。
+
+**既有自动豁免**：非 git 目录；detached HEAD；merge / rebase / cherry-pick 进行中；目标落在
+\`.claude/\`、\`.keeper/\`、\`.git/\` 或显式配置的豁免目录。\`git commit\` 亦按此豁免——前提是
+暂存区非空且**每一条**都落在豁免目录下、显式 pathspec 也逐条豁免、且不带 \`-a\` / \`-A\` /
+\`--all\` / \`-i\` / \`--include\` / \`--amend\`。写法不在白名单内就仍然拦：改法是先窄 \`git add\` 再不带 \`-a\` 提交。
+
+**Bash 已知漏报**：守卫只机械识别 \`git commit\`；\`sed -i\`、重定向、\`tee\`、heredoc、
+解释器内部写文件虽可能过闸，在 main/master 上同样不得使用。`
+
 function main() {
   if (process.env.WORKTREE_GUARD === 'off') process.exit(0)
 
@@ -82,7 +120,7 @@ function main() {
     JSON.stringify({
       hookSpecificOutput: {
         hookEventName: event,
-        additionalContext: CONTEXT,
+        additionalContext: isCodex(payload) ? CONTEXT_CODEX : CONTEXT,
       },
     })
   )

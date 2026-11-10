@@ -86,11 +86,24 @@ def render(queue_dir):
     return lines
 
 
+def _is_codex_host(ev):
+    """Codex 宿主判别：环境变量 PLUGIN_ROOT 非空，或事件 JSON 含 turn_id。
+
+    与 debug_worktree_destroy_guard.py 的 is_codex_host 同一判据（不用 CLAUDE_PLUGIN_ROOT，
+    Codex 也设它）。Codex 下本注入整段静默：keeper 体系靠 `Agent` 派发插件 agents/ 里的
+    debug-keeper / chore-keeper、靠 `SendMessage` 续派，Codex 既没有这两个工具也不加载
+    agents/，注入的分诊、快照与路由全是做不到的指令。
+    """
+    return bool(os.environ.get("PLUGIN_ROOT")) or (isinstance(ev, dict) and "turn_id" in ev)
+
+
 def main():
     try:
         ev = json.loads(sys.stdin.read())
     except Exception:
         ev = {}
+    if _is_codex_host(ev):
+        return
     cwd = ev.get("cwd") or os.getcwd()
     prompt = ev.get("prompt") or ""
 

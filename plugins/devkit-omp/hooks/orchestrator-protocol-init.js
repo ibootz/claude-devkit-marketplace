@@ -10,6 +10,11 @@
 // 开关：环境变量 OMP_PROTOCOL_ENABLED ∈ {1,true,on,yes}（大小写不敏感）才注入；
 //       未设置 / 其他值 → 静默放行，不写任何上下文。
 //
+// Codex 宿主不注入：协议的唯一调用路径是「`Agent` 工具派发 omp-explore / omp-plan / omp-task」，
+// Codex 没有 `Agent` 工具、也不加载插件的 agents/，注进去是一条做不到的指令。判据：环境变量
+// PLUGIN_ROOT 非空或入参含 turn_id（与 devkit-task-keeper 的 debug_worktree_destroy_guard.py
+// 同一判据；不用 CLAUDE_PLUGIN_ROOT，Codex 也设它）。用例见 hooks/tests/codex-host.test.js。
+//
 // Trigger: SessionStart
 // Output: hookSpecificOutput.additionalContext → 注入到 Claude 上下文
 
@@ -20,8 +25,24 @@ function isEnabled() {
   return v === '1' || v === 'true' || v === 'on' || v === 'yes'
 }
 
+function isCodex(payload) {
+  return Boolean(process.env.PLUGIN_ROOT) ||
+    Boolean(payload && typeof payload === 'object' &&
+      Object.prototype.hasOwnProperty.call(payload, 'turn_id'))
+}
+
 function main() {
   if (!isEnabled()) {
+    process.exit(0)
+  }
+
+  let payload = null
+  try {
+    payload = JSON.parse(require('fs').readFileSync(0, 'utf-8'))
+  } catch (e) {
+    payload = null
+  }
+  if (isCodex(payload)) {
     process.exit(0)
   }
 

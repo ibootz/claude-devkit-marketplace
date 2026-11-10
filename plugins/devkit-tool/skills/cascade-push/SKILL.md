@@ -39,14 +39,12 @@ git submodule 嵌套项目里，每个 submodule 自己是独立 git 仓，父�
 
 ## 执行工作流
 
-脚本随本 skill 提供。先定位它：
+脚本随本 skill 提供，在本 skill 目录（SKILL.md 所在目录）的 `scripts/cascade-push.py`。先拼上本 skill 目录的绝对路径定位它——脚本要在 superproject 里执行，按当前工作目录解析 `scripts/` 会找不到：
 
 ```bash
-SP="$CLAUDE_PLUGIN_ROOT/skills/cascade-push/scripts/cascade-push.py"
+SP="<本 skill 目录>/scripts/cascade-push.py"
 ls -l "$SP"   # 必须存在再往下走
 ```
-
-拿不到 `$CLAUDE_PLUGIN_ROOT` 时（如直接在源仓里跑），改用绝对路径 `plugins/devkit-tool/skills/cascade-push/scripts/cascade-push.py`。
 
 ### 第一步：简报（默认动作，不带任何 flag）
 
@@ -66,7 +64,7 @@ python3 "$SP" --no-fetch                   # 离线时用，简报会标注远�
 
 ### 第二步：取 Human 批准（不可跳过）
 
-push 是不可逆的外部写，**批准必须走 `AskUserQuestion` 工具**——Human 常把会话投到手机上远程操作，只有这个工具名会触发推送通知；用 `<options>` 文本块问等于让他在外面完全不知道有事等他拍板。
+push 是不可逆的外部写，**批准必须走 `AskUserQuestion` 工具**——Human 常把会话投到手机上远程操作，只有这个工具名会触发推送通知；用 `<options>` 文本块问等于让他在外面完全不知道有事等他拍板。**Codex 下**没有这个工具：在正文里把简报与问句发给 Human，等他当轮明确回复批准再带 `--approved` 推。
 
 转述简报时把这几样原样带上，让 Human 不打开终端就能判断：
 
@@ -132,7 +130,7 @@ python3 "$SP" --push --approved
 - [ ] 动手前先跑过**简报**（不带 `--apply` / `--push`），且简报里每层的未提交改动与待推送 commit 都有着落
 - [ ] 简报里**每层的待推送 commit 逐条**（subject + 文件清单）已呈给 Human，不是只给了"共 N 条"
 - [ ] untracked 里被标"疑似不该提交"的项已逐个点名，该 ignore 的已进 `.gitignore`
-- [ ] Human 的批准通过 **`AskUserQuestion`** 拿到，且是**本轮**这一份简报的批准（工作区变过就重出简报重新取）
+- [ ] Human 的批准通过 **`AskUserQuestion`**（Codex 下为正文里的当轮明确回复）拿到，且是**本轮**这一份简报的批准（工作区变过就重出简报重新取）
 - [ ] 计划里**没有硬阻塞**：无 detached HEAD 层、无远端领先本地的层；无 upstream 的层已先 `push -u` 设置
 - [ ] `--apply` 时传了 `--message`，且 message 写得出这一层实际改了什么
 - [ ] 每个有子模块的父仓，`--apply` 输出里能看到该子模块的 **`gitlink 已更新`** 行（子模块本轮有新提交时）

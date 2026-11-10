@@ -161,8 +161,17 @@ function render(calls, dispatches, probesSince) {
   return `${head}${tail}`
 }
 
+// 【4.14.0 Codex 宿主不注入】账本数的是 Claude Code transcript 里的 `Agent` / `Task` 派发，
+// 劝的是「下一步派 `Explore`」。Codex 没有这两个工具，transcript 格式也不同，算出的数与
+// 劝告都不成立。判据与 working-discipline.js 的 isCodex 同一条：PLUGIN_ROOT 非空或入参含 turn_id。
+function isCodex(ev) {
+  return Boolean(process.env.PLUGIN_ROOT) ||
+    Boolean(ev && Object.prototype.hasOwnProperty.call(ev, 'turn_id'))
+}
+
 function main() {
   const ev = readEvent()
+  if (isCodex(ev)) return
   const p = ev.transcript_path
   if (!p) return
 

@@ -27,7 +27,7 @@ const path = require('path')
 const HOOK = path.join(__dirname, '..', 'clickable-paths.js')
 
 // detectHost() 读的全部变量。逐个删，让每条用例自己声明宿主。
-const PROBE_VARS = ['CLAUDE_CODE_ENTRYPOINT', 'TERM_PROGRAM', 'VSCODE_INJECTION', 'WT_SESSION']
+const PROBE_VARS = ['CLAUDE_CODE_ENTRYPOINT', 'TERM_PROGRAM', 'VSCODE_INJECTION', 'WT_SESSION', 'PLUGIN_ROOT']
 
 // 非 webview 的三个宿主在同一平台上共用一种形态，所以用例只能分出「webview / 其余」
 // 两档——这不是测试偷懒，映射本身就是两态的，见 hook 里的 pickInlineForm()。

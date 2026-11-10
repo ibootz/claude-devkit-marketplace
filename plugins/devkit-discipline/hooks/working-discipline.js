@@ -368,6 +368,21 @@ function readEvent() {
   }
 }
 
+// 【4.14.0 Codex 宿主】同一份插件也装进 Codex。Codex 没有 Claude Code 的 `Agent`
+// （model / subagent_type / name 字段）、`SendMessage`、`AskUserQuestion`、`TaskList`、team 模式，
+// system prompt 里也没有 `Do not call the AgentTool` 那句禁令（2026-11-10 读 openai/codex main
+// 源码与插件实测转述）。注入里点名这些工具的段落在 Codex 下是一组做不到的指令，只会让模型
+// 去找不存在的工具。所以 Codex 下：零章换成不点名工具的并发判据、去掉派发字段判据与在飞记账 /
+// team 模式两条、问法去掉 `AskUserQuestion`、hook 一章去掉 `Agent` 那道闸（它挂在 `Agent` 工具
+// 上，Codex 里永远不触发）。与工具无关的纪律逐字照常注入。
+// 判据：环境变量 PLUGIN_ROOT 非空，或入参含 turn_id → Codex（与 devkit-task-keeper 的
+// debug_worktree_destroy_guard.py 同一判据；不用 CLAUDE_PLUGIN_ROOT，Codex 也设它）。
+// Claude 侧三层注入逐字不变，由 test/codex-host-verify.js 的 golden 钉住。
+function isCodex(event) {
+  return Boolean(process.env.PLUGIN_ROOT) ||
+    Boolean(event && Object.prototype.hasOwnProperty.call(event, 'turn_id'))
+}
+
 // ── 纪律分节（各节独立成字符串，按事件组合）──────────────────────────
 
 // ── 每轮层：零章（并行优先）+ 4 条自查 + 解释类回复 ──────────────────────────────
@@ -439,6 +454,17 @@ const SECTION_PARALLEL_TURN = [
   '**检查点①（合并）**：连续 3 条消息各只有一个工具调用时，第 4 次调用前把剩余待查项合进同一条消息；合不了就写明属于哪个串行理由。',
   '**检查点②（派发，①不顶替②）**：自上次派发以来你已逐个发起 **≥6 次只读检索**，且还剩 **≥2 个互不依赖的待查项** → 下一步派 `Explore`，不再自己查。次数由每轮「派发账本」现算，你只答后一半。',
   '两个检查点都以**外部可见的产物**为准：①是那条多调用消息，②是 `Agent` 调用本身。',
+].join('\n')
+
+// Codex 版零章：授权前提段对冲的是 Claude Code system prompt 里的 AgentTool 禁令，Codex 没有
+// 那句禁令，整段删；三档并发不点名工具；检查点②依赖派发账本（数的是 Claude transcript 里的
+// `Agent` 调用），Codex 下账本不注入，只留检查点①。
+const SECTION_PARALLEL_TURN_CODEX = [
+  '## 零、并行优先（本章优先级最高）',
+  '',
+  '**默认并发**：发调用前盘点哪些互不依赖（判据：后一个的输入是否要前一个的输出），不依赖的一律并发：同一轮里一次发出多个只读调用（读文件、搜索、只读命令），最优先；预计大输出、跨文件检索、可切分的独立子任务，宿主能起子代理时交子代理并发做。**串行只有三个理由**：输入依赖前一步输出 / 写同一资源 / 待用户拍板。',
+  '',
+  '**检查点（合并）**：连续 3 次各只发一个工具调用时，第 4 次调用前把剩余待查项合进同一轮；合不了就写明属于哪个串行理由。',
 ].join('\n')
 
 // 每轮层的 4 条自查：只放**指针**，细则在 SessionStart 那份里，禁止在此重复正文。
@@ -848,12 +874,65 @@ function buildImageEvidence(event) {
   ].join('\n')
 }
 
+// ── Codex 宿主的派生版（4.14.0）──────────────────────────────────────
+// 全部从 Claude 版逐字派生（删行 / 删句），不手写第二份全文：同一条纪律只有一个真源，
+// Claude 版改了措辞，Codex 版自动跟上。删掉的都是点名 Claude 专属工具的部分。
+const ASK_NO_TOOL_CLAUSE = '在正文里问，不调 `AskUserQuestion`。'
+const TURN_ASK_NO_TOOL_CLAUSE = '，在正文里问、不调 `AskUserQuestion`；'
+const CONFIRM_DIALOG_LINE =
+  '**正文答复不是机械授权**：绕不过只认授权弹框的守卫（如 `devkit-worktree-flow` 主分支拦截），撞到时说明原委，默认引导进 worktree。'
+const DISPATCH_REF_LINE = '5.1 类型、5.2 档位、5.6、5.7 的完整判据在每轮注入指路的那份 reference 的 `SEC:dispatch`。'
+
+function mustReplace(text, from, to) {
+  if (!text.includes(from)) throw new Error('Codex 派生版的锚点不在原文里：' + from.slice(0, 40))
+  return text.replace(from, to)
+}
+
+// 在飞记账靠 `TaskList` 讲口径、team 模式是 Claude Code 的实验开关，两条 Codex 都用不上。
+const SECTION_SUBAGENT_CODEX = withoutBullets(SECTION_SUBAGENT, [SUBAGENT_BULLET_INFLIGHT, SUBAGENT_BULLET_TEAM])
+const SECTION_SUBAGENT_SUB_CODEX = withoutBullets(SECTION_SUBAGENT_SUB, [SUBAGENT_BULLET_INFLIGHT_SUB, SUBAGENT_BULLET_TEAM_SUB])
+// 「正文答复不是机械授权」那句说的是 Claude 侧只认授权弹框的守卫；Codex 没有弹框，
+// 那道闸在 Codex 下改认用户在正文里的同意（见 devkit-worktree-flow），这句反而误导，删。
+const SECTION_EXPRESSION_MAIN_CODEX = withoutBullets(
+  mustReplace(SECTION_EXPRESSION_MAIN, ASK_NO_TOOL_CLAUSE, '在正文里问。'),
+  [CONFIRM_DIALOG_LINE])
+const SECTION_TURN_CHECKLIST_CODEX = mustReplace(SECTION_TURN_CHECKLIST, TURN_ASK_NO_TOOL_CLAUSE, '，在正文里问；')
+// 5.1 类型、5.2 档位住在讲 `Agent` 字段的 reference 里，Codex 下那份 reference 不适用。
+const SECTION_DISPATCH_CODEX = withoutBullets(SECTION_DISPATCH, [DISPATCH_REF_LINE]).replace(/\n+$/, '')
+
+const SECTION_PARALLEL_SUB_CODEX = [
+  '## 零、并行优先（本章优先级最高）',
+  '',
+  '**默认并发**：互不依赖的只读调用（读文件、搜索、只读命令）在同一轮里一次发出（判据：后一个的输入是否要前一个的输出）。**串行只有三个理由**：输入依赖 / 写同一资源 / 需拍板而你无权决定（写进回执交父代理，不原地干等）。',
+].join('\n')
+
 // ── 按事件组合注入内容 ────────────────────────────────────────────
 
 // SessionStart 层：静态纪律主体（一～七章）。会话开始注入一次，每次 auto-compact 后由
 // `SessionStart:compact` 重新注入一次（实测见文件头 3.2.0 段），因此不需要每轮重发。
 // 零章不在这里——它必须每轮重申，理由见 SECTION_PARALLEL_TURN 上方注释。
-function buildSessionPrompt() {
+function buildSessionPrompt(codex) {
+  if (codex) {
+    return [
+      '# AI 工作纪律（会话级常驻，auto-compact 后自动重新注入）',
+      '',
+      '一～七章全程有效，后续轮次不再重复全文；零章与每轮自查另行每轮注入。',
+      '',
+      SECTION_CONTEXT,
+      '',
+      SECTION_SUBAGENT_CODEX,
+      '',
+      SECTION_EXPRESSION_MAIN_CODEX,
+      '',
+      SECTION_THINKING,
+      '',
+      SECTION_DISPATCH_CODEX,
+      '',
+      SECTION_HOOK_ENFORCED_NO_DISPATCH,
+      '',
+      SECTION_CONDUCT,
+    ].join('\n')
+  }
   return [
     '# AI 工作纪律（会话级常驻，auto-compact 后自动重新注入）',
     '',
@@ -877,8 +956,22 @@ function buildSessionPrompt() {
 
 // UserPromptSubmit 层：只有零章 + 派发字段判据 + 4 条自查 + 解释类回复 + 画图 + 本轮图片路径。
 // 无图轮次 4.3.0 实测约 2.8k 字符（含解释类回复约 0.5k），仍远低于 3.1.0 每轮的 6717。
-function buildTurnPrompt(event) {
+function buildTurnPrompt(event, codex) {
   const imageEvidence = buildImageEvidence(event)
+  if (codex) {
+    return [
+      '# AI 工作纪律 · 每轮要点（一～七章已在会话开始注入，仍然有效）',
+      '',
+      SECTION_PARALLEL_TURN_CODEX,
+      '',
+      SECTION_TURN_CHECKLIST_CODEX,
+      '',
+      SECTION_EXPLAIN_TURN,
+      '',
+      SECTION_DRAW_TURN,
+      ...(imageEvidence ? ['', imageEvidence] : []),
+    ].join('\n')
+  }
   return [
     '# AI 工作纪律 · 每轮要点（一～七章已在会话开始注入，仍然有效）',
     '',
@@ -951,8 +1044,9 @@ function canDispatch(event) {
   return !NO_DISPATCH_AGENT_TYPES.has(t.trim().toLowerCase())
 }
 
-function buildSubagentPrompt(event) {
-  const dispatches = canDispatch(event)
+function buildSubagentPrompt(event, codex) {
+  // Codex 下派发字段判据整节不给（全是 `Agent` 的字段），hook 一章去掉 `Agent` 那道闸。
+  const dispatches = !codex && canDispatch(event)
   const dispatchSections = dispatches
     ? [
       '## 五、你再派下一层时的字段判据',
@@ -973,11 +1067,11 @@ function buildSubagentPrompt(event) {
     '**你没有用户通道**：下文凡要求问用户、让用户核对的，写进回执交父代理转达，不原地干等。',
     '新写或大改 md 前先写一句「本次 md 受众判定：{人 / AI / 人机混合}，理由：……」，**先于**你第一次写 md 的工具调用。**AI 读**→上下文齐备、用词精确、示例覆盖典型与边界；**人读**→结论前置、术语先定义，动笔前先调 `devkit-tool:tech-doc`。',
     '',
-    SECTION_PARALLEL_SUB,
+    codex ? SECTION_PARALLEL_SUB_CODEX : SECTION_PARALLEL_SUB,
     '',
     SECTION_CONTEXT,
     '',
-    SECTION_SUBAGENT_SUB,
+    codex ? SECTION_SUBAGENT_SUB_CODEX : SECTION_SUBAGENT_SUB,
     '',
     SECTION_EXPRESSION,
     '',
@@ -992,14 +1086,16 @@ function main() {
   const event = readEvent()
   const name = event && event.hook_event_name
 
+  const codex = isCodex(event)
+
   let hookEventName = 'UserPromptSubmit'
-  let additionalContext = buildTurnPrompt(event)
+  let additionalContext = buildTurnPrompt(event, codex)
   if (name === 'SubagentStart') {
     hookEventName = 'SubagentStart'
-    additionalContext = buildSubagentPrompt(event)
+    additionalContext = buildSubagentPrompt(event, codex)
   } else if (name === 'SessionStart') {
     hookEventName = 'SessionStart'
-    additionalContext = buildSessionPrompt()
+    additionalContext = buildSessionPrompt(codex)
   }
 
   const output = {

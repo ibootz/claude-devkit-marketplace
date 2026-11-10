@@ -294,6 +294,17 @@ keeper 待拍板会写 `<交付>/decisions/<stamp>-<keeper>.md` 并 SendMessage 
 指针：skills/tk-decisions；状态看每轮注入或各队列 index.md。"""
 
 
+def _is_codex_host(ev):
+    """Codex 宿主判别：环境变量 PLUGIN_ROOT 非空，或事件 JSON 含 turn_id。
+
+    与 debug_worktree_destroy_guard.py 的 is_codex_host 同一判据（不用 CLAUDE_PLUGIN_ROOT，
+    Codex 也设它）。Codex 下本注入整段静默：keeper 体系靠 `Agent` 派发插件 agents/ 里的
+    debug-keeper / chore-keeper、靠 `SendMessage` 续派，Codex 既没有这两个工具也不加载
+    agents/，注入的分诊、快照与路由全是做不到的指令。
+    """
+    return bool(os.environ.get("PLUGIN_ROOT")) or (isinstance(ev, dict) and "turn_id" in ev)
+
+
 def main():
     ev_name = "SessionStart"
     argv = sys.argv[1:]
@@ -305,6 +316,8 @@ def main():
         ev = json.loads(sys.stdin.read())
     except Exception:
         ev = {}
+    if _is_codex_host(ev):
+        return
     cwd = ev.get("cwd") or os.getcwd()
     keeper_root = find_keeper_root(cwd) if find_keeper_root else None
     enabled = bool(keeper_root)

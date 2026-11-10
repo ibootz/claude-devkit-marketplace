@@ -1,11 +1,13 @@
 ---
 name: tk-decisions
-description: keeper（后台 subagent）与 Human 之间的决策打包 HITL 协议正典：keeper 把待拍板事项写 `.keeper/<交付id>/decisions/` 文件 + SendMessage 一句话通知，主会话攒批后一次 AskUserQuestion 并列问完，答复原文写 `answers/` 回传。解决「subagent 永远拿不到 AskUserQuestion」与「逐条弹框打断用户」两个问题。
+description: keeper（后台 subagent）与 Human 之间的决策打包 HITL 协议正典：keeper 把待拍板事项写 `.keeper/<交付id>/decisions/` 文件 + SendMessage 一句话通知，主会话攒批后一次 AskUserQuestion 并列问完，答复原文写 `answers/` 回传。解决「subagent 永远拿不到 AskUserQuestion」与「逐条弹框打断用户」两个问题。仅适用于 Claude Code。
 when_to_use: |
   主会话收到 keeper 的 SendMessage 待拍板通知、每轮注入出现「待拍板 N 条」、用户问"有什么要我拍板的"、交付停顿点自查、或任何 keeper 报了需要 Human 决定的事项时。keeper 侧写决策文件的完整规范也在本文件（keeper 的 agent 定义里有摘要）。
 ---
 
 # tk-decisions：决策打包 HITL 协议
+
+> **Codex 下不适用**：协议两端（keeper 写决策文件 + `SendMessage` 通知、主会话 `AskUserQuestion` 攒批问）都依赖 Claude Code 专属工具，Codex 下没有 keeper。待拍板事项在正文里直接问用户。
 
 ## 为什么存在
 

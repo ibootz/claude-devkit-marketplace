@@ -1,6 +1,6 @@
 ---
 name: marketplace-cache-sync
-description: 拉取 Claude Code 已配置的插件市场(marketplace)最新代码，刷新全部已安装插件(installed plugin，启用与未启用都刷)的本地缓存版本(含 user scope 与 project/local scope 两种安装范围)，并在刷新后回收缓存磁盘占用。先探测再刷新，只动真有变化的那几个。
+description: 拉取 Claude Code 已配置的插件市场(marketplace)最新代码，刷新全部已安装插件(installed plugin，启用与未启用都刷)的本地缓存版本(含 user scope 与 project/local scope 两种安装范围)，并在刷新后回收缓存磁盘占用。先探测再刷新，只动真有变化的那几个。仅适用于 Claude Code。
 when_to_use: |
   用户说"更新一下插件市场"、"拉取 marketplace 最新代码"、"刷新插件缓存"、"plugin 装的新版本怎么不生效"、"skill 改了但没同步过来"、"刷新插件太慢了"、"marketplace update 要跑十几分钟"、"市场 lastUpdated 变了/没变是不是真的更新了"、"marketplace update 之后要不要重启"、"插件缓存占了多少空间"、"清理插件缓存"、"cache 目录太大"、"temp_git_ 开头的目录能删吗"、"历史版本缓存能不能删"、"reload-plugins 够不够还是必须重启"、"reload 完 hook 还是旧的"、"某个项目里装的插件版本没跟着更新"、"project scope 的插件怎么刷新"、"这个插件只在某个项目里装了，全局刷新覆盖不到"。
   **另一类触发是主动的，不要漏**——上面那些措辞全是「发现没生效之后」的补救语气，但更常见的场景是**改完当场就该刷**：
@@ -9,6 +9,8 @@ when_to_use: |
 ---
 
 # Marketplace Cache Sync（插件市场与插件缓存刷新）
+
+> **Codex 下不适用**：刷的是 Claude Code 的插件市场与插件缓存（`claude plugin ...`、`/reload-plugins`），Codex 的插件缓存不归这套命令管。在 Codex 里改完插件，按 Codex 自己的插件安装 / 更新方式重新装一次。
 
 把"更新插件市场"这件事拆成两层动作依次执行，**先用本地/并发探测算出「哪几个真的需要动」，再只对那几个调 CLI**，并在核实每一层是否真的生效时避开已知的误判坑。
 

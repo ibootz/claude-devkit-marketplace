@@ -61,6 +61,10 @@
 //     glob pathspec）——仍被拦。这是白名单换来的代价：改法是先窄 `git add` 再不带 `-a`
 //     提交，或走 worktree。**不要为了过闸把判据放宽成黑名单。**
 //
+// 【Codex 宿主】判据与阻断照旧，只换 hint：Codex 没有 `EnterWorktree` / `AskUserQuestion`，
+// 本轮授权凭据也无从写入，hint 改给 `git worktree` 命令流程、不给直写申请路径。
+// Claude 侧文案逐字不变，见 tests/codex-host.test.js。
+//
 // Input: JSON on stdin（tool_name / tool_input / cwd）
 // Exit 0 = 放行；Exit 2 = 阻断（stderr 作为附加上下文回灌给 Claude）
 
@@ -440,6 +444,14 @@ function evaluate(dirForRepo, filePath) {
   }
 }
 
+// Codex 宿主判据：环境变量 PLUGIN_ROOT 非空或入参含 turn_id（与 devkit-task-keeper 的
+// debug_worktree_destroy_guard.py 同一判据；不用 CLAUDE_PLUGIN_ROOT，Codex 也设它）。
+function isCodex(payload) {
+  return Boolean(process.env.PLUGIN_ROOT) ||
+    Boolean(payload && typeof payload === 'object' &&
+      Object.prototype.hasOwnProperty.call(payload, 'turn_id'))
+}
+
 function main() {
   if (process.env.WORKTREE_GUARD === 'off') process.exit(0)
 
@@ -500,7 +512,10 @@ function main() {
   const request = JSON.stringify(
     approvalToolInput({ repository: hit.root, branch: hit.branch, target: hit.subject })
   )
-  const hint =
+  const hint = isCodex(payload)
+    ? `默认路径：git -C ${hit.root} worktree add .claude/worktrees/<名字> -b <临时分支>，名字用 <仓名短名>-<功能词1>-<功能词2>-<功能词3>；在 worktree 里改与提交，再 git -C ${hit.root} merge --no-ff <临时分支>，最后 worktree remove 并删临时分支。` +
+      'Codex 下没有本轮直写授权通道，只能走 worktree。WORKTREE_GUARD=off 是独立的全局关闭开关，不得拿它冒充 Human 本轮授权。'
+    :
     '默认路径：调 EnterWorktree 工具，name 用 <仓名短名>-<功能词1>-<功能词2>-<功能词3>；仓名取仓根目录名，功能最多 3 个词，不足不补，同名仅追加 4 位短 hash；在临时分支改与提交，再 --no-ff 合回。' +
     `若确需本轮直写：主会话原样调用 AskUserQuestion ${request}；` +
     'Human 选择“批准本轮”后重试，授权覆盖当前会话本轮全部 main/master 写入，下一次用户消息或本轮结束即失效。' +

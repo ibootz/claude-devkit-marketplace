@@ -86,13 +86,11 @@ git -C <本层子模块> ls-tree <上一步的pin> <再下层路径>  # 逐层�
 
 ### 脚本路径（三个脚本共用，先取一次）
 
-三个脚本随本 skill 分发，路径用插件根变量取，**不要**写成相对当前目录的 `scripts/xxx.sh`——脚本要在被诊断的父仓根目录下执行，那里没有 `scripts/` 这个目录：
+三个脚本随本 skill 分发，在本 skill 目录（SKILL.md 所在目录）的 `scripts/` 下。先拼上本 skill 目录的绝对路径再用，**不要**按当前目录解析 `scripts/xxx`——脚本要在被诊断的父仓根目录下执行，那里没有 `scripts/` 这个目录：
 
 ```bash
-SD="$CLAUDE_PLUGIN_ROOT/skills/cascade-pull/scripts"
+SD="<本 skill 目录>/scripts"
 ```
-
-拿不到 `$CLAUDE_PLUGIN_ROOT` 时（少数宿主不注入该变量），改用插件安装目录下的绝对路径 `plugins/devkit-tool/skills/cascade-pull/scripts/`。
 
 ### S0 · 只读诊断（永远第一步）
 

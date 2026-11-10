@@ -30,6 +30,13 @@
 // **落盘 md 那一轨不参与宿主映射**，永远是相对路径 + 标题锚点：文档 commit 后会被
 // 别人、别的机器、GitLab 网页读到，跟着本机宿主变只会在别处变成死链。
 //
+// 【为什么 2.2.0 加 Codex 分支】
+// Codex 只把 inline code 里的路径渲染成可点击，系统提示明令不用 file:// / vscode:// 等 URI、
+// 不写行号范围；TUI 把本地文件 markdown 链接渲染成「标签 (路径)」纯文本（2026-11-10 读
+// openai/codex main 源码取得，详见 devkit-clickable-paths 的同名注释）。所以 Codex 下对话正文
+// 那一轨改成 inline code 路径 + `:行号`（仓内相对仓库根、仓外绝对，用户 2026-11-10 拍板），
+// 落盘 md 那一轨照旧。判据（isCodex）与 devkit-clickable-paths 逐字相同，改一处要两处一起改。
+//
 // 【与 devkit-clickable-paths 的分工】
 // 那个插件管**提到文件时的路径**，本插件管**文档章节的引用**，两者互补不重叠：
 // 引用 md 文档的章节 → 落盘走相对链接 + 标题锚点（本插件）；
@@ -51,7 +58,14 @@ const ALLOWED_EVENTS = new Set(['UserPromptSubmit', 'SubagentStart'])
 // 顺序从最特异到最泛，不可调换：VS Code 内置终端同时带 `VSCODE_*` 与
 // `CLAUDE_CODE_ENTRYPOINT=cli`，先判 webview 才不会把两者混为一谈。
 // 与 devkit-clickable-paths 的同名函数保持逐字一致，对照表见那个插件 README 的「宿主判别表」。
-function detectHost(env) {
+// Codex 判据：PLUGIN_ROOT 非空或入参含 turn_id。不用 CLAUDE_PLUGIN_ROOT（Codex 也设）、
+// 不用 CODEX_* 前缀（用户环境本就可能有）。
+function isCodex(env, payload) {
+  return Boolean(env.PLUGIN_ROOT) || Boolean(payload && Object.prototype.hasOwnProperty.call(payload, 'turn_id'))
+}
+
+function detectHost(env, payload) {
+  if (isCodex(env, payload)) return 'codex'
   if (env.CLAUDE_CODE_ENTRYPOINT === 'claude-vscode') return 'vscode-webview'
   if (env.TERM_PROGRAM === 'vscode' || env.VSCODE_INJECTION === '1') return 'vscode-terminal'
   if (env.WT_SESSION) return 'windows-terminal'
@@ -62,12 +76,22 @@ function detectHost(env) {
 // pickInlineForm()：Windows 侧 `file:` 带行号必挂（ShellExecute 不解析 `#行号`），
 // 非 Windows 侧 `file:` + `#行号` 是 iTerm2 Semantic History 已验证可用的形态。
 function pickInlineForm(host, platform) {
+  if (host === 'codex') return 'codex-inline'
   if (host === 'vscode-webview') return 'workspace-relative'
   return platform === 'win32' ? 'vscode-absolute' : 'file-absolute'
 }
 
 // 对话正文那一轨的示例与要点。落盘那一轨是常量，不在这里。
 function inlineSpec(form) {
+  if (form === 'codex-inline') {
+    return {
+      label: 'inline code 路径 + 行号',
+      sample: '`skills/working-discipline/SKILL.md:128`（§5.2 模型档位：三档模型分别什么时候用）',
+      note: '路径单独写成一段 inline code，仓内写相对仓库根的路径、仓外写绝对路径，行号跟在 `:` 后、' +
+        '只写起始行。Codex 只把 inline code 里的路径渲染成可点击，路径前不加 `file://` 这类 URI 前缀、' +
+        '外面不包 markdown 链接；章节标题原文与提要写在 inline code 外面。',
+    }
+  }
   if (form === 'workspace-relative') {
     return {
       label: '相对 workspace 根的路径 + 行号',
@@ -147,12 +171,13 @@ function main() {
     process.exit(0)
   }
 
-  let event = ''
+  let payload = {}
   try {
-    event = (JSON.parse(readStdin()) || {}).hook_event_name || ''
+    payload = JSON.parse(readStdin()) || {}
   } catch {
-    event = ''
+    payload = {}
   }
+  const event = payload.hook_event_name || ''
 
   // 读不到或不认识的事件名一律不注入：宁可这一路静默失效，
   // 也不回声一个来路不明的字符串。
@@ -160,7 +185,7 @@ function main() {
     process.exit(0)
   }
 
-  const spec = inlineSpec(pickInlineForm(detectHost(process.env), process.platform))
+  const spec = inlineSpec(pickInlineForm(detectHost(process.env, payload), process.platform))
 
   const output = {
     hookSpecificOutput: {

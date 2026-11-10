@@ -1,9 +1,11 @@
 ---
 name: orphan-process-cleaner
-description: "查找并清理 Claude Code 拉起、仍在后台跑的进程（macOS 与 Linux/WSL；不支持 Windows）。分两类列：逃逸——会话退出、compact、清屏丢了任务句柄，或 nohup/& 后被 launchd/init 收养，父进程链上已没有活着的 claude；长驻——claude 还在，但 run_in_background / Monitor 拉起的 dev server、watch、监听端口的服务已跑很久。自带只读探测脚本，默认只列不杀，用户逐个点名后才 kill。用户说「后台还有什么在跑」「端口被占了是谁」「清理游离进程」「孤儿进程」「会话关了服务还在」「TaskList 找不到但进程还在」「之前起的 dev server 还在吗」时使用。"
+description: "查找并清理 Claude Code 拉起、仍在后台跑的进程（macOS 与 Linux/WSL；不支持 Windows）。分两类列：逃逸——会话退出、compact、清屏丢了任务句柄，或 nohup/& 后被 launchd/init 收养，父进程链上已没有活着的 claude；长驻——claude 还在，但 run_in_background / Monitor 拉起的 dev server、watch、监听端口的服务已跑很久。自带只读探测脚本，默认只列不杀，用户逐个点名后才 kill。用户说「后台还有什么在跑」「端口被占了是谁」「清理游离进程」「孤儿进程」「会话关了服务还在」「TaskList 找不到但进程还在」「之前起的 dev server 还在吗」时使用。仅适用于 Claude Code。"
 ---
 
 # 后台进程排查与清理
+
+> **Codex 下不适用**：判据沿进程父链找 Claude Code 进程、长驻任务靠 `TaskList` / `TaskStop` 处理，Codex 拉起的进程认不出来。在 Codex 里查后台进程用 `ps` / `lsof -iTCP -sTCP:LISTEN` 手动看，kill 前先问用户。
 
 脚本把当前用户的进程分成三类，后文一律用这三个词：
 

@@ -1,0 +1,1 @@
+{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"本轮用户写了 ultraverify：本轮要交付的结论，交付前先用 Skill 工具加载 `devkit-ultraverify:ultraverify`，按它的五步走证伪内环（拆断言 → 改写盲问 → 派看不到原稿证据的证伪者 → 比对判红 → 停止或升级）。\n本轮还没有结论（比如只是在讨论问题）时，先照常把结论做出来，再走证伪内环；用户本轮只是在谈论这个插件本身、并没有要证伪的结论时，忽略本段。"}}

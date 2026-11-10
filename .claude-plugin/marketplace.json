@@ -42,7 +42,7 @@
       "source": "./plugins/devkit-tool",
       "category": "Development",
       "description": "工具技能集：submodule 同步推送、提交推送、会话起法与交接、话题可视化、技术文档写法、新事物认知与为我所用等 15 技能",
-      "version": "6.39.0"
+      "version": "6.40.0"
     },
     {
       "name": "devkit-spec",
@@ -56,14 +56,14 @@
       "source": "./plugins/devkit-omp",
       "category": "Development",
       "description": "Oh my pi (omp) CLI 集成 - 在 CC/Codex 里用 omp 做编码、审查、搜索",
-      "version": "3.1.0"
+      "version": "3.2.0"
     },
     {
       "name": "devkit-discipline",
       "source": "./plugins/devkit-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒 + 回合末出处审查，附中文消歧 skill",
-      "version": "4.13.0"
+      "version": "4.14.0"
     },
     {
       "name": "devkit-agent-browser",
@@ -84,7 +84,7 @@
       "source": "./plugins/devkit-task-keeper",
       "category": "Productivity",
       "description": "多实例 keeper 并行托管 debug/杂务两队列：一 bug 一实例，原子认领 + 合并锁 + 登记前查重、转出互链",
-      "version": "5.1.0"
+      "version": "5.2.0"
     },
     {
       "name": "devkit-style-plain-talk",
@@ -105,7 +105,7 @@
       "source": "./plugins/devkit-style-wenyan",
       "category": "Productivity",
       "description": "文言极简输出风格 - 文言语法压缩、字形简体，代码与告警原样，启停即切换",
-      "version": "2.1.0"
+      "version": "2.2.0"
     },
     {
       "name": "devkit-insight",
@@ -126,14 +126,14 @@
       "source": "./plugins/devkit-clickable-paths",
       "category": "Productivity",
       "description": "文件路径可点击 - 链接整条裸露不套反引号，对话正文按宿主切形态，落盘 md 恒用 vscode:；Windows 启动查超链接",
-      "version": "2.2.0"
+      "version": "2.3.0"
     },
     {
       "name": "devkit-worktree-flow",
       "source": "./plugins/devkit-worktree-flow",
       "category": "Development",
       "description": "主分支保护 + worktree 隔离边界 - 默认走 worktree，进入后写哪份/怎么退，撞闸怎么自救",
-      "version": "2.1.0"
+      "version": "2.2.0"
     },
     {
       "name": "devkit-cd-blocker",
@@ -147,7 +147,7 @@
       "source": "./plugins/devkit-readable-citations",
       "category": "Productivity",
       "description": "引用别处章节要免跳可读 - 带标题原文与20字提要，对话正文按宿主切形态、落盘走相对路径",
-      "version": "2.1.0"
+      "version": "2.2.0"
     },
     {
       "name": "devkit-complexity-first",
@@ -161,21 +161,21 @@
       "source": "./plugins/devkit-plugin-eval",
       "category": "Development",
       "description": "插件评测 - 离线对照装与不装、新旧版的差，会话复盘与发版闸门，待审页人工裁定",
-      "version": "0.5.1"
+      "version": "0.5.2"
     },
     {
       "name": "devkit-excalidraw-diagram",
       "source": "./plugins/devkit-excalidraw-diagram",
       "category": "Productivity",
       "description": "Excalidraw 图解 - 生成可编辑的 .excalidraw 图，渲染 PNG 回看修版（移植自 coleam00）",
-      "version": "1.6.0"
+      "version": "1.6.1"
     },
     {
       "name": "devkit-ultraverify",
       "source": "./plugins/devkit-ultraverify",
       "category": "Development",
       "description": "结论交付前的证伪内环：盲问派独立证伪者、比对判红，提示写 ultraverify 即开",
-      "version": "0.2.1"
+      "version": "0.3.0"
     }
   ]
 }

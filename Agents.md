@@ -37,6 +37,9 @@
 - hook 一律注册在 `plugins/<name>/hooks/hooks.json`（`{"description": "...", "hooks": {...}}`），Claude Code 与 Codex 都按这个默认路径加载。`.claude-plugin/plugin.json` 与 `.codex-plugin/plugin.json` 都不写 `hooks` 字段：写内联对象 Codex 不识别；写 `"hooks": "./hooks/hooks.json"` 会让 Claude Code 报重复加载。
 - 不要建插件根目录 `plugin.json`、不要把 hooks 内联进清单——Codex 0.167 实测两者都会让 hook 不被识别。
 - 宿主是 Codex 时 `PreToolUse` 的 `permissionDecision: "ask"` 不生效（视为 hook 失败、工具照常执行）。需要用户确认的闸，在 Codex 下改输出 `deny` 并要求用户同意后带 `DEVKIT_CONFIRMED=1` 重跑；宿主判别：环境变量 `PLUGIN_ROOT` 非空或输入 JSON 含 `turn_id` → Codex。参照 `plugins/devkit-task-keeper/hooks/lib/debug_worktree_destroy_guard.py`。
+- 注入类 hook（SessionStart / UserPromptSubmit / SubagentStart）按同一宿主判别分流，Claude 侧输出逐字不变、用 golden 快照测试钉住（形态见 `plugins/devkit-discipline/test/codex-host-verify.js`）。Codex 侧：点名 Claude 专属工具（`Agent` 字段与 model 档位、Explore / Plan、`SendMessage` / `ListAgents`、`AskUserQuestion`、`TaskList`、`EnterWorktree`、Skill 工具）的段落省略或换成不点名工具的表述；整段依赖这些工具的注入（devkit-tool 跨会话通信、devkit-omp、task-keeper 的 keeper 路由与队列快照）在 Codex 下整段不注入。
+- 文件引用形态（2026-11-10 拍板）：Codex 下写 inline code，仓内路径相对仓库根、仓外写绝对路径，后接 `:行号`，不写行号范围，禁用 `file://` / `vscode://`——Codex 系统提示只认 inline code 路径为可点击，TUI 把 `[x](file:///…)` 渲染成「标签 (路径)」纯文本（转述主会话对 openai/codex 源码的核查）。落盘 md 那一轨不随宿主变。
+- skill 正文不写 `${CLAUDE_PLUGIN_ROOT}`：Codex 不替换 SKILL.md 正文、也不把这个变量注入模型执行命令的 shell（只注入 hook 进程）。写相对本 SKILL.md 所在目录的路径，并在用到命令处写明一次「先拼上本 skill 目录再执行」。只对 Claude Code 有意义的 skill 在 description 末尾加「仅适用于 Claude Code。」，正文标题下一行写 Codex 下的替代做法。
 - 优先使用 prompt-based hooks；如需 command hooks，必须明确输入/输出 JSON schema。
 - 所有 hooks 脚本必须做到：
   - 失败可解释（明确 deny/block 的原因）

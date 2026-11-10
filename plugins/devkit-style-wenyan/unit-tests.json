@@ -1,5 +1,6 @@
 {
   "tests": [
-    { "run": ["node", "hooks/tests/wenyan-output-style.test.js"] }
+    { "run": ["node", "hooks/tests/wenyan-output-style.test.js"] },
+    { "run": ["node", "hooks/tests/codex-host.test.js"] }
   ]
 }

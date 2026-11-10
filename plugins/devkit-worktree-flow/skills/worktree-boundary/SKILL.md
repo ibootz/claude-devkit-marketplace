@@ -1,9 +1,11 @@
 ---
 name: worktree-boundary
-description: 已经在 worktree 会话里、要动手写文件或要退出时的隔离边界纪律。动手前先定位自己在哪一份 checkout（同名相对路径在父仓与 worktree 里指向两个不同文件，且这个歧义不报错），退出前先确认改动已提交、合回与清理的顺序。撞到 `isolated in the worktree`、`Shell cwd was reset to`、「在 worktree 里改不了父仓的文件」、「cd 出去被弹回」、「worktree 里的 test 和父仓的 test 不是同一个文件」、「改完要不要提交才能合回」、`ExitWorktree`、「合并回主分支」、「清理 worktree」、「让另一个会话帮我改被拦的那一步」、`Refusing to run it — a worktree-isolated session's git operations`、「命令太复杂无法验证是否留在 worktree 内」，以及**你正准备把一条改父仓的命令交给 Human 自己敲**时使用。**准备操作 worktree 之前与准备退出 worktree 之前都要读**，别等撞了闸才来。「我在 main 上要落笔、该不该开 worktree」是另一个时刻，走 worktree-flow skill。
+description: 已经在 worktree 会话里、要动手写文件或要退出时的隔离边界纪律。动手前先定位自己在哪一份 checkout（同名相对路径在父仓与 worktree 里指向两个不同文件，且这个歧义不报错），退出前先确认改动已提交、合回与清理的顺序。撞到 `isolated in the worktree`、`Shell cwd was reset to`、「在 worktree 里改不了父仓的文件」、「cd 出去被弹回」、「worktree 里的 test 和父仓的 test 不是同一个文件」、「改完要不要提交才能合回」、`ExitWorktree`、「合并回主分支」、「清理 worktree」、「让另一个会话帮我改被拦的那一步」、`Refusing to run it — a worktree-isolated session's git operations`、「命令太复杂无法验证是否留在 worktree 内」，以及**你正准备把一条改父仓的命令交给 Human 自己敲**时使用。**准备操作 worktree 之前与准备退出 worktree 之前都要读**，别等撞了闸才来。「我在 main 上要落笔、该不该开 worktree」是另一个时刻，走 worktree-flow skill。仅适用于 Claude Code。
 ---
 
 # worktree 隔离边界与退出
+
+> **Codex 下不适用**：本 skill 讲的是 Claude Code 的 worktree 隔离会话（`EnterWorktree` / `ExitWorktree` 与它的写拦截），Codex 没有这层隔离。Codex 里用 `git worktree` 时只需记住一条：同名相对路径在父仓与 worktree 里是两个文件，命令一律写绝对路径或 `git -C <路径>`。
 
 worktree 会话的隔离**只拦写、不拦读**。这个形状决定了本 skill 的两个时刻：动手前要知道自己
 落笔在哪一份 checkout，退出前要知道改动能不能合回去。

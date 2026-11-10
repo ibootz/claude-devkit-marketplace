@@ -159,8 +159,17 @@ def cell(s):
     return str(s if s not in (None, "") else "-").replace("|", "\\|")
 
 
+# 编号列链接形态。`file`（默认）= `[DBG-140](file:///abs/issue.md#1)`，Claude Code 下可点；
+# `code` = `` `.keeper/D-001-x/debug/DBG-140/issue.md:1` ``，给 Codex 用——Codex 只把 inline
+# code 里的路径识别成可点击，`[x](file:///…)` 在它的 TUI 里只渲染成「标签 (路径)」纯文本。
+# 由 `--link-style` 设置。本脚本由模型在 shell 里调用，拿不到 hook 进程才有的宿主环境变量，
+# 所以宿主只能靠调用方显式传参，不做自动探测。
+LINK_STYLE = "file"
+
+
 def cell_link(iid, path):
-    """编号列专用：渲染成 `[DBG-140](file:///abs/path/issue.md#1)` 可点击链接。
+    """编号列专用：渲染成 `[DBG-140](file:///abs/path/issue.md#1)` 可点击链接
+    （`--link-style code` 时渲染成 inline code 路径，见 LINK_STYLE）。
 
     与 `cell()` 分开一个函数，是因为 `cell()` 还被说明/状态等其它列复用——把
     链接逻辑塞进 `cell()` 会给那些列也套上链接。`path` 来自 `load_all()` /
@@ -181,6 +190,11 @@ def cell_link(iid, path):
         return text
     if not os.path.isfile(abspath):
         return text
+    if LINK_STYLE == "code":
+        # 在 cwd 之下写相对路径（Codex 按工作区相对路径解析），否则写绝对路径。
+        rel = os.path.relpath(abspath, os.getcwd())
+        shown = abspath if rel.startswith("..") else rel
+        return "%s `%s:1`" % (text, shown.replace("|", "\\|"))
     return "[%s](file://%s#1)" % (text, abspath)
 
 
@@ -391,7 +405,11 @@ def main():
                     help="说明列宽度（汉字数，默认 %d）" % DEFAULT_SUMMARY_WIDTH)
     ap.add_argument("--status", default="",
                     help="只看这些状态，逗号分隔（%s）" % "/".join(STATE_ORDER))
+    ap.add_argument("--link-style", choices=["file", "code"], default="file",
+                    help="编号列链接形态：file=file:// 链接（Claude Code，默认）/ code=inline code 路径（Codex）")
     args = ap.parse_args()
+    global LINK_STYLE
+    LINK_STYLE = args.link_style
 
     only = [s.strip() for s in args.status.split(",") if s.strip()]
     bad = [s for s in only if s not in STATE_ORDER]

@@ -8,6 +8,11 @@
 // 开关：环境变量 OMP_PROTOCOL_ENABLED ∈ {1,true,on,yes}（大小写不敏感）才注入；
 //       未设置 / 其他值 → 静默放行，不读 stdin 也不写任何上下文。
 //
+// Codex 宿主不注入：协议的唯一调用路径是「`Agent` 工具派发 omp-explore / omp-plan / omp-task」，
+// Codex 没有 `Agent` 工具、也不加载插件的 agents/，注进去是一条做不到的指令。判据：环境变量
+// PLUGIN_ROOT 非空或入参含 turn_id（与 devkit-task-keeper 的 debug_worktree_destroy_guard.py
+// 同一判据；不用 CLAUDE_PLUGIN_ROOT，Codex 也设它）。用例见 hooks/tests/codex-host.test.js。
+//
 // Trigger: UserPromptSubmit
 // Output: hookSpecificOutput.additionalContext → 拼到当前用户消息后的上下文
 
@@ -16,6 +21,12 @@
 function isEnabled() {
   const v = String(process.env.OMP_PROTOCOL_ENABLED || '').trim().toLowerCase()
   return v === '1' || v === 'true' || v === 'on' || v === 'yes'
+}
+
+function isCodex(payload) {
+  return Boolean(process.env.PLUGIN_ROOT) ||
+    Boolean(payload && typeof payload === 'object' &&
+      Object.prototype.hasOwnProperty.call(payload, 'turn_id'))
 }
 
 function main() {
@@ -32,11 +43,15 @@ function main() {
   }
 
   let userPrompt = ''
+  let parsed = null
   try {
-    const parsed = JSON.parse(stdinRaw)
+    parsed = JSON.parse(stdinRaw)
     userPrompt = String(parsed.prompt || parsed.user_prompt || '')
   } catch (e) {
     userPrompt = stdinRaw
+  }
+  if (isCodex(parsed)) {
+    process.exit(0)
   }
 
   // 用户当前消息显式豁免 → 不注入提醒，让 AI 自由执行

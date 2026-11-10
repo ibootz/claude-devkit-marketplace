@@ -568,6 +568,8 @@ The render script prints this exact command when Chromium is missing. `uv` itsel
 
 In the reply, link the PNG as a plain markdown link, `[caption](file:///abs/path/topic.png)`: no leading `!`, no `#` fragment. Claude Code's terminal cannot show images, so `![caption](…)` prints as the plain text `caption (url)` and cannot be clicked; the plain link opens the PNG in the system image viewer. Then link the `.excalidraw` source the same way. Inside a markdown document, `![caption](figures/topic.png)` is right: the document's renderer displays it.
 
+In Codex, write the absolute path as inline code instead, e.g. `` `/tmp/claude-diagrams/topic.png` ``, and the `.excalidraw` source the same way: Codex only makes inline-code paths clickable and renders `[caption](file:///…)` as plain text `caption (path)`.
+
 ---
 
 ## Updating an Existing Diagram

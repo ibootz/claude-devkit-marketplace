@@ -17,7 +17,7 @@ const path = require('path')
 
 const HOOK = path.join(__dirname, '..', 'readable-citations.js')
 
-const PROBE_VARS = ['CLAUDE_CODE_ENTRYPOINT', 'TERM_PROGRAM', 'VSCODE_INJECTION', 'WT_SESSION']
+const PROBE_VARS = ['CLAUDE_CODE_ENTRYPOINT', 'TERM_PROGRAM', 'VSCODE_INJECTION', 'WT_SESSION', 'PLUGIN_ROOT']
 
 // 非 webview 的三个宿主在同一平台上共用一种形态，见 hook 里的 pickInlineForm()。
 const ABS_SCHEME = process.platform === 'win32' ? 'vscode://file/' : 'file:///'

@@ -40,7 +40,7 @@ git push                        # 无 upstream 时 git push -u origin <当前分
 临时分支的价值在隔离，不在远端——合回即完成交付：
 
 1. 在 worktree 里提交（message 同上按仓惯例）。
-2. 回主仓：worktree 会话用 `ExitWorktree {"action":"keep"}`；只是站在 worktree 目录里则直接 `git -C <主仓路径>` 操作。
+2. 回主仓：Claude Code 的 worktree 会话用 `ExitWorktree {"action":"keep"}`；只是站在 worktree 目录里（Codex 一律如此）则直接 `git -C <主仓路径>` 操作。
 3. 主分支落后远端时先 `git -C <主仓> pull --rebase`，再合：
 
    ```bash
@@ -75,6 +75,8 @@ git push                        # 无 upstream 时 git push -u origin <当前分
 2. **push 完成后刷两层缓存**：`claude plugin marketplace update <marketplace>`，再按 `marketplace-cache-sync` 第二、三步刷**该插件的全部安装记录**（user 与各项目目录下的 project/local scope 逐条刷）。只跑不带 `--scope` 的 `claude plugin update <插件名>@<marketplace>` 只刷 user scope，项目级记录照旧钉着老版本，在那些项目里启动的会话加载的仍是旧版。
 
 刷完提示用户：**运行 `/reload-plugins` 刷新当前会话**（skill/hook/agent 热载；仅 SessionStart/SessionEnd/PreCompact 生命周期挂载点变动才需重启会话）。
+
+**在 Codex 里**第 2 步与 `/reload-plugins` 都不适用（`claude plugin` 命令刷的是 Claude Code 的缓存，Codex 没有 `/reload-plugins`）：只做第 1 步升版提交推送，收尾告诉用户新版要在 Codex 里重新安装或更新插件后才生效。
 
 ## 什么时候不触发
 

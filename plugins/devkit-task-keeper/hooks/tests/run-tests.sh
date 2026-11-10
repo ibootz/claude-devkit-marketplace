@@ -192,6 +192,7 @@ source "$TESTS_DIR/cases/23-h28-gitignore-v6.sh"
 source "$TESTS_DIR/cases/24-h29-keeper-generation.sh"
 source "$TESTS_DIR/cases/25-h30-multi-instance.sh"
 source "$TESTS_DIR/cases/26-h31-single-active.sh"
+source "$TESTS_DIR/cases/27-h32-codex-host.sh"
 
 # 【2026-08-26 新增 H31，编号 [183]-[203]】
 #   v8 / 4.6.0「一个事项一个活跃主条目」规则的两个机械面：`keeper_cli.py
@@ -203,6 +204,11 @@ source "$TESTS_DIR/cases/26-h31-single-active.sh"
 #   义务，已归档的 done 源不得误报为不存在）；检出 exit 2）。
 #   看板文案「已解决→已关闭」的断言随 H24 的 [99]/[100]/[102]/[104] 一起改，不
 #   另开一节（同一处代码改动）。
+
+# 【2026-11-10 新增 H32，编号 [205]-[208]】
+#   Codex 宿主下 keeper_routing.py（SessionStart / UserPromptSubmit）、queue_snapshot.py、
+#   chore_snapshot.py 四个注入整段静默；Claude 宿主照常注入；只设 CLAUDE_PLUGIN_ROOT
+#   不算 Codex；board.py --link-style code 出 inline code 路径。成因见 cases/27-h32-codex-host.sh 文件头。
 
 echo
 printf '通过 %d / 失败 %d\n' "$pass" "$fail"
