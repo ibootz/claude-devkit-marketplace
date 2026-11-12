@@ -139,7 +139,7 @@ plugins/devkit-tool/
 
 按顺序取第一个命中的落点：
 
-1. **本轮本来就要写一份 md 文档**（方案、报告、spec、交接）→ PNG 与 `.excalidraw` 放进文档旁的 `figures/`，文档里用相对路径引 PNG。
+1. **本轮本来就要写一份 md 文档**（方案、报告、spec、交接）→ PNG 与 `.excalidraw` 放进文档旁的 `figures/`，文档里用相对路径引 PNG。文档的交付格式是单文件 HTML 时例外：图渲染到临时目录，由 `devkit-tool:tech-doc` 的打包脚本连同 `.excalidraw` 源稿内嵌进 HTML，落点不留 `figures/`，细则见它的 `references/html.md`。
 2. **持久事实，且本轮属于某个已有工作项目录** → 写到 `<工作项目录>/diagrams/<主题>.excalidraw` 与同名 `.png`。工作项目录指本轮任务已经在用的那个目录：`.scratch/<feature>/`、devkit-task-keeper 的条目目录（如 `.keeper/<交付id>/debug/DBG-123/`）、sdlc 交付目录、spec 目录；判据是本轮已经往里面写过文件，或用户点名了它。**不自己 commit**，在回复里说一句「新增了未跟踪文件 `<路径>`」，让它随该工作项的正常提交入库——新建的未跟踪文件不会被 `commit -a` 带走，但会被 `git add -A` 带走，用户得知道它在那。
 3. **其余情况** → 写到系统临时目录下的 `claude-diagrams/<主题>.excalidraw` 与同名 `.png`（macOS / Linux 取 `$TMPDIR`，未设则 `/tmp`；Windows 取 `%TEMP%`）。其中**图是持久事实、但本轮没有工作项目录**的，在回复末尾加一句「这张图值得留作资产，建议放到 `<路径>`，要我挪过去吗」，用户同意后再挪。建议路径优先选项目里已有的文档目录；项目里没有合适目录时，把「新建哪个目录」一并写进这句建议，由用户定——各项目 `docs/` 的布局各有规矩，自建目录可能与之冲突。
 

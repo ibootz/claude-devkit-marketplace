@@ -67,6 +67,7 @@ api[订单服务]:::svc -->|推送任务| mq[消息队列]:::plat
 - **默认**：按 `show-me` 调 `devkit-excalidraw-diagram` 出 Excalidraw 图，`.excalidraw` 与 PNG 放在文档旁的 `figures/` 目录，文档里引 PNG。PNG 在 GitLab / GitHub、Typora、钉钉等在线文档里都能直接显示。【判断】
 - **未安装 `devkit-excalidraw-diagram` 或渲染跑不通**：mermaid 源码写进 md；要发布到不渲染 mermaid 的平台时，先导出 PNG 再引用，源文件 `.mmd` 同放 `figures/`。
 - 一次性给人看、看完即弃的视觉讲解才用 HTML。
+- **文档交付格式是单文件 HTML**（SKILL.md 第零步）时，Excalidraw 图渲染到临时目录、由 `scripts/html_pack.py` 连同源稿内嵌进 HTML；≤5 个方框的简单图可直接手写 `<svg>`；不用 mermaid。细则见 `html.md` 第四节。
 
 ---
 

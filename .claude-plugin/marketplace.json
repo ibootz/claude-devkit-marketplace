@@ -42,7 +42,7 @@
       "source": "./plugins/devkit-tool",
       "category": "Development",
       "description": "工具技能集：submodule 同步推送、提交推送、会话起法与交接、话题可视化、技术文档写法、新事物认知与为我所用等 15 技能",
-      "version": "6.40.0"
+      "version": "6.41.0"
     },
     {
       "name": "devkit-spec",

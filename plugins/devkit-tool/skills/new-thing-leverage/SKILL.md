@@ -29,6 +29,8 @@ when_to_use: |
 └── figures/            81-*、82-* 开头的图
 ```
 
+交付格式沿用 `run-log.md` 里 new-thing-understand 记下的那项；没记的按 md。格式是 HTML 时，81、82 两篇写成正文片段 `81-adopt.html`、`82-join.html`（不写 `.md`），第 5 步重新合成 `<新事物名>.html`，把它们并进去。
+
 `run-log.md` 追加本 skill 的开工与结束时刻。产物不 `git add`、不提交。
 
 ## 第 1 步：接上认知产物
@@ -73,7 +75,8 @@ when_to_use: |
 
 1. 对照 `new-thing-understand` 的 `references/articles.md` 末尾的 Merrill 五原则检查表核对，重点是「问题中心」（方案回到访谈里的进步陈述）与「整合」（落到使用者的系统上）。
 2. 方案与访谈摘要的约束清单逐条对照：每条约束要么被某条路径满足，要么写明哪条路径违反了它。
-3. 告诉使用者：各篇一句话提要、推荐路径、待对齐清单最关键的 3 项、建议的下一步（通常是带着待对齐清单去找对应的人，或用 spec-analyze 进入详细设计）。
+3. 交付格式是 HTML 时，在产物目录里重跑 new-thing-understand「收尾」那条 `html_pack.py assemble` 命令，文件列表在 `70-*.html` 之后追加实际出了的 `81-adopt.html`、`82-join.html`；`80-interview.md` 是过程记录，不进 HTML。
+4. 告诉使用者：交付格式是 HTML 时只给那一个 HTML 文件；各篇一句话提要、推荐路径、待对齐清单最关键的 3 项、建议的下一步（通常是带着待对齐清单去找对应的人，或用 spec-analyze 进入详细设计）。
 
 ## 参考文件
 

@@ -35,10 +35,10 @@
 
 每篇一个 `general-purpose` 子代理，模型取 sonnet；机制篇题材复杂时取 opus。第一批同一条消息并发派出，融会贯通等第一批交回再派。派发 prompt 含四段：
 
-- 【目标】写 `<篇号>-<篇位>.md`，回答分工表里本篇那一行的问题，达到本篇的目标理解层级。
+- 【目标】写 `<篇号>-<篇位>.md`（交付格式是 HTML 时写正文片段 `<篇号>-<篇位>.html`，片段里的 `id` 以篇号开头），回答分工表里本篇那一行的问题，达到本篇的目标理解层级。
 - 【上下文】
   - 必读：`01-fact-base.md` 全文、`00-sources.md` 的冲突清单、本 skill 的 `references/articles.md` 里本篇篇位那一节。
-  - 写作：先调 `devkit-tool:tech-doc`，按它判类型、套骨架、自检。
+  - 写作：先调 `devkit-tool:tech-doc`，按它判类型、套骨架、自检；交付格式是 HTML 时另读它的 `references/html.md` 第三、四、七节（标签写法、配图、片段约定），篇间链接写 `<篇号>-<篇位>.html#id`。
   - 画图：调 `devkit-excalidraw-diagram:excalidraw-diagram` 出图，按事实底稿的图规约配色与命名；渲染后 Read PNG 检查，有缺陷就改；核对 PNG 修改时间晚于本次渲染开始，渲染命令不接 `tail`、`head`；跑不通就原位放文本箭头图、标「待补 Excalidraw 图」与原因。
   - 资料原文的路径，供核对出处时回读。
 - 【约束】
