@@ -1,8 +1,7 @@
 ---
 name: tk-worktree
-description: 从一个源 worktree 派生出**结构完整的聚合仓 worktree**（父仓 + 全部 submodule（子模块）层，含嵌套递归），落点固定 `<source>/.keeper/<交付id>/debug/<id>/worktree/`，并能整体合并回源 worktree 的分支。`git worktree add` 只建父仓工作区、submodule 目录全是空的，本 skill 负责把它们按父仓记录的 gitlink（父仓 index 里那条 `160000` 模式条目，值是子仓某次提交的 40 位 SHA）真正 checkout 出来，并提供状态查询 / 清理 / 回流。核心纪律：linked worktree 里永远走 `git worktree add` 供给、绝不用 `git submodule update --init`；gitlink 一律以**源侧同层 index** 为准。
-when_to_use: |
-  用户或 keeper 说"新 worktree 里 submodule 是空的"、"worktree 里子模块没内容"、"给 worktree 补子模块"、"给这个 issue 开一个带完整子模块的工作区"、"submodule update --init 之后回流失败/not our ref"、"清理 worktree 的子模块工作区"、"把 worktree 里子模块的改动合回源分支"。
+description: "从源 worktree 派生结构完整的聚合仓 worktree（父仓 + 全部嵌套 submodule），按源侧 index 的 gitlink 把子模块 checkout 出来，并提供状态查询、清理、整体合并回源分支。linked worktree 里只用 `git worktree add` 供给，不用 `git submodule update --init`。"
+when_to_use: "用户或 keeper 说「新 worktree 里 submodule 是空的」「给 worktree 补子模块」「给这个 issue 开一个带完整子模块的工作区」「submodule update --init 之后回流失败 / not our ref」「清理 worktree 的子模块工作区」「把 worktree 里子模块的改动合回源分支」。"
 ---
 
 # worktree 的 submodule 供给

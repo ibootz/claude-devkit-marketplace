@@ -1,23 +1,7 @@
 ---
 name: tk-debug
-description: >-
-  Debug 队列工程化处理（主会话侧入口）。把「Human 报 bug → AI 立刻派 subagent 修」
-  改造成「主会话只转发 → debug-keeper agent 独立跑完登记/triage/派发/对账/收尾，
-  自己直接并行派第二层 fixer subagent」的并行流水线。**v7 起一条 issue 一个
-  debug-keeper 实例**，同一档可以并存多个；同轮报来多条 bug 要在同一条消息里并行
-  派多个实例，各管一条，互不干扰。队列落在项目根
-  `.keeper/<交付id>/debug/`（一 issue 一个目录，跨 session 持久；v6 起 issue 文本、
-  receipts 与截图入库，只有 fixer worktree 等四类本机产物排除在外）。**主会话在本流程里只做三件事：截图落盘（如果用户附了图）→ 把原话转给
-  debug-keeper → 立刻回到原任务。** 不做 triage、不写 issue 文件、不派 fixer、
-  不对账，这些全部由 debug-keeper 在独立上下文里完成，避免打断主会话手上的工作。
-  仅适用于 Claude Code。
-when_to_use: |
-  用户报 bug / 缺陷 / 报错 / 白屏 / 崩溃 / 数据不对 / 点了没反应，或说「登记这个
-  问题」「triage 一下」「这条插队」「启用 debug 队列」「这些 bug 一起修」，或在
-  verify 阶段发现 in-scope 缺陷需要排期修复时，必须用这个 skill。**禁止绕过队列
-  直接派 subagent 修 bug**——「收到即派发」正是本机制要消除的行为。项目根还没有
-  `.keeper/<交付id>/debug/` 时也走这里（由首次派出的 debug-keeper 实例负责冷启动
-  初始化）。同轮收到多条 bug 时，一律并行派多个实例，不要塞给同一个实例排队处理。
+description: "Debug 队列主会话侧入口：主会话只把用户原话（附图先落盘）转给 debug-keeper agent，随即回原任务；登记、triage、派 fixer、对账、收尾都由 debug-keeper 完成。一条 issue 一个实例，同轮多条 bug 并行派多个实例。仅适用于 Claude Code。"
+when_to_use: "用户报 bug / 缺陷 / 报错 / 白屏 / 崩溃 / 数据不对 / 点了没反应，或说「登记这个问题」「triage 一下」「这条插队」「启用 debug 队列」「这些 bug 一起修」，或 verify 阶段发现 in-scope 缺陷时必须用；项目根还没有 `.keeper/<交付id>/debug/` 时也走这里。修 bug 一律经队列，不直接派 subagent。"
 ---
 
 # Debug 队列（主会话侧 · 你只做三件事）

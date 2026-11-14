@@ -1,9 +1,7 @@
 ---
 name: cascade-pull
-description: 带 submodule 的 Git 仓库同步拉取——父仓拉最新、子模块 checkout 到位、gitlink 对齐，是 `git pull` 增强版。与 `cascade-push` 配对但作用域相反：**只处理本仓直接声明的一层 submodule，绝不递归嵌套层**。诊断父仓/子模块/远端三方差异后由用户选拉取模式，移动 gitlink 前列新旧提交给用户确认。**仓库无 `.gitmodules` 时自动降级为普通 `git pull`，不询问模式。**
-when_to_use: |
-  用户说"拉一下代码/更新代码/同步仓库"、"pull 完子模块还是旧的/没更新"、"submodule dirty 或 detached HEAD"、"更新/bump submodule 指针"、"把某个 submodule 提升到最新"、"submodule 落后要拉齐"、"更新 gitlink"时使用。
-  **核心判据**：仓库有 `.gitmodules` 且要把父仓与子模块同步到一致。单仓无 submodule（无 `.gitmodules`）时，本 skill 自动降级为普通 `git pull`——当作普通拉取指令直接执行，无需询问拉取模式。嵌套递归拉取（多层子模块一路往里 pull）不是本 skill——本 skill 只处理一层、严禁 `--recursive`；递归推送方向（由内向外提交）才用 `cascade-push`。
+description: "带 submodule 的仓库同步拉取（`git pull` 增强版）：父仓拉最新、子模块 checkout 到位、gitlink 对齐；只处理直接声明的一层，不递归、不用 `--recursive`。移动 gitlink 前列新旧提交给用户确认；无 `.gitmodules` 时直接降级为普通 `git pull`。"
+when_to_use: "用户说「拉一下代码 / 更新代码 / 同步仓库」「pull 完子模块还是旧的」「submodule dirty 或 detached HEAD」「更新 / bump submodule 指针」「把某个 submodule 提升到最新」「submodule 落后要拉齐」「更新 gitlink」时使用。由内向外逐层提交推送走 cascade-push。"
 ---
 
 # 带 submodule 的仓库同步拉取（增强版 pull）

@@ -1,8 +1,7 @@
 ---
 name: tk-chore
-description: 主会话把杂务（台账/沉淀/收尾/外部系统小操作）转交常驻 chore-keeper subagent 托管的最小流程：判断是杂务 → 逐字转发 → 回原任务。登记、分类、攒批执行、外部写打包拍板、归档全部由 chore-keeper 在独立上下文完成，主会话不亲手做杂务。队列落盘 `.keeper/<交付id>/chore/`（v6 起正文与附件入库，只排除 worktree/instance.json/keeper-active/merge.lock 四类本机产物）。仅适用于 Claude Code。
-when_to_use: |
-  用户说"记一下 / 记个账 / 台账加一条"、"这个结论沉淀到文档 / 同步到 wiki"、"回头收尾 / 别忘了清理"、"帮我提个单 / 发个通知（非 bug 类）"，或任何不改核心代码、不修 bug、可以攒着批量做的琐碎事务。**禁止主会话亲手做掉杂务，哪怕它看起来 30 秒就能完**——「顺手做更快」正是本机制要消除的行为：就地做完的杂务只活在本轮上下文里，compact 一次就没了，也没有任何跨 session 的恢复锚点。bug / 报错 / 异常行为不走这里——那是 tk-debug 的 debug-keeper 管的。
+description: "主会话把杂务（台账/沉淀/收尾/外部系统小操作）逐字转交常驻 chore-keeper subagent 托管，随即回原任务；登记、攒批执行、外部写打包拍板、归档都由 chore-keeper 完成。仅适用于 Claude Code。"
+when_to_use: "用户说「记一下 / 记个账 / 台账加一条」「这个结论沉淀到文档 / 同步到 wiki」「回头收尾 / 别忘了清理」「帮我提个单 / 发个通知（非 bug 类）」，或任何不改核心代码、可攒批做的琐碎事务时使用。哪怕 30 秒能做完也转交，主会话不亲手做——就地做完的杂务 compact 后就没了。bug / 报错走 tk-debug。"
 ---
 
 # tk-chore：主会话侧的杂务转交流程

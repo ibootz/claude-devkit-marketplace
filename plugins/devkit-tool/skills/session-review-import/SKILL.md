@@ -1,6 +1,6 @@
 ---
 name: session-review-import
-description: 把别人上传到 NAS 的 Claude Code 会话记录导入本机 claude-devtools（Context 应用）审阅——合并多日增量切片、落位 ~/.claude/projects、子代理进 <sessionId>/subagents/ 子目录。用户说「导入别人的对话记录」「审核 / 审阅他人（上传）的会话」「把 NAS 上的会话弄到 devtools 里看」「wangpengfei / 某人做的需求会话拉下来看看」时使用；也治「devtools 会话列表出现一堆碎条目 / 每条只有 1~4 条消息」「会话不能识别成唯一对话」——那是 agent 文件平铺在项目顶层所致，修法在本 skill。只看本机会话不触发；要分析 sdlc 作用源（技能手册注入 / hook 拦截 / 常驻底座）也不触发，devtools 不解析 attachment 层，走 gen_chat_view 脚本那条路。
+description: "把别人上传到 NAS 的 Claude Code 会话记录导入本机 claude-devtools（Context 应用）审阅——合并多日增量切片、落位 ~/.claude/projects、子代理进 <sessionId>/subagents/。用户说「导入别人的对话记录」「审核 / 审阅他人上传的会话」「把 NAS 上的会话弄到 devtools 里看」「某人做的需求会话拉下来看看」时使用；也治「devtools 会话列表一堆碎条目 / 每条只有 1~4 条消息」「会话不能识别成唯一对话」。只看本机会话、分析 sdlc 作用源（走 gen_chat_view 脚本）不触发。"
 ---
 
 # 导入他人 NAS 会话到 claude-devtools 审阅

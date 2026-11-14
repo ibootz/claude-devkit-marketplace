@@ -72,6 +72,46 @@ hook 的 deny/hint 文案、reference 文档一律作用）；后者管**结构�
 读技能的动作必须是**每个技能一次真实的 `Skill` 工具调用**，不接受「我已了解这些技能的内容」这类
 声明代替。同一会话内已经读过则不必重读。
 
+## 硬约束：每个技能的「description + when_to_use」合计 ≤400 字符
+
+**上限 400 字符，按下面的口径算，超了不许提交。** 新建技能、改 `description` 或 `when_to_use` 都受此约束。
+
+**口径**（Claude Code 2.1.323 二进制的 `QLt` 函数）：有 `when_to_use` 时算
+`description + " - " + when_to_use` 整串的长度，没有时只算 `description`。按 Python `len()` 计，一个汉字算 1。
+
+**为什么**：维护者在全局设置里把 `skillListingMaxDescChars` 设成了 400（默认值是 1536），用来压每轮的技能清单。
+超过 400 的部分会被截掉，末尾换成 `…`，整个过程不报错。
+写在后半段的触发词会因此丢掉，技能就不再被自动调用，而且没有任何提示。
+2026-11-14 实测：本仓 34 个技能里有 14 个超限，全部按本节压到了 400 以内。
+
+**写法**：
+
+- 最能判断「什么时候该用这个技能」的触发词和判据写在最前面；
+- 同义触发词只保留最常见的 2～4 个；
+- 设计依据、实测数据、历史事故、正文里已有的流程，一律不写进 description；
+- 和别的技能的分工只在确实容易混淆时写一句「不用于 X，走 Y」；
+- 值里含 `: ` 时要加引号或改用 `|` 块写法。YAML 解析失败的技能会被静默跳过，不出现在技能清单里。
+
+**检查**（逐条打印长度，有 `OVER` 或 `ERR` 时退出码为 1）：
+
+```bash
+python3 - <<'EOF'
+import glob, re, sys, yaml
+bad = 0
+for p in sorted(glob.glob('plugins/*/skills/**/SKILL.md', recursive=True)):
+    m = re.match(r'---\n(.*?)\n---', open(p, encoding='utf-8').read(), re.S)
+    try: d = yaml.safe_load(m.group(1)) or {}
+    except Exception as e: print('ERR ', p, e); bad += 1; continue
+    s = str(d.get('description') or ''); w = d.get('when_to_use')
+    s = f'{s} - {w}' if w else s
+    if len(s) > 400: print('OVER', len(s), p); bad += 1
+print('不合格', bad); sys.exit(1 if bad else 0)
+EOF
+```
+
+**什么时候不触发**：插件级的 `plugin.json` / `marketplace.json` 的 description 另有上限（80 / 120），
+见 `.claude/rules/project/plugin-description-length.md`。
+
 ## Agent skills
 
 ### Issue tracker

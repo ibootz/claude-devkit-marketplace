@@ -1,6 +1,6 @@
 ---
 name: excalidraw-diagram
-description: "把概念、架构、流程画成 Excalidraw 图：生成 `.excalidraw` JSON（按概念选扇出、汇聚、时间线等视觉模式，技术图嵌真实代码与数据片段），再用 Playwright 渲染成 PNG 回看、迭代修版。用户点名要 Excalidraw 图、`.excalidraw` 文件，或要一张能在 excalidraw.com / Obsidian Excalidraw 里继续拖拽编辑的白板图时使用，如「用 excalidraw 画个架构图」「生成一个 .excalidraw 文件」「出张能拖拽改的白板图」「draw this as an Excalidraw diagram」；改一张已有的 `.excalidraw` 图时也用，如「把刚才那张图里的 X 改成 Y」「图上再加一步」。只说「画个图 / 可视化一下」而没提 Excalidraw 或可编辑白板时，走 devkit-tool:show-me。"
+description: "把概念、架构、流程画成 Excalidraw 图：生成 `.excalidraw` JSON（按概念选扇出、汇聚、时间线等视觉模式），再用 Playwright 渲染成 PNG 回看、迭代修版。用户点名要 Excalidraw 图、`.excalidraw` 文件，或要能在 excalidraw.com / Obsidian 里继续拖拽编辑的白板图时使用，如「用 excalidraw 画个架构图」「生成一个 .excalidraw 文件」「出张能拖拽改的白板图」「draw this as an Excalidraw diagram」；改已有 `.excalidraw` 图（「把那张图里的 X 改成 Y」「图上再加一步」）也用。只说「画个图 / 可视化一下」没提 Excalidraw 时走 devkit-tool:show-me。"
 ---
 
 # Excalidraw Diagram Creator

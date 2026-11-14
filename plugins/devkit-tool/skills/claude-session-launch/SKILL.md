@@ -1,6 +1,6 @@
 ---
 name: claude-session-launch
-description: 再起一个 Claude Code 会话来干活，或把本会话上下文交接给新会话——后台会话用 `claude --allow-dangerously-skip-permissions --bg -n <名字>`（立即返回 8 位短 id，配 agents/attach/logs/stop 四个管理命令；`-n` 就是 `claude agents` 面板里显示的名字），要人盯着看的前台会话用两条 osascript 在 iTerm2 里弹新 tab。用户说「起一个后台会话/后台 agent」「用 cy 开几个窗口」「给新会话起个名字/指定 claude agents 里显示的名字」「起一个走 glm/别的模型或第三方网关的会话」「给新会话指定模型或 settings 配置文件」「并行开几个 claude 跑」「开个新 tab 跑 claude」「让另一个会话去做 X」「怎么看那个后台会话在干什么」「停掉那个后台会话」「claude --bg / claude agents / claude attach / claude logs / claude stop 怎么用」「claude logs 出来一堆乱码转义」「新开的 tab 跑在错的目录里」「pgrep iTerm2 查不到进程」「后台会话改完没合回主分支 / 没推送 / worktree 没清」时使用；要别的会话接手本会话的活时同样用——「开个新会话接着做这个」「交接给新会话」「把上下文传给 X 会话」「handoff 给 X」，交接文档的写法就在本 skill 里。**起会话之前就读**，别等 cwd 落错仓或 logs 刷出满屏 ANSI 才来。只派活给一个**已经存在**的会话、不交上下文时，直接 ListAgents + SendMessage。仅适用于 Claude Code。
+description: "再起一个 Claude Code 会话干活，或把本会话上下文交接给新会话：后台用 `claude --bg -n <名字>`，前台用 osascript 在 iTerm2 弹新 tab。用户说「起一个后台会话 / 后台 agent」「用 cy 开几个窗口」「给新会话起名 / 指定 claude agents 里显示的名字」「起一个走 glm / 第三方网关或指定模型的会话」「并行开几个 claude 跑」「开个新 tab 跑 claude」「交接给新会话 / handoff 给 X」「看 / 停掉那个后台会话」「claude logs 一堆乱码」「新 tab 跑在错的目录」「pgrep iTerm2 查不到进程」「后台会话改完没合回 / 没推送」时使用，起会话之前就读。只给已存在的会话派活走 SendMessage。仅适用于 Claude Code。"
 ---
 
 # 起一个新的 Claude Code 会话

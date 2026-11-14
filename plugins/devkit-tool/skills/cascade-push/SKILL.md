@@ -1,10 +1,7 @@
 ---
 name: cascade-push
-description: 嵌套 git submodule（多层子模块）项目从最内层向外逐层提交推送，链式更新每一层父仓的 gitlink。push 前必出「推送简报」——逐层调查未提交改动（含 untracked）与待推送 commit（每条列 subject + 文件清单 + gitlink 标注），交 Human 批准后才带 --approved 推远端。自带 cascade-push.py：默认只出简报，--apply 才提交，--push --approved 才推送，push 后逐层写后回读远端 SHA。
-when_to_use: |
-  用户说"提交推送 submodule"、"嵌套子模块怎么提交"、"submodule 改了怎么 push 上去"、"多层子模块一层层往外提交"、"submodule 提交顺序"、"gitlink 没更新"、"父仓没记录子模块的改动"、"submodule push 了别人拉不到"、"submodule detached HEAD 怎么提交"、"用 foreach --recursive 提交 submodule 顺序错了"。
-  **也覆盖「推之前先讲清楚要推什么」这类诉求**："push 前给我个清单"、"这次要推哪些 commit"、"本地还有哪些没提交/没推上去的"、"每个提交改了什么给我看看"、"我批准了再推"、"别直接推、先给简报"。
-  **核心触发判据**：当前项目是真正的 git submodule 嵌套结构（有 `.gitmodules`、父仓 index 里有 mode 160000 的 gitlink 条目、子模块各自是独立 git 仓），且本轮要把改动从最内层一路提交推送到最外层。单仓 monorepo（没有 submodule）直接用 `git commit` / `git push` 即可，不需要本 skill。
+description: "嵌套 git submodule 项目从最内层向外逐层提交推送，链式更新各层父仓的 gitlink。push 前必出「推送简报」（逐层未提交改动与待推 commit），Human 批准后才推，推后回读远端 SHA。"
+when_to_use: "用户说「提交推送 submodule」「嵌套子模块怎么提交」「submodule 改了怎么 push」「submodule 提交顺序」「多层子模块一层层往外提交」「gitlink 没更新 / 父仓没记录子模块的改动」「submodule push 了别人拉不到」「submodule detached HEAD 怎么提交」，或要「push 前给我个清单」「这次要推哪些 commit」「本地还有哪些没推上去」「别直接推、先给简报」「我批准了再推」。无 submodule 的单仓直接 git push。"
 ---
 
 # Nested Submodule Commit-Push（嵌套 submodule 由内向外逐层提交推送）

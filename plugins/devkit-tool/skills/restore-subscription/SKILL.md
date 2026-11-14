@@ -1,11 +1,7 @@
 ---
 name: restore-subscription
-description: 把因自定义模型配置（第三方 API 中转 / 本地 LLM）而回不到 Claude 订阅鉴权的会话切回订阅。定位三层污染源（shell 环境变量 / settings 文件的 env 段 / daemon 进程继承），用 `--settings` 空串覆盖起新会话替换旧会话，并自动沿用旧会话的显示名，全程保住对话历史。判据落在 transcript 的实际应答模型上，不信"看起来切过去了"。仅 macOS 实证。
-when_to_use: |
-  用户说"切回订阅"、"不想用 apikey 了"、"改回官方模型"、"会话里改了不生效"、"还是走的第三方"、"base_url 怎么还是旧的"、"/login 了没用"、"提示 Invalid API key"、"提示 Both claude.ai and ANTHROPIC_API_KEY set"、"agent 全在报 429 但我订阅还有额度"、"横幅显示 API Usage Billing 不是我的订阅"、"用了 GLM/DeepSeek/Kimi/本地 LM Studio 之后回不去了"。
-  **核心触发判据**：当前或某些会话正在用非 Anthropic 官方的鉴权（`ANTHROPIC_BASE_URL` 指向第三方、或 `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` 是中转 key），而用户想让它们改用自己的 Claude 订阅账号，且**不想丢失这些会话已有的对话历史**。
-  **另一类触发是诊断性的，不要漏**：用户并没有说"切回订阅"，而是报告一个看起来无关的现象——某几个后台 agent 全部卡在同样的 429 限流、且重置时间逐秒相同；或者新起的会话莫名其妙报 Invalid API key。这类现象的根因常常就是本 skill 处理的污染，先按"症状与判据"一节确诊再说。
-  **不适用**：用户本来就想用第三方模型、只是想换一个 key 或换个中转商（那是改配置，不是切回订阅）；用户问的是订阅额度本身用完了怎么办（那是等窗口重置或升级套餐，本 skill 帮不上）。
+description: "把因第三方 API 中转 / 本地 LLM 配置而回不到 Claude 订阅鉴权的会话切回订阅，保住对话历史：定位 shell 环境变量 / settings env / daemon 继承三层污染，用 `--settings` 覆盖起新会话替换旧会话。仅 macOS 实证。"
+when_to_use: "用户说「切回订阅」「不想用 apikey 了」「改回官方模型」「用了 GLM/DeepSeek/Kimi/LM Studio 后回不去」「还是走的第三方 / base_url 还是旧的」「/login 了没用」「提示 Invalid API key」「Both claude.ai and ANTHROPIC_API_KEY set」「横幅显示 API Usage Billing」；或多个后台 agent 同时 429、重置时间相同而订阅仍有额度。只想换 key / 中转商、订阅额度用完不适用。"
 ---
 
 # Restore Subscription（切回订阅鉴权）

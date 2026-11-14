@@ -42,7 +42,7 @@
       "source": "./plugins/devkit-tool",
       "category": "Development",
       "description": "工具技能集：submodule 同步推送、提交推送、会话起法与交接、话题可视化、技术文档写法、新事物认知与为我所用等 15 技能",
-      "version": "6.41.0"
+      "version": "6.41.1"
     },
     {
       "name": "devkit-spec",
@@ -84,7 +84,7 @@
       "source": "./plugins/devkit-task-keeper",
       "category": "Productivity",
       "description": "多实例 keeper 并行托管 debug/杂务两队列：一 bug 一实例，原子认领 + 合并锁 + 登记前查重、转出互链",
-      "version": "5.2.0"
+      "version": "5.2.1"
     },
     {
       "name": "devkit-style-plain-talk",
@@ -133,7 +133,7 @@
       "source": "./plugins/devkit-worktree-flow",
       "category": "Development",
       "description": "主分支保护 + worktree 隔离边界 - 默认走 worktree，进入后写哪份/怎么退，撞闸怎么自救",
-      "version": "2.2.0"
+      "version": "2.2.1"
     },
     {
       "name": "devkit-cd-blocker",
@@ -168,7 +168,7 @@
       "source": "./plugins/devkit-excalidraw-diagram",
       "category": "Productivity",
       "description": "Excalidraw 图解 - 生成可编辑的 .excalidraw 图，渲染 PNG 回看修版（移植自 coleam00）",
-      "version": "1.6.1"
+      "version": "1.6.2"
     },
     {
       "name": "devkit-ultraverify",
