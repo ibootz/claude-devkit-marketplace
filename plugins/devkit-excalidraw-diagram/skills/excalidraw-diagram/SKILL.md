@@ -370,7 +370,7 @@ Colors encode information, not decoration. Every color choice should come from `
 
 ### Styles
 
-Four styles. One style per diagram, applied to every element; the default is rounded-sans.
+Five styles. One style per diagram, applied to every element; the default is rounded-sans.
 
 | Style | Pick when the user says | `roughness` | prose `fontFamily` | code / JSON evidence `fontFamily` |
 |---|---|---|---|---|
@@ -378,8 +378,16 @@ Four styles. One style per diagram, applied to every element; the default is rou
 | **hand-drawn** | 手绘, 草图, sketch, whiteboard | 1 | 5 (Excalifont) | 3 |
 | **clean** | 干净, 正式, clean, formal, client-facing | 0 | 2 (Helvetica) | 3 |
 | **mono** | 等宽, 等宽圆角, 工程风, monospace, blueprint | 0 | 3 (Cascadia) | 3 |
+| **pastel** | 柔和色块, 浅色色块, 色块卡片, 低饱和, pastel; or hands over a pastel layered-card image as the style sample | 0 | 2 (Helvetica) | 3 |
 
-Everything else is shared: `fillStyle: "solid"`, rounded corners as in `references/element-templates.md`, colors from `color-palette.md`. To switch an existing diagram's style, change `roughness` on every element and `fontFamily` on every text element, then re-render: widths shift between fonts.
+Everything else is shared: `fillStyle: "solid"`, rounded corners as in `references/element-templates.md`, colors from `color-palette.md`. To switch an existing diagram's style, change `roughness` on every element and `fontFamily` on every text element, then re-render: widths shift between fonts. Switching to or from pastel also swaps every color and stroke width, per the rules below.
+
+**pastel** is the one style that changes colors and structure, not just line and font. It is a layered-architecture look: big low-saturation (or white) group zones, each holding smaller cards and gray tag chips.
+- Colors come only from the **Pastel Style** section of `color-palette.md`; the semantic table above it is not used. One zone color per layer or responsibility group.
+- Shapes `strokeWidth: 1`; arrows and connectors `strokeWidth: 2`, `endArrowhead: "triangle"`, `elbowed: true`.
+- Nesting is the point: zones contain cards, cards hold a title line plus a gray description line. Checklist items 9 (no uniform containers), 10 (minimal containers) and 20 (container ratio) do not apply; every other item does.
+- Card text: title `20`, description `16` in the description color; diagram title `28`. Excalidraw has no bold, so the size step carries the title emphasis.
+- Out-of-scope, planned, or external parts: dashed outline (`strokeStyle: "dashed"`) in the palette's out-of-scope colors, and a legend entry for it.
 
 What each style costs, measured on 2026-10-25 by rendering 4 identifier-heavy technical diagrams in every style with this skill's renderer:
 - **clean and rounded-sans:** uppercase `I` and lowercase `l` are the same glyph, so `skuId` reads as `skuld`. On diagrams dense with identifiers (sequence, ER, class, API) where the user named no style, draw the default and mention in the reply that mono avoids this misreading.

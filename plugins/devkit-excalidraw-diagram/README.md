@@ -46,12 +46,13 @@
 | 新增 `references/gallery/`（`README.md` + 70 张 PNG）；`SKILL.md` 设计流程第 4 步与新增的 Reference Gallery 一节指向它 | 1.4.0：69 张各类技术图的样例与画法、瑕疵，画指定类型的图时先查对应条目 | 用户要把这套样例图作为画特定技术图时的参照 |
 | `SKILL.md` Styles 表、Text Rules、Quality Checklist 第 17–18 条；`references/element-templates.md` 全部模板；`references/design-guide.md` 第 4.5、7.1、7.3 条；`references/json-schema.md` 的 `roughness`、`fontFamily` 行 | 1.5.0：默认风格由手绘改为圆体（`roughness: 0` + `fontFamily: 6` Nunito）；手绘降为点名「手绘」「草图」才用 | 2026-10-26 用户拍板默认用圆体柔和风 |
 | `SKILL.md` 新增 Handing the Diagram Over、Updating an Existing Diagram 两节，开头加改图指路，`description` 补改图触发说法 | 1.6.0：回复里 PNG 用普通链接、不加 `!`；同一话题已有图时在原文件上定点改、重渲染到原路径，只有布局整体变化才重画 | 实测 `![图注](file://…png)` 在 Claude Code 终端印成纯文本、点不动；整份重写要重新输出全部 JSON，还会冲掉用户在编辑器里的手改 |
+| `SKILL.md` Styles 表加第五种风格及其规则；`references/color-palette.md` 末尾新增 Pastel Style 色板；`references/design-guide.md` 第 3.4 条注明例外 | 1.7.0：新增「柔和色块」风格（pastel）：低饱和分区底色 + 同色系浅描边、大分区里嵌小卡片、卡片上标题下灰色说明、三角箭头、范围外用虚线框；只有这种风格换色板，容器描边对比度低于 3:1 属有意为之，文字与箭头仍达标 | 2026-11-19 用户要能用 Excalidraw 复刻 nb 组方案文档里的柔和色块分层架构图；色值取自该样板 SVG |
 | `references/pyproject.toml`、`.gitignore`、上游 `README.md` | 未移植 | 依赖已内联进脚本；安装说明并入本文件 |
 
 改配色：编辑 `skills/excalidraw-diagram/references/color-palette.md`，所有图跟着变。
 
 
-## 风格（1.4.0 起四种）
+## 风格（1.7.0 起五种）
 
 默认圆体（1.5.0 起；1.1.0–1.4.0 默认手绘）。用户说出下表的说法时，整张图换成对应风格，一张图只用一种。
 
@@ -61,8 +62,9 @@
 | 手绘 | 「手绘」「草图」 | 手绘抖动 | Excalifont 手写体 | 读起来像草稿 |
 | 干净 | 「干净」「正式」「给客户看」 | 直线 | Helvetica | 大写 I 与小写 l 同形，`skuId` 会读成 `skuld` |
 | 等宽 | 「等宽」「等宽圆角」「工程风」 | 直线 | Cascadia 等宽 | 标识符不会认错；中文字距偏大，O 与 0 难分，`->` 显示成 → |
+| 柔和色块 | 「柔和色块」「浅色色块」「色块卡片」「低饱和」「pastel」，或给一张柔和色块分层图当样板 | 直线 | Helvetica | 改的不只是线条和字体：换用专属浅色色板，容器描边很浅（对比度约 1.5～1.9:1），靠底色和标题区分分区；没有粗体，卡片标题只能靠大一号字号突出，说明文字最小 16 |
 
-四种风格都是圆角框、实心填充、同一套配色；代码与 JSON 片段在任何风格下都用等宽字体。
+前四种风格都是圆角框、实心填充、同一套配色，柔和色块用自己的色板；代码与 JSON 片段在任何风格下都用等宽字体。
 
 
 ## 参考图库（1.4.0 起）

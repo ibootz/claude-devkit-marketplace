@@ -4,6 +4,8 @@
 
 Every hex below is a swatch in Excalidraw's own color picker (open-color shades from `packages/common/src/colors.ts`), so a user who opens the file and edits it by hand picks from the same colors. Contrast was checked against WCAG on 2026-10-24: every stroke is ≥ 3:1 against the white canvas, and `#1e1e1e` text is ≥ 9.9:1 on every fill. A replacement color must pass the same two checks (see `design-guide.md` §3).
 
+The **Pastel Style** section at the end is the one exception to both claims: its hexes are not picker swatches, and its container strokes are below 3:1. It applies only when SKILL.md Styles picks `pastel`; every other style uses the tables before it.
+
 ---
 
 ## Shape Colors (Semantic)
@@ -71,3 +73,28 @@ Used for code snippets, data examples, and other concrete evidence inside techni
 | Property | Value |
 |----------|-------|
 | Canvas background | `#ffffff` |
+
+---
+
+## Pastel Style (only when Styles picks `pastel`)
+
+Low-saturation fills with a same-hue, slightly darker stroke. Replaces every table above for that diagram. Users editing by hand enter these through the picker's hex field.
+
+| Role | Fill | Stroke |
+|------|------|--------|
+| Zone / card: green | `#eaf4ef` | `#bbd6c7` |
+| Zone / card: blue-gray | `#f2f5fb` | `#c5d2e5` |
+| Zone / card: violet | `#f1ecfb` | `#c3b3e6` |
+| Zone / card: amber | `#fff4e0` | `#e0bf7f` |
+| Zone / card: white (outer frame, neutral zone) | `#ffffff` | `#c5d2e5` |
+| Tag chip (small label block) | `#f6f7f9` | `#c9ced6` |
+| Out-of-scope / planned (dashed) | `#ffffff` | `#c5d2e5` |
+
+| Element | Color |
+|---------|-------|
+| Titles (diagram, zone, card) | `#1e1e1e` |
+| Description line under a card title | `#53647c` |
+| Arrows and connectors | `#718096` |
+| Canvas background | `#ffffff` |
+
+Contrast, computed 2026-11-19 with the WCAG formula: `#1e1e1e` ≥ 14.4:1 and `#53647c` ≥ 5.2:1 on every fill; arrows `#718096` 4.0:1 on white. Container strokes are 1.5–1.9:1 by design: the zone is read from its fill and its title text, not its outline, so keep a title inside every zone and card.
