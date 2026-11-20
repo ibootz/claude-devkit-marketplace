@@ -568,6 +568,19 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 4.16.0 写文档的图先调 show-me：每轮注入收紧、write-guard 加 mermaid 提醒
+
+**起因**：用户 2026-11-20 反馈 AI 又开始用 mermaid 画图、不走 Excalidraw，怀疑是前一阵压缩注入导致遵循度下降。查证结论是**不成立**：「画图」一节自 4.3.x（2026-10-24，559aba6）后未改，11-14 的 description 压缩只删措辞、11-16 的 4.15.0 未碰画图。实际情况：10-25 之后写入 ```mermaid 的 Write/Edit 共 17 次，11-17～19 的 11 次集中在 3 个写文档的会话，三个会话都**没调过** `devkit-tool:show-me` 或 `devkit-excalidraw-diagram`，其中两个调过 `tech-doc`——tech-doc 第四步只写「载体与落点按 show-me 定」，是指路不是指令；本节注入又有两句放行 mermaid：「md 文档的图直接画进那份文档」「没命中上面几条也想用 mermaid 时，同样写进 md 文件」。
+
+**改了什么**：
+- 每轮注入「画图」：改为「写进 md 文档的图同样先调 `devkit-tool:show-me`」；mermaid 只在 show-me 判定走退路时才写。
+- `write-guard` 新增检查三：md 文件本次写入的新文本含 ```mermaid、且 transcript 里没有 skill 名含 `show-me` / `excalidraw` 的 Skill 调用时提醒一次（同会话同文件去重，键加 `mermaid:` 前缀）。skills / references / `.claude/` 下的规约 md、读不到 transcript 时放行。用户当轮拍板选了「提示词 + hook」方案（Q1 c）。
+- 同批 devkit-tool 6.41.2：tech-doc 第四步改为「动笔画第一张图前先调 show-me」，自检加一条「每张图都调过 show-me，含 mermaid 时写明退路原因」。
+
+**回归**：`test/guard-verify.js` 新增 13 条（Write / Edit 新文本、调过 show-me / excalidraw、无 / 读不到 transcript、规约目录、非 md、只提到 mermaid 一词、去重键互不吞），全套 202/202。
+
+**观察**：两周后（2026-12-04）按本节的统计口径重扫，看 mermaid 写入是否回落、提醒后是否转去调 show-me；提醒后仍原样保留 mermaid 占多数就删掉检查三。
+
 ### 4.15.0 命令自己跑：弹浏览器的登录也由 AI 起，交出须附报错原文
 
 **起因**：用户 2026-11-16 反馈 AI 抛 `! <命令>` 让他自己跑太频繁。扫 2026-10-24 ～ 11-14 本机主会话，AI 正文给出 `! <命令>` 31 处，14 处是 `tccli auth login`、`dws auth login`、`cred login` 一类登录与凭据导入；其余多是 `claude update`、`killall OneDrive` 这种问一句就能自己跑的。根因是旧闭集第 3 项「要用户本人的身份：交互式登录，建议他敲 `! <命令>`」，加上系统提示同样措辞，把「要人点授权」读成了「要人敲命令」。

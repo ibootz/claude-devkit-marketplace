@@ -80,6 +80,19 @@
 // 放行：basename 不是 claude.md / 不在当前项目树内 / 项目内路径以 `.claude/rules/`
 //       开头 / 路径命中依赖·产物模式 / 行数 <= 200
 //
+// 【检查三：md 里新写了 mermaid 图，而本会话没调过画图技能（4.16.0）】
+// 2026-11-17～19 实测：3 个写文档的会话共 11 次把 ```mermaid 写进 md，事前都没调
+// devkit-tool:show-me 或 devkit-excalidraw-diagram——tech-doc 第四步只「指向」show-me、
+// 不要求调用，模型读完 tech-doc 就直接写 mermaid。show-me 才是判「出 Excalidraw 还是
+// 走 mermaid 退路」的地方，没调它写下的 mermaid 都是跳过了这一步。
+// 判据：扩展名 .md/.markdown + 本次写入的**新文本**（Write 的 content、Edit 的 new_string）
+//   含 ```mermaid + transcript 里没有 skill 名含 show-me / excalidraw 的 Skill 调用。
+//   只看新文本：改一份早就有 mermaid 的文档的别处不该提醒。
+// 放行：skills / references 目录与 .claude/ 下的 md（讲 mermaid 写法的规约文本本身）、
+//   payload 没有 transcript_path 或读不到（无法判断就不提醒——这条是提醒不是硬约束，
+//   宁可漏一次也不在基础设施异常时乱报）。
+// 同一会话同一文件只提醒一次，与检查一、二共用去重表（键加 `mermaid:` 前缀，互不吞）。
+//
 // 【行数计数：3.6.0 修掉 +1 偏移】
 // 旧实现 content.split('\n').length 在文件以换行结尾时（POSIX 文本文件常态）多算
 // 一行。审计两组实测：wc -l 得 12436、guard 报 12437；wc -l 得 685、guard 报 686；
@@ -153,6 +166,13 @@ const GENERATED_PATH_PATTERN =
 
 // 生成物命名约定：foo.min.js / foo.generated.ts / foo.g.dart / foo.bundle.js / foo_pb2.py
 const GENERATED_NAME_PATTERN = /(\.min\.|\.generated\.|\.g\.|\.bundle\.|_pb2?\.|\.pb\.)/
+
+// 检查三：md 扩展名、mermaid 围栏、放行目录、画图技能的 Skill 调用（transcript 是 jsonl，
+// tool_use 序列化为 "name":"Skill","input":{"skill":"<名>"，按 skill 名子串判即可）
+const MD_EXTENSIONS = new Set(['.md', '.markdown'])
+const MERMAID_FENCE = /(^|\n)\s*(```|~~~)\s*mermaid\b/
+const MERMAID_EXEMPT_PATH = /(^|\/)(skills|references|\.claude)\//
+const DRAWING_SKILL_CALL = /"skill"\s*:\s*"[^"]*(show-me|excalidraw)[^"]*"/
 
 // `.claude/rules/` 下的 md 不受 CLAUDE.md 行数约束（拆分后的细节页天然可以长）。
 // 只匹配**项目内相对路径的开头**——不是"路径任意位置包含"，后者是绕过点（见文件头）。
@@ -258,6 +278,47 @@ function claimReminder(sessionId, absPath) {
   }
 }
 
+// 本次写入的新文本：Write 取 content，Edit 取 new_string，其余（MultiEdit 等）拼各段 new_string
+function writtenText(toolInput) {
+  if (!toolInput) return ''
+  if (typeof toolInput.content === 'string') return toolInput.content
+  if (typeof toolInput.new_string === 'string') return toolInput.new_string
+  if (Array.isArray(toolInput.edits)) {
+    return toolInput.edits.map((e) => (e && typeof e.new_string === 'string' ? e.new_string : '')).join('\n')
+  }
+  return ''
+}
+
+// 返回 true = 本会话调过画图技能；读不到 transcript 返回 null（调用方按「不提醒」处理）
+function calledDrawingSkill(transcriptPath) {
+  if (typeof transcriptPath !== 'string' || !transcriptPath) return null
+  try {
+    return DRAWING_SKILL_CALL.test(fs.readFileSync(transcriptPath, 'utf8'))
+  } catch (_) {
+    return null
+  }
+}
+
+function checkMermaid(payload, filePath, posixPath, ext, cwd) {
+  if (!MD_EXTENSIONS.has(ext)) return
+  if (MERMAID_EXEMPT_PATH.test(posixPath)) return
+  if (!MERMAID_FENCE.test(writtenText(payload.tool_input))) return
+  if (calledDrawingSkill(payload.transcript_path) !== false) return
+
+  const absPath = path.resolve(cwd, filePath)
+  if (!claimReminder(payload.session_id, `mermaid:${absPath}`)) return
+
+  const relPath = path.relative(cwd, filePath) || filePath
+  process.stderr.write(
+    `[L1-BLOCKER] file=${relPath} check=write-guard ` +
+      `finding="md 里写了 mermaid 图，本会话还没调过 devkit-tool:show-me" ` +
+      `hint="现在调 devkit-tool:show-me，按它选图：装了 devkit-excalidraw-diagram 就出 Excalidraw PNG 放进文档旁 figures/，` +
+      `再把这段 mermaid 换成图片引用；show-me 判定走 mermaid 退路、或项目规约另定了画法（如手绘 SVG）时，照那边做并在回复里一句话说明原因。` +
+      `未装 devkit-tool 时忽略本条"\n`
+  )
+  process.exit(2)
+}
+
 function isGenerated(posixPath, basename) {
   return GENERATED_PATH_PATTERN.test(posixPath) || GENERATED_NAME_PATTERN.test(basename)
 }
@@ -288,8 +349,11 @@ function main() {
   const posixPath = toPosix(filePath)
   const cwd = payload.cwd || process.cwd()
 
-  // 依赖 / 产物 / 生成物：两条检查都不适用
+  // 依赖 / 产物 / 生成物：三条检查都不适用
   if (isGenerated(posixPath, basename)) process.exit(0)
+
+  // 检查三命中即 exit(2)；不命中继续往下走行数检查
+  checkMermaid(payload, filePath, posixPath, ext, cwd)
 
   const isSource = SOURCE_EXTENSIONS.has(ext)
 

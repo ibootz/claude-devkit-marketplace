@@ -42,7 +42,7 @@
       "source": "./plugins/devkit-tool",
       "category": "Development",
       "description": "工具技能集：submodule 同步推送、提交推送、会话起法与交接、话题可视化、技术文档写法、新事物认知与为我所用等 15 技能",
-      "version": "6.41.1"
+      "version": "6.41.2"
     },
     {
       "name": "devkit-spec",
@@ -63,7 +63,7 @@
       "source": "./plugins/devkit-discipline",
       "category": "Productivity",
       "description": "AI 工作纪律 - 语义规则分三层注入 + 3 道硬拦 1 道事后提醒 + 回合末出处审查，附中文消歧 skill",
-      "version": "4.15.0"
+      "version": "4.16.0"
     },
     {
       "name": "devkit-agent-browser",

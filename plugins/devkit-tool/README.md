@@ -14,6 +14,12 @@
 
 ---
 
+## 6.41.2：tech-doc 画图前先调 show-me
+
+2026-11-17～19 有 3 个写文档的会话把 mermaid 直接写进 md，事前都没调 show-me。原因之一是 tech-doc 第四步只写「图的载体与落点按 show-me 定」，读起来像参考而不是动作。现在改成「动笔画第一张图前先调 `devkit-tool:show-me`」，mermaid 只在 show-me 判定走退路时才写；自检加一条对应检查。同批 devkit-discipline 4.16.0 收紧每轮注入、给 write-guard 加了 mermaid 提醒，起因与统计见那边 README 的 4.16.0 一节。
+
+---
+
 ## 6.38.0：新增 new-thing-understand、new-thing-leverage；子代理可以自己出 Excalidraw 图
 
 **一句话：** 新增两个通用 skill。`new-thing-understand` 帮使用者看懂一个对他来说是新的东西（技术、理论、系统、组织内部的新业务等），产出导读、本质、机制、坐标、融会贯通几篇文章并以一次检验检查点收尾；`new-thing-leverage` 先做萃取访谈，再出纳入、融入两类方案文章，把新事物和使用者自己的系统接起来。

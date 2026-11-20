@@ -521,7 +521,7 @@ const SECTION_DRAW_TURN = [
   '- 讲方案或改动时结构有变化：改前、改后各一张；',
   '- 用户就同一话题第二次表示没看懂（「还是不懂」「还是没看到…啥意思」「把我当新手 / 半道接手的讲」都算）。',
   '',
-  '回复里的图链接放在全景块末尾，没有全景块时放在首行之后；md 文档的图直接画进那份文档。**回复正文里不出现 mermaid 代码块**：终端不渲染 mermaid，读者只看到一堆源码；没命中上面几条也想用 mermaid 时，同样写进 md 文件、正文给链接。未装 devkit-tool 时把 mermaid 源码写进临时目录 `claude-diagrams/<主题>.md`，正文给链接。',
+  '回复里的图链接放在全景块末尾，没有全景块时放在首行之后；写进 md 文档的图同样先调 `devkit-tool:show-me`，按它的选图与落点画进那份文档。**回复正文里不出现 mermaid 代码块**：终端不渲染 mermaid，读者只看到一堆源码；mermaid 只在 show-me 判定走退路时才写，写进 md 文件、正文给链接。未装 devkit-tool 时把 mermaid 源码写进临时目录 `claude-diagrams/<主题>.md`，正文给链接。',
 ].join('\n')
 
 const SECTION_CONTEXT = [
@@ -824,7 +824,7 @@ const SECTION_HOOK_ENFORCED = [
   '',
   '- **`Bash`**（`bash-guard.js`）：只查 `agent-browser` 启动类子命令的登录态与活动实例数（≥4 先 `close`）。裸 `cd` 另由 `devkit-cd-blocker` 硬拦：用 `(cd /abs/path && cmd)` / `git -C <path>` / 全绝对路径',
   HOOK_ENFORCED_AGENT_BULLET,
-  '- **`Write` / `Edit`**（`write-guard.js`）：源码 >1000 行、项目内 `CLAUDE.md` >200 行给提示，同一会话同一文件只提醒一次；挂 `PostToolUse`，**触发时已写完**、不回滚——动笔前就判断该不该拆',
+  '- **`Write` / `Edit`**（`write-guard.js`）：源码 >1000 行、项目内 `CLAUDE.md` >200 行、md 里新写 mermaid 而本会话没调过 `devkit-tool:show-me` 时给提示，同一会话同一文件只提醒一次；挂 `PostToolUse`，**触发时已写完**、不回滚——动笔前就判断该不该拆',
   '',
   '三道闸的完整判据、已实测的误杀面与自解除方式见 ' + REF_GUARDS + '。',
 ].join('\n')

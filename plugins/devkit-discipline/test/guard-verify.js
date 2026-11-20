@@ -317,6 +317,41 @@ writeS('去重: 条目值不是时间戳时照常提醒', 'sess-val', F.over1000
   check('去重: 7 天内的状态文件保留', true, fs.existsSync(fresh))
 }
 
+// ── write-guard / 检查三：md 里写 mermaid 而本会话没调画图技能（4.16.0）──────
+{
+  const MD = put(path.join(PROJECT, 'docs/design.md'), '# x\n')
+  const SKILL_REF = put(path.join(PROJECT, 'plugins/p/skills/s/references/figures.md'), '# x\n')
+  const trNoDraw = path.join(FIXTURE_ROOT, 'tr-nodraw.jsonl')
+  fs.writeFileSync(trNoDraw, JSON.stringify({ type: 'assistant', message: { content: [
+    { type: 'tool_use', name: 'Skill', input: { skill: 'devkit-tool:tech-doc' } }] } }) + '\n')
+  const trDraw = path.join(FIXTURE_ROOT, 'tr-draw.jsonl')
+  fs.writeFileSync(trDraw, JSON.stringify({ type: 'assistant', message: { content: [
+    { type: 'tool_use', name: 'Skill', input: { skill: 'devkit-tool:show-me' } }] } }) + '\n')
+  const trExc = path.join(FIXTURE_ROOT, 'tr-exc.jsonl')
+  fs.writeFileSync(trExc, JSON.stringify({ type: 'assistant', message: { content: [
+    { type: 'tool_use', name: 'Skill', input: { skill: 'devkit-excalidraw-diagram:excalidraw-diagram' } }] } }) + '\n')
+  const MER = '## 流程\n\n```mermaid\nsequenceDiagram\nA->>B: x\n```\n'
+  const mm = (label, sess, tool, file, input, tr, expect) => {
+    const r = run(WRITE_GUARD, { tool_name: tool, tool_input: { file_path: file, ...input },
+      cwd: PROJECT, session_id: sess, transcript_path: tr }, WG_ENV)
+    check(label, expect, r.code, r.err)
+    return r
+  }
+  const r1 = mm('mermaid: Write 新写 mermaid、未调画图技能 → 提醒', 'mm-1', 'Write', MD, { content: MER }, trNoDraw, BLOCK)
+  check('mermaid: 提醒文案点名 show-me', true, /show-me/.test(r1.err), r1.err)
+  mm('mermaid: 同会话同文件第二次不提醒', 'mm-1', 'Write', MD, { content: MER }, trNoDraw, PASS)
+  mm('mermaid: Edit 的 new_string 含 mermaid → 提醒', 'mm-2', 'Edit', MD, { old_string: 'a', new_string: MER }, trNoDraw, BLOCK)
+  mm('mermaid: Edit 新文本不含 mermaid → 放行', 'mm-3', 'Edit', MD, { old_string: 'a', new_string: '普通段落' }, trNoDraw, PASS)
+  mm('mermaid: 调过 show-me → 放行', 'mm-4', 'Write', MD, { content: MER }, trDraw, PASS)
+  mm('mermaid: 调过 excalidraw-diagram → 放行', 'mm-5', 'Write', MD, { content: MER }, trExc, PASS)
+  mm('mermaid: 无 transcript_path → 放行', 'mm-6', 'Write', MD, { content: MER }, undefined, PASS)
+  mm('mermaid: transcript 读不到 → 放行', 'mm-7', 'Write', MD, { content: MER }, path.join(FIXTURE_ROOT, 'nope.jsonl'), PASS)
+  mm('mermaid: skills/references 下的规约 md → 放行', 'mm-8', 'Write', SKILL_REF, { content: MER }, trNoDraw, PASS)
+  mm('mermaid: 非 md 文件 → 放行', 'mm-9', 'Write', put(path.join(PROJECT, 'docs/a.txt'), ''), { content: MER }, trNoDraw, PASS)
+  mm('mermaid: 正文只提到 mermaid 一词、无围栏 → 放行', 'mm-10', 'Write', MD, { content: '回复里不写 mermaid 代码块' }, trNoDraw, PASS)
+  mm('mermaid: 去重键与行数检查互不吞（同文件先 mermaid 后仍可提醒别的检查）', 'mm-1', 'Write', F.over1000, {}, trNoDraw, BLOCK)
+}
+
 // ── 派发账本（dispatch-ledger.js，3.12.0 新增）────────────────────────
 //
 // 它是纯注入 hook，失败是静默的——没有断言就没人发现它已经不数数了。
