@@ -1,16 +1,16 @@
 ---
 name: marketplace-cache-sync
-description: "拉取已配置插件市场(marketplace)最新代码，刷新全部已安装插件（含 user 与 project/local scope、启用与未启用）的本地缓存，并回收缓存磁盘占用；先探测，只刷有变化的。仅适用于 Claude Code。"
-when_to_use: "用户说「更新插件市场」「刷新插件缓存」「插件新版本 / skill 改了没生效」「marketplace update 太慢」「reload-plugins 够不够还是要重启 / reload 完 hook 还是旧的」「project scope 的插件没跟着更新」「清理插件缓存 / cache 目录太大 / 历史版本缓存能删吗」时使用。主动触发：本轮写过 `<marketplace 仓>/plugins/**` 并已推送，收尾时就刷。"
+description: "拉取插件市场最新代码，刷新全部已安装插件（含 user 与 project/local scope、启用与未启用）的本地缓存，回收缓存占用，并检查/升级 dws CLI；先探测，只动有变化的。市场与缓存部分仅适用于 Claude Code，dws 升级通用。"
+when_to_use: "用户说「更新插件市场」「刷新插件缓存」「插件新版本 / skill 改了没生效」「marketplace update 太慢」「reload-plugins 够不够还是要重启」「project scope 的插件没跟着更新」「清理插件缓存 / cache 太大 / 历史版本能删吗」「升级 dws / dws 有新版本」时使用。主动触发：本轮写过 `<marketplace 仓>/plugins/**` 并已推送，收尾时就刷。"
 ---
 
 # Marketplace Cache Sync（插件市场与插件缓存刷新）
 
-> **Codex 下不适用**：刷的是 Claude Code 的插件市场与插件缓存（`claude plugin ...`、`/reload-plugins`），Codex 的插件缓存不归这套命令管。在 Codex 里改完插件，按 Codex 自己的插件安装 / 更新方式重新装一次。
+> **Codex 下不适用（市场与缓存部分）**：前五步刷的是 Claude Code 的插件市场与插件缓存（`claude plugin ...`、`/reload-plugins`），Codex 的插件缓存不归这套命令管。在 Codex 里改完插件，按 Codex 自己的插件安装 / 更新方式重新装一次。第六步的 dws 升级与宿主无关，Codex 下照常可以跑。
 
-把"更新插件市场"这件事拆成两层动作依次执行，**先用本地/并发探测算出「哪几个真的需要动」，再只对那几个调 CLI**，并在核实每一层是否真的生效时避开已知的误判坑。
+前五步把"更新插件市场"这件事拆成两层动作依次执行，**先用本地/并发探测算出「哪几个真的需要动」，再只对那几个调 CLI**，并在核实每一层是否真的生效时避开已知的误判坑。第六步是一节独立的 dws CLI 升级，可以单独跑，不影响前五步的顺序与判据。
 
-**验证基础**：本 skill 经过多次真实全量执行，覆盖两层模型（marketplace 源 vs 已安装插件缓存）、探测优先的执行顺序、project/local scope 按 (id, projectPath) 逐条刷新、缓存清理白名单差集算法。各结论数字与坑的完整复现证据（日期 / CLI 版本 / 秒数 / 复现过程）见 `references/verification-log.md`。
+**验证基础**：本 skill 经过多次真实全量执行，覆盖两层模型（marketplace 源 vs 已安装插件缓存）、探测优先的执行顺序、project/local scope 按 (id, projectPath) 逐条刷新、缓存清理白名单差集算法。各结论数字与坑的完整复现证据（日期 / CLI 版本 / 秒数 / 复现过程）见 `references/verification-log.md`；dws 升级的判据与 2026-11-16 实测见同文件「dws CLI 升级」。
 
 ## 背景：两层状态，容易只做一半
 
@@ -265,6 +265,39 @@ python3 "$PROBE" --stage cleanup --apply   # 真删
 
 剔掉不累积：那个目录下次 sync 时仍在差集里，那时进程已退出或已 reload，会被正常收走。
 
+### 第六步：升级 dws CLI（可选，独立于前五步）
+
+dws 是钉钉 Workspace CLI，和 Claude Code 的插件市场/缓存无关。把它放进本 skill，只是因为两者经常在同一次「把本机工具刷新到最新」里一起做；只升级 dws 时只跑这一节，不要跑前五步。
+
+脚本 `scripts/upgrade-dws.py` **默认只检查**，`--apply` 才真正升级：
+
+```bash
+# 脚本路径与前五步的 PROBE 同一取法
+DWSUP="$(jq -r '.plugins | to_entries[] | select(.key | startswith("devkit-tool@")) | .value[0].installPath' ~/.claude/plugins/installed_plugins.json | head -1)/skills/marketplace-cache-sync/scripts/upgrade-dws.py"
+ls -l "$DWSUP"   # 必须存在再往下走
+
+python3 "$DWSUP"            # 只检查：当前版本、最新版本、是否可升级
+python3 "$DWSUP" --apply    # 有新版本才升级；已是最新则跳过
+```
+
+它按三步走，每步都回读：
+
+1. `dws version --format json` 取当前版本，同时取 `version_check` 里的缓存结论（`status` / `latest` / `checked_at`）。
+2. `dws upgrade --check --format json` 取 `needs_upgrade` / `latest_version`。这一步会查 npm registry，本机实测偶发 `TLS handshake timeout`（同机 `curl` 同一 URL 返回 200），所以脚本失败后重试一次；仍失败就回落到第 1 步的缓存，并在输出里标「缓存，可能过期」。缓存说可升级时继续；缓存说已是最新（`up_to_date`）时只打印「缓存显示已是最新，但本次没有实时确认」并 exit 1，不升级、也不把缓存当成实时结论。缓存里没有可用结论才按检查失败报错。
+3. `--apply` 时跑 `dws upgrade --version <latest> -y`，升级后再跑一次 `dws version --format json` 核实版本；回读对不上就 exit 1，不只看升级回执。脚本会过滤升级输出里的下载进度条，只留备份 / 校验 / 替换 / 完成这些行。
+
+**npm registry 不可达时显式换源**（第三方镜像，确认可用再用）：
+
+```bash
+python3 "$DWSUP" --apply --registry https://registry.npmmirror.com
+```
+
+**dws 未安装时脚本打印「未找到 dws」并 exit 0**：这一节跳过即可，不要当成整体失败。
+
+**升级的副作用**：`dws upgrade` 会按新版本官方清单**全量覆盖**预制 skill（本机实测装到 6 个位置，含 `~/.agents/skills/dingtalk-*` 与 `~/.claude/skills/` 下的软链）。同名旧 skill 会先备份到 `~/.dws/skill-backups/<时间戳>/`；要回滚用 `dws upgrade --rollback -y`。二进制下一条命令就生效；官方 skill 文件随升级更新，宿主没有自动重载时用 `/reload-plugins` 或新会话。
+
+完成判据：`--apply` 后脚本打印「✓ 回读核实：<旧版本> -> <新版本>」并 exit 0；只检查时打印当前版本与最新版本，且不改动 dws 二进制与 skill。
+
 ## 已验证的坑
 
 每条只列**现象 → 处置方向**；完整复现过程（具体插件版本、抽样数量、回执原文等）见 `references/verification-log.md`「已验证的坑 · 完整证据表」。
@@ -297,6 +330,8 @@ python3 "$PROBE" --stage cleanup --apply   # 真删
 | `marketplace update` / `add` 报 `Git clone timed out after 120s` | 默认超时不够，与网络无关——重试不加变量没用。照报错提示带 `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=300000` 重跑（实测两仓各 3m45s / 3m08s） |
 | `marketplace update` 报 `could not open '…<name>..clone/.git/objects/pack/tmp_pack_*'` 或 `fetch-pack: invalid index-pack output` | **与超时无关**——重试即过，实测重试那次耗时低于 120s 默认值，加超时变量是碰巧。疑似多会话并发 clone 同一路径互踩，成因未确认。失败不留 `..clone` 残留，直接重跑 |
 | 第五步清理后某个会话每次工具调用都报 hook 错 | 删掉了那个会话**正在加载**的版本目录——hook 路径在会话启动时已固化成带版本号的绝对路径，进程不会因配置改动重解析。`--stage cleanup` 已按 `.in_use/<pid>` 存活进程与刷新前快照两条判据自动保留；手工删除时也先查 `.in_use/`，见第五步 (b)「必须剔除的那一项」 |
+| dws 升级检查报 `TLS handshake timeout`，但同机 `curl` 同一 URL 返回 200 | 本机实测偶发，重试即过；脚本失败后重试一次并回落到 `dws version` 缓存。仍失败时显式换源 `--registry https://registry.npmmirror.com`，见第六步 |
+| `dws upgrade` 覆盖了预制 `dingtalk-*` skill | 升级前按官方清单全量覆盖，同名旧 skill 备份在 `~/.dws/skill-backups/<时间戳>/`；回滚 `dws upgrade --rollback -y`，见第六步 |
 
 ## 验证清单
 
@@ -316,3 +351,6 @@ python3 "$PROBE" --stage cleanup --apply   # 真删
 - [ ] 若执行了第五步清理：确认在第三步刷新**之后**做的；`temp_git_*` 交给 `--stage cleanup` 收（零引用且两小时内无改动）；历史版本走的是 `--stage cleanup`（路径规范化后的白名单差集，不是 `jq` + `find` + `comm` 文字比对）；反向检查为空、「未引用」数远小于「磁盘」数；已 `--apply` 并报告释放体积（用户明确要求保留回滚版本时除外）；仍有存活进程在用（`.in_use/<pid>`）或刷新前快照仍引用的版本在输出里标为「保留」
 - [ ] 已明确告知用户让新版本生效的**最小动作**：默认建议 `/reload-plugins`；仅当新版本改动了 `SessionStart` / `SessionEnd` / `PreCompact` 挂载点时才说”必须重启”（判断依据是**同时查两处**：`plugin.json` 的 `hooks` 字段 + `hooks/` 目录下的脚本文件名约定，见第四步检测命令；只查 `plugin.json` 会漏掉目录式 hook，误判”无需重启”）
 - [ ] 生效后的核实看的是**行为**（下一轮 hook 注入文本 / skill 内容确实变了），不是 reload 回执里的插件数量
+- [ ] dws 一节默认先检查；只有用户要求升级或完整刷新时才加 `--apply`。`--apply` 后脚本回读了 `dws version --format json`，版本对不上会 exit 1——没有只信升级回执
+- [ ] dws 检查失败时区分了「实时检查失败」与「缓存结论」：缓存说可升级时回落并标缓存时间 / 可能过期；缓存说已是最新时只报告「未实时确认」并 exit 1，没有把失败当成已是最新
+- [ ] dws 未安装时按跳过处理（脚本 exit 0），没有把第六步的缺席判成整体失败；报告里说明了升级会覆盖预制 `dingtalk-*` skill、备份在 `~/.dws/skill-backups/`，需要时给出 `dws upgrade --rollback -y`

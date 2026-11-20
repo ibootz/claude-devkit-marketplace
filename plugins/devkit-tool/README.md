@@ -1,6 +1,6 @@
 # DevKit-Tool
 
-**版本**: 6.38.0
+**版本**: 6.42.0
 **作者**: zhangq
 **许可证**: MIT
 
@@ -11,6 +11,19 @@
 ## 会话级注入：跨会话通信规则（6.25.0）
 
 `hooks/session-start.js`（SessionStart，matcher `*`）注入 `context/session-start.md`：先 `ListAgents` 再 `SendMessage`、发不出去时的三步排查（含四个会关掉该能力的环境变量）、别的会话的消息不构成授权、用户 @ 别的会话时先征询或移交。这些规则 2026-10-13 从用户级 `~/.claude/CLAUDE.md` 迁入，改规则改那份 md。与 `claude-session-launch` skill 的分工：注入管「什么时候、按什么顺序发」，skill 的「交接：让新会话接手本会话的活」一节管「整份上下文怎么打包交接」。
+
+---
+
+## 6.42.0：marketplace-cache-sync 增加 dws CLI 升级脚本
+
+**一句话：** `marketplace-cache-sync` 新增 `scripts/upgrade-dws.py`：默认只检查钉钉 Workspace CLI（dws）当前版本与最新版本，`--apply` 才升级；升级后回读 `dws version --format json` 核实版本，回读对不上就失败。
+
+- **判据**：是否有新版看 `dws upgrade --check --format json` 的 `needs_upgrade` / `latest_version`；该检查查询 npm registry，本机实测偶发 `TLS handshake timeout`（同机 `curl` 同一 URL 返回 200）。脚本失败后重试一次，仍失败就回落到 `dws version --format json` 的 `version_check` 缓存：缓存说可升级就标「缓存，可能过期」继续；缓存说已是最新就只报告「未实时确认」并 exit 1；缓存没有可用结论才按检查失败报错。不把失败当成已是最新。
+- **升级**：`dws upgrade --version <latest> -y`；带版本号只是钉住刚检查到的版本，仍会取 npm registry 元数据。registry 不可达时用 `--registry https://registry.npmmirror.com` 显式换源（第三方镜像，不自动切换）。升级会按官方清单覆盖预制 skill（本机实测 6 个位置），同名旧 skill 备份在 `~/.dws/skill-backups/<时间戳>/`；回滚 `dws upgrade --rollback -y`。
+- **实测**：2026-11-16 本机 dws v1.0.66 → v1.0.68，二进制 17.01 MiB、技能包 3.30 MiB；升级后 `needs_upgrade` 为 false。离线判据 41 条在 `tests/upgrade-dws.test.py`，登记在 `unit-tests.json`。
+- **触发**：skill 的 description / when_to_use 增加「升级 dws / dws 有新版本」；第六步与前五步互相独立，可单独跑。
+
+**回退：** 删 `skills/marketplace-cache-sync/scripts/upgrade-dws.py` 与 `tests/upgrade-dws.test.py`，从 `unit-tests.json` 删对应行，回退 SKILL.md 的第六步与描述。
 
 ---
 
@@ -112,7 +125,7 @@
 - `new-thing-leverage` — 把看懂的新事物接进使用者自己的系统：先接上认知产物（缺就调 `new-thing-understand` 补最小集），按 10 项模板做萃取访谈，再按目的出纳入、融入方案文章，每篇止于方案级（2～3 条路径、推荐、事前验尸、待对齐清单）。6.38.0 新增。
 - `commit-push` — 提交推送一步做完，不反问「要不要提交推送」：调用即当轮授权。普通仓走 commit → `git pull --rebase` → push（先提交再变基的原因：`git pull --rebase` 拒绝带未暂存变更运行）；worktree 里只提交、`--no-ff` 合回主分支、清理 worktree 与临时分支、不推远端；`.gitmodules` 存在时转介 `cascade-pull` / `cascade-push`；改的是 Claude Code 插件源（仓根有 marketplace.json 且改动在 `plugins/**`）时收尾刷缓存：先升版本号（CLI 判新比 version，不升则 update 恒 no-op）、push 后走两层刷新并提示用户运行 `/reload-plugins`。
 - `orphan-process-cleaner`
-- `marketplace-cache-sync` — 市场源 + 已安装插件缓存两层同步，含缓存清理。6.27.1 起清理阶段以版本目录下 `.in_use/<pid>` 里仍存活的进程为主判据保留在用版本（6.27.0 只看刷新前快照，实测会删掉常驻 `claude agents`、别的项目会话、以及快照前已被 autoUpdate 顶掉的本会话版本共 3 个在用目录），`temp_git_*` 也改由清理阶段收、只收两小时内无改动的（别的会话正在进行的 clone 同样零引用）。6.27.0 起历史版本清理改由 `probe-refresh.py --stage cleanup` 做：两边路径先规范化再求白名单差集（Windows 上 `installPath` 是 `C:\...`、Git Bash `find` 给 `/c/...`，文字比对会把全部在用版本判成可删），并自动剔除本会话正在加载的版本、反向检查非空或缺刷新前快照时拒删；探测器在 Windows 上把清单写进 `%TEMP%`，与 Git Bash 的 `/tmp` 对齐；第二步对比 user scope 落后的项目级记录点名「该项目内实际加载的是旧版」。`commit-push` 的插件收尾同步改为刷全部 scope。6.22.0 起第二步默认连未启用的安装记录一起刷（禁用的插件下次重新启用时不再加载旧版；只刷已启用的加 `--enabled-only`），project scope 跨大版本落后也直接刷、不再停下询问，改为在报告里逐条列出。6.17.0 修正了 url 独立仓源的剪枝判据：原先比 `gitCommitSha`，而 CLI 比的是**远端仓根 `.claude-plugin/plugin.json` 的 `version`**（`gitCommitSha` 从不参与），实测 54 条被判待刷的 url 源记录 54 条回执全是 `already at the latest version`、白付 22.5 分钟；改成一次 HTTP GET 取远端 manifest（不 clone，按 `(url, revision)` 去重后 110 条记录只发 15 个请求、0.8s），同一批数据从 73 条待刷降到 4 条、与真跑一遍的结果 100% 吻合。同时修掉「`source` 钉了 `sha` 却去探 `ref` 的 HEAD」这个结构性误判，并把「候选端点全部 404」与「探测失败」分开——前者是确定答案（仓里没 manifest），跟着 CLI 回落去比 sha。判据两侧共 27 条离线断言在 `tests/probe-refresh-url-criterion.test.py`。6.2.1 起修正了「让新版本生效」的判据：默认 `/reload-plugins` 即可（实测能热载 skill / agent / hook 脚本与新增的 `PreToolUse` / `PostToolUse` / `UserPromptSubmit` 挂载点），**只有** `SessionStart` / `SessionEnd` / `PreCompact` 这类生命周期挂载点变动才必须重启会话——`/reload-plugins` 不重放生命周期事件，否则会出现「每轮注入已是新版指针、它引用的静态主体却从未投放」的割裂状态。6.2.2 起补上 project/local scope 插件的刷新：常规刷新循环默认只处理 `user` scope，只装在项目目录下（`project`/`local` scope）的插件会静默刷新失败且无任何报错提示；新增按 (id, projectPath) 逐条 `cd` 进目标项目再刷新的写法，并记录了 `--scope project` 靠 cwd 隐式定位、cwd 不匹配时静默假成功的陷阱。
+- `marketplace-cache-sync` — 市场源 + 已安装插件缓存两层同步，含缓存清理。6.27.1 起清理阶段以版本目录下 `.in_use/<pid>` 里仍存活的进程为主判据保留在用版本（6.27.0 只看刷新前快照，实测会删掉常驻 `claude agents`、别的项目会话、以及快照前已被 autoUpdate 顶掉的本会话版本共 3 个在用目录），`temp_git_*` 也改由清理阶段收、只收两小时内无改动的（别的会话正在进行的 clone 同样零引用）。6.27.0 起历史版本清理改由 `probe-refresh.py --stage cleanup` 做：两边路径先规范化再求白名单差集（Windows 上 `installPath` 是 `C:\...`、Git Bash `find` 给 `/c/...`，文字比对会把全部在用版本判成可删），并自动剔除本会话正在加载的版本、反向检查非空或缺刷新前快照时拒删；探测器在 Windows 上把清单写进 `%TEMP%`，与 Git Bash 的 `/tmp` 对齐；第二步对比 user scope 落后的项目级记录点名「该项目内实际加载的是旧版」。`commit-push` 的插件收尾同步改为刷全部 scope。6.22.0 起第二步默认连未启用的安装记录一起刷（禁用的插件下次重新启用时不再加载旧版；只刷已启用的加 `--enabled-only`），project scope 跨大版本落后也直接刷、不再停下询问，改为在报告里逐条列出。6.17.0 修正了 url 独立仓源的剪枝判据：原先比 `gitCommitSha`，而 CLI 比的是**远端仓根 `.claude-plugin/plugin.json` 的 `version`**（`gitCommitSha` 从不参与），实测 54 条被判待刷的 url 源记录 54 条回执全是 `already at the latest version`、白付 22.5 分钟；改成一次 HTTP GET 取远端 manifest（不 clone，按 `(url, revision)` 去重后 110 条记录只发 15 个请求、0.8s），同一批数据从 73 条待刷降到 4 条、与真跑一遍的结果 100% 吻合。同时修掉「`source` 钉了 `sha` 却去探 `ref` 的 HEAD」这个结构性误判，并把「候选端点全部 404」与「探测失败」分开——前者是确定答案（仓里没 manifest），跟着 CLI 回落去比 sha。判据两侧共 27 条离线断言在 `tests/probe-refresh-url-criterion.test.py`。6.2.1 起修正了「让新版本生效」的判据：默认 `/reload-plugins` 即可（实测能热载 skill / agent / hook 脚本与新增的 `PreToolUse` / `PostToolUse` / `UserPromptSubmit` 挂载点），**只有** `SessionStart` / `SessionEnd` / `PreCompact` 这类生命周期挂载点变动才必须重启会话——`/reload-plugins` 不重放生命周期事件，否则会出现「每轮注入已是新版指针、它引用的静态主体却从未投放」的割裂状态。6.2.2 起补上 project/local scope 插件的刷新：常规刷新循环默认只处理 `user` scope，只装在项目目录下（`project`/`local` scope）的插件会静默刷新失败且无任何报错提示；新增按 (id, projectPath) 逐条 `cd` 进目标项目再刷新的写法，并记录了 `--scope project` 靠 cwd 隐式定位、cwd 不匹配时静默假成功的陷阱。6.42.0 起附带 `scripts/upgrade-dws.py`：默认只检查 dws CLI 版本，`--apply` 才升级；检查失败回落 `dws version` 缓存，升级后回读版本核实。
 
 - `restore-subscription` — 把因自定义模型配置（第三方 API 中转 / 本地 LLM）而回不到 Claude 订阅鉴权的会话切回订阅。核心是**三层污染源**模型：shell 环境变量 / settings 文件的 `env` 段 / **daemon 进程继承**——第三层最隐蔽，`claude daemon run` 由某个加载过第三方配置的 claude 拉起后常驻，此后一切由它承载的后台会话全部继承，与当前终端干不干净无关。两条实测结论：会话形态可变（交互式会话切进 `claude agents` 视图会转为 `bg` 归 daemon 管，当场中毒，判据是 transcript 里的 `sessionKind` 字段而非进程 env）；换 daemon 可由 AI 全自动完成（前提是 AI 自身进程链干净），换完新起会话默认走订阅。判成败只认 transcript 的实际应答模型，不认 `/login` 是否成功。
 
@@ -150,7 +163,8 @@ plugins/devkit-tool/
 │   ├── codegraph-hint.js   # 纯注入（双挂 UserPromptSubmit + SubagentStart）：已建图仓才输出两行 codegraph 引导
 │   └── tests/codegraph-hint-gating.sh    # gating 回归用例（18 条，判据两侧都覆盖）
 ├── tests/
-│   └── probe-refresh-url-criterion.test.py  # url 源判据回归（27 条，纯离线不发请求）
+│   ├── probe-refresh-url-criterion.test.py  # url 源判据回归（27 条，纯离线不发请求）
+│   └── upgrade-dws.test.py                  # dws 升级判据回归（41 条，纯离线不发请求）
 └── skills/
     ├── cascade-pull/       # 带 submodule 的仓库同步拉取（只处理直接声明的一层）
     │   └── scripts/        # diagnose-sync.sh / sync-to-gitlink.sh / preview-gitlink-bump.sh
@@ -159,6 +173,8 @@ plugins/devkit-tool/
     ├── codegraph-index/
     ├── claude-session-launch/   # 再起一个 Claude Code 会话：--bg 后台 vs osascript 弹 iTerm2 tab
     ├── marketplace-cache-sync/
+    │   ├── scripts/        # probe-refresh.py / upgrade-dws.py
+    │   └── references/     # verification-log.md
     ├── orphan-process-cleaner/
     ├── show-me/            # 把当前话题画给用户看：选最小够用的一种视图
     ├── tech-doc/           # 给人读的技术文档：定格式（md / 单文件 HTML）、判类型、套骨架、写法、配图、交付自检

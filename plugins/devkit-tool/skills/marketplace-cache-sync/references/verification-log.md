@@ -16,6 +16,7 @@
 8. [多版本钉版反例](#多版本钉版反例)——为什么不能"只保留最新版本"
 9. [缓存清理两次差集规模](#缓存清理两次差集规模)——清理收益随频率衰减
 10. [已验证的坑 · 完整证据表](#已验证的坑--完整证据表)——正文坑表每条的复现过程
+11. [dws CLI 升级实测](#dws-cli-升级实测2026-11-16)——dws 版本判据、npm registry 偶发失败与 2026-11-16 升级实测
 
 ---
 
@@ -28,6 +29,7 @@
 - **一次 hook 定义方式双检测验证**（2026-08-01，发现目录式 hook 会让"只读 `plugin.json` 判生命周期"漏判）
 - **一次性能专项实测**（2026-08-06，逐条计时定位固定开销、验证"跳过 no-op 等价"、验证两类插件源的探测判据）
 - **一次 directory 源迁移实测**（2026-09-28，`aisdlc-qa` 从 directory 源迁到 git 源：`marketplace remove` 连带卸载插件、市场名取自仓内 manifest、按原 (scope, projectPath) 逐条重装）
+- **一次 dws 升级实测**（2026-11-16，dws v1.0.66 → v1.0.68，含 npm registry 偶发 TLS 失败、缓存回落与升级后回读）
 
 下方「已验证的坑 · 完整证据表」列出各条已复现问题。
 
@@ -396,3 +398,100 @@ PreToolUse:Bash hook error: [node …/cd-blocker/1.0.0/hooks/guards/cd-guard.js]
 `.in_use/` 是 CLI 自己维护的：每个加载该版本的进程写一个以 pid 命名的文件，内容 `{"pid":…,"procStart":…}`；版本被顶掉时另写 `.orphaned_at`（毫秒时间戳）。2.1.301 与 2.1.303 都写。6.27.1 起以「`.in_use/` 里有存活 pid」为主判据，快照判据保留作兜底。修正后同一份数据：可删 21 个、保留 8 个，删后无任何会话报 hook 错。
 
 同轮另一发现：清理期间 `cache/` 下新冒出 17 个 `temp_git_*`（别的会话正在 clone），其中一个几秒内自行消失。旧判据「两份配置零引用即整批删」会把它们一起删掉，6.27.1 起只收两小时内无改动的。
+
+## dws CLI 升级实测（2026-11-16）
+
+**环境**：macOS Darwin 25.5.0；dws v1.0.66（commit `f215043e676d6889e1ddce3464828d8b1ec40c31`，build `2026-10-28T07:36:14Z`，edition `open`），独立二进制 `/Users/zhangq/.local/bin/dws`（46 MB Mach-O arm64）。升级目标 v1.0.68。
+
+### 版本判据
+
+`dws version --format json` 返回当前版本与**缓存的**更新结论（`cached: true`）。实时检查失败时它仍 exit 0，是脚本的回落来源：
+
+```json
+{
+  "version": "v1.0.66",
+  "version_check": {
+    "current": "v1.0.66",
+    "latest": "1.0.68",
+    "status": "update_available",
+    "checked_at": "2026-11-16T06:14:18.542586Z",
+    "cached": true
+  },
+  "_notice": {
+    "update": {
+      "current": "v1.0.66",
+      "latest": "1.0.68",
+      "command": "dws upgrade",
+      "message": "发现新版本（当前 v1.0.66，最新 1.0.68），运行 dws upgrade 升级。"
+    }
+  }
+}
+```
+
+`dws upgrade --check --format json` 是实时检查，判据字段是 `needs_upgrade` / `latest_version`：
+
+```json
+{
+  "changelog": null,
+  "current_version": "v1.0.66",
+  "latest_version": "v1.0.68",
+  "needs_upgrade": true,
+  "prerelease": false,
+  "release_date": "",
+  "release_url": "",
+  "track": "release"
+}
+```
+
+升级后同一命令返回 `current_version` / `latest_version` 都是 `v1.0.68`、`needs_upgrade: false`；`dws version --format json` 的 `version_check.status` 变成 `up_to_date`。
+
+### npm registry 偶发 TLS 失败
+
+同一天内，`dws upgrade --check` 既成功过也失败过。失败时 exit 5，错误 JSON **走 stderr**：
+
+```json
+{"error":{"category":"internal","code":5,"message":"检查更新失败: 获取 npm 版本 latest 失败: 无法连接 npm Registry: Get \"https://registry.npmjs.org/dingtalk-workspace-cli/latest\": net/http: TLS handshake timeout"}}
+```
+
+同一时刻用 `curl` 请求同一 URL 返回 `200`（0.35s）；`registry.npmmirror.com` 也返回 `200`（1.72s）。紧接着连跑三次 `dws upgrade --check` 全部成功（`needs_upgrade: true`），之后 `--check --version v1.0.66 --format json` 与 `--version v1.0.66 --force --dry-run` 又各失败一次。结论：这是 dws 的 Go 客户端到 npmjs 的偶发失败，不是本机断网；脚本因此重试一次，仍失败才回落缓存。
+
+错误 JSON 走 stderr 这一点是实测踩到的：脚本最初只解析 stdout，失败时把整段 JSON 当成「无法解析的输出」原样打出来；现在 stdout / stderr 两路都先尝试解析 JSON。
+
+另一个坑：设置 `DWS_UPGRADE_REGISTRY` 后，`dws version --format json` 的 `version_check.status` 会变成 `unknown`（实测），缓存回落失效；脚本读版本时显式从环境里剔除这个变量，只让检查 / 升级两步用它。
+
+### `--version` 不能绕开 registry
+
+一度以为 `dws upgrade --version <latest> -y` 可以跳过 npm registry 查询，实测**不成立**：
+
+- `dws upgrade --version v1.0.68 --dry-run` 成功，打印「下载来源: GitHub 同版本平台资产 (20.31 MiB)」——dry-run 只预览步骤，未复现 registry 失败（推断：它不取版本元数据）。
+- `dws upgrade --version v1.0.68 -y` 失败，exit 5：`获取版本 v1.0.68 信息失败: 获取 npm 版本 1.0.68 失败: ... TLS handshake timeout`。
+
+带 `--version` 的作用只是钉住刚刚检查到的版本，避免再解析一次 latest；registry 仍要可达。registry 不可达时的可用做法是显式换源：
+
+```bash
+DWS_UPGRADE_REGISTRY=https://registry.npmmirror.com dws upgrade --version v1.0.68 --dry-run
+```
+
+（第三方镜像，是否可用与是否可信由使用者判断；脚本只提供 `--registry` 开关，不自动换源。）
+
+### 实际升级
+
+重试后默认 registry 成功。`dws upgrade --version v1.0.68 -y` 的输出要点：
+
+- 下载来源：GitHub 同版本平台资产，二进制 `dws-darwin-arm64.tar.gz` 17.01 MiB，技能包 `dws-skills.zip` 3.30 MiB。
+- 五步：备份 v1.0.66 → 下载二进制与技能包 → SHA256 校验 → 解压验证 → 替换二进制并安装技能包。
+- 技能包装到 6 个位置：`~/.agents/skills`、`~/.claude/skills`、`~/.codebuddy/skills`、`~/.hermes/skills`、`~/.qoder-cn/skills`、`~/.zcode/skills`。
+- 备份目录：`~/.dws/skill-backups/20261116-063309/`（同名旧 skill 先备份）。
+- 升级后回读：`dws version` = v1.0.68（build `2026-11-11T08:18:05Z`，commit `ba02fc6cdbdb3543d21d0cdb70f027bf0d142692`）；`dws upgrade --check --format json` 的 `needs_upgrade` 为 false。
+
+`~/.claude/skills/dingtalk-*` 是指向 `~/.agents/skills/dingtalk-*` 的软链（如 `dingtalk-aitable -> ../../.agents/skills/dingtalk-aitable`）。升级后本会话下一次用户消息的技能清单从旧 4 个 `dingtalk-*`（aitable / chat / contact / doc）变成 12 个名称集合不同的 skill，说明宿主检测到了 skill 文件变化并重载；若别的宿主没有自动重载，`/reload-plugins` 或新会话后生效。二进制本身在下一条 dws 命令就生效。
+
+### 脚本行为实测
+
+- 检查模式、实时检查失败时：打印 `⚠ 实时检查失败：…`，回落到缓存并标 `缓存（2026-11-16T06:14:18.542586Z，可能过期）`，`v1.0.66 -> v1.0.68`，exit 0。
+- 检查模式、实时检查失败且缓存为 `up_to_date` 时：打印 `缓存显示已是最新（2026-11-16T06:33:11.212199Z），但本次没有实时确认；未升级。`，exit 1；不把缓存当成实时结论。
+- 检查模式、实时检查成功时：`最新版本：v1.0.68（实时检查）`，exit 0。
+- `--apply`：升级成功，回读 `v1.0.68`，打印 `✓ 回读核实：v1.0.66 -> v1.0.68`，exit 0。
+- 已是最新时再跑 `--apply`：`已是最新，无需升级。`，exit 0。
+- 第一次 `--apply` 因 registry TLS 失败：exit 1，并打印换源命令；重试后成功。
+- 离线判据 `tests/upgrade-dws.test.py` 41 条断言全过；覆盖版本号归一化、混合输出取 JSON、成功 / 错误 JSON、文本兜底、升级命令形态、错误压行与进度条过滤。
