@@ -46,10 +46,10 @@ All values come from `color-palette.md`; this section is about *how much* and *w
 1. **Grayscale first.** Lay the diagram out in neutrals; add a fill only where it marks a role. Color that does not encode meaning is removed. [sourced: Google-TW, RefactoringUI-color]
 2. **≤ 3–4 semantic fills per diagram**, plus neutral. Same role → same color across every diagram in a set. [heuristic: Skill-guides, Thornton]
 3. **Light fill, same-hue dark stroke.** The lightest shades are fills only — never strokes, never text. [sourced: RefactoringUI-color, WCAG-contrast]
-4. **Contrast floors**: text ≥ 4.5:1 against what it sits on, at every size (Excalifont strokes are thin, so the 3:1 large-text allowance is not used); strokes and arrows ≥ 3:1 against the canvas. The palette is pre-checked; a custom color must be checked before use. The `pastel` style waives the stroke floor for container outlines only (see `color-palette.md` Pastel Style); its text and arrows still meet these floors. [sourced: WCAG-contrast, WCAG-non-text; strict text floor inferred]
+4. **Contrast floors**: text ≥ 4.5:1 against what it sits on, at every size (Excalifont strokes are thin, so the 3:1 large-text allowance is not used); strokes and arrows ≥ 3:1 against the canvas. The palette is pre-checked; a custom color must be checked before use. The shared palette waives the stroke floor for card and zone hairlines only (see `color-palette.md`): cards read from fill, shadow, and title. Text and arrows still meet these floors. [sourced: WCAG-contrast, WCAG-non-text; strict text floor inferred]
 5. **Color is never the only cue.** Pair it with shape, `strokeStyle`, or a text label. Avoid hue pairs of equal brightness, and never red/green as the sole distinction. [sourced: WCAG-color, Okabe-Ito, AWS, Azure]
 6. **Line style has fixed meaning**: `solid` = synchronous / primary path; `dashed` = asynchronous / event / optional; `dotted` = weak dependency or annotation leader. Whatever is used goes in the legend. [sourced: Azure, AWS]
-7. **No pure black.** Text and dark strokes use `#1e1e1e` (Excalidraw's own black). [sourced: RefactoringUI-color, Excalidraw-src]
+7. **No pure black.** Text and dark strokes use the palette's darkest gray (`#1d1d1f` in the shared palette, Excalidraw's own `#1e1e1e` in brutal). [sourced: RefactoringUI-color, Excalidraw-src]
 8. **Author in light mode only.** Excalidraw derives dark mode by filtering the whole canvas (`invert(93%) hue-rotate(180deg)`); a hand-made dark palette fights that filter. [sourced: Excalidraw-src]
 
 ---
@@ -58,9 +58,9 @@ All values come from `color-palette.md`; this section is about *how much* and *w
 
 1. **≤ 3 font sizes per diagram**, from Excalidraw's presets 16 / 20 / 28 / 36 — e.g. title 28 (36 for a single-diagram poster), section labels 20, body 16. Nothing below 16. [sourced: NNg-hierarchy; preset mapping inferred]
 2. **≤ 2 dominant elements**: the title and one focal element. Everything else is visibly smaller. [sourced: NNg-hierarchy]
-3. **One accent.** Exactly one element or group breaks the pattern — the accent color, or the only `strokeWidth: 4`. An eye lands on the single thing that differs; emphasis everywhere is emphasis nowhere. [sourced: SWD; "only strokeWidth 4" inferred]
+3. **One accent.** Exactly one element or group breaks the pattern — one arrow or path drawn in its role's accent color (`color-palette.md` Accent column) while every other arrow stays gray. An eye lands on the single thing that differs; emphasis everywhere is emphasis nowhere. [sourced: SWD; "only strokeWidth 4" inferred]
 4. **Emphasize by quieting the rest.** Push secondary text to the body color and secondary lines to `strokeWidth: 1` instead of enlarging the hero. Opacity stays 100 (SKILL.md rule). [sourced: RefactoringUI-review]
-5. **Fonts.** The prose font comes from the chosen style in SKILL.md **Styles** (`6` Nunito by default; `5`, `2`, or `3` for the other styles); code uses `3`. One prose family per diagram. [sourced: Excalidraw-src, HN-thread]
+5. **Fonts.** The prose font comes from the chosen style in SKILL.md **Styles** (`3` Cascadia by default; `6`, `5`, or `2` for the other styles); code uses `3`. One prose family per diagram. [sourced: Excalidraw-src, HN-thread]
 6. **Squint test after render.** Look at the PNG as a thumbnail: the first place the eye lands must be the intended focal element. If it lands elsewhere, lower the contrast *there*; do not add more weight to the focal element. [sourced: NNg-hierarchy, SWD]
 
 ---
@@ -88,7 +88,7 @@ All values come from `color-palette.md`; this section is about *how much* and *w
    }
    ```
 2. **Labels are short verb phrases** (2–6 CJK characters, 1–3 English words), placed beside the longest straight segment. [sourced: C4-notation; length heuristic]
-3. **Open arrowheads** (`"arrow"`), not large filled triangles. [sourced: AWS]
+3. **Small filled arrowheads** (`"triangle"`) on a `strokeWidth: 2` line; Excalidraw scales the head with the stroke, so it stays small. [style decision 2026-11-21; replaces the earlier open-arrowhead rule]
 
 ---
 
@@ -96,7 +96,7 @@ All values come from `color-palette.md`; this section is about *how much* and *w
 
 1. **In the hand-drawn style, `roughness: 1` on every element, never 2, never mixed in one diagram.** Hand-drawn looks cheap when sketchiness piles up (jitter + handwriting + decoration everywhere), not because it is hand-drawn. [inferred: Budd, Wood-2012]
 2. **Quantity by area → `roughness: 0`.** When shape size itself encodes a number, sketchy rendering measurably hurts area judgment. [sourced: Wood-2012]
-3. **Sketch look on request only.** Hand-drawn reads as "draft / idea", so it is not the default. When the user asks for a sketch, whiteboard, clean, formal, or monospace look, switch the whole diagram to the matching style in SKILL.md **Styles** (hand-drawn, clean, or mono). [sourced: HN-thread]
+3. **Sketch look on request only.** Hand-drawn reads as "draft / idea", so it is not the default. When the user asks for a sketch, whiteboard, clean, formal, or rounded-font look, switch the whole diagram to the matching style in SKILL.md **Styles** (hand-drawn, clean, or rounded-sans; brutal also swaps the palette). [sourced: HN-thread]
 4. **No decoration.** No ornamental doodles, stars, or filler shapes. [inferred: Budd]
 
 ---

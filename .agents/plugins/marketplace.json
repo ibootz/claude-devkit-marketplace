@@ -82,7 +82,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "4.17.0"
+      "version": "4.18.0"
     },
     {
       "author": {
@@ -352,7 +352,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "1.7.0"
+      "version": "1.8.0"
     },
     {
       "author": {

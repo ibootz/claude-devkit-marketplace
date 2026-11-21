@@ -17,7 +17,8 @@
     // (@braintree/sanitize-url@6.0.2 constants.mjs), so the module never loads and rendering times out.
     import { exportToSvg } from "https://esm.sh/@excalidraw/excalidraw@0.18.0?bundle";
 
-    window.renderDiagram = async function(jsonData) {
+    // embedScene: when true the SVG carries the scene, so excalidraw.com reopens it as an editable drawing.
+    window.renderDiagram = async function(jsonData, embedScene = false) {
       try {
         const data = typeof jsonData === "string" ? JSON.parse(jsonData) : jsonData;
         const elements = data.elements || [];
@@ -33,6 +34,8 @@
           appState: {
             ...appState,
             exportBackground: true,
+            exportEmbedScene: embedScene,
+            exportScale: 1,
           },
           files: files,
         });

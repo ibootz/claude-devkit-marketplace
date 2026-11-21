@@ -568,6 +568,17 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 4.18.0 画图默认让位给 svg-diagram：write-guard 检查三认 svg-diagram
+
+**起因**：用户 2026-11-21 拍板新建 `devkit-svg-diagram`（JSON 描述 → 固定主题 SVG + PNG），凡原先默认 Excalidraw 的地方改为默认它，点名 Excalidraw 才走 `devkit-excalidraw-diagram`。检查三原先只认 skill 名含 `show-me` / `excalidraw` 的调用，直接调 `svg-diagram` 画完再写 mermaid 退路的会话会被误提醒；提醒文案也还在指向 Excalidraw。
+
+**改了什么**：
+- `write-guard` 检查三的放行判据加上 skill 名含 `svg-diagram` 的 Skill 调用。
+- 提醒文案改为「装了 devkit-svg-diagram 就出 SVG 图与 PNG 放进文档旁 figures/，用户点名 Excalidraw 才用 devkit-excalidraw-diagram」。
+- `references/guard-boundaries.md` 同步。
+
+**回归**：`test/guard-verify.js` 新增 2 条（调过 svg-diagram 放行、提醒文案点名 svg-diagram），全套 204/204。
+
 ### 4.17.0 词条链接（3.14）与回合末链接审查
 
 **一句话**：回复里读者会卡住的旁支内容（名词、编号、压得很密的一句、拍板清单里的事项）挂链接并括注一句原文——本机一处原文说得清就直链，散在多处就把几处原文逐字摘进临时目录里的词条文件再链，找不到写「未找到出处」（3.14）；释义与词条只许逐字摘本机文件，回合末用不经模型的比对核词条；回合末审查另起一路并行判定，只查能判定的两样：编号与本机文件没给链接、拍板清单点名的事项一项链接都没有。

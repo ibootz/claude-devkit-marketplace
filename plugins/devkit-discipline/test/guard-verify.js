@@ -330,6 +330,9 @@ writeS('去重: 条目值不是时间戳时照常提醒', 'sess-val', F.over1000
   const trExc = path.join(FIXTURE_ROOT, 'tr-exc.jsonl')
   fs.writeFileSync(trExc, JSON.stringify({ type: 'assistant', message: { content: [
     { type: 'tool_use', name: 'Skill', input: { skill: 'devkit-excalidraw-diagram:excalidraw-diagram' } }] } }) + '\n')
+  const trSvg = path.join(FIXTURE_ROOT, 'tr-svg.jsonl')
+  fs.writeFileSync(trSvg, JSON.stringify({ type: 'assistant', message: { content: [
+    { type: 'tool_use', name: 'Skill', input: { skill: 'devkit-svg-diagram:svg-diagram' } }] } }) + '\n')
   const MER = '## 流程\n\n```mermaid\nsequenceDiagram\nA->>B: x\n```\n'
   const mm = (label, sess, tool, file, input, tr, expect) => {
     const r = run(WRITE_GUARD, { tool_name: tool, tool_input: { file_path: file, ...input },
@@ -344,6 +347,8 @@ writeS('去重: 条目值不是时间戳时照常提醒', 'sess-val', F.over1000
   mm('mermaid: Edit 新文本不含 mermaid → 放行', 'mm-3', 'Edit', MD, { old_string: 'a', new_string: '普通段落' }, trNoDraw, PASS)
   mm('mermaid: 调过 show-me → 放行', 'mm-4', 'Write', MD, { content: MER }, trDraw, PASS)
   mm('mermaid: 调过 excalidraw-diagram → 放行', 'mm-5', 'Write', MD, { content: MER }, trExc, PASS)
+  mm('mermaid: 调过 svg-diagram → 放行', 'mm-5b', 'Write', MD, { content: MER }, trSvg, PASS)
+  check('mermaid: 提醒文案点名 svg-diagram 为默认', true, /devkit-svg-diagram/.test(r1.err), r1.err)
   mm('mermaid: 无 transcript_path → 放行', 'mm-6', 'Write', MD, { content: MER }, undefined, PASS)
   mm('mermaid: transcript 读不到 → 放行', 'mm-7', 'Write', MD, { content: MER }, path.join(FIXTURE_ROOT, 'nope.jsonl'), PASS)
   mm('mermaid: skills/references 下的规约 md → 放行', 'mm-8', 'Write', SKILL_REF, { content: MER }, trNoDraw, PASS)

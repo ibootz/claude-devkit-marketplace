@@ -2,7 +2,7 @@
 
 Copy-paste JSON templates for each Excalidraw element type. The `strokeColor` and `backgroundColor` values are placeholders — always pull actual colors from `color-palette.md` based on the element's semantic purpose.
 
-Templates carry the rounded-sans defaults (`roughness: 0`, `fontFamily: 6`). For another style, swap those two fields per the **Styles** table in SKILL.md. Text inside code / JSON evidence artifacts uses `fontFamily: 3` in every style.
+Templates carry the mac defaults (`roughness: 0`, `fontFamily: 3`, hairline shapes at `strokeWidth: 1`, `triangle` arrowheads). For another style, swap fields per the **Styles** section in SKILL.md; the mac shadow copy is described there. Text inside code / JSON evidence artifacts uses `fontFamily: 3` in every style.
 
 ## Free-Floating Text (no container)
 ```json
@@ -14,7 +14,7 @@ Templates carry the rounded-sans defaults (`roughness: 0`, `fontFamily: 6`). For
   "text": "Section Title",
   "originalText": "Section Title",
   "fontSize": 20,
-  "fontFamily": 6,
+  "fontFamily": 3,
   "textAlign": "left",
   "verticalAlign": "top",
   "strokeColor": "<title color from palette>",
@@ -100,7 +100,7 @@ Templates carry the rounded-sans defaults (`roughness: 0`, `fontFamily: 6`). For
   "strokeColor": "<stroke from palette based on semantic purpose>",
   "backgroundColor": "<fill from palette based on semantic purpose>",
   "fillStyle": "solid",
-  "strokeWidth": 2,
+  "strokeWidth": 1,
   "strokeStyle": "solid",
   "roughness": 0,
   "opacity": 100,
@@ -127,10 +127,10 @@ Templates carry the rounded-sans defaults (`roughness: 0`, `fontFamily: 6`). For
   "text": "Process",
   "originalText": "Process",
   "fontSize": 16,
-  "fontFamily": 6,
+  "fontFamily": 3,
   "textAlign": "center",
   "verticalAlign": "middle",
-  "strokeColor": "<text color — match parent shape's stroke or use 'on light/dark fills' from palette>",
+  "strokeColor": "<text color — 'On fills' from palette; description line uses Secondary>",
   "backgroundColor": "transparent",
   "fillStyle": "solid",
   "strokeWidth": 1,
@@ -157,7 +157,7 @@ Templates carry the rounded-sans defaults (`roughness: 0`, `fontFamily: 6`). For
   "type": "arrow",
   "id": "arrow1",
   "x": 282, "y": 145, "width": 118, "height": 0,
-  "strokeColor": "<arrow color — typically matches source element's stroke from palette>",
+  "strokeColor": "<arrow color from palette — #8e8e93; the one emphasized arrow takes its source's accent>",
   "backgroundColor": "transparent",
   "fillStyle": "solid",
   "strokeWidth": 2,
@@ -177,7 +177,7 @@ Templates carry the rounded-sans defaults (`roughness: 0`, `fontFamily: 6`). For
   "startBinding": {"elementId": "elem1", "focus": 0, "gap": 2},
   "endBinding": {"elementId": "elem2", "focus": 0, "gap": 2},
   "startArrowhead": null,
-  "endArrowhead": "arrow"
+  "endArrowhead": "triangle"
 }
 ```
 

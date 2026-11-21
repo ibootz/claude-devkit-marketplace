@@ -4,10 +4,15 @@
 #     "playwright>=1.40.0",
 # ]
 # ///
-"""Render Excalidraw JSON to PNG using Playwright + headless Chromium.
+"""Render Excalidraw JSON to PNG or SVG using Playwright + headless Chromium.
 
 Usage:
     uv run <skill-dir>/references/render_excalidraw.py <path-to-file.excalidraw> [--output path.png] [--scale 2] [--width 1920]
+    uv run <skill-dir>/references/render_excalidraw.py <path-to-file.excalidraw> --output path.svg   # SVG with the scene embedded
+    uv run <skill-dir>/references/render_excalidraw.py <path-to-file.svg> --output /tmp/x.png         # rasterize an SVG to view it
+
+An `--output` ending in `.svg` writes an SVG that carries the scene: browsers and markdown previews show it,
+and excalidraw.com reopens it as an editable drawing. An `.svg` input is rasterized as-is (no Excalidraw needed).
 
 First-time setup (downloads Chromium for the Playwright version in this script's uv environment):
     uv run <skill-dir>/references/render_excalidraw.py --install-browser
@@ -154,7 +159,8 @@ def render(
 
         # Inject the diagram data and render
         json_str = json.dumps(data)
-        result = page.evaluate(f"window.renderDiagram({json_str})")
+        embed = "true" if output_path.suffix.lower() == ".svg" else "false"
+        result = page.evaluate(f"window.renderDiagram({json_str}, {embed})")
 
         if not result or not result.get("success"):
             error_msg = result.get("error", "Unknown render error") if result else "renderDiagram returned null"
@@ -172,9 +178,28 @@ def render(
             browser.close()
             sys.exit(1)
 
-        svg_el.screenshot(path=str(output_path))
+        if output_path.suffix.lower() == ".svg":
+            output_path.write_text(svg_el.evaluate("el => el.outerHTML"), encoding="utf-8")
+        else:
+            svg_el.screenshot(path=str(output_path))
         browser.close()
 
+    return output_path
+
+
+def rasterize_svg(svg_path: Path, output_path: Path | None, scale: int) -> Path:
+    """Screenshot an SVG file (e.g. a gallery figure) to PNG so it can be viewed as an image."""
+    from playwright.sync_api import sync_playwright
+
+    if output_path is None or output_path.suffix.lower() != ".png":
+        print("ERROR: an .svg input needs --output ending in .png (write it to a temp dir, not next to the SVG)", file=sys.stderr)
+        sys.exit(1)
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 800, "height": 600}, device_scale_factor=scale)
+        page.goto(svg_path.resolve().as_uri())
+        page.locator("svg").first.screenshot(path=str(output_path))
+        browser.close()
     return output_path
 
 
@@ -190,9 +215,9 @@ def main() -> None:
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stderr.reconfigure(encoding="utf-8")
 
-    parser = argparse.ArgumentParser(description="Render Excalidraw JSON to PNG")
-    parser.add_argument("input", type=Path, nargs="?", help="Path to .excalidraw JSON file")
-    parser.add_argument("--output", "-o", type=Path, default=None, help="Output PNG path (default: same name with .png)")
+    parser = argparse.ArgumentParser(description="Render Excalidraw JSON to PNG or SVG; rasterize an SVG to PNG")
+    parser.add_argument("input", type=Path, nargs="?", help="Path to .excalidraw JSON file, or an .svg to rasterize")
+    parser.add_argument("--output", "-o", type=Path, default=None, help="Output path; .png (default: input name with .png) or .svg (scene embedded)")
     parser.add_argument("--scale", "-s", type=int, default=2, help="Device scale factor (default: 2)")
     parser.add_argument("--width", "-w", type=int, default=1920, help="Max viewport width (default: 1920)")
     parser.add_argument("--install-browser", action="store_true", help="Download Chromium for this environment's Playwright, then exit")
@@ -207,8 +232,11 @@ def main() -> None:
         print(f"ERROR: File not found: {args.input}", file=sys.stderr)
         sys.exit(1)
 
-    png_path = render(args.input, args.output, args.scale, args.width)
-    print(str(png_path))
+    if args.input.suffix.lower() == ".svg":
+        out_path = rasterize_svg(args.input, args.output, args.scale)
+    else:
+        out_path = render(args.input, args.output, args.scale, args.width)
+    print(str(out_path))
 
 
 if __name__ == "__main__":

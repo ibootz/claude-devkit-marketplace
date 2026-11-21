@@ -79,8 +79,8 @@ Evidence artifacts are concrete examples that prove your diagram is accurate and
 
 | Artifact Type | When to Use | How to Render |
 |---------------|-------------|---------------|
-| **Code snippets** | APIs, integrations, implementation details | Dark rectangle + syntax-colored text (see color palette for evidence artifact colors) |
-| **Data/JSON examples** | Data formats, schemas, payloads | Dark rectangle + colored text (see color palette) |
+| **Code snippets** | APIs, integrations, implementation details | Light gray rectangle + syntax-colored text (see color palette for evidence artifact colors) |
+| **Data/JSON examples** | Data formats, schemas, payloads | Light gray rectangle + colored text (see color palette) |
 | **Event/step sequences** | Protocols, workflows, lifecycles | Timeline pattern (line + dots + labels) |
 | **UI mockups** | Showing actual output/results | Nested rectangles mimicking real UI |
 | **Real input content** | Showing what goes IN to a system | Rectangle with sample content visible |
@@ -359,7 +359,7 @@ Colors encode information, not decoration. Every color choice should come from `
 **Key principles:**
 - Each semantic purpose (start, end, decision, AI, error, etc.) has a specific fill/stroke pair
 - Free-floating text uses color for hierarchy (titles, subtitles, details — each at a different level)
-- Evidence artifacts (code snippets, JSON examples) use their own dark background + colored text scheme
+- Evidence artifacts (code snippets, JSON examples) use their own light gray block + syntax-colored text scheme
 - Always pair a darker stroke with a lighter fill for contrast
 
 **Do not invent new colors.** If a concept doesn't fit an existing semantic category, use Primary/Neutral or Secondary.
@@ -370,37 +370,47 @@ Colors encode information, not decoration. Every color choice should come from `
 
 ### Styles
 
-Five styles. One style per diagram, applied to every element; the default is rounded-sans.
+Five styles. One style per diagram, applied to every element; the default is mac.
 
 | Style | Pick when the user says | `roughness` | prose `fontFamily` | code / JSON evidence `fontFamily` |
 |---|---|---|---|---|
-| **rounded-sans** (default) | nothing about style; 圆体, 柔和, Nunito, rounded font, soft | 0 | 6 (Nunito) | 3 |
+| **mac** (default) | nothing about style; Mac 扁平, 苹果风, 柔和色块, 色块卡片, 等宽, 工程风, pastel, monospace; or hands over a pastel layered-card image as the style sample | 0 | 3 (Cascadia) | 3 |
+| **rounded-sans** | 圆体, Nunito, rounded font, soft | 0 | 6 (Nunito) | 3 |
 | **hand-drawn** | 手绘, 草图, sketch, whiteboard | 1 | 5 (Excalifont) | 3 |
-| **clean** | 干净, 正式, clean, formal, client-facing | 0 | 2 (Helvetica) | 3 |
-| **mono** | 等宽, 等宽圆角, 工程风, monospace, blueprint | 0 | 3 (Cascadia) | 3 |
-| **pastel** | 柔和色块, 浅色色块, 色块卡片, 低饱和, pastel; or hands over a pastel layered-card image as the style sample | 0 | 2 (Helvetica) | 3 |
+| **clean** | 干净, 正式, 无衬线, clean, formal, client-facing | 0 | 2 (Helvetica) | 3 |
+| **brutal** | 野兽派, 新野兽派, 野蛮风格, neo-brutalism, brutalist | 0 | 2 (Helvetica) | 3 |
 
-Everything else is shared: `fillStyle: "solid"`, rounded corners as in `references/element-templates.md`, colors from `color-palette.md`. To switch an existing diagram's style, change `roughness` on every element and `fontFamily` on every text element, then re-render: widths shift between fonts. Switching to or from pastel also swaps every color and stroke width, per the rules below.
+The first four share one palette (the shared tables in `color-palette.md`) and these rules:
+- `fillStyle: "solid"`, rounded corners as in `references/element-templates.md`.
+- Shapes `strokeWidth: 1` with the role's hairline stroke (hand-drawn: `2`, or the rough line disappears). Arrows and connectors `#8e8e93`, `strokeWidth: 2`, `endArrowhead: "triangle"`; orthogonal routes use `elbowed: true`.
+- Card text is centered both ways: `textAlign: "center"`, and the title-plus-description block sits at the card's vertical middle (block top = card `y` + (card height − block height) / 2). Card title `20` in the title color, description `16` in the secondary color; diagram title `28`. Excalidraw has no bold, so the size step carries the title emphasis. Zone titles sit top-left.
+- Layered diagrams (architecture, deployment, context maps) nest: big `#f5f5f7` zones with no visible edge, each holding cards and small white tag chips. For these, checklist items 9 (no uniform containers), 10 (minimal containers) and 20 (container ratio) do not apply.
+- Out-of-scope, planned, or external parts: white fill, dashed `#aeaeb2` outline (`strokeStyle: "dashed"`), and a legend entry for it.
 
-**pastel** is the one style that changes colors and structure, not just line and font. It is a layered-architecture look: big low-saturation (or white) group zones, each holding smaller cards and gray tag chips.
-- Colors come only from the **Pastel Style** section of `color-palette.md`; the semantic table above it is not used. One zone color per layer or responsibility group.
-- Shapes `strokeWidth: 1`; arrows and connectors `strokeWidth: 2`, `endArrowhead: "triangle"`, `elbowed: true`.
-- Nesting is the point: zones contain cards, cards hold a title line plus a gray description line. Checklist items 9 (no uniform containers), 10 (minimal containers) and 20 (container ratio) do not apply; every other item does.
-- Card text: title `20`, description `16` in the description color; diagram title `28`. Excalidraw has no bold, so the size step carries the title emphasis.
-- Out-of-scope, planned, or external parts: dashed outline (`strokeStyle: "dashed"`) in the palette's out-of-scope colors, and a legend entry for it.
+To switch among the four, change `roughness` on every element and `fontFamily` on every text element, add or remove the mac shadows, then re-render: widths shift between fonts. Switching to or from brutal swaps every color, stroke width, and shadow, per its rules below.
+
+**mac** adds a soft drop shadow under every card, chip, and diamond: a copy of the shape offset `0, +5`, fill `#000000`, `strokeColor: "transparent"`, `opacity: 7`, placed before the shape in `elements` so it draws underneath. Shadow and shape share one `groupIds` entry; arrows bind to the shape, never the shadow. Zones, dashed out-of-scope shapes, dots, and code blocks get no shadow. The shadow is what lifts a white card off a white canvas, since its hairline outline is nearly invisible by design.
+
+**brutal** is neo-brutalism: loud, flat, and blocky. Colors come only from the **Brutal Style** section of `color-palette.md`.
+- Every shape: `strokeWidth: 4`, stroke `#1e1e1e`, `roundness: null` (square corners), one saturated fill per role.
+- Shadow: under each shape, a `#1e1e1e` copy of it offset `+10, +10`, placed before the shape in `elements` so it draws underneath. Shadow and shape share one `groupIds` entry so they move together; arrows bind to the shape, never the shadow. Budget the 10px offset into every gap. Small chips, dots, and code blocks get no shadow.
+- Arrows `#1e1e1e`, `strokeWidth: 4`, `endArrowhead: "triangle"`; structural lines `strokeWidth: 2`. Arrow labels sit on a black label chip (`#1e1e1e` rectangle, `#ffffff` text 16).
+- Text `#1e1e1e`, left-aligned inside cards: title `20`, description `16`.
+- Waived for brutal: checklist item 32's "exactly one accent" (every outline is `4`) and the 20px grid for shadows only (the `+10` offset is off-grid by design; shapes stay on the grid). Every other item applies, including the legend when fills carry meaning.
 
 What each style costs, measured on 2026-10-25 by rendering 4 identifier-heavy technical diagrams in every style with this skill's renderer:
-- **clean and rounded-sans:** uppercase `I` and lowercase `l` are the same glyph, so `skuId` reads as `skuld`. On diagrams dense with identifiers (sequence, ER, class, API) where the user named no style, draw the default and mention in the reply that mono avoids this misreading.
+- **clean and rounded-sans:** uppercase `I` and lowercase `l` are the same glyph, so `skuId` reads as `skuld`. On diagrams dense with identifiers (sequence, ER, class, API) prefer mac; when the user asked for one of these two, mention the misreading in the reply.
 - **rounded-sans:** Nunito has no CJK glyphs; Chinese falls back to the system sans-serif, so on a mostly-Chinese diagram it looks almost the same as clean. Only Latin text gets rounded letterforms.
-- **mono:** every identifier stays distinct, but CJK characters take a full 1em each, so size containers from the estimate in Text Rules plus one character of slack. `O` and `0` are hard to tell apart. Cascadia draws `->` as → and `<=` as ≤ (ligatures; the text itself is unchanged).
+- **mac:** every identifier stays distinct, but CJK characters take a full 1em each, so size containers from the estimate in Text Rules plus one character of slack. `O` and `0` are hard to tell apart. Cascadia draws `->` as → and `<=` as ≤ (ligatures; the text itself is unchanged). Cascadia has no CJK glyphs: Chinese renders in the viewer's system sans-serif, so only Latin, digits, and identifiers look monospaced.
 
 ### Stroke Width
-- `strokeWidth: 1` — Thin, elegant. Good for lines, dividers, subtle connections.
-- `strokeWidth: 2` — Standard. Good for shapes and primary arrows.
-- `strokeWidth: 4` — Bold. Reserve for the diagram's single accent (main flow line or key connection). These three values are Excalidraw's own presets; other widths have no button in the editor.
+Excalidraw's own presets are `1`, `2`, and `4`; other widths have no button in the editor.
+- `1` — shapes in every style but brutal and hand-drawn; secondary structural lines.
+- `2` — arrows and main structural lines; hand-drawn shapes.
+- `4` — brutal only.
 
 ### Opacity
-**Always use `opacity: 100` for all elements.** Use color, size, and stroke width to create hierarchy instead of transparency.
+**Use `opacity: 100` for every element except the mac shadow copies (`opacity: 7`).** Use color, size, and stroke width to create hierarchy instead of transparency.
 
 ### Small Markers Instead of Shapes
 Instead of full shapes, use small dots (10-20px ellipses) as:
@@ -442,9 +452,9 @@ Position alone doesn't show relationships. If A relates to B, there must be an a
 }
 ```
 
-Settings: `fontFamily` from the chosen row of **Styles** (`6` for the default rounded-sans style), `textAlign: "center"`, `verticalAlign: "middle"`. Text inside code / JSON evidence artifacts uses `fontFamily: 3` (monospace) in every style so code stays aligned.
+Settings: `fontFamily` from the chosen row of **Styles** (`3` for the default mac style), `textAlign: "center"`, `verticalAlign: "middle"`. Text inside code / JSON evidence artifacts uses `fontFamily: 3` (monospace) in every style so code stays aligned.
 
-Width estimate for sizing containers: each CJK character ≈ 1 × font size, each Latin character ≈ 0.62 × font size (0.6 in monospace); add the container's padding on top.
+Width estimate for sizing containers: each CJK character ≈ 1 × font size, each Latin character ≈ 0.6 × font size in the default mac style (0.62 in the other styles); add the container's padding on top.
 
 Font sizes: at most three per diagram, from Excalidraw's presets — title `28` (`36` for a single poster-style diagram), section labels `20`, body and arrow labels `16`. Nothing below 16.
 
@@ -478,8 +488,8 @@ See `references/element-templates.md` for copy-paste JSON templates for each ele
 
 When the request names a diagram type:
 1. List the entries: `grep -n '^### ' '<skill-dir>/references/gallery/README.md'` — one line each, `### NN 图名（图类型）`.
-2. Read the matching entry (about 10 lines from its heading) and the PNG on its image line, `references/gallery/png/NN-slug.png`.
-3. Borrow the notation, layout skeleton, drawing technique, and canvas size. The content is yours, and so is the style: the gallery is rendered all-monospace with square corners, which is none of the four **Styles**.
+2. Read the matching entry (about 10 lines from its heading), then look at its figure. Figures are SVGs (`references/gallery/svg/NN-slug.svg`) that `Read` cannot show as images, so rasterize first and read the PNG: `uv run '<skill-dir>/references/render_excalidraw.py' '<skill-dir>/references/gallery/svg/NN-slug.svg' --output /tmp/gallery-NN.png`. `references/gallery/overview.png` shows all 69 as thumbnails.
+3. Borrow the notation, layout skeleton, drawing technique, and canvas size. The content is yours, and so is the style: the gallery uses the shared palette with Cascadia text and hairline strokes, mostly with square corners and without the mac shadows.
 4. Sections `## 12` and `## 13` of the README list what Excalidraw draws badly and the better tool for each (dense dependency graphs → Graphviz / D2, data charts → ECharts / Vega-Lite, frequently changing Gantt → Mermaid, executable BPMN → bpmn.io). For those types, tell the user the better tool before drawing.
 
 ---
@@ -518,6 +528,8 @@ uv run '<skill-dir>/references/render_excalidraw.py' <path-to-file.excalidraw>
 ```
 
 This outputs a PNG next to the `.excalidraw` file. Then use the **Read tool** on the PNG to actually view it.
+
+When the user wants an SVG (for a web page, or one file that both displays and stays editable), add `--output topic.svg`: the scene is embedded, so excalidraw.com reopens the SVG as an editable drawing. Keep rendering PNGs for the review loop; `Read` cannot show an SVG.
 
 ### The Loop
 
@@ -628,9 +640,9 @@ Keeping the file name and path means links in earlier replies and documents now 
 
 ### Technical
 16. **Text clean**: `text` contains only readable words
-17. **Font**: every prose text element uses the chosen style's `fontFamily` (`6` by default); code / JSON evidence uses `3`
+17. **Font**: every prose text element uses the chosen style's `fontFamily` (`3` by default); code / JSON evidence uses `3`
 18. **Roughness**: every element uses the chosen style's `roughness` (`0` by default); one style per diagram
-19. **Opacity**: `opacity: 100` for all elements (no transparency)
+19. **Opacity**: `opacity: 100` for all elements except mac shadow copies (`opacity: 7`)
 20. **Container ratio**: <30% of text elements should be inside containers
 
 ### Visual Validation (Render Required)

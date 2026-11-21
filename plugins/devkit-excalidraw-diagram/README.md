@@ -11,9 +11,10 @@
 | 说法 | 走哪里 |
 |---|---|
 | 「用 excalidraw 画个架构图」「生成一个 .excalidraw 文件」「出张能拖拽改的白板图」 | 本插件 `excalidraw-diagram` |
-| 「画个图」「可视化一下」，没提 Excalidraw | `devkit-tool:show-me`（挑伪代码、调用树、Mermaid、HTML 等最小够用的视图） |
+| 「画个架构图 / 流程图 / 时序图」，没提 Excalidraw | `devkit-svg-diagram:svg-diagram`（默认出图） |
+| 「画个图」「可视化一下」，没说图种 | `devkit-tool:show-me`（挑伪代码、调用树、成品图、HTML 等最小够用的视图；要成品图时默认转调 svg-diagram） |
 
-上游的触发描述是「任何想可视化流程、架构、概念的时候」，会和 `show-me` 抢同一批请求，所以这里收窄到点名 Excalidraw 或可编辑白板图。
+上游的触发描述是「任何想可视化流程、架构、概念的时候」，会和 `show-me` 抢同一批请求，所以这里收窄到点名 Excalidraw 或可编辑白板图。2026-11-21 起默认出图改由 `devkit-svg-diagram` 承担（devkit-tool 6.43.0），`show-me`、`tech-doc` 只在用户点名 Excalidraw 时转调本插件，或在未装 svg-diagram 时退到本插件。
 
 
 ## 前置依赖
@@ -47,24 +48,25 @@
 | `SKILL.md` Styles 表、Text Rules、Quality Checklist 第 17–18 条；`references/element-templates.md` 全部模板；`references/design-guide.md` 第 4.5、7.1、7.3 条；`references/json-schema.md` 的 `roughness`、`fontFamily` 行 | 1.5.0：默认风格由手绘改为圆体（`roughness: 0` + `fontFamily: 6` Nunito）；手绘降为点名「手绘」「草图」才用 | 2026-10-26 用户拍板默认用圆体柔和风 |
 | `SKILL.md` 新增 Handing the Diagram Over、Updating an Existing Diagram 两节，开头加改图指路，`description` 补改图触发说法 | 1.6.0：回复里 PNG 用普通链接、不加 `!`；同一话题已有图时在原文件上定点改、重渲染到原路径，只有布局整体变化才重画 | 实测 `![图注](file://…png)` 在 Claude Code 终端印成纯文本、点不动；整份重写要重新输出全部 JSON，还会冲掉用户在编辑器里的手改 |
 | `SKILL.md` Styles 表加第五种风格及其规则；`references/color-palette.md` 末尾新增 Pastel Style 色板；`references/design-guide.md` 第 3.4 条注明例外 | 1.7.0：新增「柔和色块」风格（pastel）：低饱和分区底色 + 同色系浅描边、大分区里嵌小卡片、卡片上标题下灰色说明、三角箭头、范围外用虚线框；只有这种风格换色板，容器描边对比度低于 3:1 属有意为之，文字与箭头仍达标 | 2026-11-19 用户要能用 Excalidraw 复刻 nb 组方案文档里的柔和色块分层架构图；色值取自该样板 SVG |
+| `references/color-palette.md` 通用色板、文字色、代码块配色全部重写，末尾新增 Brutal Style；`SKILL.md` Styles 表、Text Rules、Reference Gallery、Render 一节、Checklist 第 17 条；`references/element-templates.md`、`json-schema.md`、`design-guide.md` 第 4.5、7.3 条；`render_excalidraw.py` 与 `render_template.html`；`references/gallery/` 由 PNG 换成 SVG | 1.8.0：默认风格改为「Mac 扁平」（mac：等宽字体 + 柔和色块 + 细描边 + 卡片柔和投影 + 三角箭头 + 卡片文字居中），原「柔和色块」并入它；除新野兽派外所有风格共用一套 Mac 色板（浅底、同色相细描边、Apple 灰阶文字，文字对 4.5:1 达标，卡片细描边低于 3:1 属有意为之），代码块改浅底 Xcode 配色；新增「新野兽派」（brutal，保留自己的高饱和色板）；渲染脚本支持输出内嵌场景的 SVG、把 SVG 转成 PNG；图库 69 张改用 Mac 色板重渲染为内嵌场景的 SVG | 2026-11-21 用户嫌原商务配色丑，选定「Mac 扁平 + 柔和色块 + 等宽」为默认，并要求其他风格统一用这套颜色；同意收录新野兽派；图库要换成 SVG 或 Excalidraw 原始文件 |
 | `references/pyproject.toml`、`.gitignore`、上游 `README.md` | 未移植 | 依赖已内联进脚本；安装说明并入本文件 |
 
 改配色：编辑 `skills/excalidraw-diagram/references/color-palette.md`，所有图跟着变。
 
 
-## 风格（1.7.0 起五种）
+## 风格（1.8.0 起五种）
 
-默认圆体（1.5.0 起；1.1.0–1.4.0 默认手绘）。用户说出下表的说法时，整张图换成对应风格，一张图只用一种。
+默认 Mac 扁平（1.8.0 起；1.5.0–1.7.0 默认圆体，1.1.0–1.4.0 默认手绘）。用户说出下表的说法时，整张图换成对应风格，一张图只用一种。
 
 | 风格 | 用户怎么说 | 线条 | 正文字体 | 实测代价 |
 |---|---|---|---|---|
-| 圆体（默认） | 不提风格；「圆体」「柔和」「Nunito」 | 直线 | Nunito | 大写 I 与小写 l 同形，`skuId` 会读成 `skuld`；Nunito 不带中文字形，中文回退系统黑体，中文为主的图和「干净」几乎一样 |
+| Mac 扁平（默认） | 不提风格；「Mac 扁平」「苹果风」「柔和色块」「色块卡片」「等宽」「工程风」，或给一张柔和色块分层图当样板 | 直线 | Cascadia 等宽 | 卡片下多一层柔和投影（7% 黑，下移 5px），白卡片靠它从白底浮起；标识符不会认错；中文字距偏大，O 与 0 难分，`->` 显示成 →；Cascadia 不带中文字形，中文回退系统黑体 |
+| 圆体 | 「圆体」「Nunito」 | 直线 | Nunito | 大写 I 与小写 l 同形，`skuId` 会读成 `skuld`；Nunito 不带中文字形，中文为主的图和「干净」几乎一样 |
 | 手绘 | 「手绘」「草图」 | 手绘抖动 | Excalifont 手写体 | 读起来像草稿 |
 | 干净 | 「干净」「正式」「给客户看」 | 直线 | Helvetica | 大写 I 与小写 l 同形，`skuId` 会读成 `skuld` |
-| 等宽 | 「等宽」「等宽圆角」「工程风」 | 直线 | Cascadia 等宽 | 标识符不会认错；中文字距偏大，O 与 0 难分，`->` 显示成 → |
-| 柔和色块 | 「柔和色块」「浅色色块」「色块卡片」「低饱和」「pastel」，或给一张柔和色块分层图当样板 | 直线 | Helvetica | 改的不只是线条和字体：换用专属浅色色板，容器描边很浅（对比度约 1.5～1.9:1），靠底色和标题区分分区；没有粗体，卡片标题只能靠大一号字号突出，说明文字最小 16 |
+| 新野兽派 | 「野兽派」「新野兽派」「野蛮风格」「neo-brutalism」 | 直线 | Helvetica | 4px 纯黑粗边、黑色实心投影、直角、高饱和填充、箭头标签黑底白字；视觉很重，不适合正式文档；投影要占 10px 间距 |
 
-前四种风格都是圆角框、实心填充、同一套配色，柔和色块用自己的色板；代码与 JSON 片段在任何风格下都用等宽字体。
+前四种风格共用同一套 Mac 色板与结构规则：圆角框、实心浅底、同色相细描边、灰色三角箭头、卡片文字水平垂直都居中、分层图用浅灰分区嵌卡片；只有 Mac 扁平加投影。新野兽派用自己的高饱和色板。代码与 JSON 片段在任何风格下都用等宽字体。
 
 
 ## 参考图库（1.4.0 起）
@@ -73,8 +75,8 @@
 每张有一句话图注、画法要点、已知瑕疵和画布尺寸，另有两节写 Excalidraw 画不好什么、哪类图该换什么工具。
 AI 画指定类型的图（C4、时序图、ER 图、BPMN、甘特图……）时先查对应条目、看图，再照它的记号和版式画。
 
-- 图片用等宽直角风渲染，只当版式参照，出图风格仍按上一节选。
-- 插件只带压成 64 色的 PNG（约 6.7 MB），不带 `.excalidraw` 源文件和生成脚本。
+- 图片用 Mac 色板加等宽字体渲染（不带投影），只当版式参照，出图风格仍按上一节选。
+- 1.8.0 起每张图是内嵌了 Excalidraw 场景的 SVG（共约 8.6 MB）：浏览器和 markdown 预览直接显示，拖进 excalidraw.com 能继续编辑；另带一张全景缩略图 `overview.png`。不带生成脚本。
 - 图里的业务是虚构电商「青禾商城」。
 
 

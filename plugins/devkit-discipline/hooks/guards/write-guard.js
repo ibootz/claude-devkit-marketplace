@@ -82,11 +82,12 @@
 //
 // 【检查三：md 里新写了 mermaid 图，而本会话没调过画图技能（4.16.0）】
 // 2026-11-17～19 实测：3 个写文档的会话共 11 次把 ```mermaid 写进 md，事前都没调
-// devkit-tool:show-me 或 devkit-excalidraw-diagram——tech-doc 第四步只「指向」show-me、
-// 不要求调用，模型读完 tech-doc 就直接写 mermaid。show-me 才是判「出 Excalidraw 还是
-// 走 mermaid 退路」的地方，没调它写下的 mermaid 都是跳过了这一步。
+// devkit-tool:show-me 或画图技能——tech-doc 第四步只「指向」show-me、
+// 不要求调用，模型读完 tech-doc 就直接写 mermaid。show-me 才是判「出成品图（默认
+// devkit-svg-diagram，点名 Excalidraw 才用 devkit-excalidraw-diagram）还是走 mermaid 退路」
+// 的地方，没调它写下的 mermaid 都是跳过了这一步。
 // 判据：扩展名 .md/.markdown + 本次写入的**新文本**（Write 的 content、Edit 的 new_string）
-//   含 ```mermaid + transcript 里没有 skill 名含 show-me / excalidraw 的 Skill 调用。
+//   含 ```mermaid + transcript 里没有 skill 名含 show-me / svg-diagram / excalidraw 的 Skill 调用。
 //   只看新文本：改一份早就有 mermaid 的文档的别处不该提醒。
 // 放行：skills / references 目录与 .claude/ 下的 md（讲 mermaid 写法的规约文本本身）、
 //   payload 没有 transcript_path 或读不到（无法判断就不提醒——这条是提醒不是硬约束，
@@ -172,7 +173,7 @@ const GENERATED_NAME_PATTERN = /(\.min\.|\.generated\.|\.g\.|\.bundle\.|_pb2?\.|
 const MD_EXTENSIONS = new Set(['.md', '.markdown'])
 const MERMAID_FENCE = /(^|\n)\s*(```|~~~)\s*mermaid\b/
 const MERMAID_EXEMPT_PATH = /(^|\/)(skills|references|\.claude)\//
-const DRAWING_SKILL_CALL = /"skill"\s*:\s*"[^"]*(show-me|excalidraw)[^"]*"/
+const DRAWING_SKILL_CALL = /"skill"\s*:\s*"[^"]*(show-me|svg-diagram|excalidraw)[^"]*"/
 
 // `.claude/rules/` 下的 md 不受 CLAUDE.md 行数约束（拆分后的细节页天然可以长）。
 // 只匹配**项目内相对路径的开头**——不是"路径任意位置包含"，后者是绕过点（见文件头）。
@@ -312,7 +313,7 @@ function checkMermaid(payload, filePath, posixPath, ext, cwd) {
   process.stderr.write(
     `[L1-BLOCKER] file=${relPath} check=write-guard ` +
       `finding="md 里写了 mermaid 图，本会话还没调过 devkit-tool:show-me" ` +
-      `hint="现在调 devkit-tool:show-me，按它选图：装了 devkit-excalidraw-diagram 就出 Excalidraw PNG 放进文档旁 figures/，` +
+      `hint="现在调 devkit-tool:show-me，按它选图：装了 devkit-svg-diagram 就出 SVG 图与 PNG 放进文档旁 figures/（用户点名 Excalidraw 才用 devkit-excalidraw-diagram），` +
       `再把这段 mermaid 换成图片引用；show-me 判定走 mermaid 退路、或项目规约另定了画法（如手绘 SVG）时，照那边做并在回复里一句话说明原因。` +
       `未装 devkit-tool 时忽略本条"\n`
   )
