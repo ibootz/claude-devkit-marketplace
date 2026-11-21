@@ -35,17 +35,17 @@ SKILL.md 第四步的展开：选什么图、每张图怎么检查、全篇怎�
 
 ## 三、全篇统一
 
-同一篇文档的所有图用同一种风格（都 mermaid，或都 Excalidraw 同一风格）、同一字体、同一套**按角色**的配色。按角色配色意味着同一个角色在每张图里颜色相同，读者看一次图例就能读懂后面所有图。【判断】
+同一篇文档的所有图用同一种风格（都 mermaid，或都同一种出图风格、同一主题）、同一字体、同一套**按角色**的配色。按角色配色意味着同一个角色在每张图里颜色相同，读者看一次图例就能读懂后面所有图。【判断】
 
-默认角色配色（取自 Excalidraw 调色板，mermaid 用 `classDef`、Excalidraw 用元素属性）：
+默认用 svg-diagram：颜色由主题决定，只需按下表第二列给卡片填 `role`，全篇同一主题。走 mermaid 退路、Excalidraw 或手写 SVG 时用后两列的颜色（取自 Excalidraw 调色板，mermaid 用 `classDef`、Excalidraw 用元素属性）：
 
-| 角色 | 填充 | 描边 | 用于 |
-|---|---|---|---|
-| 本方服务 | `#a5d8ff` | `#1971c2` | 本项目自己的服务、模块 |
-| 平台 / 中间件 | `#ffec99` | `#f08c00` | 共用平台、队列、网关 |
-| 外部 | `#ffc9c9` | `#e03131` | 第三方、外部厂商 |
-| 目标 / 新增 | `#b2f2bb` | `#2f9e44` | 方案要建成的部分 |
-| 范围外 / 废弃 | `#dee2e6` | `#495057`，虚线 | 不在本次范围、待下线 |
+| 角色 | svg-diagram `role` | 填充 | 描边 | 用于 |
+|---|---|---|---|---|
+| 本方服务 | `primary` | `#a5d8ff` | `#1971c2` | 本项目自己的服务、模块 |
+| 平台 / 中间件 | `platform` | `#ffec99` | `#f08c00` | 共用平台、队列、网关 |
+| 外部 | `external` | `#ffc9c9` | `#e03131` | 第三方、外部厂商 |
+| 目标 / 新增 | `success` | `#b2f2bb` | `#2f9e44` | 方案要建成的部分 |
+| 范围外 / 废弃 | `plain` 加 `"dashed": true` | `#dee2e6` | `#495057`，虚线 | 不在本次范围、待下线 |
 
 分组框统一灰色虚线、透明填充，不抢方框的颜色。
 
@@ -64,10 +64,10 @@ api[订单服务]:::svc -->|推送任务| mq[消息队列]:::plat
 
 ## 四、选载体
 
-- **默认**：按 `show-me` 调 `devkit-excalidraw-diagram` 出 Excalidraw 图，`.excalidraw` 与 PNG 放在文档旁的 `figures/` 目录，文档里引 PNG。PNG 在 GitLab / GitHub、Typora、钉钉等在线文档里都能直接显示。【判断】
-- **未安装 `devkit-excalidraw-diagram` 或渲染跑不通**：mermaid 源码写进 md；要发布到不渲染 mermaid 的平台时，先导出 PNG 再引用，源文件 `.mmd` 同放 `figures/`。
+- **默认**：按 `show-me` 调 `devkit-svg-diagram:svg-diagram` 出 SVG 图，JSON 描述、`.svg` 与 PNG 放在文档旁的 `figures/` 目录，文档里引 PNG。用户点名 Excalidraw 时改调 `devkit-excalidraw-diagram`，源文件为 `.excalidraw`。PNG 在 GitLab / GitHub、Typora、钉钉等在线文档里都能直接显示。【判断】
+- **未安装 `devkit-svg-diagram` 时先退到 `devkit-excalidraw-diagram`；两者都没装或渲染跑不通**：mermaid 源码写进 md；要发布到不渲染 mermaid 的平台时，先导出 PNG 再引用，源文件 `.mmd` 同放 `figures/`。
 - 一次性给人看、看完即弃的视觉讲解才用 HTML。
-- **文档交付格式是单文件 HTML**（SKILL.md 第零步）时，Excalidraw 图渲染到临时目录、由 `scripts/html_pack.py` 连同源稿内嵌进 HTML；≤5 个方框的简单图可直接手写 `<svg>`；不用 mermaid。细则见 `html.md` 第四节。
+- **文档交付格式是单文件 HTML**（SKILL.md 第零步）时，图渲染到临时目录、由 `scripts/html_pack.py` 把 PNG 内嵌进 HTML（图的源稿——svg-diagram 描述或 `.excalidraw`——一并内嵌）；≤5 个方框的简单图可直接手写 `<svg>`；不用 mermaid。细则见 `html.md` 第四节。
 
 ---
 

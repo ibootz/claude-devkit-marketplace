@@ -1,0 +1,22 @@
+{
+  "theme": "mac",
+  "title": "智测平台研发组织",
+  "tree": {
+    "id": "cto", "title": "技术负责人", "role": "primary",
+    "children": [
+      {"id": "fe", "title": "前端组", "desc": "考试端 / 管理端", "children": [
+        {"id": "fe1", "title": "考试端"},
+        {"id": "fe2", "title": "管理后台"}
+      ]},
+      {"id": "be", "title": "后端组", "desc": "判分与题库", "children": [
+        {"id": "be1", "title": "判分服务"},
+        {"id": "be2", "title": "题库服务"}
+      ]},
+      {"id": "ai", "title": "算法组", "role": "ai", "desc": "AI 预评分"}
+    ]
+  },
+  "legend": [
+    {"role": "primary", "label": "负责人"},
+    {"role": "ai", "label": "AI"}
+  ]
+}

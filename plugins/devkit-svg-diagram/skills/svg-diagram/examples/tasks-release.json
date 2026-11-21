@@ -1,0 +1,19 @@
+{
+  "theme": "mac",
+  "title": "智测 3.2 发版计划",
+  "tasks": [
+    {"id": "spec", "title": "需求评审", "start": "2026-11-02", "end": "2026-11-04", "role": "start"},
+    {"id": "dev", "title": "开发", "start": "2026-11-05", "end": "2026-11-13", "role": "primary", "after": ["spec"]},
+    {"id": "ai", "title": "AI 评分调优", "start": "2026-11-05", "end": "2026-11-11", "role": "ai", "after": ["spec"]},
+    {"id": "test", "title": "联调测试", "start": "2026-11-16", "end": "2026-11-20", "role": "manual", "after": ["dev"]},
+    {"id": "ship", "title": "上线", "start": "2026-11-23", "milestone": true, "role": "success", "after": ["test"]}
+  ],
+  "marker": {"at": "2026-11-09", "label": "今天"},
+  "legend": [
+    {"role": "start", "label": "准备"},
+    {"role": "primary", "label": "开发"},
+    {"role": "ai", "label": "AI"},
+    {"role": "manual", "label": "测试"},
+    {"role": "success", "label": "里程碑"}
+  ]
+}

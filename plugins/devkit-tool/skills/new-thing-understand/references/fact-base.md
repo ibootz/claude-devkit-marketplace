@@ -24,7 +24,7 @@
 - 风格：<rounded-sans 默认；术语里标识符多时用 mono>
 - 角色配色：<新事物本身 / 使用者已知的东西 / 外部参与方 / 风险与空白，各用哪组 fill 与 stroke>
 - 图例：每篇第一张图下放图例，写颜色、线型、缩写各代表什么。
-- 文件名：figures/<篇号>-<主题>.excalidraw 与同名 .png
+- 文件名：figures/<篇号>-<主题>.png 与同名图源文件（svg-diagram 的 JSON 描述与 .svg，或 .excalidraw）
 ```
 
 **目标理解层级**取三级之一：能列出要点 → 能讲清要点之间的关系 → 能迁移到新情境。全组文章覆盖三级，不全停在第一级。
@@ -39,7 +39,7 @@
 - 【上下文】
   - 必读：`01-fact-base.md` 全文、`00-sources.md` 的冲突清单、本 skill 的 `references/articles.md` 里本篇篇位那一节。
   - 写作：先调 `devkit-tool:tech-doc`，按它判类型、套骨架、自检；交付格式是 HTML 时另读它的 `references/html.md` 第三、四、七节（标签写法、配图、片段约定），篇间链接写 `<篇号>-<篇位>.html#id`。
-  - 画图：调 `devkit-excalidraw-diagram:excalidraw-diagram` 出图，按事实底稿的图规约配色与命名；渲染后 Read PNG 检查，有缺陷就改；核对 PNG 修改时间晚于本次渲染开始，渲染命令不接 `tail`、`head`；跑不通就原位放文本箭头图、标「待补 Excalidraw 图」与原因。
+  - 画图：调 `devkit-svg-diagram:svg-diagram` 出图（用户点名 Excalidraw 才调 `devkit-excalidraw-diagram:excalidraw-diagram`），按事实底稿的图规约配色与命名；渲染后 Read PNG 检查，有缺陷就改；核对 PNG 修改时间晚于本次渲染开始，渲染命令不接 `tail`、`head`；跑不通就原位放文本箭头图、标「待补图」与原因。
   - 资料原文的路径，供核对出处时回读。
 - 【约束】
   - 术语与数字以事实底稿为准。发现事实底稿有错或缺，不自行改它，写进回执。

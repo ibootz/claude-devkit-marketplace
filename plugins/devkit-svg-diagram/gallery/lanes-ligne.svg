@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 599" width="1080" height="599" font-family="&#x27;Helvetica Neue&#x27;,Helvetica,Arial,&#x27;PingFang SC&#x27;,&#x27;Microsoft YaHei&#x27;,sans-serif" data-theme="ligne" data-fonts="Cascadia"><metadata id="diagram-spec"><![CDATA[{
+ "theme": "ligne",
+ "title": "成绩复核流程",
+ "lanes": [
+  {
+   "id": "stu",
+   "title": "学员"
+  },
+  {
+   "id": "sys",
+   "title": "智测平台"
+  },
+  {
+   "id": "tch",
+   "title": "老师"
+  }
+ ],
+ "steps": [
+  {
+   "id": "apply",
+   "title": "申请复核",
+   "lane": "stu",
+   "col": 0,
+   "role": "start",
+   "shape": "pill"
+  },
+  {
+   "id": "check",
+   "title": "校验时限",
+   "desc": "成绩公布 7 天内",
+   "lane": "sys",
+   "col": 0,
+   "role": "primary"
+  },
+  {
+   "id": "assign",
+   "title": "派给阅卷老师",
+   "lane": "sys",
+   "col": 1,
+   "role": "primary"
+  },
+  {
+   "id": "review",
+   "title": "重新评阅",
+   "lane": "tch",
+   "col": 1,
+   "role": "manual"
+  },
+  {
+   "id": "notify",
+   "title": "通知结果",
+   "lane": "sys",
+   "col": 2,
+   "role": "primary"
+  },
+  {
+   "id": "done",
+   "title": "查看新成绩",
+   "lane": "stu",
+   "col": 2,
+   "role": "success",
+   "shape": "pill"
+  }
+ ],
+ "edges": [
+  {
+   "from": "apply",
+   "to": "check"
+  },
+  {
+   "from": "check",
+   "to": "assign"
+  },
+  {
+   "from": "assign",
+   "to": "review"
+  },
+  {
+   "from": "review",
+   "to": "notify"
+  },
+  {
+   "from": "notify",
+   "to": "done",
+   "accent": "success"
+  }
+ ],
+ "legend": [
+  {
+   "role": "start",
+   "label": "起点"
+  },
+  {
+   "role": "primary",
+   "label": "系统"
+  },
+  {
+   "role": "manual",
+   "label": "人工"
+  },
+  {
+   "role": "success",
+   "label": "结束"
+  }
+ ]
+}]]></metadata><defs></defs><rect width="100%" height="100%" fill="#ffffff"/><text x="28" y="46.2" font-size="28" font-weight="700" fill="#111111" dominant-baseline="central" font-family="&#x27;Helvetica Neue&#x27;,Helvetica,Arial,&#x27;PingFang SC&#x27;,&#x27;Microsoft YaHei&#x27;,sans-serif">成绩复核流程</text><path d="M28.00,98.40 C28.00,91.73 31.33,88.40 38.00,88.40 C372.67,88.40 707.33,88.40 1042.00,88.40 C1048.67,88.40 1052.00,91.73 1052.00,98.40 C1052.00,131.73 1052.00,165.07 1052.00,198.40 C1052.00,205.07 1048.67,208.40 1042.00,208.40 C707.33,208.40 372.67,208.40 38.00,208.40 C31.33,208.40 28.00,205.07 28.00,198.40 C28.00,165.07 28.00,131.73 28.00,98.40 Z" fill="#f5f5f5"/><text x="52.0" y="126.4" font-size="20" font-weight="700" fill="#111111" dominant-baseline="central">学员</text><path d="M28.00,242.40 C28.00,235.73 31.33,232.40 38.00,232.40 C372.67,232.40 707.33,232.40 1042.00,232.40 C1048.67,232.40 1052.00,235.73 1052.00,242.40 C1052.00,282.13 1052.00,321.87 1052.00,361.60 C1052.00,368.27 1048.67,371.60 1042.00,371.60 C707.33,371.60 372.67,371.60 38.00,371.60 C31.33,371.60 28.00,368.27 28.00,361.60 C28.00,321.87 28.00,282.13 28.00,242.40 Z" fill="#f5f5f5"/><text x="52.0" y="270.4" font-size="20" font-weight="700" fill="#111111" dominant-baseline="central">智测平台</text><path d="M28.00,405.60 C28.00,398.93 31.33,395.60 38.00,395.60 C372.67,395.60 707.33,395.60 1042.00,395.60 C1048.67,395.60 1052.00,398.93 1052.00,405.60 C1052.00,438.93 1052.00,472.27 1052.00,505.60 C1052.00,512.27 1048.67,515.60 1042.00,515.60 C707.33,515.60 372.67,515.60 38.00,515.60 C31.33,515.60 28.00,512.27 28.00,505.60 C28.00,472.27 28.00,438.93 28.00,405.60 Z" fill="#f5f5f5"/><text x="52.0" y="433.6" font-size="20" font-weight="700" fill="#111111" dominant-baseline="central">老师</text><g class="edges"><path d="M328.00,184.40 C328.00,205.42 328.00,226.43 328.00,247.45" fill="none" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M328.00,254.65 L322.96,242.65 L333.04,242.65 Z" fill="#111111" stroke="#111111" stroke-width="1.5" stroke-linejoin="round"/><path d="M428.00,302.00 C458.35,302.00 488.70,302.00 519.05,302.00" fill="none" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M526.25,302.00 L514.25,307.04 L514.25,296.96 Z" fill="#111111" stroke="#111111" stroke-width="1.5" stroke-linejoin="round"/><path d="M628.00,338.00 C628.00,362.22 628.00,386.43 628.00,410.65" fill="none" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M628.00,417.85 L622.96,405.85 L633.04,405.85 Z" fill="#111111" stroke="#111111" stroke-width="1.5" stroke-linejoin="round"/><path d="M728.00,455.60 C794.67,455.60 861.33,455.60 928.00,455.60 C928.00,419.38 928.00,383.17 928.00,346.95" fill="none" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M928.00,339.75 L933.04,351.75 L922.96,351.75 Z" fill="#111111" stroke="#111111" stroke-width="1.5" stroke-linejoin="round"/><path d="M928.00,266.00 C928.00,241.91 928.00,217.82 928.00,193.72" fill="none" stroke="#111111" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/><path d="M928.00,186.53 L933.04,198.53 L922.96,198.53 Z" fill="#111111" stroke="#111111" stroke-width="2.25" stroke-linejoin="round"/></g><path d="M228.00,148.40 C228.00,128.52 244.12,112.40 264.00,112.40 C306.67,112.40 349.33,112.40 392.00,112.40 C411.88,112.40 428.00,128.52 428.00,148.40 C428.00,168.28 411.88,184.40 392.00,184.40 C349.33,184.40 306.67,184.40 264.00,184.40 C244.12,184.40 228.00,168.28 228.00,148.40 Z" fill="#e3e3e3" stroke="#1d4ed8" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><text x="328.0" y="148.4" font-size="20" font-weight="500" fill="#111111" text-anchor="middle" dominant-baseline="central" data-maxw="162">申请复核</text><path d="M828.00,148.40 C828.00,128.52 844.12,112.40 864.00,112.40 C906.67,112.40 949.33,112.40 992.00,112.40 C1011.88,112.40 1028.00,128.52 1028.00,148.40 C1028.00,168.28 1011.88,184.40 992.00,184.40 C949.33,184.40 906.67,184.40 864.00,184.40 C844.12,184.40 828.00,168.28 828.00,148.40 Z" fill="#ffffff" stroke="#111111" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><text x="928.0" y="148.4" font-size="20" font-weight="500" fill="#111111" text-anchor="middle" dominant-baseline="central" data-maxw="162">查看新成绩</text><path d="M228.00,262.40 C228.00,258.40 230.00,256.40 234.00,256.40 C296.67,256.40 359.33,256.40 422.00,256.40 C426.00,256.40 428.00,258.40 428.00,262.40 C428.00,288.80 428.00,315.20 428.00,341.60 C428.00,345.60 426.00,347.60 422.00,347.60 C359.33,347.60 296.67,347.60 234.00,347.60 C230.00,347.60 228.00,345.60 228.00,341.60 C228.00,315.20 228.00,288.80 228.00,262.40 Z" fill="#1d4ed8" stroke="#1d4ed8" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round"/><text x="328.0" y="287.4" font-size="20" font-weight="500" fill="#ffffff" text-anchor="middle" dominant-baseline="central" data-maxw="162">校验时限</text><text x="328.0" y="318.0" font-size="16" fill="#e3e9fb" text-anchor="middle" dominant-baseline="central" data-maxw="162">成绩公布 7 天内</text><path d="M528.00,272.00 C528.00,268.00 530.00,266.00 534.00,266.00 C596.67,266.00 659.33,266.00 722.00,266.00 C726.00,266.00 728.00,268.00 728.00,272.00 C728.00,292.00 728.00,312.00 728.00,332.00 C728.00,336.00 726.00,338.00 722.00,338.00 C659.33,338.00 596.67,338.00 534.00,338.00 C530.00,338.00 528.00,336.00 528.00,332.00 C528.00,312.00 528.00,292.00 528.00,272.00 Z" fill="#1d4ed8" stroke="#1d4ed8" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round"/><text x="628.0" y="302.0" font-size="20" font-weight="500" fill="#ffffff" text-anchor="middle" dominant-baseline="central" data-maxw="162">派给阅卷老师</text><path d="M828.00,272.00 C828.00,268.00 830.00,266.00 834.00,266.00 C896.67,266.00 959.33,266.00 1022.00,266.00 C1026.00,266.00 1028.00,268.00 1028.00,272.00 C1028.00,292.00 1028.00,312.00 1028.00,332.00 C1028.00,336.00 1026.00,338.00 1022.00,338.00 C959.33,338.00 896.67,338.00 834.00,338.00 C830.00,338.00 828.00,336.00 828.00,332.00 C828.00,312.00 828.00,292.00 828.00,272.00 Z" fill="#1d4ed8" stroke="#1d4ed8" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round"/><text x="928.0" y="302.0" font-size="20" font-weight="500" fill="#ffffff" text-anchor="middle" dominant-baseline="central" data-maxw="162">通知结果</text><path d="M528.00,425.60 C528.00,421.60 530.00,419.60 534.00,419.60 C596.67,419.60 659.33,419.60 722.00,419.60 C726.00,419.60 728.00,421.60 728.00,425.60 C728.00,445.60 728.00,465.60 728.00,485.60 C728.00,489.60 726.00,491.60 722.00,491.60 C659.33,491.60 596.67,491.60 534.00,491.60 C530.00,491.60 528.00,489.60 528.00,485.60 C528.00,465.60 528.00,445.60 528.00,425.60 Z" fill="#ffffff" stroke="#111111" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="0.1 5"/><text x="628.0" y="455.6" font-size="20" font-weight="500" fill="#111111" text-anchor="middle" dominant-baseline="central" data-maxw="162">重新评阅</text><text x="28" y="561.2" font-size="16" font-weight="700" fill="#111111" dominant-baseline="central">图例</text><path d="M80.00,558.00 C80.00,554.00 82.00,552.00 86.00,552.00 C90.00,552.00 94.00,552.00 98.00,552.00 C102.00,552.00 104.00,554.00 104.00,558.00 C104.00,560.13 104.00,562.27 104.00,564.40 C104.00,568.40 102.00,570.40 98.00,570.40 C94.00,570.40 90.00,570.40 86.00,570.40 C82.00,570.40 80.00,568.40 80.00,564.40 C80.00,562.27 80.00,560.13 80.00,558.00 Z" fill="#e3e3e3" stroke="#1d4ed8" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><text x="112.0" y="561.2" font-size="16" fill="#555555" dominant-baseline="central">起点</text><path d="M172.00,558.00 C172.00,554.00 174.00,552.00 178.00,552.00 C182.00,552.00 186.00,552.00 190.00,552.00 C194.00,552.00 196.00,554.00 196.00,558.00 C196.00,560.13 196.00,562.27 196.00,564.40 C196.00,568.40 194.00,570.40 190.00,570.40 C186.00,570.40 182.00,570.40 178.00,570.40 C174.00,570.40 172.00,568.40 172.00,564.40 C172.00,562.27 172.00,560.13 172.00,558.00 Z" fill="#1d4ed8" stroke="#1d4ed8" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/><text x="204.0" y="561.2" font-size="16" fill="#555555" dominant-baseline="central">系统</text><path d="M264.00,558.00 C264.00,554.00 266.00,552.00 270.00,552.00 C274.00,552.00 278.00,552.00 282.00,552.00 C286.00,552.00 288.00,554.00 288.00,558.00 C288.00,560.13 288.00,562.27 288.00,564.40 C288.00,568.40 286.00,570.40 282.00,570.40 C278.00,570.40 274.00,570.40 270.00,570.40 C266.00,570.40 264.00,568.40 264.00,564.40 C264.00,562.27 264.00,560.13 264.00,558.00 Z" fill="#ffffff" stroke="#111111" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="0.1 5"/><text x="296.0" y="561.2" font-size="16" fill="#555555" dominant-baseline="central">人工</text><path d="M356.00,558.00 C356.00,554.00 358.00,552.00 362.00,552.00 C366.00,552.00 370.00,552.00 374.00,552.00 C378.00,552.00 380.00,554.00 380.00,558.00 C380.00,560.13 380.00,562.27 380.00,564.40 C380.00,568.40 378.00,570.40 374.00,570.40 C370.00,570.40 366.00,570.40 362.00,570.40 C358.00,570.40 356.00,568.40 356.00,564.40 C356.00,562.27 356.00,560.13 356.00,558.00 Z" fill="#ffffff" stroke="#111111" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><text x="388.0" y="561.2" font-size="16" fill="#555555" dominant-baseline="central">结束</text></svg>

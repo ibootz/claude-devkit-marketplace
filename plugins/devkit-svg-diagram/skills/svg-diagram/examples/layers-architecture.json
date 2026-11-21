@@ -1,0 +1,36 @@
+{
+  "theme": "mac",
+  "title": "智测平台 · 产品架构图",
+  "subtitle": "分层视图：渠道 → 应用 → 中台 → 外部依赖",
+  "zones": [
+    {"title": "触达渠道", "desc": "学员与管理员的入口", "nodes": [
+      {"id": "pc", "title": "PC 端"},
+      {"id": "h5", "title": "H5 / 小程序"},
+      {"id": "app", "title": "移动 App"},
+      {"id": "im", "title": "钉钉 / 企微"}
+    ]},
+    {"title": "业务应用", "desc": "面向场景的功能", "nodes": [
+      {"id": "exam", "title": "在线考试", "desc": "组卷、监考、阅卷", "role": "primary"},
+      {"id": "practice", "title": "练习中心", "desc": "错题、刷题", "role": "primary"},
+      {"id": "ai", "title": "智能出题", "desc": "大模型生成试题", "role": "ai"},
+      {"id": "report", "title": "成绩分析", "desc": "报表与画像", "role": "primary"}
+    ]},
+    {"title": "能力中台", "desc": "多个应用共用", "nodes": [
+      {"id": "bank", "title": "题库服务", "role": "platform"},
+      {"id": "judge", "title": "判分引擎", "role": "platform"},
+      {"id": "user", "title": "用户与权限", "role": "platform"},
+      {"id": "msg", "title": "消息通知", "role": "platform"}
+    ]},
+    {"title": "外部依赖", "nodes": [
+      {"id": "llm", "title": "大模型 API", "role": "external"},
+      {"id": "oss", "title": "对象存储", "role": "external"},
+      {"id": "sso", "title": "企业 SSO", "role": "external"}
+    ]}
+  ],
+  "legend": [
+    {"role": "primary", "label": "业务应用"},
+    {"role": "ai", "label": "AI 能力"},
+    {"role": "platform", "label": "共享中台"},
+    {"role": "external", "label": "外部依赖"}
+  ]
+}

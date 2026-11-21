@@ -17,7 +17,7 @@
         "name": "zhangq"
       },
       "category": "Development",
-      "description": "工具技能集：submodule 同步推送、提交推送、会话起法与交接、话题可视化、技术文档写法、新事物认知与为我所用等 15 技能",
+      "description": "工具技能集：submodule 同步推送、提交推送、会话起法与交接、话题可视化、技术文档写法、新事物认知与为我所用等 16 技能",
       "homepage": "https://github.com/ibootz/claude-devkit-marketplace",
       "name": "devkit-tool",
       "source": {
@@ -28,7 +28,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "version": "6.42.0"
+      "version": "6.43.0"
     },
     {
       "author": {
@@ -353,6 +353,23 @@
         "authentication": "ON_INSTALL"
       },
       "version": "1.7.0"
+    },
+    {
+      "author": {
+        "name": "zhangq"
+      },
+      "category": "Productivity",
+      "description": "SVG 图解 - JSON 描述按固定主题渲染 SVG 与 PNG，九种布局、七套主题，默认 Mac 扁平",
+      "name": "devkit-svg-diagram",
+      "source": {
+        "source": "local",
+        "path": "./plugins/devkit-svg-diagram"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "version": "1.0.0"
     },
     {
       "author": {

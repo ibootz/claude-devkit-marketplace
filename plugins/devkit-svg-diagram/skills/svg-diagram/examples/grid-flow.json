@@ -1,0 +1,32 @@
+{
+  "theme": "mac",
+  "title": "试卷提交流程",
+  "nodes": [
+    {"id": "submit", "title": "学员交卷", "role": "start", "shape": "pill", "row": 0, "col": 0},
+    {"id": "auto", "title": "客观题自动判分", "desc": "判分引擎", "role": "primary", "row": 0, "col": 1},
+    {"id": "has_sub", "title": "有主观题？", "role": "platform", "shape": "diamond", "row": 0, "col": 2},
+    {"id": "ai", "title": "AI 预评分", "desc": "给出建议分", "role": "ai", "row": 1, "col": 2},
+    {"id": "manual", "title": "老师复核", "role": "manual", "row": 1, "col": 1},
+    {"id": "done", "title": "出成绩", "role": "success", "shape": "pill", "row": 1, "col": 0}
+  ],
+  "groups": [
+    {"title": "自动阶段", "nodes": ["submit", "auto", "has_sub"]}
+  ],
+  "edges": [
+    {"from": "submit", "to": "auto"},
+    {"from": "auto", "to": "has_sub"},
+    {"from": "has_sub", "to": "ai", "label": "是"},
+    {"from": "ai", "to": "manual"},
+    {"from": "manual", "to": "done", "accent": "success"}
+  ],
+  "code": [
+    {"title": "// 提交请求", "lines": ["POST /exam/{id}/submit", "{ \"answers\": [...], \"elapsed\": 1820 }"]}
+  ],
+  "legend": [
+    {"role": "start", "label": "起点"},
+    {"role": "ai", "label": "AI"},
+    {"role": "manual", "label": "人工"},
+    {"role": "success", "label": "结束"},
+    {"edge": "solid", "label": "流向"}
+  ]
+}

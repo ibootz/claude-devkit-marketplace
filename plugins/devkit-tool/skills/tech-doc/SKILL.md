@@ -7,7 +7,7 @@ when_to_use: "触发词：写文档 / 出一份报告 / 整理成文档 / 写方
 # 技术文档（写给人读的 md / 单文件 HTML）
 
 本 skill 管一篇文档的**交付格式、类型、骨架、写法、配图、自检**六件事，按顺序做。
-单张图怎么画、放哪交给 `devkit-tool:show-me`；要 Excalidraw 成品图交给 `devkit-excalidraw-diagram`（已安装时）；写给 AI 的文档归 `writing-for-agents`。
+单张图怎么画、放哪交给 `devkit-tool:show-me`；默认成品图（架构、流程、时序、状态）交给 `devkit-svg-diagram:svg-diagram`，点名要 Excalidraw 才交给 `devkit-excalidraw-diagram`（均已安装时）；写给 AI 的文档归 `writing-for-agents`。
 
 **读者假定**：懂开发，对本项目零上下文——不知道它做什么、有哪些参与方、内部叫法指什么。不按读者职位或此前提问推高这个假定。
 
@@ -19,12 +19,12 @@ when_to_use: "触发词：写文档 / 出一份报告 / 整理成文档 / 写方
 
 | 格式 | 交付物 | 适合 |
 |---|---|---|
-| **md** | `<名>.md` 加旁边的 `figures/`（`.excalidraw` 与 PNG） | 进仓库、要 diff、在 GitLab / Typora / 在线文档平台里看 |
-| **单文件 HTML** | 只有一个 `<名>.html`：图片 base64 内嵌、Excalidraw 源稿藏在文件里、样式内联，离线双击即开 | 发给人看（钉钉、邮件、网盘），对方不用装任何东西 |
+| **md** | `<名>.md` 加旁边的 `figures/`（图源文件与 PNG） | 进仓库、要 diff、在 GitLab / Typora / 在线文档平台里看 |
+| **单文件 HTML** | 只有一个 `<名>.html`：图片 base64 内嵌、图的源稿（svg-diagram 描述或 `.excalidraw`）藏在文件里、样式内联，离线双击即开 | 发给人看（钉钉、邮件、网盘），对方不用装任何东西 |
 
 **怎么定**：用户本轮说了格式就照办；没说时，在动笔前问一次，与本轮其它要问的问题合在一起，推荐项按上表「适合」一列给。无人值守（子代理、headless）时取 md，不发问。评审、改写已有文档沿用原格式。
 
-**选 HTML 时**，动笔前读 [`references/html.md`](references/html.md)：起稿、标签写法、Excalidraw 图与手写 SVG 怎么进文件、打包脚本的退出码与警告、改已有 HTML、多篇合成一个文件，都在里面。
+**选 HTML 时**，动笔前读 [`references/html.md`](references/html.md)：起稿、标签写法、svg-diagram / Excalidraw 图与手写 SVG 怎么进文件、打包脚本的退出码与警告、改已有 HTML、多篇合成一个文件，都在里面。
 
 **完成判据**：能说出本篇交付 md 还是 HTML、依据是用户原话还是默认；选 HTML 时已读完 `references/html.md`。
 
@@ -93,7 +93,7 @@ when_to_use: "触发词：写文档 / 出一份报告 / 整理成文档 / 写方
 5. 图紧跟着逐块解释它的文字；与要点无关的节点删掉。【有出处，二手】Mayer 就近原则、去冗余原则。
 6. 全篇配图同一风格、同一套按角色配色、同一字体。【判断】
 
-**动笔画第一张图前先调 `devkit-tool:show-me`**，由它定视图、载体与落点：装了 `devkit-excalidraw-diagram` 就出 Excalidraw 图，PNG 放文档旁的 `figures/`。mermaid 只在 show-me 判定走退路时才写进文档，并在回复里一句话说明原因。tech-doc 只管图该不该有、怎么检查，不替 show-me 选画法。
+**动笔画第一张图前先调 `devkit-tool:show-me`**，由它定视图、载体与落点：装了 `devkit-svg-diagram` 就出 SVG 图（用户点名 Excalidraw 才出 Excalidraw 图），PNG 放文档旁的 `figures/`。mermaid 只在 show-me 判定走退路时才写进文档，并在回复里一句话说明原因。tech-doc 只管图该不该有、怎么检查，不替 show-me 选画法。
 
 ## 第五步：交付前自检
 

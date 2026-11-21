@@ -1,6 +1,6 @@
 # 单文件 HTML 文档
 
-SKILL.md 第零步选了 HTML 时读。HTML 是原稿本身：直接写 HTML、直接改 HTML，不经过 md。交付物只有一个 `<名>.html`，图片、图的 Excalidraw 源稿、样式全在文件里，离线双击即开。
+SKILL.md 第零步选了 HTML 时读。HTML 是原稿本身：直接写 HTML、直接改 HTML，不经过 md。交付物只有一个 `<名>.html`，图片、样式、图的源稿（svg-diagram 描述或 `.excalidraw`）全在文件里，离线双击即开。
 
 工具是 `<本 skill 目录>/scripts/html_pack.py`，用 `uv run` 执行，依赖由脚本头的 PEP 723 声明自动安装（首次运行要联网）。下文 `PACK` 指 `uv run '<本 skill 目录>/scripts/html_pack.py'`。
 
@@ -40,21 +40,26 @@ SKILL.md 第一到第三步的规则照用，只是落成 HTML 标签：
 
 ## 四、配图
 
-SKILL.md 第四步的六条照用。图注写在图前：`<p class="caption-lead">图 N 说的是：……</p>`。按图的复杂度二选一：
+SKILL.md 第四步的六条照用。图注写在图前：`<p class="caption-lead">图 N 说的是：……</p>`。按图的复杂度与用户要求三选一：
 
-**Excalidraw（默认，结构、流程、时序、状态图都用它）**
-1. 调 `devkit-excalidraw-diagram:excalidraw-diagram`，`.excalidraw` 与渲染出的同名 PNG 都写进第一节的临时 `figures/`，文件名 `<序号>-<主题>`。
+**svg-diagram（默认，结构、流程、时序、状态图都用它）**
+1. 调 `devkit-svg-diagram:svg-diagram`，JSON 描述、`.svg` 与渲染出的同名 PNG 都写进第一节的临时 `figures/`，文件名 `<序号>-<主题>`。
 2. 正文里引 PNG 的绝对路径：
    ```html
    <figure><img src="/tmp/tech-doc/<名>/figures/01-overview.png" alt="图 1 全景"></figure>
    ```
-3. 打包时 PNG 转成 base64 写进 `src`，宽于 2000 像素的等比缩到 2000（`--max-width` 可调，0 为不缩）；PNG 旁的同名 `.excalidraw` 自动嵌进文件末尾的 `<script type="application/json" class="excalidraw-src">`，以后改图从这里取回。
+3. 打包时 PNG 转成 base64 写进 `src`，宽于 2000 像素的等比缩到 2000（`--max-width` 可调，0 为不缩）；同名 `.svg` 里内嵌的描述（没有 `.svg` 时取同名 `.json`）自动嵌进文件末尾的 `<script type="application/json" class="diagram-src">`，以后改图从这里取回。也可以直接引 `.svg`：矢量、放大不糊，描述从它自身取。
+
+**Excalidraw（仅用户点名 Excalidraw 或要拖拽编辑的白板图时用）**
+1. 调 `devkit-excalidraw-diagram:excalidraw-diagram`，`.excalidraw` 与渲染出的同名 PNG 都写进第一节的临时 `figures/`，文件名 `<序号>-<主题>`。
+2. 正文引 PNG，写法同上。
+3. 打包时 PNG 内嵌同上；PNG 旁的同名 `.excalidraw` 自动嵌进文件末尾的 `<script type="application/json" class="excalidraw-src">`，以后改图从这里取回。
 
 **手写 SVG（只用于简单图：≤5 个方框、一条时间轴、几根柱子）**
 - 直接写 `<figure><svg viewBox="0 0 宽 高" role="img" aria-label="图注">…</svg></figure>`，不经过文件。
 - 配色用模板里的角色变量，与 `figures.md`「三、全篇统一」同一套，写在 `style` 里：`style="fill:var(--svc);stroke:var(--svc-s)"`；平台 `--plat`、外部 `--ext`、目标 `--target`、范围外 `--out`（各自带 `-s` 是描边）。写进 `style` 而不是 `fill="var(--svc)"` 属性：Chromium 实测两种都生效，其它浏览器对属性里的 `var()` 未核实，`style` 是标准 CSS，稳妥。
 - 每个方框有 `<text>` 标签，每条箭头旁有动作标签；文字写 `style="font-family:inherit"`，中文才不掉成衬线字体。
-- 超过上面的规模就改用 Excalidraw：手写 SVG 的布局全靠算坐标，复杂图容易重叠。
+- 超过上面的规模就改用 svg-diagram：手写 SVG 的布局全靠算坐标，复杂图容易重叠。
 
 ## 五、打包与检查
 
@@ -64,12 +69,12 @@ SKILL.md 第四步的六条照用。图注写在图前：`<p class="caption-lead
 PACK pack '<落点>/<名>.html'
 ```
 
-原地改写。成功输出一行：文件大小、内嵌图片张数、Excalidraw 源稿份数、警告条数。
+原地改写。成功输出一行：文件大小、内嵌图片张数、svg-diagram 描述份数、Excalidraw 源稿份数、警告条数。
 
 | 退出码 | 含义 | 处理 |
 |---|---|---|
 | 1 | 图片不存在、模板占位符没替换、id 重复 | 按 stderr 那一行改 HTML 后重跑 |
-| 2 | 含 mermaid | 改用 Excalidraw 或手写 SVG |
+| 2 | 含 mermaid | 改用 svg-diagram 或手写 SVG |
 
 警告逐条处理，交付时为 0 条，或在回复里说明保留的理由：
 - 本地文件链接、`file://` / `vscode://` 链接、远程图片——读者打不开，删掉或改写成文字、内嵌图片。
@@ -83,12 +88,12 @@ PACK pack '<落点>/<名>.html'
 
 - 改文字：直接编辑 HTML 正文，再 `pack`。
 - 改图：
-  1. `PACK extract '<名>.html' "$TMPDIR/tech-doc/<名>/figures"` 取回全部 `.excalidraw`；
-  2. 在取回的 `.excalidraw` 上改，渲染出同名 PNG；
-  3. 把 HTML 里对应 `<img data-excalidraw="<名>">` 的 `src` 从 `data:...` 换成新 PNG 的绝对路径；
+  1. `PACK extract '<名>.html' "$TMPDIR/tech-doc/<名>/figures"` 取回全部源稿：svg-diagram 描述为 `<名>.json`（带渲染时的主题），Excalidraw 为 `<名>.excalidraw`；
+  2. 在取回的源稿上改，按各自 skill 重新渲染出同名 PNG（svg-diagram 连同 `.svg`）；
+  3. 把 HTML 里对应 `<img data-diagram="<名>">` 或 `<img data-excalidraw="<名>">` 的 `src` 从 `data:...` 换成新 PNG 的绝对路径；
   4. `pack`：新 PNG 内嵌，同名源稿替换旧的。
 
-`src` 里的 base64 很长，用 `Edit` 换时以 `data-excalidraw="<名>"` 所在的那段 `<img ...>` 为定位，或用一行 Python 按 `data-excalidraw` 属性替换，不把整段 base64 读进上下文。
+`src` 里的 base64 很长，用 `Edit` 换时以 `data-diagram="<名>"` / `data-excalidraw="<名>"` 所在的那段 `<img ...>` 为定位，或用一行 Python 按该属性替换，不把整段 base64 读进上下文。
 
 ## 七、多篇合成一个 HTML
 

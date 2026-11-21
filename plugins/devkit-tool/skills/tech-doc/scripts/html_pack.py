@@ -2,20 +2,24 @@
 # requires-python = ">=3.9"
 # dependencies = ["beautifulsoup4>=4.12", "pillow>=10"]
 # ///
-"""单文件 HTML 文档的打包工具：图片转 base64 内嵌、Excalidraw 源稿一并藏进文件、自动生成目录。
+"""单文件 HTML 文档的打包工具：图片转 base64 内嵌、图的源稿（svg-diagram 描述或 Excalidraw）一并藏进文件、自动生成目录。
 
 子命令（由 uv 按上方 PEP 723 声明自动装依赖）：
     uv run html_pack.py new <doc.html> --title 标题
         按 assets/doc-template.html 新建一份空文档，正文写在 <main> 里。
     uv run html_pack.py pack <doc.html> [-o out.html] [--max-width 2000]
-        把 <img src="本地路径"> 换成 data URI；图片旁有同名 .excalidraw 时把源稿 JSON 嵌进
-        <script type="application/json" class="excalidraw-src">；填充 <nav class="toc">；做离线自检。
+        把 <img src="本地路径"> 换成 data URI，并把图的源稿嵌进文件：
+          - 图片旁有同名 .excalidraw → <script type="application/json" class="excalidraw-src">；
+          - 否则图片本身或同名 .svg 里嵌着 <metadata id="diagram-spec">，或图片旁有同名 svg-diagram
+            描述 .json（顶层含 zones / nodes / participants 之一）→ <script ... class="diagram-src">。
+        填充 <nav class="toc">；做离线自检。
         默认原地改写。
     uv run html_pack.py assemble <part1.html> [<part2.html> ...] -o out.html --title 标题
         多篇正文片段（只含正文标签，不含 <html>/<head>）按顺序拼进模板，篇间链接
         `20-essence.html#某id` 改写成页内 `#某id`，再执行 pack。
     uv run html_pack.py extract <doc.html> <输出目录>
-        把内嵌的 Excalidraw 源稿还原成 <名>.excalidraw，供改图后重新渲染、再 pack 回去。
+        把内嵌源稿还原成文件：svg-diagram 描述 → <名>.json，Excalidraw → <名>.excalidraw，
+        供改图后重新渲染、再 pack 回去。
 
 退出码：0 成功；1 输入缺失、图片缺失、模板占位符没替换、id 重复；2 含 mermaid。
 """
@@ -25,6 +29,7 @@ import argparse
 import base64
 import io
 import json
+import re
 import sys
 import unicodedata
 from pathlib import Path
@@ -37,6 +42,12 @@ TEMPLATE = SKILL_DIR / "assets" / "doc-template.html"
 MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
         ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml"}
 WARN_BYTES = 20 * 1024 * 1024
+# svg-diagram 的描述：顶层恰含其一；SVG 里的内嵌格式与 devkit-svg-diagram 的 render.py 一致
+DIAGRAM_KEYS = ("zones", "nodes", "participants")
+SPEC_RE = re.compile(r'<metadata id="diagram-spec"><!\[CDATA\[(.*?)\]\]></metadata>', re.S)
+# 两种源稿：script 的 class、img 上记名字的属性、extract 还原的扩展名
+SOURCES = {"excalidraw": ("excalidraw-src", "data-excalidraw", ".excalidraw"),
+           "diagram": ("diagram-src", "data-diagram", ".json")}
 
 
 class Fail(Exception):
@@ -89,20 +100,39 @@ def encode_image(p: Path, max_width: int) -> str:
     return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
 
 
-def embed_excalidraw(soup: BeautifulSoup, img: Tag, src_file: Path) -> None:
-    name = img.get("data-excalidraw") or src_file.stem
-    try:
-        payload = json.dumps(json.loads(src_file.read_text(encoding="utf-8")), ensure_ascii=False, separators=(",", ":"))
-    except json.JSONDecodeError as e:
-        raise Fail(f"{src_file} 不是合法 JSON：{e}")
-    payload = payload.replace("</", "<\\/")
-    for old in soup.select("script.excalidraw-src"):
+def diagram_spec(p: Path) -> dict | None:
+    """找 svg-diagram 的描述。先取图片本身或同名 .svg 里嵌的 diagram-spec（它是实际渲染用的那份，
+    带 --theme 覆盖后的主题），没有再取同名 .json（顶层含 zones / nodes / participants 之一）。"""
+    svg = p if p.suffix.lower() == ".svg" else p.with_suffix(".svg")
+    if svg.is_file():
+        m = SPEC_RE.search(svg.read_text(encoding="utf-8", errors="replace"))
+        if m:
+            try:
+                return json.loads(m.group(1).replace("]]]]><![CDATA[>", "]]>"))
+            except json.JSONDecodeError:
+                pass
+    j = p.with_suffix(".json")
+    if j.is_file():
+        try:
+            d = json.loads(j.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return None
+        if isinstance(d, dict) and any(k in d for k in DIAGRAM_KEYS):
+            return d
+    return None
+
+
+def embed_source(soup: BeautifulSoup, img: Tag, kind: str, default_name: str, data) -> None:
+    cls, attr, _ = SOURCES[kind]
+    name = img.get(attr) or default_name
+    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    for old in soup.select(f"script.{cls}"):
         if old.get("data-name") == name:
             old.decompose()
-    s = soup.new_tag("script", attrs={"type": "application/json", "class": "excalidraw-src", "data-name": name})
+    s = soup.new_tag("script", attrs={"type": "application/json", "class": cls, "data-name": name})
     s.string = payload
     (soup.body or soup).append(s)
-    img["data-excalidraw"] = name
+    img[attr] = name
 
 
 def fill_toc(soup: BeautifulSoup) -> None:
@@ -181,7 +211,15 @@ def pack_soup(soup: BeautifulSoup, base: Path, max_width: int, warnings: list[st
         img["src"] = encode_image(p, max_width)
         exc = p.with_suffix(".excalidraw")
         if exc.is_file():
-            embed_excalidraw(soup, img, exc)
+            try:
+                data = json.loads(exc.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as e:
+                raise Fail(f"{exc} 不是合法 JSON：{e}")
+            embed_source(soup, img, "excalidraw", exc.stem, data)
+        else:
+            spec = diagram_spec(p)
+            if spec is not None:
+                embed_source(soup, img, "diagram", p.stem, spec)
         if not img.get("alt"):
             warnings.append(f"图片缺 alt：{src}")
     fill_toc(soup)
@@ -199,8 +237,9 @@ def write_out(soup: BeautifulSoup, out: Path, warnings: list[str]) -> int:
     if size > WARN_BYTES:
         print(f"警告：HTML {size / 1048576:.1f} MB，超过 20 MB，钉钉、邮件可能传不上；调小 --max-width。", file=sys.stderr)
     n_img = len([i for i in soup.find_all("img") if (i.get("src") or "").startswith("data:")])
+    n_dia = len(soup.select("script.diagram-src"))
     n_exc = len(soup.select("script.excalidraw-src"))
-    print(f"已生成 {out.resolve()}（{size / 1024:.0f} KB，内嵌图片 {n_img} 张，Excalidraw 源稿 {n_exc} 份，警告 {len(set(warnings))} 条）")
+    print(f"已生成 {out.resolve()}（{size / 1024:.0f} KB，内嵌图片 {n_img} 张，svg-diagram 描述 {n_dia} 份，Excalidraw 源稿 {n_exc} 份，警告 {len(set(warnings))} 条）")
     return 0
 
 
@@ -256,13 +295,15 @@ def cmd_extract(a) -> int:
     soup = BeautifulSoup(a.doc.read_text(encoding="utf-8"), "html.parser")
     a.outdir.mkdir(parents=True, exist_ok=True)
     n = 0
-    for s in soup.select("script.excalidraw-src"):
-        name = s.get("data-name") or f"figure-{n}"
-        (a.outdir / f"{name}.excalidraw").write_text(
-            json.dumps(json.loads(s.string or "{}"), ensure_ascii=False, indent=2), encoding="utf-8")
-        print(a.outdir.resolve() / f"{name}.excalidraw")
-        n += 1
-    print(f"还原 {n} 份。改图并渲染出同名 PNG 后，把对应 <img data-excalidraw=\"<名>\"> 的 src 改成该 PNG 路径，再跑 pack。")
+    for kind, (cls, attr, ext) in SOURCES.items():
+        for s in soup.select(f"script.{cls}"):
+            name = s.get("data-name") or f"figure-{n}"
+            out = a.outdir / f"{name}{ext}"
+            out.write_text(json.dumps(json.loads(s.string or "{}"), ensure_ascii=False, indent=2), encoding="utf-8")
+            print(out.resolve())
+            n += 1
+    print(f"还原 {n} 份。改图并重新渲染出同名 PNG / SVG 后，把对应 <img data-diagram=\"<名>\"> 或 "
+          f"<img data-excalidraw=\"<名>\"> 的 src 改成该图片路径，再跑 pack。")
     return 0
 
 

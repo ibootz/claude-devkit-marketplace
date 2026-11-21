@@ -21,6 +21,7 @@ Claude Code / Codex 插件市场，提供精选的开发工具集与生产力插
 - `cascade-pull` - 带 submodule 的仓库同步拉取（只处理直接声明的一层，不递归）
 - `cascade-push` - 嵌套 submodule 由内向外逐层提交推送（递归全嵌套树）
 - `tech-doc` - 写给人读的技术文档：判类型、套骨架、生手读得懂的写法、图文分工配图、交付自检；6.30.0 新增
+- `diagram-types` - 图型选型：从软件与业务、各行业数百种图型里挑最贴切的一种，说清各图型擅长表达什么；6.43.0 新增
 - `discover-unknowns` - 开工前或做到一半时挖未知的头脑风暴：用户手动调用（`/devkit-tool:discover-unknowns`），6.37.0 起 AI 撞上一组会改变做法、只有用户能答的未知时也会自行调用；盲点扫描、多方向原型发散、一次一问收敛、参考复刻语义；6.29.0 由已删除的 devkit-discover-unknowns 并入
 - `new-thing-understand` - 看懂一个新事物：多角度专业文章（导读、本质、机制、坐标、融会贯通）+ 检验检查点，分速览 / 标准 / 深入三档；6.38.0 新增
 - `new-thing-leverage` - 萃取访谈后出纳入、融入方案，把新事物接进自己的系统；6.38.0 新增
@@ -186,6 +187,10 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 移植自 [coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill)：把概念、架构、流程画成可编辑的 `.excalidraw` 文件——按概念选扇出、汇聚、时间线等视觉模式，技术图嵌真实代码与数据片段——再用 Playwright 渲染成 PNG 回看、迭代修版。直接触发只在点名要 Excalidraw 或可编辑白板图时，泛泛的「画个图」先走 `devkit-tool:show-me`；show-me 6.32.0 起画交互、流程、状态图时转调本插件出图（嵌进 md 等文档时引 PNG）。1.2.0 起可从 libraries.excalidraw.com 公共素材库搜索、下载图标并插进图里，素材存本机，不随插件分发；1.3.0 起附一份带出处的作图准则（准确、排版、配色、字体、箭头），色板换成 Excalidraw 取色器自带的颜色。1.4.0 起风格从手绘、干净两种扩到四种（加圆体、等宽），并附 69 张各类技术图的参考图库，画指定类型的图时先查对应样例；1.5.0 起默认风格由手绘改为圆体；1.6.0 起改已有的图时在原文件上定点修改、重渲染到原路径。依赖 `uv`，首次需下载一次 Chromium。1 个 Skill，零 hook。上游未附 LICENSE，版权归原作者，不在本仓 MIT 范围内；相对上游的改动与安装步骤见插件 README。
 
+### 18. devkit-svg-diagram（SVG 图解，默认出图）
+
+AI 写一份简短的 JSON 描述（分层区块、卡片、连线、图例），脚本按固定主题排版并渲染成 SVG，再转出 PNG；排版、配色、圆角、阴影都由主题决定，同一套文档里的图风格一致，也比手写 SVG 省 token。支持九种布局：分层架构图、流程 / 状态图（网格布局，带菱形判断）、时序图、组织架构树、泳道、甘特、ER、四象限，以及没有预制布局时兜底的自由坐标模式（配色仍走主题）；渲染时检查连线穿过卡片、标签重叠、缺图例，转 PNG 时用浏览器实测文字是否溢出卡片。七套主题：Mac 扁平（默认，柔和色块 + 等宽字体 + 卡片底边淡投影）、新野兽派、瑞士 / 包豪斯、伪等轴测、手绘速写笔记（手绘线条与箭头、Excalidraw 同款手写字体）、黑白清线、深色扁平；用户点名其他风格时查风格目录映射到最接近的主题；圆角、阴影、箭头、连线标签的画法照搬 Excalidraw 导出的 SVG。SVG 里嵌着原始 JSON，可提取出来改完重渲。devkit-tool 6.43.0 起 `show-me`、`tech-doc` 等默认调本插件出图，点名 Excalidraw 时才走 devkit-excalidraw-diagram。渲染只需 Python 标准库；转 PNG 依赖 `uv`，首次需下载一次 Chromium；字体（OFL，约 2 MB）随插件内置，转 PNG 时按用到的字嵌进 SVG。1 个 Skill，零 hook。
+
 ## 安装
 
 ### Claude Code
@@ -242,6 +247,9 @@ AI 工作纪律注入 + 拦截：`UserPromptSubmit` 每轮注入主会话、`Sub
 
 # Excalidraw 图解（生成可编辑 .excalidraw 图并渲染自检）
 /plugin install devkit-excalidraw-diagram@claude-devkit-marketplace
+
+# SVG 图解（默认出图：JSON 描述按固定主题渲染 SVG + PNG）
+/plugin install devkit-svg-diagram@claude-devkit-marketplace
 ```
 
 ### Codex CLI
@@ -352,7 +360,8 @@ claude-devkit-marketplace/
 │   ├── devkit-readable-citations/
 │   ├── devkit-complexity-first/
 │   ├── devkit-plugin-eval/
-│   └── devkit-excalidraw-diagram/
+│   ├── devkit-excalidraw-diagram/
+│   └── devkit-svg-diagram/
 ├── .githooks/
 │   └── pre-commit             # 提交前强制跑版本四方校验（需 git config core.hooksPath .githooks）
 ├── scripts/

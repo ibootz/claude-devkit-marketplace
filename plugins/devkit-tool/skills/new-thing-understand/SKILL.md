@@ -1,6 +1,6 @@
 ---
 name: new-thing-understand
-description: "帮使用者看懂对他来说新的东西——新技术、新理论、新系统，或组织内部的新业务、新架构、新功能。以他给的资料为主、不够时自查一手来源，产出导读、本质、机制、坐标、融会贯通几篇文章，图一律 Excalidraw，交付 md 或单文件 HTML；分速览 / 标准 / 深入三档，最后用一次检验暴露盲区。"
+description: "帮使用者看懂对他来说新的东西——新技术、新理论、新系统，或组织内部的新业务、新架构、新功能。以他给的资料为主、不够时自查一手来源，产出导读、本质、机制、坐标、融会贯通几篇文章，图默认 SVG 图（svg-diagram），交付 md 或单文件 HTML；分速览 / 标准 / 深入三档，最后用一次检验暴露盲区。"
 when_to_use: "触发词：帮我看懂 / 吃透这批资料 / 快速了解一个新技术 / 接手一个新业务、新系统 / 梳理全景 / 出几篇讲解文章 / 这东西的本质是什么 / 考考我懂没懂。new-thing-leverage 缺认知产物时点名调用。不触发：只要摘要；要接进自己系统（走 new-thing-leverage）；单写一篇文档（走 tech-doc）。"
 ---
 
@@ -39,10 +39,10 @@ when_to_use: "触发词：帮我看懂 / 吃透这批资料 / 快速了解一个
 ├── 50-tutorial.md      教程（使用者要上手时才出）
 ├── 70-integration.md   融会贯通
 ├── checkpoint.md       检验记录
-├── figures/            每张图一对：<篇号>-<主题>.excalidraw 与同名 .png
+├── figures/            每张图一组：<篇号>-<主题>.png 与同名图源文件（svg-diagram 的 JSON 描述与 .svg，或 .excalidraw）
 ```
 
-**交付格式选 HTML 时**，各篇直接写成正文片段 `<篇号>-<篇位>.html`（不写 `.md`），收尾合成一个 `<落点>/<新事物名>.html`，图与 Excalidraw 源稿都内嵌在里面，读者只拿这一个文件。片段写法见 `devkit-tool:tech-doc` 的 `references/html.md` 第七节「多篇合成一个 HTML」。产物目录仍保留：它是过程资产，续跑与 `new-thing-leverage` 要读；读者不需要它。
+**交付格式选 HTML 时**，各篇直接写成正文片段 `<篇号>-<篇位>.html`（不写 `.md`），收尾合成一个 `<落点>/<新事物名>.html`，图连同源稿（svg-diagram 描述或 `.excalidraw`）都内嵌在里面，读者只拿这一个文件。片段写法见 `devkit-tool:tech-doc` 的 `references/html.md` 第七节「多篇合成一个 HTML」。产物目录仍保留：它是过程资产，续跑与 `new-thing-leverage` 要读；读者不需要它。
 
 合篇时文件取较小的篇号、名字并列：`10-guide-essence.md`、`30-mechanism-coordinates.md`。
 **最小集**是 `00-sources.md`、导读、本质、机制四份（合并结构下就是 `00-sources.md`、`10-guide-essence.md`、`30-mechanism-coordinates.md`）。
@@ -90,10 +90,10 @@ when_to_use: "触发词：帮我看懂 / 吃透这批资料 / 快速了解一个
 - 第一批：导读、本质、机制（拆篇时每个子系统一个）、坐标、教程。
 - 第二批：融会贯通。它要引用前面各篇，等第一批交回再派。
 
-每个子代理自己写正文、自己按图规约画 Excalidraw 图并看 PNG 修图，正文直接写进文件，回执只报路径与要点。
+每个子代理自己写正文、自己按图规约画图（默认 svg-diagram）并看 PNG 修图，正文直接写进文件，回执只报路径与要点。
 导读、本质交回后立即告诉使用者可以开始读，附文件链接，不等整组。交付格式是 HTML 时，用收尾那条命令只列这两篇，先合成一版 HTML 给他读。
 
-**完成判据**：篇目分工表里的每一篇都已落盘；每张计划内的图要么有 PNG，要么原位标了「待补 Excalidraw 图」与原因。
+**完成判据**：篇目分工表里的每一篇都已落盘；每张计划内的图要么有 PNG，要么原位标了「待补图」与原因。
 
 ## 第 5 步：主会话回看
 
@@ -134,10 +134,10 @@ uv run '<本 skill 目录>/../tech-doc/scripts/html_pack.py' assemble \
 
 ## 画图
 
-- 一律 Excalidraw：调 `devkit-excalidraw-diagram:excalidraw-diagram`，产出 `figures/<篇号>-<主题>.excalidraw` 与同名 `.png`，md 文章里用 `![图注](figures/<篇号>-<主题>.png)` 引 PNG；HTML 片段里写 `<img src="figures/<篇号>-<主题>.png" alt="图注">`，合成时 PNG 与源稿一起内嵌。状态图、时序图、流程图同样用 Excalidraw，整套产物里没有 mermaid 代码块。
+- 默认 svg-diagram：调 `devkit-svg-diagram:svg-diagram`，产出 `figures/<篇号>-<主题>.png` 与同名 `.svg`、JSON 描述；用户点名 Excalidraw 才调 `devkit-excalidraw-diagram:excalidraw-diagram`，产出 `.excalidraw` 与同名 `.png`。md 文章里用 `![图注](figures/<篇号>-<主题>.png)` 引 PNG；HTML 片段里写 `<img src="figures/<篇号>-<主题>.png" alt="图注">`，合成时 PNG 连同源稿（同名 `.svg` 里的描述或 `.excalidraw`）一起内嵌。状态图、时序图、流程图同样用 svg-diagram，整套产物里没有 mermaid 代码块。
 - 先表后图：图上每个节点与每条边都能在本篇的表格或正文里找到出处。
 - 渲染后核对 PNG 的修改时间晚于本次渲染开始；渲染命令的输出原样看完，不接 `tail`、`head`。实测渲染会因页面加载超时静默失败，PNG 停在旧版，截断输出会把报错一起截掉。
-- Excalidraw 插件未安装或渲染跑不通时，原位放一个文本箭头图代码块，标「待补 Excalidraw 图」并写原因。
+- `devkit-svg-diagram` 未安装时先退到 `devkit-excalidraw-diagram`；两者都没装或渲染跑不通时，原位放一个文本箭头图代码块，标「待补图」并写原因。
 
 ## 参考文件
 

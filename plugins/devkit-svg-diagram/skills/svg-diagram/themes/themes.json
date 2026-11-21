@@ -1,0 +1,185 @@
+{
+  "mac": {
+    "label": "Mac 扁平 + 柔和色块 + 等宽（默认）",
+    "bg": "#ffffff",
+    "font": {"family": "Cascadia,Menlo,Consolas,'PingFang SC','Microsoft YaHei',monospace", "code": "Cascadia,Menlo,Consolas,'Courier New',monospace", "embed": ["Cascadia"], "latin_w": 0.6, "title_weight": 400, "zone_weight": 400, "diagram_title_weight": 400},
+    "layout": {"canvas_pad": 28, "title_gap": 24, "diagram_title_size": 28, "title_size": 20, "desc_size": 16, "zone_title_size": 20, "label_size": 16, "card_pad_x": 20, "card_pad_y": 18, "desc_gap": 6, "card_min_h": 72, "col_min": 200, "col_max": 300, "gap_x": 40, "gutter": 200, "zone_pad": 24, "zone_gap": 24, "grid_gap_x": 100, "grid_gap_y": 80, "section_gap": 36},
+    "card": {"radius": 32, "radius_ratio": 0.25, "stroke_width": 1, "dash": "8 9", "dash_width": 1.5, "text_align": "middle"},
+    "zone": {"fill": "#f5f5f7", "stroke": "none", "radius": 32, "radius_ratio": 0.25, "dash_stroke": "#aeaeb2"},
+    "shadow": {"kind": "offset", "dx": 0, "dy": 5, "color": "#000000", "opacity": 0.07},
+    "edge": {"color": "#8e8e93", "width": 2, "head": 14, "dash": "8 10", "accent_wider": false},
+    "edge_label": {"style": "gap", "text": "#636366"},
+    "text": {"title": "#1d1d1f", "desc": "#636366", "zone": "#3a3a3c"},
+    "code": {"bg": "#f5f5f7", "stroke": "#e5e5ea", "text": "#1d1d1f", "comment": "#5d6c79", "radius": 16, "dots": true},
+    "roles": {
+      "plain":    {"fill": "#ffffff", "stroke": "#e5e5ea", "accent": "#0a84ff"},
+      "primary":  {"fill": "#e8f1fd", "stroke": "#d3e3f8", "accent": "#0a84ff"},
+      "ai":       {"fill": "#efe9fb", "stroke": "#dcd0f5", "accent": "#8e5cf7"},
+      "platform": {"fill": "#fdf3dc", "stroke": "#f1dfb3", "accent": "#9a6700"},
+      "success":  {"fill": "#e4f5e9", "stroke": "#c7e7d0", "accent": "#248a3d"},
+      "start":    {"fill": "#fdeedd", "stroke": "#f3d4ae", "accent": "#c75f00"},
+      "warn":     {"fill": "#fde8e7", "stroke": "#f4c9c6", "accent": "#ff453a"},
+      "manual":   {"fill": "#fce8f1", "stroke": "#f2c9dc", "accent": "#e8508f"},
+      "data":     {"fill": "#f2f2f7", "stroke": "#dcdce1", "accent": "#8e8e93"},
+      "external": {"fill": "#ffffff", "stroke": "#aeaeb2", "accent": "#8e8e93", "dashed": true}
+    }
+  },
+
+  "brutal": {
+    "label": "新野兽派",
+    "bg": "#fffdf5",
+    "font": {"family": "'Helvetica Neue',Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif", "code": "Cascadia,Menlo,Consolas,'Courier New',monospace", "embed": ["Cascadia"], "latin_w": 0.58, "title_weight": 800, "zone_weight": 800, "diagram_title_weight": 900},
+    "layout": {"canvas_pad": 34, "title_gap": 24, "diagram_title_size": 28, "title_size": 16, "desc_size": 13, "zone_title_size": 15, "label_size": 12.5, "card_pad_x": 16, "card_pad_y": 14, "desc_gap": 6, "card_min_h": 48, "col_min": 160, "col_max": 240, "gap_x": 24, "gutter": 164, "zone_pad": 20, "zone_gap": 20, "grid_gap_x": 76, "grid_gap_y": 64, "section_gap": 30},
+    "card": {"radius": 6, "stroke_width": 2.5, "dash": "7 5", "text_align": "start", "dash_width": 2.5},
+    "zone": {"fill": "#ffffff", "stroke": "#111111", "stroke_width": 2.5, "radius": 8, "dash_stroke": "#111111"},
+    "shadow": {"kind": "offset", "dx": 5, "dy": 5, "color": "#111111", "opacity": 1},
+    "edge": {"color": "#111111", "width": 2.5, "head": 15, "head_ratio": 0.5, "dash": "8 6", "accent_wider": false},
+    "edge_label": {"style": "chip", "fill": "#111111", "stroke": "#111111", "text": "#ffffff", "radius": 4},
+    "text": {"title": "#111111", "desc": "#2b2b2b", "zone": "#111111"},
+    "code": {"bg": "#111111", "stroke": "#111111", "text": "#f5f5f5", "comment": "#a3a3a3", "radius": 6, "dots": false},
+    "roles": {
+      "plain":    {"fill": "#ffffff", "stroke": "#111111", "accent": "#111111"},
+      "primary":  {"fill": "#74c0fc", "stroke": "#111111", "accent": "#1971c2"},
+      "ai":       {"fill": "#b197fc", "stroke": "#111111", "accent": "#6741d9"},
+      "platform": {"fill": "#ffd43b", "stroke": "#111111", "accent": "#e67700"},
+      "success":  {"fill": "#8ce99a", "stroke": "#111111", "accent": "#2b8a3e"},
+      "start":    {"fill": "#ffa94d", "stroke": "#111111", "accent": "#d9480f"},
+      "warn":     {"fill": "#ff8787", "stroke": "#111111", "accent": "#c92a2a"},
+      "manual":   {"fill": "#f783ac", "stroke": "#111111", "accent": "#a61e4d"},
+      "data":     {"fill": "#dee2e6", "stroke": "#111111", "accent": "#495057"},
+      "external": {"fill": "#ffffff", "stroke": "#111111", "accent": "#111111", "dashed": true}
+    }
+  },
+
+  "swiss": {
+    "label": "瑞士 / 包豪斯",
+    "bg": "#ffffff",
+    "title_rule": 6,
+    "font": {"family": "'Helvetica Neue',Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif", "code": "Cascadia,Menlo,Consolas,'Courier New',monospace", "embed": ["Cascadia"], "latin_w": 0.56, "title_weight": 700, "zone_weight": 800, "diagram_title_weight": 800},
+    "layout": {"canvas_pad": 40, "title_gap": 34, "diagram_title_size": 32, "title_size": 15, "desc_size": 12.5, "zone_title_size": 13, "label_size": 12, "card_pad_x": 16, "card_pad_y": 16, "desc_gap": 6, "card_min_h": 52, "col_min": 160, "col_max": 240, "gap_x": 12, "gutter": 164, "zone_pad": 18, "zone_gap": 22, "grid_gap_x": 72, "grid_gap_y": 60, "section_gap": 30},
+    "card": {"radius": 0, "stroke_width": 1.5, "dash": "4 4", "text_align": "start"},
+    "zone": {"fill": "none", "stroke": "#111111", "radius": 0, "style": "rule", "rule": 4, "dash_stroke": "#111111"},
+    "shadow": {"kind": "none"},
+    "edge": {"color": "#111111", "width": 2, "head": 13, "head_ratio": 0.42, "dash": "4 4", "accent_wider": true},
+    "edge_label": {"style": "gap", "text": "#111111"},
+    "text": {"title": "#111111", "desc": "#4a4a4a", "zone": "#111111", "accent": "#e2231a"},
+    "code": {"bg": "#f2f2f2", "stroke": "#f2f2f2", "text": "#111111", "comment": "#666666", "radius": 0, "dots": false},
+    "roles": {
+      "plain":    {"fill": "#f0f0f0", "stroke": "none", "accent": "#e2231a"},
+      "primary":  {"fill": "#1f4e9e", "stroke": "none", "accent": "#1f4e9e", "text": "#ffffff", "desc": "#dbe4f3"},
+      "ai":       {"fill": "#111111", "stroke": "none", "accent": "#111111", "text": "#ffffff", "desc": "#d0d0d0"},
+      "platform": {"fill": "#f6c200", "stroke": "none", "accent": "#b88f00", "text": "#111111", "desc": "#3a3000"},
+      "success":  {"fill": "#2f6b3a", "stroke": "none", "accent": "#2f6b3a", "text": "#ffffff", "desc": "#d7e9da"},
+      "start":    {"fill": "#ffffff", "stroke": "#111111", "accent": "#111111"},
+      "warn":     {"fill": "#e2231a", "stroke": "none", "accent": "#e2231a", "text": "#ffffff", "desc": "#ffffff"},
+      "manual":   {"fill": "#ffffff", "stroke": "#e2231a", "accent": "#e2231a"},
+      "data":     {"fill": "#d9d9d9", "stroke": "none", "accent": "#555555"},
+      "external": {"fill": "#ffffff", "stroke": "#111111", "accent": "#111111", "dashed": true}
+    }
+  },
+
+  "isometric": {
+    "label": "伪等轴测（Mac 配色 + 立体侧面）",
+    "bg": "#fbfbfd",
+    "font": {"family": "Cascadia,Menlo,Consolas,'PingFang SC','Microsoft YaHei',monospace", "code": "Cascadia,Menlo,Consolas,'Courier New',monospace", "embed": ["Cascadia"], "latin_w": 0.6, "title_weight": 400, "zone_weight": 400, "diagram_title_weight": 400},
+    "layout": {"canvas_pad": 28, "title_gap": 24, "diagram_title_size": 28, "title_size": 20, "desc_size": 16, "zone_title_size": 20, "label_size": 16, "card_pad_x": 20, "card_pad_y": 18, "desc_gap": 6, "card_min_h": 72, "col_min": 200, "col_max": 300, "gap_x": 44, "gutter": 200, "zone_pad": 24, "zone_gap": 26, "grid_gap_x": 104, "grid_gap_y": 84, "section_gap": 36},
+    "card": {"radius": 6, "stroke_width": 1, "dash": "8 9", "dash_width": 1.5, "text_align": "middle"},
+    "zone": {"fill": "#efeff3", "stroke": "none", "radius": 32, "radius_ratio": 0.25, "dash_stroke": "#aeaeb2"},
+    "shadow": {"kind": "extrude", "depth": 9, "color": "#d9d9e0"},
+    "edge": {"color": "#8e8e93", "width": 2, "head": 14, "dash": "8 10", "accent_wider": false},
+    "edge_label": {"style": "gap", "text": "#636366"},
+    "text": {"title": "#1d1d1f", "desc": "#636366", "zone": "#3a3a3c"},
+    "code": {"bg": "#f5f5f7", "stroke": "#e5e5ea", "text": "#1d1d1f", "comment": "#5d6c79", "radius": 6, "dots": true},
+    "roles": {
+      "plain":    {"fill": "#ffffff", "stroke": "#d1d1d6", "accent": "#0a84ff", "side": "#dcdce3"},
+      "primary":  {"fill": "#e8f1fd", "stroke": "#c3d7f3", "accent": "#0a84ff", "side": "#bcd3f2"},
+      "ai":       {"fill": "#efe9fb", "stroke": "#d4c6f3", "accent": "#8e5cf7", "side": "#cfc1f1"},
+      "platform": {"fill": "#fdf3dc", "stroke": "#ecd8a6", "accent": "#9a6700", "side": "#ecd49a"},
+      "success":  {"fill": "#e4f5e9", "stroke": "#bfe2c8", "accent": "#248a3d", "side": "#b5dcbf"},
+      "start":    {"fill": "#fdeedd", "stroke": "#f0cda2", "accent": "#c75f00", "side": "#efc79c"},
+      "warn":     {"fill": "#fde8e7", "stroke": "#f1c0bc", "accent": "#ff453a", "side": "#eeb3ae"},
+      "manual":   {"fill": "#fce8f1", "stroke": "#eec0d5", "accent": "#e8508f", "side": "#eab8cf"},
+      "data":     {"fill": "#f2f2f7", "stroke": "#d6d6dd", "accent": "#8e8e93", "side": "#d1d1d8"},
+      "external": {"fill": "#ffffff", "stroke": "#aeaeb2", "accent": "#8e8e93", "dashed": true}
+    }
+  },
+
+  "sketchnote": {
+    "label": "速写笔记",
+    "bg": "#fffdf6",
+    "font": {"family": "Excalifont,Xiaolai,'Kaiti SC',STKaiti,KaiTi,'PingFang SC','Microsoft YaHei',cursive", "code": "Cascadia,Menlo,Consolas,'Courier New',monospace", "embed": ["Excalifont", "Xiaolai", "Cascadia"], "latin_w": 0.56, "title_weight": 400, "zone_weight": 400, "diagram_title_weight": 400},
+    "layout": {"canvas_pad": 32, "title_gap": 24, "diagram_title_size": 28, "title_size": 20, "desc_size": 16, "zone_title_size": 20, "label_size": 16, "card_pad_x": 20, "card_pad_y": 18, "desc_gap": 6, "card_min_h": 72, "col_min": 200, "col_max": 300, "gap_x": 40, "gutter": 200, "zone_pad": 24, "zone_gap": 24, "grid_gap_x": 100, "grid_gap_y": 80, "section_gap": 36},
+    "card": {"radius": 32, "radius_ratio": 0.25, "stroke_width": 1.3, "dash": "8 9", "dash_width": 1.5, "text_align": "middle"},
+    "zone": {"fill": "none", "stroke": "#2b2b2b", "stroke_width": 1.3, "radius": 32, "radius_ratio": 0.25, "highlight": "#ffe58a", "dash_stroke": "#2b2b2b"},
+    "shadow": {"kind": "none"},
+    "rough": {"amp": 2},
+    "edge": {"color": "#2b2b2b", "width": 1.6, "head": 14, "dash": "8 10", "accent_wider": false},
+    "edge_label": {"style": "gap", "text": "#2b2b2b"},
+    "text": {"title": "#1f1f1f", "desc": "#4a4a4a", "zone": "#1f1f1f"},
+    "code": {"bg": "#f6f2e4", "stroke": "#2b2b2b", "text": "#1f1f1f", "comment": "#6b6b6b", "radius": 16, "dots": false},
+    "roles": {
+      "plain":    {"fill": "#ffffff", "stroke": "#2b2b2b", "accent": "#2b2b2b"},
+      "primary":  {"fill": "#dcebff", "stroke": "#2b2b2b", "accent": "#0a6cff"},
+      "ai":       {"fill": "#ebe2ff", "stroke": "#2b2b2b", "accent": "#7a4dff"},
+      "platform": {"fill": "#fff1c2", "stroke": "#2b2b2b", "accent": "#a06b00"},
+      "success":  {"fill": "#dcf5e3", "stroke": "#2b2b2b", "accent": "#1f8a3c"},
+      "start":    {"fill": "#ffe6cc", "stroke": "#2b2b2b", "accent": "#c25e00"},
+      "warn":     {"fill": "#ffdcd9", "stroke": "#2b2b2b", "accent": "#d9342b"},
+      "manual":   {"fill": "#ffe0ee", "stroke": "#2b2b2b", "accent": "#d1407f"},
+      "data":     {"fill": "#efefef", "stroke": "#2b2b2b", "accent": "#555555"},
+      "external": {"fill": "#fffdf6", "stroke": "#2b2b2b", "accent": "#555555", "dashed": true}
+    }
+  },
+
+  "ligne": {
+    "label": "黑白线稿 + 单一强调色",
+    "bg": "#ffffff",
+    "font": {"family": "'Helvetica Neue',Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif", "code": "Cascadia,Menlo,Consolas,'Courier New',monospace", "embed": ["Cascadia"], "latin_w": 0.56, "title_weight": 500, "zone_weight": 700, "diagram_title_weight": 700},
+    "layout": {"canvas_pad": 28, "title_gap": 24, "diagram_title_size": 28, "title_size": 20, "desc_size": 16, "zone_title_size": 20, "label_size": 16, "card_pad_x": 20, "card_pad_y": 18, "desc_gap": 6, "card_min_h": 72, "col_min": 200, "col_max": 300, "gap_x": 40, "gutter": 200, "zone_pad": 24, "zone_gap": 24, "grid_gap_x": 100, "grid_gap_y": 80, "section_gap": 36},
+    "card": {"radius": 6, "stroke_width": 1.25, "dash": "10 6", "dash_width": 1.25, "text_align": "middle"},
+    "zone": {"fill": "#f5f5f5", "stroke": "none", "radius": 10, "dash_stroke": "#767676"},
+    "shadow": {"kind": "none"},
+    "edge": {"color": "#111111", "width": 1.5, "head": 12, "head_ratio": 0.42, "dash": "6 5", "accent_wider": true},
+    "edge_label": {"style": "gap", "text": "#111111"},
+    "text": {"title": "#111111", "desc": "#555555", "zone": "#111111"},
+    "code": {"bg": "#f5f5f5", "stroke": "#111111", "text": "#111111", "comment": "#595959", "radius": 6, "dots": false},
+    "roles": {
+      "plain":    {"fill": "#ffffff", "stroke": "#111111", "accent": "#111111"},
+      "primary":  {"fill": "#1d4ed8", "stroke": "#1d4ed8", "accent": "#1d4ed8", "text": "#ffffff", "desc": "#e3e9fb"},
+      "ai":       {"fill": "#111111", "stroke": "#111111", "accent": "#111111", "text": "#ffffff", "desc": "#d4d4d4"},
+      "platform": {"fill": "#e3e3e3", "stroke": "none", "accent": "#111111"},
+      "success":  {"fill": "#ffffff", "stroke": "#111111", "accent": "#111111", "stroke_width": 3},
+      "start":    {"fill": "#e3e3e3", "stroke": "#1d4ed8", "accent": "#1d4ed8", "stroke_width": 2.5},
+      "warn":     {"fill": "#ffffff", "stroke": "#1d4ed8", "accent": "#1d4ed8", "stroke_width": 2.5, "dash": "5 4", "dashed": true},
+      "manual":   {"fill": "#ffffff", "stroke": "#111111", "accent": "#111111", "stroke_width": 2.5, "dash": "0.1 5", "dashed": true},
+      "data":     {"fill": "#bdbdbd", "stroke": "none", "accent": "#111111", "desc": "#2b2b2b"},
+      "external": {"fill": "#ffffff", "stroke": "#111111", "accent": "#111111", "dashed": true}
+    }
+  },
+
+  "dark": {
+    "label": "深色扁平",
+    "bg": "#1c1c1e",
+    "font": {"family": "Cascadia,Menlo,Consolas,'PingFang SC','Microsoft YaHei',monospace", "code": "Cascadia,Menlo,Consolas,'Courier New',monospace", "embed": ["Cascadia"], "latin_w": 0.6, "title_weight": 400, "zone_weight": 400, "diagram_title_weight": 400},
+    "layout": {"canvas_pad": 28, "title_gap": 24, "diagram_title_size": 28, "title_size": 20, "desc_size": 16, "zone_title_size": 20, "label_size": 16, "card_pad_x": 20, "card_pad_y": 18, "desc_gap": 6, "card_min_h": 72, "col_min": 200, "col_max": 300, "gap_x": 40, "gutter": 200, "zone_pad": 24, "zone_gap": 24, "grid_gap_x": 100, "grid_gap_y": 80, "section_gap": 36},
+    "card": {"radius": 32, "radius_ratio": 0.25, "stroke_width": 1, "dash": "8 9", "dash_width": 1.5, "text_align": "middle"},
+    "zone": {"fill": "#2a2a2d", "stroke": "none", "radius": 32, "radius_ratio": 0.25, "dash_stroke": "#8e8e93"},
+    "shadow": {"kind": "none"},
+    "edge": {"color": "#98989d", "width": 2, "head": 14, "dash": "8 10", "accent_wider": false},
+    "edge_label": {"style": "gap", "text": "#c7c7cc"},
+    "text": {"title": "#f5f5f7", "desc": "#aeaeb2", "zone": "#d1d1d6"},
+    "code": {"bg": "#2c2c2e", "stroke": "#48484a", "text": "#f5f5f7", "comment": "#a1a1a6", "radius": 16, "dots": true},
+    "roles": {
+      "plain":    {"fill": "#2c2c2e", "stroke": "#7c7c80", "accent": "#409cff"},
+      "primary":  {"fill": "#13304f", "stroke": "#4a86d1", "accent": "#409cff"},
+      "ai":       {"fill": "#2b2347", "stroke": "#8e74da", "accent": "#bf5af2"},
+      "platform": {"fill": "#3a3014", "stroke": "#b8932e", "accent": "#ffd60a"},
+      "success":  {"fill": "#15381f", "stroke": "#3f9a59", "accent": "#30d158"},
+      "start":    {"fill": "#40280f", "stroke": "#c2772a", "accent": "#ff9f0a"},
+      "warn":     {"fill": "#451b1b", "stroke": "#cc534c", "accent": "#ff6961"},
+      "manual":   {"fill": "#431a2e", "stroke": "#c45286", "accent": "#ff6482"},
+      "data":     {"fill": "#38383b", "stroke": "#8e8e93", "accent": "#a1a1a6"},
+      "external": {"fill": "#1c1c1e", "stroke": "#8e8e93", "accent": "#a1a1a6", "dashed": true}
+    }
+  }
+}

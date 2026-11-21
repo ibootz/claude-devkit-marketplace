@@ -41,8 +41,8 @@
       "name": "devkit-tool",
       "source": "./plugins/devkit-tool",
       "category": "Development",
-      "description": "工具技能集：submodule 同步推送、提交推送、会话起法与交接、话题可视化、技术文档写法、新事物认知与为我所用等 15 技能",
-      "version": "6.42.0"
+      "description": "工具技能集：submodule 同步推送、提交推送、会话起法与交接、话题可视化、技术文档写法、新事物认知与为我所用等 16 技能",
+      "version": "6.43.0"
     },
     {
       "name": "devkit-spec",
@@ -169,6 +169,13 @@
       "category": "Productivity",
       "description": "Excalidraw 图解 - 生成可编辑的 .excalidraw 图，渲染 PNG 回看修版（移植自 coleam00）",
       "version": "1.7.0"
+    },
+    {
+      "name": "devkit-svg-diagram",
+      "source": "./plugins/devkit-svg-diagram",
+      "category": "Productivity",
+      "description": "SVG 图解 - JSON 描述按固定主题渲染 SVG 与 PNG，九种布局、七套主题，默认 Mac 扁平",
+      "version": "1.0.0"
     },
     {
       "name": "devkit-ultraverify",

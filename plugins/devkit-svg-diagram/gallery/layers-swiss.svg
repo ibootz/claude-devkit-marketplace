@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 938 678" width="938" height="678" font-family="&#x27;Helvetica Neue&#x27;,Helvetica,Arial,&#x27;PingFang SC&#x27;,&#x27;Microsoft YaHei&#x27;,sans-serif" data-theme="swiss" data-fonts="Cascadia"><metadata id="diagram-spec"><![CDATA[{
+ "theme": "swiss",
+ "title": "智测平台 · 产品架构图",
+ "subtitle": "分层视图：渠道 → 应用 → 中台 → 外部依赖",
+ "zones": [
+  {
+   "title": "触达渠道",
+   "desc": "学员与管理员的入口",
+   "nodes": [
+    {
+     "id": "pc",
+     "title": "PC 端"
+    },
+    {
+     "id": "h5",
+     "title": "H5 / 小程序"
+    },
+    {
+     "id": "app",
+     "title": "移动 App"
+    },
+    {
+     "id": "im",
+     "title": "钉钉 / 企微"
+    }
+   ]
+  },
+  {
+   "title": "业务应用",
+   "desc": "面向场景的功能",
+   "nodes": [
+    {
+     "id": "exam",
+     "title": "在线考试",
+     "desc": "组卷、监考、阅卷",
+     "role": "primary"
+    },
+    {
+     "id": "practice",
+     "title": "练习中心",
+     "desc": "错题、刷题",
+     "role": "primary"
+    },
+    {
+     "id": "ai",
+     "title": "智能出题",
+     "desc": "大模型生成试题",
+     "role": "ai"
+    },
+    {
+     "id": "report",
+     "title": "成绩分析",
+     "desc": "报表与画像",
+     "role": "primary"
+    }
+   ]
+  },
+  {
+   "title": "能力中台",
+   "desc": "多个应用共用",
+   "nodes": [
+    {
+     "id": "bank",
+     "title": "题库服务",
+     "role": "platform"
+    },
+    {
+     "id": "judge",
+     "title": "判分引擎",
+     "role": "platform"
+    },
+    {
+     "id": "user",
+     "title": "用户与权限",
+     "role": "platform"
+    },
+    {
+     "id": "msg",
+     "title": "消息通知",
+     "role": "platform"
+    }
+   ]
+  },
+  {
+   "title": "外部依赖",
+   "nodes": [
+    {
+     "id": "llm",
+     "title": "大模型 API",
+     "role": "external"
+    },
+    {
+     "id": "oss",
+     "title": "对象存储",
+     "role": "external"
+    },
+    {
+     "id": "sso",
+     "title": "企业 SSO",
+     "role": "external"
+    }
+   ]
+  }
+ ],
+ "legend": [
+  {
+   "role": "primary",
+   "label": "业务应用"
+  },
+  {
+   "role": "ai",
+   "label": "AI 能力"
+  },
+  {
+   "role": "platform",
+   "label": "共享中台"
+  },
+  {
+   "role": "external",
+   "label": "外部依赖"
+  }
+ ]
+}]]></metadata><defs></defs><rect width="100%" height="100%" fill="#ffffff"/><text x="40" y="60.8" font-size="32" font-weight="800" fill="#111111" dominant-baseline="central" font-family="&#x27;Helvetica Neue&#x27;,Helvetica,Arial,&#x27;PingFang SC&#x27;,&#x27;Microsoft YaHei&#x27;,sans-serif">智测平台 · 产品架构图</text><rect x="40" y="84.8" width="56" height="6" fill="#e2231a"/><text x="40" y="107.6" font-size="12.5" fill="#4a4a4a" dominant-baseline="central">分层视图：渠道 → 应用 → 中台 → 外部依赖</text><rect x="40" y="151.6" width="858" height="4" fill="#111111"/><text x="58.0" y="173.7" font-size="13" font-weight="800" fill="#111111" dominant-baseline="central">触达渠道</text><text x="58.0" y="194.5" font-size="12.5" fill="#4a4a4a" dominant-baseline="central" data-maxw="138">学员与管理员的入口</text><rect x="40" y="261.6" width="858" height="4" fill="#111111"/><text x="58.0" y="283.7" font-size="13" font-weight="800" fill="#111111" dominant-baseline="central">业务应用</text><text x="58.0" y="304.5" font-size="12.5" fill="#4a4a4a" dominant-baseline="central" data-maxw="138">面向场景的功能</text><rect x="40" y="395.225" width="858" height="4" fill="#111111"/><text x="58.0" y="417.3" font-size="13" font-weight="800" fill="#111111" dominant-baseline="central">能力中台</text><text x="58.0" y="438.1" font-size="12.5" fill="#4a4a4a" dominant-baseline="central" data-maxw="138">多个应用共用</text><rect x="40" y="505.225" width="858" height="4" fill="#111111"/><text x="58.0" y="527.3" font-size="13" font-weight="800" fill="#111111" dominant-baseline="central">外部依赖</text><g class="edges"></g><path d="M204.00,169.60 C257.33,169.60 310.67,169.60 364.00,169.60 C364.00,186.93 364.00,204.27 364.00,221.60 C310.67,221.60 257.33,221.60 204.00,221.60 C204.00,204.27 204.00,186.93 204.00,169.60 Z" fill="#f0f0f0"/><text x="220.0" y="195.6" font-size="15" font-weight="700" fill="#111111" text-anchor="start" dominant-baseline="central" data-maxw="130">PC 端</text><path d="M376.00,169.60 C429.33,169.60 482.67,169.60 536.00,169.60 C536.00,186.93 536.00,204.27 536.00,221.60 C482.67,221.60 429.33,221.60 376.00,221.60 C376.00,204.27 376.00,186.93 376.00,169.60 Z" fill="#f0f0f0"/><text x="392.0" y="195.6" font-size="15" font-weight="700" fill="#111111" text-anchor="start" dominant-baseline="central" data-maxw="130">H5 / 小程序</text><path d="M548.00,169.60 C601.33,169.60 654.67,169.60 708.00,169.60 C708.00,186.93 708.00,204.27 708.00,221.60 C654.67,221.60 601.33,221.60 548.00,221.60 C548.00,204.27 548.00,186.93 548.00,169.60 Z" fill="#f0f0f0"/><text x="564.0" y="195.6" font-size="15" font-weight="700" fill="#111111" text-anchor="start" dominant-baseline="central" data-maxw="130">移动 App</text><path d="M720.00,169.60 C773.33,169.60 826.67,169.60 880.00,169.60 C880.00,186.93 880.00,204.27 880.00,221.60 C826.67,221.60 773.33,221.60 720.00,221.60 C720.00,204.27 720.00,186.93 720.00,169.60 Z" fill="#f0f0f0"/><text x="736.0" y="195.6" font-size="15" font-weight="700" fill="#111111" text-anchor="start" dominant-baseline="central" data-maxw="130">钉钉 / 企微</text><path d="M204.00,279.60 C257.33,279.60 310.67,279.60 364.00,279.60 C364.00,304.81 364.00,330.02 364.00,355.23 C310.67,355.23 257.33,355.23 204.00,355.23 C204.00,330.02 204.00,304.81 204.00,279.60 Z" fill="#1f4e9e"/><text x="220.0" y="305.4" font-size="15" font-weight="700" fill="#ffffff" text-anchor="start" dominant-baseline="central" data-maxw="130">在线考试</text><text x="220.0" y="330.2" font-size="12.5" fill="#dbe4f3" text-anchor="start" dominant-baseline="central" data-maxw="130">组卷、监考、阅卷</text><path d="M376.00,279.60 C429.33,279.60 482.67,279.60 536.00,279.60 C536.00,304.81 536.00,330.02 536.00,355.23 C482.67,355.23 429.33,355.23 376.00,355.23 C376.00,330.02 376.00,304.81 376.00,279.60 Z" fill="#1f4e9e"/><text x="392.0" y="305.4" font-size="15" font-weight="700" fill="#ffffff" text-anchor="start" dominant-baseline="central" data-maxw="130">练习中心</text><text x="392.0" y="330.2" font-size="12.5" fill="#dbe4f3" text-anchor="start" dominant-baseline="central" data-maxw="130">错题、刷题</text><path d="M548.00,279.60 C601.33,279.60 654.67,279.60 708.00,279.60 C708.00,304.81 708.00,330.02 708.00,355.23 C654.67,355.23 601.33,355.23 548.00,355.23 C548.00,330.02 548.00,304.81 548.00,279.60 Z" fill="#111111"/><text x="564.0" y="305.4" font-size="15" font-weight="700" fill="#ffffff" text-anchor="start" dominant-baseline="central" data-maxw="130">智能出题</text><text x="564.0" y="330.2" font-size="12.5" fill="#d0d0d0" text-anchor="start" dominant-baseline="central" data-maxw="130">大模型生成试题</text><path d="M720.00,279.60 C773.33,279.60 826.67,279.60 880.00,279.60 C880.00,304.81 880.00,330.02 880.00,355.23 C826.67,355.23 773.33,355.23 720.00,355.23 C720.00,330.02 720.00,304.81 720.00,279.60 Z" fill="#1f4e9e"/><text x="736.0" y="305.4" font-size="15" font-weight="700" fill="#ffffff" text-anchor="start" dominant-baseline="central" data-maxw="130">成绩分析</text><text x="736.0" y="330.2" font-size="12.5" fill="#dbe4f3" text-anchor="start" dominant-baseline="central" data-maxw="130">报表与画像</text><path d="M204.00,413.23 C257.33,413.23 310.67,413.23 364.00,413.23 C364.00,430.56 364.00,447.89 364.00,465.23 C310.67,465.23 257.33,465.23 204.00,465.23 C204.00,447.89 204.00,430.56 204.00,413.23 Z" fill="#f6c200"/><text x="220.0" y="439.2" font-size="15" font-weight="700" fill="#111111" text-anchor="start" dominant-baseline="central" data-maxw="130">题库服务</text><path d="M376.00,413.23 C429.33,413.23 482.67,413.23 536.00,413.23 C536.00,430.56 536.00,447.89 536.00,465.23 C482.67,465.23 429.33,465.23 376.00,465.23 C376.00,447.89 376.00,430.56 376.00,413.23 Z" fill="#f6c200"/><text x="392.0" y="439.2" font-size="15" font-weight="700" fill="#111111" text-anchor="start" dominant-baseline="central" data-maxw="130">判分引擎</text><path d="M548.00,413.23 C601.33,413.23 654.67,413.23 708.00,413.23 C708.00,430.56 708.00,447.89 708.00,465.23 C654.67,465.23 601.33,465.23 548.00,465.23 C548.00,447.89 548.00,430.56 548.00,413.23 Z" fill="#f6c200"/><text x="564.0" y="439.2" font-size="15" font-weight="700" fill="#111111" text-anchor="start" dominant-baseline="central" data-maxw="130">用户与权限</text><path d="M720.00,413.23 C773.33,413.23 826.67,413.23 880.00,413.23 C880.00,430.56 880.00,447.89 880.00,465.23 C826.67,465.23 773.33,465.23 720.00,465.23 C720.00,447.89 720.00,430.56 720.00,413.23 Z" fill="#f6c200"/><text x="736.0" y="439.2" font-size="15" font-weight="700" fill="#111111" text-anchor="start" dominant-baseline="central" data-maxw="130">消息通知</text><path d="M204.00,523.23 C257.33,523.23 310.67,523.23 364.00,523.23 C364.00,540.56 364.00,557.89 364.00,575.23 C310.67,575.23 257.33,575.23 204.00,575.23 C204.00,557.89 204.00,540.56 204.00,523.23 Z" fill="#ffffff" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4 4"/><text x="220.0" y="549.2" font-size="15" font-weight="700" fill="#111111" text-anchor="start" dominant-baseline="central" data-maxw="130">大模型 API</text><path d="M376.00,523.23 C429.33,523.23 482.67,523.23 536.00,523.23 C536.00,540.56 536.00,557.89 536.00,575.23 C482.67,575.23 429.33,575.23 376.00,575.23 C376.00,557.89 376.00,540.56 376.00,523.23 Z" fill="#ffffff" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4 4"/><text x="392.0" y="549.2" font-size="15" font-weight="700" fill="#111111" text-anchor="start" dominant-baseline="central" data-maxw="130">对象存储</text><path d="M548.00,523.23 C601.33,523.23 654.67,523.23 708.00,523.23 C708.00,540.56 708.00,557.89 708.00,575.23 C654.67,575.23 601.33,575.23 548.00,575.23 C548.00,557.89 548.00,540.56 548.00,523.23 Z" fill="#ffffff" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4 4"/><text x="564.0" y="549.2" font-size="15" font-weight="700" fill="#111111" text-anchor="start" dominant-baseline="central" data-maxw="130">企业 SSO</text><text x="40" y="630.4" font-size="12" font-weight="800" fill="#111111" dominant-baseline="central">图例</text><path d="M84.00,623.53 C90.00,623.53 96.00,623.53 102.00,623.53 C102.00,628.13 102.00,632.73 102.00,637.33 C96.00,637.33 90.00,637.33 84.00,637.33 C84.00,632.73 84.00,628.13 84.00,623.53 Z" fill="#1f4e9e" stroke="#1f4e9e" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/><text x="110.0" y="630.4" font-size="12" fill="#4a4a4a" dominant-baseline="central">业务应用</text><path d="M186.00,623.53 C192.00,623.53 198.00,623.53 204.00,623.53 C204.00,628.13 204.00,632.73 204.00,637.33 C198.00,637.33 192.00,637.33 186.00,637.33 C186.00,632.73 186.00,628.13 186.00,623.53 Z" fill="#111111" stroke="#111111" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/><text x="212.0" y="630.4" font-size="12" fill="#4a4a4a" dominant-baseline="central">AI 能力</text><path d="M284.16,623.53 C290.16,623.53 296.16,623.53 302.16,623.53 C302.16,628.13 302.16,632.73 302.16,637.33 C296.16,637.33 290.16,637.33 284.16,637.33 C284.16,632.73 284.16,628.13 284.16,623.53 Z" fill="#f6c200" stroke="#f6c200" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/><text x="310.2" y="630.4" font-size="12" fill="#4a4a4a" dominant-baseline="central">共享中台</text><path d="M386.16,623.53 C392.16,623.53 398.16,623.53 404.16,623.53 C404.16,628.13 404.16,632.73 404.16,637.33 C398.16,637.33 392.16,637.33 386.16,637.33 C386.16,632.73 386.16,628.13 386.16,623.53 Z" fill="#ffffff" stroke="#111111" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4 3"/><text x="412.2" y="630.4" font-size="12" fill="#4a4a4a" dominant-baseline="central">外部依赖</text></svg>

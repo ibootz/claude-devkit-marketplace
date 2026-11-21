@@ -1,0 +1,25 @@
+{
+  "theme": "mac",
+  "title": "需求优先级",
+  "matrix": {
+    "x": {"label": "投入", "low": "小", "high": "大"},
+    "y": {"label": "价值", "low": "低", "high": "高"},
+    "quadrants": [
+      {"title": "马上做", "role": "success"},
+      {"title": "规划做"},
+      {"title": "顺手做"},
+      {"title": "不做", "role": "warn"}
+    ],
+    "items": [
+      {"id": "a", "title": "AI 预评分", "role": "ai", "x": 0.25, "y": 0.72},
+      {"id": "b", "title": "题库迁移", "x": 0.78, "y": 0.68},
+      {"id": "c", "title": "导出 PDF", "x": 0.22, "y": 0.22},
+      {"id": "d", "title": "自建图表引擎", "x": 0.75, "y": 0.2}
+    ]
+  },
+  "legend": [
+    {"role": "success", "label": "优先"},
+    {"role": "warn", "label": "放弃"},
+    {"role": "ai", "label": "AI"}
+  ]
+}

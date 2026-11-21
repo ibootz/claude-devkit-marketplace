@@ -1,0 +1,30 @@
+{
+  "theme": "mac",
+  "title": "成绩复核流程",
+  "lanes": [
+    {"id": "stu", "title": "学员"},
+    {"id": "sys", "title": "智测平台"},
+    {"id": "tch", "title": "老师"}
+  ],
+  "steps": [
+    {"id": "apply", "title": "申请复核", "lane": "stu", "col": 0, "role": "start", "shape": "pill"},
+    {"id": "check", "title": "校验时限", "desc": "成绩公布 7 天内", "lane": "sys", "col": 0, "role": "primary"},
+    {"id": "assign", "title": "派给阅卷老师", "lane": "sys", "col": 1, "role": "primary"},
+    {"id": "review", "title": "重新评阅", "lane": "tch", "col": 1, "role": "manual"},
+    {"id": "notify", "title": "通知结果", "lane": "sys", "col": 2, "role": "primary"},
+    {"id": "done", "title": "查看新成绩", "lane": "stu", "col": 2, "role": "success", "shape": "pill"}
+  ],
+  "edges": [
+    {"from": "apply", "to": "check"},
+    {"from": "check", "to": "assign"},
+    {"from": "assign", "to": "review"},
+    {"from": "review", "to": "notify"},
+    {"from": "notify", "to": "done", "accent": "success"}
+  ],
+  "legend": [
+    {"role": "start", "label": "起点"},
+    {"role": "primary", "label": "系统"},
+    {"role": "manual", "label": "人工"},
+    {"role": "success", "label": "结束"}
+  ]
+}

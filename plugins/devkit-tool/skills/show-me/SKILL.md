@@ -1,6 +1,6 @@
 ---
 name: show-me
-description: 把一个话题画成图——按要讲的东西挑最小够用的那一种视图（伪代码、调用树、组件树、文件树、Excalidraw 图、diff、带实值的走查、对比表、时间线、复现命令、HTML 图解），并定好图放正文、写进 md 还是做成 HTML，留作项目资产还是放临时目录。本 skill 只管怎么画；什么时候该画由 devkit-discipline 每轮注入的「画图」规则决定（按回答内容判，不分回复类型），规则命中时调用本 skill。用户说"画出来""画个图""图解一下""可视化一下""show me"时同样调用。
+description: 把一个话题画成图——按要讲的东西挑最小够用的那一种视图（伪代码、调用树、组件树、文件树、SVG 图、diff、带实值的走查、对比表、时间线、复现命令、HTML 图解），并定好图放正文、写进 md 还是做成 HTML，留作项目资产还是放临时目录。本 skill 只管怎么画；什么时候该画由 devkit-discipline 每轮注入的「画图」规则决定（按回答内容判，不分回复类型），规则命中时调用本 skill。用户说"画出来""画个图""图解一下""可视化一下""show me"时同样调用。
 when_to_use: |
   触发词：画出来 / 画个图 / 给我看看 / 可视化一下 / 图解一下 / show me。
   devkit-discipline 每轮注入的「画图」规则命中时（任何类型的回复与落地 md 文档），由它点名调用。
@@ -15,6 +15,8 @@ when_to_use: |
 ## 一、选哪一种视图
 
 按「要讲的是什么」选，不按「哪种看起来更专业」选。
+
+**要出成品图（下面的 SVG 图、Excalidraw 图、HTML 文件），或要讲的东西对不上下面任何一个标题时，先调 `devkit-tool:diagram-types` 定图型**：它从各行业的数百种图型里挑出最贴切的一种，再回到本 skill 定用什么画、载体与落点。已经对上下面某个文本视图标题的（伪代码、各种树、对比表、时间线）不必调。
 
 ### 讲逻辑或算法 → 伪代码
 
@@ -69,11 +71,15 @@ plugins/devkit-tool/
 └── tests/          # 离线回归用例
 ```
 
-### 讲组件交互、控制流、状态流转 → Excalidraw 图
+### 讲组件交互、控制流、状态流转、架构分层 → SVG 图
 
-调用 `devkit-excalidraw-diagram:excalidraw-diagram` 出图，产物是 `<主题>.excalidraw`（能拖进 excalidraw.com / Obsidian 继续改）和它渲染出的同名 `<主题>.png`。按关系定构图：调用与交互画成时序式（参与方横排、消息自上而下、每条箭头标动作），流程与分支画成带菱形判断的流程图，状态画成状态节点加标了触发事件的转移箭头。**讲方案时改前、改后各一张**，读者对着两张图找差异，比读一段「原来……现在……」快。
+默认调用 `devkit-svg-diagram:svg-diagram` 出图：AI 写一份简短 JSON 描述（分层区块、卡片、连线、图例），脚本渲染成 `<主题>.svg` 并转出同名 `<主题>.png`，SVG 可直接嵌 md、浏览器打开，主题默认 mac。按关系定构图：调用与交互画成时序式（参与方横排、消息自上而下、每条箭头标动作），流程与分支画成带菱形判断的流程图，状态画成状态节点加标了触发事件的转移箭头。**讲方案时改前、改后各一张**，读者对着两张图找差异，比读一段「原来……现在……」快。
 
-**退路**：未安装 `devkit-excalidraw-diagram`，或渲染跑不通（缺 `uv`、拉不到 esm.sh）时，改写 Mermaid——调用与交互用 `sequenceDiagram`，流程与分支用 `flowchart`，状态用 `stateDiagram-v2`——源码写进 md 文件、正文给链接（Mermaid 终端不渲染，不贴进回复正文），并在回复里一句话说明没出 Excalidraw 图的原因。载体与落点见第二、三节。
+**图型没有预制布局时**：泳道、甘特、ER、组织架构树、四象限等按 svg-diagram 的布局表选对应布局；表里查不到的图型用它的 `canvas` 自由坐标模式画，配色照样走主题（默认 mac，用户点名才换）。没有预制布局不是改走 Excalidraw 或 Mermaid 的理由。
+
+**点名 Excalidraw 才走 Excalidraw**：用户点名要 Excalidraw 图、`.excalidraw` 文件，或要能在 excalidraw.com / Obsidian 里拖拽编辑的白板图时，调 `devkit-excalidraw-diagram:excalidraw-diagram`，产物是 `<主题>.excalidraw` 和渲染出的同名 `<主题>.png`。
+
+**退路**：未安装 `devkit-svg-diagram` 时先退到 `devkit-excalidraw-diagram`；两者都没装、或渲染跑不通（缺 `uv`、拉不到 esm.sh）时，改写 Mermaid——调用与交互用 `sequenceDiagram`，流程与分支用 `flowchart`，状态用 `stateDiagram-v2`——源码写进 md 文件、正文给链接（Mermaid 终端不渲染，不贴进回复正文），并在回复里一句话说明没出 SVG / Excalidraw 图的原因。载体与落点见第二、三节。
 
 ### 讲几个方案怎么取舍 → 对比表
 
@@ -127,11 +133,12 @@ plugins/devkit-tool/
 |---|---|---|
 | 对比表、时间线，以及其它行 × 列的对照（字段对照、改前改后） | 直接放正文的 markdown 表格 | 终端按列渲染，中英文混排也对得齐；在代码块里用空格对齐列，中文字符一宽就错位 |
 | 伪代码、调用树、走查、组件树、文件树、diff、复现命令、整块代码 | 直接放正文的代码块 | markdown 没有这些形状的语法；终端原样显示，读者不用离开对话 |
-| Excalidraw 图 | `.excalidraw` 源文件加同名 PNG；正文给 PNG 链接。**嵌进 md 或其它文档时一律引 PNG**（md 写 `![图注](figures/<主题>.png)`），源文件放在 PNG 旁边 | PNG 在 GitLab / GitHub 网页、Typora、钉钉等在线文档里都能直接显示，不依赖渲染器；`.excalidraw` 留着下次改图 |
+| SVG 图（默认） | JSON 描述、`.svg` 加同名 PNG；正文给 PNG 链接。**嵌进 md 或其它文档时一律引 PNG**（md 写 `![图注](figures/<主题>.png)`），JSON 描述与 SVG 放在 PNG 旁边 | PNG 在 GitLab / GitHub 网页、Typora、钉钉等在线文档里都能直接显示，不依赖渲染器；JSON 描述留着下次改图 |
+| Excalidraw 图（点名才用） | `.excalidraw` 源文件加同名 PNG，引用方式同上 | `.excalidraw` 能拖进 excalidraw.com 继续改 |
 | Mermaid（仅退路） | md 文件里的 ` ```mermaid ` 源码块，正文给链接；**回复正文里不出现 mermaid 块** | 终端不渲染 mermaid，源码摊在正文里读者看不出形状 |
 | 视觉布局、信息图、短幻灯 | HTML 文件 | 只有它能控制版式与配色 |
 
-**要留作资产的图用 `.excalidraw` 加 PNG，不用 HTML。** `.excalidraw` 是 JSON 纯文本，能 diff，后来的 agent 也能读能改；PNG 负责在文档与网页里显示。HTML 在代码托管网页上只显示源码，一次改动 diff 出几百行样式噪声，改一个节点要重写整段，所以只用在「一次性给人看、看完即弃」的场合。
+**要留作资产的图用 JSON 描述（Excalidraw 图则是 `.excalidraw`）加 PNG，不用 HTML。** 两者都是 JSON 纯文本，能 diff，后来的 agent 也能读能改；PNG 负责在文档与网页里显示。HTML 在代码托管网页上只显示源码，一次改动 diff 出几百行样式噪声，改一个节点要重写整段，所以只用在「一次性给人看、看完即弃」的场合。
 
 ## 三、落点：图留在哪
 
@@ -139,19 +146,19 @@ plugins/devkit-tool/
 
 按顺序取第一个命中的落点：
 
-1. **本轮本来就要写一份 md 文档**（方案、报告、spec、交接）→ PNG 与 `.excalidraw` 放进文档旁的 `figures/`，文档里用相对路径引 PNG。文档的交付格式是单文件 HTML 时例外：图渲染到临时目录，由 `devkit-tool:tech-doc` 的打包脚本连同 `.excalidraw` 源稿内嵌进 HTML，落点不留 `figures/`，细则见它的 `references/html.md`。
-2. **持久事实，且本轮属于某个已有工作项目录** → 写到 `<工作项目录>/diagrams/<主题>.excalidraw` 与同名 `.png`。工作项目录指本轮任务已经在用的那个目录：`.scratch/<feature>/`、devkit-task-keeper 的条目目录（如 `.keeper/<交付id>/debug/DBG-123/`）、sdlc 交付目录、spec 目录；判据是本轮已经往里面写过文件，或用户点名了它。**不自己 commit**，在回复里说一句「新增了未跟踪文件 `<路径>`」，让它随该工作项的正常提交入库——新建的未跟踪文件不会被 `commit -a` 带走，但会被 `git add -A` 带走，用户得知道它在那。
-3. **其余情况** → 写到系统临时目录下的 `claude-diagrams/<主题>.excalidraw` 与同名 `.png`（macOS / Linux 取 `$TMPDIR`，未设则 `/tmp`；Windows 取 `%TEMP%`）。其中**图是持久事实、但本轮没有工作项目录**的，在回复末尾加一句「这张图值得留作资产，建议放到 `<路径>`，要我挪过去吗」，用户同意后再挪。建议路径优先选项目里已有的文档目录；项目里没有合适目录时，把「新建哪个目录」一并写进这句建议，由用户定——各项目 `docs/` 的布局各有规矩，自建目录可能与之冲突。
+1. **本轮本来就要写一份 md 文档**（方案、报告、spec、交接）→ PNG 与源文件（svg-diagram 的 JSON 描述与 `.svg`，或 `.excalidraw`）放进文档旁的 `figures/`，文档里用相对路径引 PNG。文档的交付格式是单文件 HTML 时例外：图渲染到临时目录，由 `devkit-tool:tech-doc` 的打包脚本连同源稿（svg-diagram 描述或 `.excalidraw`）内嵌进 HTML，落点不留 `figures/`，细则见它的 `references/html.md`。
+2. **持久事实，且本轮属于某个已有工作项目录** → 写到 `<工作项目录>/diagrams/<主题>.png` 与源文件（svg-diagram 的 JSON 描述与 `.svg`，或 `.excalidraw`）。工作项目录指本轮任务已经在用的那个目录：`.scratch/<feature>/`、devkit-task-keeper 的条目目录（如 `.keeper/<交付id>/debug/DBG-123/`）、sdlc 交付目录、spec 目录；判据是本轮已经往里面写过文件，或用户点名了它。**不自己 commit**，在回复里说一句「新增了未跟踪文件 `<路径>`」，让它随该工作项的正常提交入库——新建的未跟踪文件不会被 `commit -a` 带走，但会被 `git add -A` 带走，用户得知道它在那。
+3. **其余情况** → 写到系统临时目录下的 `claude-diagrams/<主题>.png` 与源文件（同上）（macOS / Linux 取 `$TMPDIR`，未设则 `/tmp`；Windows 取 `%TEMP%`）。其中**图是持久事实、但本轮没有工作项目录**的，在回复末尾加一句「这张图值得留作资产，建议放到 `<路径>`，要我挪过去吗」，用户同意后再挪。建议路径优先选项目里已有的文档目录；项目里没有合适目录时，把「新建哪个目录」一并写进这句建议，由用户定——各项目 `docs/` 的布局各有规矩，自建目录可能与之冲突。
 
 HTML 文件一律落系统临时目录（`show-me-<短描述>.html`），不写进仓库：它不是资产，留在工作区会弄脏 `git status`，还可能被顺手提交进去。打开命令 macOS 用 `open`，Windows 用 `start`。
 
-**正文怎么给**：给 PNG 一个普通 markdown 链接 `[图注](file:///绝对路径/<主题>.png)`——**开头不加 `!`、不带 `#` 行号**——用一句话说图里画了什么，再附上 `.excalidraw` 源文件的链接。退回 Mermaid 时给 md 图示文件同样形态的链接。不加 `!` 的原因：Claude Code 终端显示不了图片，`![图注](…)` 会原样印成纯文本「图注 (url)」，点不动；`![]()` 只在写进 md 文档时用（见第二节载体表）。不带 `#` 的原因：带了 iTerm2 会按 Semantic History 交给编辑器跳到某行，看到的是源码；不带才交给系统默认应用（看图应用、Typora）渲染打开。
+**正文怎么给**：给 PNG 一个普通 markdown 链接 `[图注](file:///绝对路径/<主题>.png)`——**开头不加 `!`、不带 `#` 行号**——用一句话说图里画了什么，再附上源文件的链接。退回 Mermaid 时给 md 图示文件同样形态的链接。不加 `!` 的原因：Claude Code 终端显示不了图片，`![图注](…)` 会原样印成纯文本「图注 (url)」，点不动；`![]()` 只在写进 md 文档时用（见第二节载体表）。不带 `#` 的原因：带了 iTerm2 会按 Semantic History 交给编辑器跳到某行，看到的是源码；不带才交给系统默认应用（看图应用、Typora）渲染打开。
 
-**在 Codex 里**改写成 inline code 绝对路径，如 `` `/tmp/claude-diagrams/<主题>.png` ``，`.excalidraw` 源文件同样写法：Codex 只把 inline code 里的路径识别成可点击，`[图注](file:///…)` 在它的 TUI 里只渲染成「图注 (路径)」纯文本。
+**在 Codex 里**改写成 inline code 绝对路径，如 `` `/tmp/claude-diagrams/<主题>.png` ``，源文件同样写法：Codex 只把 inline code 里的路径识别成可点击，`[图注](file:///…)` 在它的 TUI 里只渲染成「图注 (路径)」纯文本。
 
-**同一话题已有图**：在原 `.excalidraw` 上改、重新渲染到原 PNG 路径，不另起新文件，做法见 `devkit-excalidraw-diagram` 的 Updating an Existing Diagram 一节。原路径不变，此前回复与文档里的链接打开就是新版。
+**同一话题已有图**：在原源文件上改、重新渲染到原 PNG 路径，不另起新文件；Excalidraw 图的做法见 `devkit-excalidraw-diagram` 的 Updating an Existing Diagram 一节。原路径不变，此前回复与文档里的链接打开就是新版。
 
-**子代理**：子代理可以自己出 Excalidraw 图——先调 `devkit-excalidraw-diagram` 加载全文，渲染后 Read PNG 回看再修。渲染偶尔因页面加载超时静默失败、PNG 停在旧版，所以每次渲染后核对 PNG 修改时间晚于本次渲染开始，渲染命令的输出原样看完、不接 `tail` / `head`。多张图要统一时，主会话在派发说明里写死配色、命名与落点，收回后逐张看图。子代理不执行 `open` / `start`——它会抢走屏幕焦点，而子代理不知道 Human 此刻在不在看；由主会话决定什么时候打开。
+**子代理**：子代理可以自己出图——先调 `devkit-svg-diagram:svg-diagram`（点名 Excalidraw 时调 `devkit-excalidraw-diagram`）加载全文，渲染后 Read PNG 回看再修。渲染偶尔因页面加载超时静默失败、PNG 停在旧版，所以每次渲染后核对 PNG 修改时间晚于本次渲染开始，渲染命令的输出原样看完、不接 `tail` / `head`。多张图要统一时，主会话在派发说明里写死配色、命名与落点，收回后逐张看图。子代理不执行 `open` / `start`——它会抢走屏幕焦点，而子代理不知道 Human 此刻在不在看；由主会话决定什么时候打开。
 
 ## 排版约定
 

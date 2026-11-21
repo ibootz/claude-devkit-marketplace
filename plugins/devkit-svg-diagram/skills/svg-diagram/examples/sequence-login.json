@@ -1,0 +1,26 @@
+{
+  "theme": "mac",
+  "title": "单点登录时序",
+  "participants": [
+    {"id": "user", "title": "浏览器", "role": "plain"},
+    {"id": "app", "title": "智测平台", "role": "primary"},
+    {"id": "sso", "title": "企业 SSO", "role": "external"},
+    {"id": "user_svc", "title": "用户服务", "role": "platform"}
+  ],
+  "messages": [
+    {"from": "user", "to": "app", "label": "访问 /exam"},
+    {"from": "app", "to": "user", "label": "302 跳 SSO", "dashed": true},
+    {"from": "user", "to": "sso", "label": "登录"},
+    {"from": "sso", "to": "app", "label": "回调带 code"},
+    {"from": "app", "to": "user_svc", "label": "换 token"},
+    {"from": "user_svc", "to": "user_svc", "label": "建会话"},
+    {"from": "user_svc", "to": "app", "label": "token", "dashed": true},
+    {"from": "app", "to": "user", "label": "进入考试", "accent": "success"}
+  ],
+  "legend": [
+    {"role": "primary", "label": "本系统"},
+    {"role": "platform", "label": "共享中台"},
+    {"role": "external", "label": "外部"},
+    {"edge": "dashed", "label": "返回"}
+  ]
+}

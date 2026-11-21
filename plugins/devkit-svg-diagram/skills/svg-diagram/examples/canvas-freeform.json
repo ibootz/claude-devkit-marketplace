@@ -1,0 +1,34 @@
+{
+  "theme": "mac",
+  "title": "判分引擎：一题三路",
+  "canvas": {
+    "width": 900, "height": 380,
+    "elements": [
+      {"id": "q", "shape": "circle", "title": "一道题", "role": "start", "x": 0, "y": 140, "w": 140},
+      {"id": "zone", "shape": "zone", "title": "判分引擎", "x": 220, "y": 0, "w": 420, "h": 380},
+      {"id": "obj", "title": "客观题", "desc": "标准答案比对", "role": "primary", "x": 260, "y": 60, "w": 340, "h": 80},
+      {"id": "sub", "title": "主观题", "desc": "AI 预评分", "role": "ai", "x": 260, "y": 170, "w": 340, "h": 80},
+      {"id": "code", "title": "编程题", "desc": "沙箱跑测试用例", "role": "platform", "x": 260, "y": 280, "w": 340, "h": 80},
+      {"id": "out", "shape": "ellipse", "title": "得分", "role": "success", "x": 740, "y": 160, "w": 160, "h": 100},
+
+      {"id": "in-trunk", "shape": "line", "points": [[140, 210], [180, 210]]},
+      {"id": "in-bus", "shape": "line", "points": [[180, 100], [180, 320]]},
+      {"id": "to-obj", "shape": "arrow", "points": [[180, 100], [260, 100]]},
+      {"id": "to-sub", "shape": "arrow", "points": [[180, 210], [260, 210]]},
+      {"id": "to-code", "shape": "arrow", "points": [[180, 320], [260, 320]]},
+
+      {"id": "from-obj", "shape": "line", "points": [[600, 100], [680, 100]]},
+      {"id": "from-sub", "shape": "line", "points": [[600, 210], [680, 210]]},
+      {"id": "from-code", "shape": "line", "points": [[600, 320], [680, 320]]},
+      {"id": "out-bus", "shape": "line", "points": [[680, 100], [680, 320]]},
+      {"id": "to-out", "shape": "arrow", "role": "success", "points": [[680, 210], [740, 210]]}
+    ]
+  },
+  "legend": [
+    {"role": "start", "label": "输入"},
+    {"role": "primary", "label": "规则"},
+    {"role": "ai", "label": "AI"},
+    {"role": "platform", "label": "沙箱"},
+    {"role": "success", "label": "输出"}
+  ]
+}

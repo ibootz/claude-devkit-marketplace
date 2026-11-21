@@ -1,0 +1,30 @@
+{
+  "theme": "mac",
+  "title": "考试域数据模型",
+  "entities": [
+    {"id": "exam", "title": "exam", "role": "primary", "row": 0, "col": 0, "fields": [
+      {"key": "PK", "name": "id", "type": "bigint"},
+      {"name": "title", "type": "varchar"},
+      {"name": "deadline", "type": "datetime"}
+    ]},
+    {"id": "paper", "title": "paper", "role": "primary", "row": 0, "col": 1, "fields": [
+      {"key": "PK", "name": "id", "type": "bigint"},
+      {"key": "FK", "name": "exam_id", "type": "bigint"},
+      {"key": "FK", "name": "user_id", "type": "bigint"},
+      {"name": "score", "type": "decimal"}
+    ]},
+    {"id": "answer", "title": "answer", "role": "data", "row": 1, "col": 1, "fields": [
+      {"key": "PK", "name": "id", "type": "bigint"},
+      {"key": "FK", "name": "paper_id", "type": "bigint"},
+      {"name": "content", "type": "text"}
+    ]}
+  ],
+  "relations": [
+    {"from": "exam", "to": "paper", "from_card": "1", "to_card": "N", "label": "包含"},
+    {"from": "paper", "to": "answer", "from_card": "1", "to_card": "N"}
+  ],
+  "legend": [
+    {"role": "primary", "label": "业务表"},
+    {"role": "data", "label": "明细表"}
+  ]
+}
