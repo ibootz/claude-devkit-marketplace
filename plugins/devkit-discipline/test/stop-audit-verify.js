@@ -36,12 +36,13 @@ function check(name, cond, detail) {
 const STUB = path.join(DIR, 'stub-claude')
 fs.writeFileSync(STUB, `#!/usr/bin/env node
 const fs = require('fs')
-fs.readFileSync(0)
-if (process.env.STUB_LOG) fs.appendFileSync(process.env.STUB_LOG, 'called\\n')
-const m = process.env.STUB_MODE
+const inp = fs.readFileSync(0, 'utf8')
+const isLink = inp.includes('回合末链接审查')
+if (process.env.STUB_LOG) fs.appendFileSync(process.env.STUB_LOG, (isLink ? 'link' : 'source') + '\\n')
+const m = isLink ? (process.env.STUB_LINK || 'pass') : process.env.STUB_MODE
 if (m === 'exit1') process.exit(1)
 if (m === 'garbage') { process.stdout.write('not json'); process.exit(0) }
-const so = m === 'block' ? { ok: false, reason: '回合末出处审查：\\n- 测试' } : { ok: true }
+const so = m === 'block' ? { ok: false, reason: isLink ? '回合末链接审查：\\n- 链接' : '回合末出处审查：\\n- 测试' } : { ok: true }
 process.stdout.write(JSON.stringify({ structured_output: so }))
 `)
 fs.chmodSync(STUB, 0o755)
@@ -158,6 +159,167 @@ const jsonl = (rows) => rows.map((r) => JSON.stringify(r)).join('\n') + '\n'
   const e4 = childEnv({ CLAUDE_CODE_EFFORT_LEVEL: 'high', API_TIMEOUT_MS: '600000' })
   check('子进程推理强度固定 medium、不继承用户的 high', e4.CLAUDE_CODE_EFFORT_LEVEL === 'medium', JSON.stringify(e4))
   check('子进程单次请求超时固定 25 秒、不继承用户的 600 秒', e4.API_TIMEOUT_MS === '25000', JSON.stringify(e4))
+}
+
+// ---- 4.17.0 两路并行判定：出处 + 链接 ----
+{
+  const { loadAudits, mergeReasons } = require(HOOK)
+  const on = loadAudits({})
+  check('默认跑两路：source 在前、link 在后', on.length === 2 && on[0].kind === 'source' && on[1].kind === 'link')
+  check('出处那路提示词不含链接类', !on[0].template.includes('编号没给链接') && on[0].template.includes('二、能查没查'))
+  check('链接那路提示词只审链接、带 $ARGUMENTS', on[1].template.includes('回合末链接审查') && on[1].template.includes('$ARGUMENTS') && !on[1].template.includes('能查没查'))
+  for (const v of ['off', 'OFF', '0', 'false']) {
+    const off = loadAudits({ CLICKABLE_PATHS: v })
+    check(`CLICKABLE_PATHS=${v} → 只跑出处一路`, off.length === 1 && off[0].kind === 'source')
+  }
+  check('CLICKABLE_PATHS=on → 两路', loadAudits({ CLICKABLE_PATHS: 'on' }).length === 2)
+  const S = { kind: 'source', verdict: { ok: false, reason: 'A' } }
+  const L = { kind: 'link', verdict: { ok: false, reason: 'B' } }
+  check('合并：两路都打回 → 出处在前、空一行', mergeReasons([L, S]) === 'A\n\nB')
+  check('合并：一路放行、一路失败 → 空', mergeReasons([{ kind: 'source', verdict: { ok: true } }, { kind: 'link', verdict: null }]) === '')
+  check('合并：出处失败、链接打回 → 只有链接', mergeReasons([{ kind: 'source', verdict: null }, L]) === 'B')
+}
+{
+  const r = run(base, { STUB_MODE: 'pass', STUB_LINK: 'block' })
+  let j = null
+  try { j = JSON.parse(r.stdout) } catch { /* 下面断言会报 */ }
+  check('端到端：只有链接打回 → reason 只含链接那路', j && j.decision === 'block' && j.reason === '回合末链接审查：\n- 链接', r.stdout)
+}
+{
+  const r = run(base, { STUB_MODE: 'block', STUB_LINK: 'block' })
+  let j = null
+  try { j = JSON.parse(r.stdout) } catch { /* 下面断言会报 */ }
+  check('端到端：两路都打回 → 合成一条', j && j.reason === '回合末出处审查：\n- 测试\n\n回合末链接审查：\n- 链接', r.stdout)
+}
+{
+  const log = path.join(DIR, 'kinds-default')
+  run(base, { STUB_MODE: 'pass', STUB_LOG: log, CLICKABLE_PATHS: '' })
+  const kinds = fs.readFileSync(log, 'utf8').trim().split('\n').sort().join(',')
+  check('端到端：默认两路各调一次', kinds === 'link,source', kinds)
+  const log2 = path.join(DIR, 'kinds-off')
+  run(base, { STUB_MODE: 'pass', STUB_LOG: log2, CLICKABLE_PATHS: 'off' })
+  check('端到端：CLICKABLE_PATHS=off 只调出处一路', fs.readFileSync(log2, 'utf8').trim() === 'source')
+}
+{
+  const r = run(base, { STUB_MODE: 'exit1', STUB_LINK: 'block' })
+  check('端到端：出处那路失败不影响链接那路打回', r.stdout.includes('回合末链接审查'), r.stdout)
+}
+
+// ---- 4.17.0 词条核对（wiki-check.js，不经模型）----
+{
+  const { checkWikiFile, wikiFilesThisTurn, parseSource, wikiReason } = require(path.join(__dirname, '..', 'hooks', 'wiki-check.js'))
+  const { userPromptText } = require(HOOK)
+  const docs = path.join(DIR, 'repo', 'docs')
+  fs.mkdirSync(docs, { recursive: true })
+  const SRC = path.join(docs, 'design.md')
+  const pad = Array.from({ length: 60 }, (_, i) => `填充行 ${i + 1}`)
+  pad[9] = '## 定时催办'
+  pad[10] = '- **定时催办**：到期前一天自动提醒负责人，'
+  pad[11] = '  提醒走钉钉工作通知。'
+  pad[49] = '评估 Plugin 是给作答打分的规则包。'
+  fs.writeFileSync(SRC, pad.join('\n') + '\n')
+  const wikiDir = path.join(DIR, 'claude-wiki', 'repo')
+  fs.mkdirSync(wikiDir, { recursive: true })
+  const W = (name, body) => { const f = path.join(wikiDir, name); fs.writeFileSync(f, body); return f }
+  const src = (line) => `—— [design.md:${line}](vscode://file${SRC}:${line})`
+
+  const good = W('good.md', [
+    '# 定时催办', '',
+    '> 「定时催办：到期前一天自动提醒负责人，提醒走钉钉工作通知。」', src(11), '',
+    '> 评估 Plugin 是……打分的规则包', src(50), '',
+    '## 未找到', '- 谁负责维护', '',
+    '## 相关词条', '- [评估 Plugin](./eval-plugin.md)', '',
+    '<!-- 写于 2026-11-21，会话主题：测试 -->', '',
+  ].join('\n'))
+  check('词条核对：合格词条（跨行摘录、去粗体与列表符、删节号、未找到、相关词条、注释）→ 无问题', checkWikiFile(good).length === 0, JSON.stringify(checkWikiFile(good)))
+
+  const prose = W('prose.md', ['# 定时催办', '', '> 到期前一天自动提醒负责人', src(11), '', '它的作用是减少逾期，这次改动会用到它。', ''].join('\n'))
+  const pp = checkWikiFile(prose)
+  check('词条核对：骨架外的自写句子 → 报出行号', pp.length === 1 && pp[0].includes('第 6 行') && pp[0].includes('自写句子'), JSON.stringify(pp))
+
+  const h2 = W('h2.md', ['# 定时催办', '', '## 是什么', '> 到期前一天自动提醒负责人', src(11), ''].join('\n'))
+  check('词条核对：自写小标题（如「是什么」）→ 报出', checkWikiFile(h2).some((x) => x.includes('是什么')), JSON.stringify(checkWikiFile(h2)))
+
+  const reword = W('reword.md', ['# 定时催办', '', '> 到期前一天会自动提醒负责的人', src(11), ''].join('\n'))
+  check('词条核对：改了字的摘录 → 找不到逐字原文', checkWikiFile(reword).some((x) => x.includes('找不到逐字原文')), JSON.stringify(checkWikiFile(reword)))
+
+  const splice = W('splice.md', ['# 定时催办', '', '> 到期前一天自动提醒负责人……是给作答打分的规则包', src(11), ''].join('\n'))
+  check('词条核对：用删节号拼两处原文 → 各片段都在文件里时放行（行号只核第一段）', checkWikiFile(splice).length === 0, JSON.stringify(checkWikiFile(splice)))
+  const tiny = W('tiny.md', ['# 定时催办', '', '> 到期……提醒……负责', src(11), ''].join('\n'))
+  check('词条核对：短于 4 字的片段 → 报「像在拼句」', checkWikiFile(tiny).some((x) => x.includes('像在拼句')), JSON.stringify(checkWikiFile(tiny)))
+
+  const badLine = W('badline.md', ['# 定时催办', '', '> 到期前一天自动提醒负责人', src(58), ''].join('\n'))
+  check('词条核对：行号注错（原文在 11 行、注 58 行）→ 报行号', checkWikiFile(badLine).some((x) => x.includes('行号注错')), JSON.stringify(checkWikiFile(badLine)))
+  const outRange = W('outrange.md', ['# 定时催办', '', '> 到期前一天自动提醒负责人', src(999), ''].join('\n'))
+  check('词条核对：行号超出文件范围 → 报出', checkWikiFile(outRange).some((x) => x.includes('超出文件范围')), JSON.stringify(checkWikiFile(outRange)))
+
+  const noSrc = W('nosrc.md', ['# 定时催办', '', '> 到期前一天自动提醒负责人', '', '## 未找到', '- 维护人', ''].join('\n'))
+  const ns = checkWikiFile(noSrc)
+  check('词条核对：摘录下没有出处行 → 报出，且算「没有一段带出处的摘录」', ns.some((x) => x.includes('没有紧跟出处行')) && ns.some((x) => x.includes('没有一段带出处的摘录')), JSON.stringify(ns))
+
+  const self = W('self.md', ['# 定时催办', '', '> 定时催办', `—— [good.md:1](vscode://file${good}:1)`, ''].join('\n'))
+  check('词条核对：出处指向词条目录 → 报出', checkWikiFile(self).some((x) => x.includes('词条目录')), JSON.stringify(checkWikiFile(self)))
+
+  check('出处解析：file:///abs#12 与 #L12 都认', parseSource(`file://${SRC}#12`).line === 12 && parseSource(`file://${SRC}#L12`).line === 12)
+  check('出处解析：vscode 链接带列号也认', parseSource(`vscode://file${SRC}:12:3`).line === 12)
+  check('出处解析：Windows 盘符去掉前导斜杠', parseSource('vscode://file/C:/a/b.md:3').file === 'C:/a/b.md')
+
+  const raw = jsonl([
+    user('上一轮'),
+    toolUse('Write', { file_path: prose, content: '' }),
+    user('本轮'),
+    toolUse('Write', { file_path: good, content: '' }),
+    toolUse('Edit', { file_path: reword, old_string: 'a', new_string: 'b' }),
+    toolUse('Write', { file_path: path.join(DIR, 'not-wiki.md'), content: '' }),
+    toolUse('Write', { file_path: reword, content: '' }),
+  ])
+  const files = wikiFilesThisTurn(raw, userPromptText)
+  check('本轮词条：只取本轮、只取 claude-wiki 下的 md、去重', files.length === 2 && files[0] === good && files[1] === reword, JSON.stringify(files))
+  const reason = wikiReason(raw, userPromptText)
+  check('打回 reason：标题、只列不合格的词条、带改法', reason.startsWith('回合末词条核对') && reason.includes('reword.md') && !reason.includes('good.md：') && reason.includes('未找到出处'), reason)
+  check('打回 reason：全合格 → 空', wikiReason(jsonl([user('本轮'), toolUse('Write', { file_path: good, content: '' })]), userPromptText) === '')
+  check('打回 reason：词条已被删掉 → 不核', wikiReason(jsonl([user('本轮'), toolUse('Write', { file_path: path.join(wikiDir, 'gone.md'), content: '' })]), userPromptText) === '')
+
+  // 真实原文形态：代码注释前缀、md 表格与链接、带空格与括号的路径
+  const codeSrc = path.join(docs, 'hook.js')
+  fs.writeFileSync(codeSrc, "'use strict'\n// 1. stop_hook_active=true（本轮已打回过一次）→ 直接放行，\n//    不调模型。\n# python 注释：默认只检查，\n# --apply 才改动。\n")
+  const code = W('code.md', ['# stop_hook_active', '', '> stop_hook_active=true（本轮已打回过一次）→ 直接放行，不调模型。', `—— [hook.js:2](vscode://file${codeSrc}:2)`, '', '> 默认只检查，--apply 才改动。', `—— [hook.js:4](vscode://file${codeSrc}:4)`, ''].join('\n'))
+  check('词条核对：跨行的 // 与 # 注释原文 → 去掉注释前缀后比对通过', checkWikiFile(code).length === 0, JSON.stringify(checkWikiFile(code)))
+  const tblSrc = path.join(docs, 'table.md')
+  fs.writeFileSync(tblSrc, '| 档 | 说明 |\n|---|---|\n| `SessionStart` | 背景规则，见 [hook-restraint](./x.md) 的强度阶梯 |\n')
+  const tbl = W('tbl.md', ['# SessionStart', '', '> | SessionStart | 背景规则，见 hook-restraint 的强度阶梯 |', `—— [table.md:3](vscode://file${tblSrc}:3)`, ''].join('\n'))
+  check('词条核对：摘 md 表格行（含行内代码与链接）→ 通过', checkWikiFile(tbl).length === 0, JSON.stringify(checkWikiFile(tbl)))
+  const spDir = path.join(DIR, 'dir with space(1)')
+  fs.mkdirSync(spDir, { recursive: true })
+  fs.copyFileSync(SRC, path.join(spDir, 'design.md'))
+  const enc = encodeURI(path.join(spDir, 'design.md')).replace(/\(/g, '%28').replace(/\)/g, '%29')
+  const spOk = W('sp-ok.md', ['# 定时催办', '', '> 到期前一天自动提醒负责人', `—— [design.md:11](vscode://file${enc}:11)`, ''].join('\n'))
+  check('词条核对：路径含空格与括号、按 %20 %28 %29 编码 → 通过', checkWikiFile(spOk).length === 0, JSON.stringify(checkWikiFile(spOk)))
+  const spRaw = W('sp-raw.md', ['# 定时催办', '', '> 到期前一天自动提醒负责人', `—— [design.md:11](vscode://file${path.join(spDir, 'design.md')}:11)`, ''].join('\n'))
+  const spr = checkWikiFile(spRaw)
+  check('词条核对：路径空格括号没编码 → 报「出处格式不对」并给编码写法，不误报成自写句子', spr.some((x) => x.includes('出处格式不对') && x.includes('%20')) && !spr.some((x) => x.includes('自写句子') || x.includes('没有紧跟出处行')), JSON.stringify(spr))
+  const many = W('many.md', ['# 定时催办', '', '> 到期前一天自动提醒负责人', src(11), '', '## 未找到', '- a1', '- a2', '- a3', '- a4', '- a5', '- a6', ''].join('\n'))
+  check('词条核对：「未找到」超过 5 条 → 报出', checkWikiFile(many).some((x) => x.includes('超过 5 条')), JSON.stringify(checkWikiFile(many)))
+  const ownSrc = W('own-src.md', ['# 定时催办', '', '> 到期前一天自动提醒负责人', src(11), ''].join('\n'))
+  check('词条核对：出处文件本轮被 Write / Edit 过 → 不算现有原文', checkWikiFile(ownSrc, new Set([path.resolve(SRC)])).some((x) => x.includes('本轮被你改写过')), JSON.stringify(checkWikiFile(ownSrc, new Set([path.resolve(SRC)]))))
+  const { wikiFilesInReply } = require(path.join(__dirname, '..', 'hooks', 'wiki-check.js'))
+  const inReply = wikiFilesInReply(`见 [定时催办](file://${encodeURI(prose)})（「到期前一天」），另 \`${reword}\``)
+  check('回复里链到的词条：file:// 链接与行内代码路径都取到', inReply.length === 2 && inReply[0] === prose && inReply[1] === reword, JSON.stringify(inReply))
+  const rr = wikiReason(jsonl([user('本轮')]), userPromptText, `复用旧词条 [定时催办](file://${prose})`)
+  check('打回 reason：本轮没写、但回复里链到的旧词条也核', rr.includes('prose.md') && rr.includes('自写句子'), rr)
+  const rr2 = wikiReason('', userPromptText, `[x](file://${prose})`)
+  check('打回 reason：读不到 transcript 时仍核回复里链到的词条', rr2.includes('prose.md'), rr2)
+
+  const tp = path.join(DIR, 'transcript-wiki.jsonl')
+  fs.writeFileSync(tp, raw)
+  const r = run({ ...base, transcript_path: tp }, { STUB_MODE: 'block' })
+  let j = null
+  try { j = JSON.parse(r.stdout) } catch { /* 下面断言会报 */ }
+  check('端到端：模型打回与词条核对合成一条，词条在最后', j && j.reason.startsWith('回合末出处审查') && j.reason.includes('\n\n回合末词条核对'), r.stdout)
+  const r2 = run({ ...base, transcript_path: tp }, { STUB_MODE: 'pass', DEVKIT_STOP_AUDIT_CLAUDE: path.join(DIR, 'no-such-claude') })
+  check('端到端：找不到 claude 时词条核对照样打回', r2.stdout.includes('回合末词条核对'), r2.stdout)
+  const r3 = run({ ...base, transcript_path: tp, stop_hook_active: true }, { STUB_MODE: 'pass' })
+  check('端到端：stop_hook_active=true 时词条也不核（每轮只打回一次）', r3.stdout === '', r3.stdout)
 }
 
 // ---- 失败日志 ----

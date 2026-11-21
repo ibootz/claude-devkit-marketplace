@@ -13,6 +13,14 @@
 //    CONTEXT_BUDGET，超出时保留最近的），连同 last_assistant_message 拼成与离线评测
 //    （.scratch/conclusion-flip/eval/run_eval.py）同形的判定输入。
 // 3. 调 `claude -p` 用 claude-sonnet-5-5 判定，取 structured_output 的 {ok, reason}。
+// 3a. 4.17.0 起同时跑两路判定：stop-audit-prompt.txt 审「无据定论 / 能查没查」（与 4.16.0 逐字相同），
+//    stop-audit-link-prompt.txt 审「编号没给链接」。两路并行起子进程，结果合成一条 reason。
+//    分开跑是用户拍板 Q2-a：一条提示词只审一件事，两路各自可改可评测、互不牵连。（当初的依据
+//    「并进同一次判定后前两类漏拦从 4/20 升到 7/20」复测不成立：只跑出处那一路也是 5/20，四次抽样
+//    在 3～7 之间波动，见 README 4.17.0。）
+//    CLICKABLE_PATHS 为 off / 0 / false（devkit-clickable-paths 的关闭开关）时不跑链接那一路。
+// 3b. 4.17.0 起再加一路不经模型的词条核对（wiki-check.js）：本轮 Write / Edit 过的
+//    claude-wiki 词条逐行查自写句子、逐段把摘录与出处文件逐字比对。找不到 claude 也照跑。
 // 4. ok=false 时 stdout 输出 {"decision":"block","reason":...}，harness 把 reason 交回主模型、
 //    本轮继续；其余一切情形（判定满足、超时、claude 找不到、输出解析失败）放行。
 //
@@ -32,7 +40,8 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { spawnSync } = require('child_process')
+const { spawnSync, spawn } = require('child_process')
+const { wikiReason } = require('./wiki-check')
 
 const MODEL = 'claude-sonnet-5-5'
 const CHILD_TIMEOUT_MS = 35000
@@ -152,6 +161,30 @@ function buildJudgeInput(hookInput, contextLines, promptTemplate) {
   return `<transcript>\n${pre}\n\n[assistant]: ${hookInput.last_assistant_message}\n</transcript>\n\n${ASK}\n\nCondition: ${cond}`
 }
 
+// 链接类审查跟随 devkit-clickable-paths 的开关：规约不注入时，回合末也不要求链接。
+function linkAuditEnabled(env) {
+  const flag = String(env.CLICKABLE_PATHS || '').toLowerCase()
+  return !(flag === 'off' || flag === '0' || flag === 'false')
+}
+
+// 返回本轮要跑的判定：[{ kind, template }]。kind=source 审出处，kind=link 审链接。
+function loadAudits(env) {
+  const read = (f) => fs.readFileSync(path.join(__dirname, f), 'utf8').trimEnd()
+  const audits = [{ kind: 'source', template: read('stop-audit-prompt.txt') }]
+  if (linkAuditEnabled(env)) audits.push({ kind: 'link', template: read('stop-audit-link-prompt.txt') })
+  return audits
+}
+
+// 多路打回合成一条：出处那路在前。各路 reason 原样拼接，中间空一行。
+function mergeReasons(verdicts) {
+  const order = { source: 0, link: 1 }
+  return verdicts
+    .filter((v) => v && v.verdict && v.verdict.ok === false && v.verdict.reason)
+    .sort((a, b) => order[a.kind] - order[b.kind])
+    .map((v) => v.verdict.reason.trim())
+    .join('\n\n')
+}
+
 function isExecutable(p) {
   try {
     fs.accessSync(p, fs.constants.X_OK)
@@ -246,30 +279,81 @@ function judge(claudeBin, input) {
   return j.structured_output || null
 }
 
-function main() {
+const JUDGE_ARGS = [
+  '-p', '--model', MODEL, '--system-prompt', SYS,
+  '--setting-sources', 'project',
+  '--strict-mcp-config', '--disable-slash-commands', '--disallowedTools', DISALLOWED,
+  '--no-session-persistence', '--output-format', 'json', '--json-schema', SCHEMA,
+]
+
+// judge 的异步版：多路判定并行时用。失败语义与 judge 相同（记日志、返回 null）。
+function judgeAsync(claudeBin, input) {
+  return new Promise((resolve) => {
+    const t0 = Date.now()
+    let child
+    try {
+      child = spawn(claudeBin, JUDGE_ARGS, { cwd: os.tmpdir(), env: childEnv(process.env), timeout: CHILD_TIMEOUT_MS })
+    } catch (e) {
+      logFailure('spawn-error', { error: e }, 0)
+      return resolve(null)
+    }
+    let stdout = ''
+    let stderr = ''
+    let error = null
+    child.stdout.setEncoding('utf8').on('data', (d) => { stdout += d })
+    child.stderr.setEncoding('utf8').on('data', (d) => { stderr += d })
+    child.on('error', (e) => { error = e })
+    child.stdin.on('error', () => { /* 子进程提前退出时写 stdin 会 EPIPE，按退出结果判 */ })
+    child.stdin.end(input)
+    child.on('close', (status, signal) => {
+      const ms = Date.now() - t0
+      const p = { status, signal, stdout, stderr, error }
+      if (error || status !== 0 || !stdout) {
+        logFailure(signal === 'SIGTERM' && ms >= CHILD_TIMEOUT_MS ? 'timeout' : error ? 'spawn-error' : 'exit-nonzero', p, ms)
+        return resolve(null)
+      }
+      let j
+      try { j = JSON.parse(stdout) } catch { logFailure('bad-json', p, ms); return resolve(null) }
+      if (!j.structured_output) logFailure('no-structured-output', p, ms)
+      resolve(j.structured_output || null)
+    })
+  })
+}
+
+// 并行跑全部判定，返回 [{ kind, verdict }]。评测脚本也走这里。
+async function runAudits(claudeBin, hookInput, contextLines, env) {
+  const audits = loadAudits(env)
+  const verdicts = await Promise.all(audits.map((a) => judgeAsync(claudeBin, buildJudgeInput(hookInput, contextLines, a.template)).catch(() => null)))
+  return audits.map((a, i) => ({ kind: a.kind, verdict: verdicts[i] }))
+}
+
+async function main() {
   if (process.env.DEVKIT_STOP_AUDIT === 'off' || process.env.DEVKIT_STOP_AUDIT_CHILD === '1') return
   let hookInput
   try { hookInput = JSON.parse(fs.readFileSync(0, 'utf8')) } catch { return }
   if (hookInput.stop_hook_active || !hookInput.last_assistant_message) return
 
-  const promptTemplate = fs.readFileSync(path.join(__dirname, 'stop-audit-prompt.txt'), 'utf8').trimEnd()
   let contextLines = []
+  let raw = ''
   try {
-    if (hookInput.transcript_path) contextLines = buildContextLines(readTail(hookInput.transcript_path))
-  } catch { /* 读不到 transcript 就只审最后一条回复 */ }
+    if (hookInput.transcript_path) {
+      raw = readTail(hookInput.transcript_path)
+      contextLines = buildContextLines(raw)
+    }
+  } catch { /* 读不到 transcript 就只审最后一条回复，词条只核回复里链到的 */ }
+  let wiki = ''
+  try { wiki = wikiReason(raw, userPromptText, hookInput.last_assistant_message) } catch { /* 词条核对失灵就不核 */ }
 
   const claudeBin = resolveClaude()
-  if (!claudeBin) return
-  let verdict = null
-  try { verdict = judge(claudeBin, buildJudgeInput(hookInput, contextLines, promptTemplate)) } catch { return }
-  if (!verdict || verdict.ok !== false || !verdict.reason) return
+  const judged = claudeBin ? mergeReasons(await runAudits(claudeBin, hookInput, contextLines, process.env)) : ''
+  const reason = [judged, wiki].filter(Boolean).join('\n\n')
+  if (!reason) return
   // 同步写：紧接着 process.exit(0)，异步的 stdout.write 写管道时可能被截断
-  fs.writeSync(1, JSON.stringify({ decision: 'block', reason: verdict.reason }))
+  fs.writeSync(1, JSON.stringify({ decision: 'block', reason }))
 }
 
 if (require.main === module) {
-  try { main() } catch { /* fail-open */ }
-  process.exit(0)
+  main().catch(() => { /* fail-open */ }).finally(() => process.exit(0))
 }
 
-module.exports = { buildContextLines, buildJudgeInput, userPromptText, cut, resolveClaude, judge, childEnv }
+module.exports = { loadAudits, mergeReasons, runAudits, judgeAsync, linkAuditEnabled, buildContextLines, buildJudgeInput, userPromptText, cut, resolveClaude, judge, childEnv }

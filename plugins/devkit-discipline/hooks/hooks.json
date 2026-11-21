@@ -1,5 +1,5 @@
 {
-  "description": "AI 工作纪律：会话级 / 每轮 / 子代理三层注入，Agent 与 Bash 的 PreToolUse 硬拦，Write/Edit 事后提醒，压缩前后校准子代理状态，Stop 回合末出处审查。",
+  "description": "AI 工作纪律：会话级 / 每轮 / 子代理三层注入，Agent 与 Bash 的 PreToolUse 硬拦，Write/Edit 事后提醒，压缩前后校准子代理状态，Stop 回合末出处与链接审查。",
   "hooks": {
     "PreToolUse": [
       {

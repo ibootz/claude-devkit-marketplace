@@ -484,8 +484,8 @@ const SECTION_PARALLEL_TURN_CODEX = [
 const SECTION_TURN_CHECKLIST = [
   '## 每轮自查（细则在会话开始注入的完整纪律里）',
   '',
-  '1. 新写或大改 md（文档 / 方案 / 报告 / skill / reference / 交接）前，先在对话里输出「本次 md 受众判定：{人 / AI / 人机混合}，理由：……」，**先于**任何写 md 的工具调用；受众含人时接着调 `devkit-tool:tech-doc`，按它定类型、骨架与配图。',
-  '2. 待拍板方案 / 评审问题：按 3.3 写齐四要素（不适用写「无」），在正文里问、不调 `AskUserQuestion`；问句与选项里的状态、编号、计数、时序当轮读真源再写。',
+  '1. 新写或大改 md（文档 / 方案 / 报告 / skill / reference / 交接；3.14 词条文件除外）前，先在对话里输出「本次 md 受众判定：{人 / AI / 人机混合}，理由：……」，**先于**任何写 md 的工具调用；受众含人时接着调 `devkit-tool:tech-doc`，按它定类型、骨架与配图。',
+  '2. 待拍板方案 / 评审问题：按 3.3 写齐四要素（不适用写「无」），点名的事项按 3.14 挂链接，在正文里问、不调 `AskUserQuestion`；问句与选项里的状态、编号、计数、时序当轮读真源再写。',
   '3. **决策性结论**（会被拿去拍板、驱动改代码改配置、或被转述给别人的）：先调工具核实再下，附出处，写明查到哪层、哪层没查（常见半路停点见 ' + REF_CONDUCT + ' 7.7）；「已证实」只认本会话亲手取得的证据。核实类任务动手前定停止条件（仅本文件内 / 追到直接调用方 / 追到跨类跨模块跨服务边界）；派子代理时停止条件进【约束】、交代深度进【期望输出】。没写深度的结论视为未完成。',
   '4. 能自己跑的命令自己跑，不抄给用户敲；弹浏览器 / 扫码的登录也由你后台起，用户只点授权。交出去只限七章列的四种，并附你实际跑出的报错原文，「预判会被拦」不算。',
 ].join('\n')
@@ -503,7 +503,7 @@ const SECTION_EXPLAIN_TURN = [
   '- **做什么：** 一句话说这个项目或模块是干什么的。',
   '- 一张示意图，按要讲的东西选：方案取舍、几项对照、事件先后写 markdown 表格；流程或数据流用箭头图，调用顺序用调用树，目录职责用文件树，界面结构用组件树，判断逻辑用伪代码，这五种放代码块。能标的标出「← 你问的在这」。',
   '- **参与方：** 图里每一方各写一句，说它是干什么的。',
-  '③ **代号翻译**：代号、编号、字段名、类名、文件行号不单独当主角——先写它在业务上是什么东西或什么动作，再在括号里注原名。',
+  '③ **代号翻译**：代号、编号、字段名、类名、文件行号不单独当主角——先写它在业务上是什么东西或什么动作，再在括号里注原名；要展开不止一句的，按 3.14 挂链接。',
   '④ **排版**：一句一行、短句；同一小段的几行紧挨，小段之间空一行，大段之间用 `---`。并列三项以上写成列表，某项下的细节写成缩进的二级列表。每段把结论、已证实 / 推断的标签、关键数字加粗，每段一两处。列选项前先单独一行写加粗的问句，说清在选什么；选项之间空两行，选项标签加粗，标签下的做法、代价、能否回退紧挨着写。',
   '⑤ **markdown 有语法的就用语法，不在代码块里用字符拼**：行 × 列的对照（方案取舍、字段对照、改前改后、时间线）写 markdown 表格，不用空格对齐列——中英文混排时列必错位；带说明的先后步骤写有序列表；层级要点写嵌套列表。代码块只放两类：markdown 画不出的形状（箭头图、各种树、伪代码），以及要原样照抄的代码、命令、日志、diff。',
 ].join('\n')
@@ -665,9 +665,10 @@ const SECTION_EXPRESSION = [
 // 由 3.2「引用自带信息」管。3.4 同时并入了五类断言分层（原「篇章连贯·断言分层」），它进
 // SECTION_34_35_SHARED、两层共用：子代理回执里把推断写成事实，父代理照抄就会传给用户。
 // 【4.3.0】3.9 压成「读者前提」加指路（它也管 3.3 问法与改动汇报），3.10 并进 SECTION_EXPLAIN_TURN。
+// 【4.17.0】「正文答复不是机械授权」一句挪进 references/conduct.md 7.1 第 1 项（用户 2026-11-21 拍板 Q1-a，
+// 给 3.14 腾 SessionStart 预算）：七章「命令自己跑」已写「真撞上且无自救路的守卫」并指路 conduct.md。
 const SECTION_38_39_MAIN = [
-  '**3.8 答后闭环**：用户答完拍板后，回收选定项与适用范围、未选项、下一步、残余不确定、重开条件；决定波及文件 / spec / 票 / 范围的，**同轮**写进受影响文件的 `## Comments` 或 `docs/adr/`（只留在对话里，compact 后就没了）。答复对不上选项就回头确认，不替用户挑。',
-  '**正文答复不是机械授权**：绕不过只认授权弹框的守卫（如 `devkit-worktree-flow` 主分支拦截），撞到时说明原委，默认引导进 worktree。',
+  '**3.8 答后闭环**：用户答完拍板后，回收选定项与适用范围、未选项、下一步、残余不确定、重开条件；决定波及文件 / spec / 票 / 范围的，**同轮**写进受影响文件的 `## Comments` 或 `docs/adr/`，compact 后对话里的就没了。答复对不上选项就回头确认，不替用户挑。',
   '',
   '**3.9 读者前提**：给真人写的正文，读者懂开发、对本项目零上下文——不知道它做什么、有哪些参与方、流程有几步、内部叫法指什么；不按读者的职位或此前的提问推高假定。写法与画图见每轮注入的「解释类回复」「画图」两节。',
 ].join('\n')
@@ -697,6 +698,25 @@ const SECTION_313_MAIN = [
   '**3.13 结论翻转**：被质疑先说证据变没变，没变就坚持；用户改主意写成「你改为 X，原记录保留」，不认成自己记错。推翻自己前面的结论时，回复开头写**更正块**：原说 X、实为 Y、错因（未核实 / 范围不够 / 环境变了）、依赖旧结论的已拍板项与已做改动。',
 ].join('\n')
 
+// 【4.17.0】3.14 词条链接，只进主会话：给用户看的回复只出自主会话。用户 2026-11-21 原话要的是
+// 「类似 wiki 网页中的词条链接网」——难懂的概念、名词、信息高度聚合的句子、标题，或文档里散在
+// 多处不好一次挂链接的内容，写进临时讲解文档再挂链接，让回复不偏离主任务。它把原有几处各管一段
+// 的规则串成一条三级阶梯：一句说得清 = 解释类回复的代号翻译 / readable-citations 的「一句就内联」；
+// 本机一处现成 = clickable-paths / readable-citations 的直链；其余才写词条文件。链接是加深不是
+// 替代：正文仍留释义，否则违背 readable-citations 的「自足」。词条一词一文件、不带行号打开，
+// 是为了避开「一份文件多节、靠行号定位、后插一节前面的链接全错位」。落点与 show-me 的
+// claude-diagrams/ 同根。词条文件豁免受众判定与改动清单：它们是回复的附注，不豁免就没人用。
+// 注入里只留判据，落点、格式、豁免在 SEC:wiki（写第一个词条前才需要，压 SessionStart 自律线）。
+// 「该不该挂」只做注入、不进回合末审查：「读者会不会卡住」要猜读者懂什么，打回一次就是整条重写；
+// 审查只管可判定的拍板事项那一条。
+// 同日追加「释义只摘原文」：用户原话「只能从现有文档中摘抄文案，不能二创，不能有任何自行加工猜测等
+// 会诱导用户的内容」。于是原先的「一句说得清就自己内联」与「本机没有、要综合推导就写词条」两级
+// 删掉，找不到原文只写「未找到出处」。词条内容能机械核对（骨架外无自写句、摘录逐字出现在出处
+// 文件），由 stop-audit.js 的 wiki-check 做，不经模型。格式与核对口径见 references/expression.md 的 SEC:wiki。
+const SECTION_314_MAIN = [
+  '**3.14 词条链接**：读者会卡住的名词代号、密句、拍板事项，挂链接、括注一句原文；原文散在多处就摘进词条文件，找不到写「未找到出处」。只逐字摘本机文件；格式见下行 `SEC:wiki`。',
+].join('\n')
+
 const SECTION_EXPRESSION_MAIN = [
   '## 三、表达约束（主会话版；语体归 output style 类插件）',
   '',
@@ -717,7 +737,9 @@ const SECTION_EXPRESSION_MAIN = [
   '',
   SECTION_313_MAIN,
   '',
-  '3.1、3.3 问法、3.12 的完整骨架与范例见 ' + REF_EXPRESSION + '。',
+  SECTION_314_MAIN,
+  '',
+  '3.1、3.3 问法、3.12、3.14 的骨架与范例见 ' + REF_EXPRESSION + '。',
 ].join('\n')
 
 // 【3.37.0】七章从用户级 `~/.claude/rules/` 迁入（用户拍板：全局 rules 目录此后不放规则，
@@ -880,8 +902,6 @@ function buildImageEvidence(event) {
 // Claude 版改了措辞，Codex 版自动跟上。删掉的都是点名 Claude 专属工具的部分。
 const ASK_NO_TOOL_CLAUSE = '在正文里问，不调 `AskUserQuestion`。'
 const TURN_ASK_NO_TOOL_CLAUSE = '，在正文里问、不调 `AskUserQuestion`；'
-const CONFIRM_DIALOG_LINE =
-  '**正文答复不是机械授权**：绕不过只认授权弹框的守卫（如 `devkit-worktree-flow` 主分支拦截），撞到时说明原委，默认引导进 worktree。'
 const DISPATCH_REF_LINE = '5.1 类型、5.2 档位、5.6、5.7 的完整判据在每轮注入指路的那份 reference 的 `SEC:dispatch`。'
 
 function mustReplace(text, from, to) {
@@ -892,11 +912,7 @@ function mustReplace(text, from, to) {
 // 在飞记账靠 `TaskList` 讲口径、team 模式是 Claude Code 的实验开关，两条 Codex 都用不上。
 const SECTION_SUBAGENT_CODEX = withoutBullets(SECTION_SUBAGENT, [SUBAGENT_BULLET_INFLIGHT, SUBAGENT_BULLET_TEAM])
 const SECTION_SUBAGENT_SUB_CODEX = withoutBullets(SECTION_SUBAGENT_SUB, [SUBAGENT_BULLET_INFLIGHT_SUB, SUBAGENT_BULLET_TEAM_SUB])
-// 「正文答复不是机械授权」那句说的是 Claude 侧只认授权弹框的守卫；Codex 没有弹框，
-// 那道闸在 Codex 下改认用户在正文里的同意（见 devkit-worktree-flow），这句反而误导，删。
-const SECTION_EXPRESSION_MAIN_CODEX = withoutBullets(
-  mustReplace(SECTION_EXPRESSION_MAIN, ASK_NO_TOOL_CLAUSE, '在正文里问。'),
-  [CONFIRM_DIALOG_LINE])
+const SECTION_EXPRESSION_MAIN_CODEX = mustReplace(SECTION_EXPRESSION_MAIN, ASK_NO_TOOL_CLAUSE, '在正文里问。')
 const SECTION_TURN_CHECKLIST_CODEX = mustReplace(SECTION_TURN_CHECKLIST, TURN_ASK_NO_TOOL_CLAUSE, '，在正文里问；')
 // 5.1 类型、5.2 档位住在讲 `Agent` 字段的 reference 里，Codex 下那份 reference 不适用。
 const SECTION_DISPATCH_CODEX = withoutBullets(SECTION_DISPATCH, [DISPATCH_REF_LINE]).replace(/\n+$/, '')
