@@ -147,7 +147,7 @@ function termLinksReason(message, writtenThisTurn) {
     lines.push(`- 挂过链接的词别处又裸写：${shown}。像 wiki 一样，本条回复里挂过链接的词每次出现都挂同一个链接；行内代码里单独写这个词也算，改成链接；围栏代码块与命令内部不算。`)
   }
   for (const q of quotes) {
-    lines.push(`- 「${q.label}」后的括注原文对不上：${q.problem}。括注只放从链接处逐字摘的原文；摘不到就删掉括注，写「（未找到出处）」。`)
+    lines.push(`- 「${q.label}」后的括注原文对不上：${q.problem}。加「」的括注只放从链接处逐字摘的原文；摘不到就改成「（AI 理解：……）」（20 字以内、不加「」）。`)
   }
   lines.push('改完把整条回复完整重写一遍；只有链接问题时不写更正块。')
   return lines.join('\n')

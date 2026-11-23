@@ -343,7 +343,7 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   const files = wikiFilesThisTurn(raw, userPromptText)
   check('本轮词条：只取本轮、只取 claude-wiki 下的 md、去重', files.length === 2 && files[0] === good && files[1] === reword, JSON.stringify(files))
   const reason = wikiReason(raw, userPromptText)
-  check('打回 reason：标题、只列不合格的词条、带改法', reason.startsWith('回合末词条核对') && reason.includes('reword.md') && !reason.includes('good.md：') && reason.includes('未找到出处'), reason)
+  check('打回 reason：标题、只列不合格的词条、带改法', reason.startsWith('回合末词条核对') && reason.includes('reword.md') && !reason.includes('good.md：') && reason.includes('AI 理解'), reason)
   check('打回 reason：全合格 → 空', wikiReason(jsonl([user('本轮'), toolUse('Write', { file_path: good, content: '' })]), userPromptText) === '')
   check('打回 reason：词条已被删掉 → 不核', wikiReason(jsonl([user('本轮'), toolUse('Write', { file_path: path.join(wikiDir, 'gone.md'), content: '' })]), userPromptText) === '')
 
@@ -422,6 +422,8 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   }
   check('括注是改写 → 报', quoteProblems(`[放行](${U}#2)（「打回一次后就不再审」）`).length === 1)
   check('括注不带「」 → 不归这里', quoteProblems(`[放行](${U}#2)（我说的白话）`).length === 0)
+  check('4.24.0 链解释文件 + 「AI 理解」括注（不加「」）→ 不报', quoteProblems('[审批流转](file:///nonexistent/claude-explain/kit/approval-flow.md)（AI 理解：提交后按角色逐级审）').length === 0)
+  check('4.24.0「AI 理解」括注里套「」冒充原文 → 仍按原文比对、报', quoteProblems(`[放行](${U}#2)（「AI 理解：打回一次就放行」）`).length === 1)
   check('不带行号的文件按全文比对', quoteProblems(`[词条](${U})（「不调模型」）`).length === 0 && quoteProblems(`[词条](${U})（「随便编的」）`).length === 1)
   const many = Array.from({ length: 9 }, (_, i) => `[词${i}号](${U}#2) 词${i}号`).join('\n')
   check('不截断：9 个词全列', (termLinksReason(many).match(/号」1 处/g) || []).length === 9)

@@ -27,7 +27,8 @@
 // 3b. 4.17.0 起再加一路不经模型的词条核对（wiki-check.js）：本轮 Write / Edit 过的
 //    claude-wiki 词条逐行查自写句子、逐段把摘录与出处文件逐字比对。找不到 claude 也照跑。
 // 3b'. 4.19.0 起模型判定再加两路审 3.14：stop-audit-stuck-prompt.txt 审读者会卡住的内部名词没挂链接
-//    也没写「未找到出处」，stop-audit-gloss-prompt.txt 审释义是自写而不是加「」的原文片段。
+//    也没写「AI 理解」或「未找到出处」，stop-audit-gloss-prompt.txt 审释义是自写而不是加「」的原文片段
+//    （4.24.0 起以「AI 理解：」开头、不加「」的括注放行）。
 //    DEVKIT_WIKI_AUDIT=off 关这两路与词条机械核对。
 //    每轮只打回一次（stop_hook_active），打回后的重写不再审，所以每路一件事、四路并行
 //    （总耗时≈最慢一路），各路提示词都要求命中项全部列出、不设上限，机械核对同样不截断。
