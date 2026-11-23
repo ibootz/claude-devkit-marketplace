@@ -254,6 +254,26 @@ _entries = [
 check("只挑久未改动的 temp_git_*", pr.stale_temp_git(_entries, _now), ["temp_git_1_old"])
 check("阈值可调", pr.stale_temp_git(_entries, _now, threshold=30), ["temp_git_1_old", "temp_git_2_fresh"])
 
+print("\n[13] write_lines：清单固定写 LF 行尾")
+#
+# Windows 上 open(..., "w") 会把 "\n" 翻成 "\r\n"，下游 bash 的 while read -r 把 \r 读进变量，
+# 传给 CLI 就成了「名字末尾多个空白」，回执 Marketplace 'ai-sdlc ' not found、整份清单逐条失败。
+# 2026-11-23 在 Windows 上实测 14 条清单 14 条这样失败。这里直接在字节层断言行尾。
+_tmp = _tempfile.mkdtemp()
+try:
+    _p = os.path.join(_tmp, "list.txt")
+    pr.write_lines(_p, ["ai-sdlc", "baoyu-skills"])
+    with open(_p, "rb") as _f:
+        _raw = _f.read()
+    check("不含 CR 字节", b"\r" in _raw, False)
+    check("逐行内容与顺序", _raw.decode("utf-8").split("\n")[:2], ["ai-sdlc", "baoyu-skills"])
+    check("文件以单个 LF 结尾", _raw.endswith(b"\n") and not _raw.endswith(b"\n\n"), True)
+    pr.write_lines(_p, [])
+    with open(_p, "rb") as _f:
+        check("空清单写成空文件", _f.read(), b"")
+finally:
+    _shutil.rmtree(_tmp)
+
 if FAILED:
     print(f"\n{len(FAILED)} 条未通过：")
     for f in FAILED:

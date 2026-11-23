@@ -107,6 +107,21 @@ def load_json(path, default=None):
         return default
 
 
+def write_lines(path, lines):
+    """写清单文件，行尾固定 LF（不受操作系统影响）。
+
+    Windows 上 `open(..., "w")` 默认把 "\\n" 翻成 "\\r\\n"。下游 bash 的
+    `while IFS= read -r` 会把 \\r 一起读进变量，于是传给 CLI 的是带 \\r 的名字：
+    `claude plugin marketplace update "ai-sdlc\\r"` 回 `Marketplace 'ai-sdlc ' not found`
+    （看起来只是名字末尾多了个空白），整份清单逐条失败而原因无从判断。
+    2026-11-23 实测 14 条清单 14 条这样失败，见 references/verification-log.md。
+    newline="\\n" 关掉平台翻译，两个平台都写纯 LF。
+    """
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        for line in lines:
+            f.write(line + "\n")
+
+
 def marketplace_manifest(mkt):
     """读某个市场的 marketplace.json（两种可能的位置都试）。"""
     for rel in (".claude-plugin/marketplace.json", "marketplace.json"):
@@ -366,9 +381,7 @@ def stage_market(out_path):
     elapsed = time.time() - t0
 
     need = [r[0] for r in results if r[1] in ("STALE", "NO_GIT", "PROBE_FAIL")]
-    with open(out_path, "w", encoding="utf-8") as f:
-        for n in need:
-            f.write(n + "\n")
+    write_lines(out_path, need)
 
     print(f"=== 阶段一：marketplace 远端探测（{len(rows)} 个，耗时 {elapsed:.1f}s）===")
     for name, state, local, remote, gcs in sorted(results, key=lambda x: (x[1], x[0])):
@@ -502,9 +515,13 @@ def stage_plugin(out_path, only_enabled=False):
 
     why = [(pid, rec, reason + scope_lag_note(pid, rec, plugins)) for pid, rec, reason in why]
 
-    with open(out_path, "w", encoding="utf-8") as f:
-        for pid, rec in need:
-            f.write(f"{pid}|{rec.get('scope')}|{rec.get('projectPath') or ''}\n")
+    write_lines(
+        out_path,
+        (
+            f"{pid}|{rec.get('scope')}|{rec.get('projectPath') or ''}"
+            for pid, rec in need
+        ),
+    )
 
     print(
         f"=== 阶段二：插件层探测（url 源 {len(urlsrc)} 条记录去重成 {len(keys)} 个远端仓，"
@@ -675,9 +692,7 @@ def stage_cleanup(out_path, before_path, apply):
     tg_stale = [] if tg_refs else stale_temp_git(tg_entries, time.time())
     tg_paths = [os.path.join(CACHE, n) for n in tg_stale]
 
-    with open(out_path, "w", encoding="utf-8") as f:
-        for p in candidates + tg_paths:
-            f.write(p + "\n")
+    write_lines(out_path, candidates + tg_paths)
 
     size = sum(dir_size(p) for p in candidates)
     tg_size = sum(dir_size(p) for p in tg_paths)

@@ -170,6 +170,18 @@ PATH 只在该次 Bash 调用的子 shell 内被破坏，**不影响后续调用
 
 用了 `for p in $plugins` 依赖单词分割的写法，zsh 默认不做单词分割。这类失败**无副作用**——CLI 在 id 校验阶段就退出，没有写 `installed_plugins.json`、没有刷新任何插件，改好写法直接重跑即可。
 
+### Windows 上清单带 CRLF，整份清单报「名字 not found」（2026-11-23）
+
+探测器原先用 `open(path, "w", encoding="utf-8")` 写清单。Windows 上 Python 把 `\n` 翻成 `\r\n`；下游 bash 的 `while IFS= read -r` 把 `\r` 一并读进变量，传给 CLI 的名字末位就多一个不可见字符。
+
+实测环境：Windows 11 Pro for Workstations、Git Bash、Claude Code 2.1.x，耗时 19:11–19:20。
+
+- `od -c %TEMP%/mkt_to_update.txt` 首行为 `a i - s d l c \r \n`，行尾确认是 CRLF。
+- 14 条清单 → 14 条 `✘ Failed to update marketplace(s): Marketplace 'ai-sdlc ' not found`。报价里名字看着完全正确（`\r` 不可见，只表现为引号前多一个空格），CLI 那句 `Available marketplaces:` 也列出了同名市场——现象与名字拼错完全一样，是本坑最难判的地方。
+- 同一份清单过一遍 `tr -d '\r'` 重跑：6 条成功、8 条因内网 GitLab 返回 502 失败。失败原因从此可辨。
+
+修法两层：探测器改用 `write_lines()`，以 `newline="\n"` 关掉平台翻译，两个平台都写纯 LF；正文的读取循环统一写成 `tr -d '\r' < 清单 | while ...`，兜住外部生成或历史遗留的 CRLF。同一轮还顺带确认了同机 `plugins_to_refresh.txt` 不带 CR——两类清单由不同代码路径写出，不能互相担保。
+
 ### 只在 project 里装过的插件静默 `exit=1`
 
 `claude plugin update "$p"` 默认 `--scope user`，无 `user` scope 记录的 id 会 `exit=1` 但循环不检查退出码。机制与 8 个实测复现 id 见本文件「project/local scope 专项坑的复现」。

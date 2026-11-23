@@ -42,7 +42,7 @@
       "source": "./plugins/devkit-tool",
       "category": "Development",
       "description": "工具技能集：submodule 同步推送、提交推送、会话起法与交接、话题可视化、技术文档写法、新事物认知与为我所用等 16 技能",
-      "version": "6.43.0"
+      "version": "6.43.1"
     },
     {
       "name": "devkit-spec",
@@ -186,7 +186,10 @@
     },
     {
       "name": "devkit-impeccable",
-      "source": { "source": "url", "url": "https://github.com/pbakaus/impeccable" },
+      "source": {
+        "source": "url",
+        "url": "https://github.com/pbakaus/impeccable"
+      },
       "category": "Design",
       "description": "前端设计技能 - 反 AI 味、UI 审计与打磨（外部源：pbakaus/impeccable）",
       "version": "4.8.0"

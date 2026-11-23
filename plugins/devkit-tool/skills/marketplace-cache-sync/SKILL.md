@@ -62,14 +62,28 @@ Claude Code 的插件系统有两层独立状态，都在 `~/.claude/plugins/` �
 # 从配置里取本插件缓存目录，避免把版本号写死在路径里
 PROBE="$(jq -r '.plugins | to_entries[] | select(.key | startswith("devkit-tool@")) | .value[0].installPath' ~/.claude/plugins/installed_plugins.json | head -1)/skills/marketplace-cache-sync/scripts/probe-refresh.py"
 ls -l "$PROBE"   # 必须存在再往下走
+
+# 解释器逐个试，以真正跑通 --version 为准。只查 command -v 不够：Windows 的
+# WindowsApps\python3 是 Microsoft Store 的零字节桩，查得到、跑不了，无输出即失败。
+PY=""
+for c in python3 python "py -3"; do
+  if $c --version >/dev/null 2>&1; then PY="$c"; break; fi
+done
+[ -n "$PY" ] || { echo "找不到可用的 Python 解释器"; exit 1; }
 ```
 
 拿不到时改用 `$CLAUDE_PLUGIN_ROOT/skills/marketplace-cache-sync/scripts/probe-refresh.py`，或直接在 devkit-tool 的源仓里跑那份脚本——它只读 `~/.claude/plugins/` 下的配置，不依赖自己所在的位置。
 
+**清单文件的路径与行尾，两个平台都要对得上。** 探测器自己解决平台差异，调用方只需知道三条：
+
+- **路径**：macOS 写 `/tmp`；Windows 原生 Python 把 `/tmp` 解析成 `C:\tmp`，而 Git Bash 的 `/tmp` 是 `%TEMP%`，所以探测器在 Windows 上改写成 `%TEMP%`——两侧落到同一目录。脚本每次都会打印实际写入路径，以它为准。
+- **行尾**：清单固定写 LF。Windows 上 `open(..., "w")` 默认把 `\n` 翻成 `\r\n`，`while IFS= read -r` 会把 `\r` 一起读进变量，传给 CLI 的名字末尾就多一个不可见字符，回执报 `Marketplace 'ai-sdlc ' not found`——看着像名字里有个空格，实为 CR。读清单前一律 `tr -d '\r'` 兜底（外部生成或历史遗留的清单同样可能带 CRLF）。
+- **shell**：下面所有片段按 bash / zsh 写（进程替换 `<(...)`、`jq`、`tr` 均可用）。macOS 走系统 zsh，Windows 走 Git Bash。
+
 ### 第一步：探测哪些市场真有新提交，只更新那几个
 
 ```bash
-python3 "$PROBE" --stage market      # 本机实测 4.5s
+"$PY" "$PROBE" --stage market      # 本机实测 4.5s
 ```
 
 它对每个 `marketplaces/<name>/` 并发跑 `git ls-remote origin HEAD` 与本地 `rev-parse HEAD` 比对，把结果分成四类，并把需要更新的市场名写进 `/tmp/mkt_to_update.txt`：
@@ -84,11 +98,11 @@ python3 "$PROBE" --stage market      # 本机实测 4.5s
 然后**只**更新命中的市场，一个一个来：
 
 ```bash
-while IFS= read -r mkt; do
+tr -d '\r' < /tmp/mkt_to_update.txt | while IFS= read -r mkt; do
   [ -z "$mkt" ] && continue
   echo "=== marketplace update $mkt ==="
   claude plugin marketplace update "$mkt" 2>&1
-done < /tmp/mkt_to_update.txt
+done
 ```
 
 **只对命中的市场逐个跑 `claude plugin marketplace update "$mkt"`。** 不带参数的全量版会对所有市场串行 clone（≈ 14~16 分钟），而典型一轮探测下来 17 个市场里通常只有 1~2 个真有新提交——绝大多数时间花在重新 clone 已经最新的仓。
@@ -98,7 +112,7 @@ done < /tmp/mkt_to_update.txt
 ### 第二步：算出真正需要刷新的插件清单
 
 ```bash
-python3 "$PROBE" --stage plugin      # 本机实测 1.5s（含 110 条 url 源记录去重成 15 个仓、并发取 manifest 0.8s）
+"$PY" "$PROBE" --stage plugin      # 本机实测 1.5s（含 110 条 url 源记录去重成 15 个仓、并发取 manifest 0.8s）
 ```
 
 输出写进 `/tmp/plugins_to_refresh.txt`，每行形如 `<id>|<scope>|<projectPath>`（user scope 的 projectPath 为空）。它做四件事：
@@ -121,7 +135,7 @@ python3 "$PROBE" --stage plugin      # 本机实测 1.5s（含 110 条 url 源�
 cp ~/.claude/plugins/installed_plugins.json /tmp/ip_before.json   # 写后回读用的基线快照
 total=$(wc -l < /tmp/plugins_to_refresh.txt | tr -d ' ')
 echo "待刷新记录数: $total（预计 $((total * 25 / 60)) 分钟左右）"
-while IFS='|' read -r pid pscope ppath; do
+tr -d '\r' < /tmp/plugins_to_refresh.txt | while IFS='|' read -r pid pscope ppath; do
   [ -z "$pid" ] && continue
   if [ "$pscope" = "user" ]; then
     echo "=== $pid [user] ==="
@@ -134,7 +148,7 @@ while IFS='|' read -r pid pscope ppath; do
     echo "=== $pid [$pscope] @ $ppath ==="
     (cd "$ppath" && claude plugin update --scope "$pscope" "$pid") 2>&1
   fi
-done < /tmp/plugins_to_refresh.txt
+done
 ```
 
 **必须用 `while IFS= read -r` 逐行读，不要写 `for p in $plugins`。** Claude Code 的 Bash 工具在 macOS 上走 zsh，而 zsh 默认**不对未加引号的变量做单词分割**（bash 会）——`for p in $plugins` 会把整个多行字符串当成**一个** token 传给 CLI，报 `Plugin "<第一个插件名>" not found` 后整个循环失败。落地成临时文件再逐行读，不依赖任何 shell 的分词行为。
@@ -238,8 +252,8 @@ du -sch ~/.claude/plugins/cache/temp_git_*/ | tail -1
 **比对前两边路径必须统一格式，所以这一步用探测器的 `cleanup` 阶段做，不用 `jq` + `find` + `comm` 拼。** Windows 上 `installPath` 记的是 `C:\Users\...`（反斜杠），Git Bash 的 `find` 列出来是 `/c/Users/...`，按文字比对时**每一个在用版本都落进差集**、被当成孤儿。探测器对两边做同一套规范化（盘符形态、分隔符、大小写、末尾斜杠）后再求差集，并顺带完成反向检查与下面「必须剔除的那一项」：
 
 ```bash
-python3 "$PROBE" --stage cleanup     # dry-run：只报告白名单 / 磁盘 / 未引用 / 可删数与体积，可删清单写进 /tmp/cache_orphan.txt
-python3 "$PROBE" --stage cleanup --apply   # 真删
+"$PY" "$PROBE" --stage cleanup     # dry-run：只报告白名单 / 磁盘 / 未引用 / 可删数与体积，可删清单写进 /tmp/cache_orphan.txt
+"$PY" "$PROBE" --stage cleanup --apply   # 真删
 ```
 
 `--apply` 在两种情况下拒绝删除并 `exit=1`：反向检查非空（配置引用了但磁盘不存在），或第三步的刷新前快照 `/tmp/ip_before.json` 不存在。同一次运行还会收走 (a) 里久未改动的 `temp_git_*`，清单一并写进 `/tmp/cache_orphan.txt`。
@@ -276,8 +290,8 @@ dws 是钉钉 Workspace CLI，和 Claude Code 的插件市场/缓存无关。把
 DWSUP="$(jq -r '.plugins | to_entries[] | select(.key | startswith("devkit-tool@")) | .value[0].installPath' ~/.claude/plugins/installed_plugins.json | head -1)/skills/marketplace-cache-sync/scripts/upgrade-dws.py"
 ls -l "$DWSUP"   # 必须存在再往下走
 
-python3 "$DWSUP"            # 只检查：当前版本、最新版本、是否可升级
-python3 "$DWSUP" --apply    # 有新版本才升级；已是最新则跳过
+"$PY" "$DWSUP"            # 只检查：当前版本、最新版本、是否可升级
+"$PY" "$DWSUP" --apply    # 有新版本才升级；已是最新则跳过
 ```
 
 它按三步走，每步都回读：
@@ -289,7 +303,7 @@ python3 "$DWSUP" --apply    # 有新版本才升级；已是最新则跳过
 **npm registry 不可达时显式换源**（第三方镜像，确认可用再用）：
 
 ```bash
-python3 "$DWSUP" --apply --registry https://registry.npmmirror.com
+"$PY" "$DWSUP" --apply --registry https://registry.npmmirror.com
 ```
 
 **dws 未安装时脚本打印「未找到 dws」并 exit 0**：这一节跳过即可，不要当成整体失败。
@@ -318,6 +332,8 @@ python3 "$DWSUP" --apply --registry https://registry.npmmirror.com
 | 清理历史版本缓存后某项目插件失效或被迫重新下载 | 按"只保留最新版本"删了。必须用 `.plugins[][].installPath` 全集做白名单差集，见第五步 (b) |
 | Windows 上白名单差集把全部在用版本列成可删 | `installPath` 是 `C:\...`、Git Bash `find` 给 `/c/...`，文字比对永不相等。用 `--stage cleanup`（两边先规范化再比），见第五步 (b) |
 | Windows 上 bash 循环读到的清单是空的或上一轮的 | 原生 Python 把 `/tmp/x` 解析成 `C:\tmp\x`，Git Bash 的 `/tmp` 是 `%TEMP%`。探测器在 Windows 上默认写 `%TEMP%`，与 bash 的 `/tmp` 同一目录；自定义 `--out` 时两边用同一个路径 |
+| Windows 上每条 `marketplace update` 都报 `Marketplace '<名字> ' not found`，回执里的名字看着完全正确 | 清单是 CRLF：`read -r` 把 `\r` 读进变量，传过去的名字末位多了个 CR。探测器自 6.43.1 起固定写 LF；读外部生成或历史清单前先 `tr -d '\r'` |
+| `python3` 查得到却什么都跑不出来（无输出、无报错） | Windows 的 `WindowsApps\python3` 是 Microsoft Store 零字节桩。按 `python3` → `python` → `py -3` 逐个真跑 `--version` 解析，见「执行工作流」开头的 `$PY` |
 | 全局插件是新版，在某个项目里用到的却是旧版 | 该项目有 project/local scope 记录钉着旧版，项目级优先加载。只刷 user scope 不会动它。按第二步清单逐条刷，探测器会在理由里标出比 user scope 落后的项目记录 |
 | 一次完整刷新要跑 30~50 分钟 | 没做探测剪枝，把两类固定开销全付了一遍。先跑 `probe-refresh.py` 两阶段（合计约 8.5s），只对真有变化的调 CLI |
 | 并发跑多个 `plugin update` 想加速 | 它们读改写同一 `installed_plugins.json` 且 CLI 内部无文件锁；flock 包住则退化成串行、零加速。加速只能靠减少调用次数 |
@@ -341,6 +357,8 @@ python3 "$DWSUP" --apply --registry https://registry.npmmirror.com
 - [ ] 判断市场是否真的拉到新代码时用的是 HEAD 对比，**没有**拿 `lastUpdated` 当判据（它变了 / 没变都不能证明任何一个方向）
 - [ ] 待刷清单里的每条记录都刷过一次，且清单是按 (id, scope, projectPath) **逐条**算的，不是按 id 去重后的数量
 - [ ] 第三步用的是 `while IFS= read -r` 逐行读，不是 `for p in $plugins`（zsh 下后者必坏）
+- [ ] 解释器是按 `python3` → `python` → `py -3` 真跑 `--version` 解析出来的，没有直接假定 `python3` 可用
+- [ ] 读清单的循环带了 `tr -d '\r'`；若回执里出现 `Marketplace '<名字> ' not found` 而名字看着正确，先查清单行尾而不是改名
 - [ ] 每条 `claude plugin update` 都**显式传了 `--scope`**（默认值是 `user`，只在项目里装过的 id 会静默 `exit=1` 滚屏而过）
 - [ ] project/local scope 的刷新里，每条命令执行前都真的 `cd` 进了该记录**自己的** `projectPath`（不是随手挑的当前目录），且刷新后用快照 diff 核实了该记录的 `version`/`gitCommitSha`/`lastUpdated` 确实变化，而不是只信"already at the latest version"这句回执文字
 - [ ] 第二步按默认行为**连未启用的安装记录一起**算进了待刷清单（没有带 `--enabled-only`，除非用户当轮明确要求只刷已启用的）
