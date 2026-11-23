@@ -1,6 +1,7 @@
 // wiki-check.js — 回合末词条核对（4.17.0，由 stop-audit.js 调用，不单独挂 hook）
 //
-// 【核什么】三章 3.14 要求词条文件（$TMPDIR/claude-wiki/<仓库>/<词条>.md）只装本机文件的逐字摘录。
+// 【核什么】三章 3.14 要求词条文件（$TMPDIR/claude-wiki/<仓库>/<词条>.md）只装客观来源的逐字摘录：本机文件，
+// 或远端内容（钉钉文档、网页、远端文件）由读取命令直接落盘的快照（$TMPDIR/claude-sources/，4.21.0）。
 // 回合末审查的判定模型只看最后一条回复，看不到词条；本模块补这一段，全程机械比对、不经模型：
 // 1. 要核的词条 = 本轮（最后一条真实用户提问之后）Write / Edit / MultiEdit 过的 file_path，加上
 //    最后一条回复里链到的路径；路径含 claude-wiki 目录段且以 .md 结尾的才算。读盘上的最终内容。
@@ -110,9 +111,9 @@ const RELATED_RE = /^- \[[^\]]+\]\(\.\/[^)\s]+\.md\)\s*$/
 function checkExcerpt(quoteLines, url, wikiFile, writtenThisTurn) {
   const src = parseSource(url)
   if (!src) return '出处链接认不出文件与行号，写成 vscode://file/绝对路径:行号'
-  if (/[\\/]claude-wiki[\\/]/.test(src.file)) return '出处指向词条目录本身，原文必须来自项目文件'
+  if (/[\\/]claude-wiki[\\/]/.test(src.file)) return '出处指向词条目录本身，原文必须来自客观来源（本机文件或远端内容的快照）'
   // 外挂文档（claude-side 目录）由模型后台生成，不是现有原文
-  if (/[\\/]claude-side[\\/]/.test(src.file)) return '出处指向外挂文档，那是模型生成的，原文必须来自项目文件'
+  if (/[\\/]claude-side[\\/]/.test(src.file)) return '出处指向外挂文档，那是模型生成的，原文必须来自客观来源（本机文件或远端内容的快照）'
   if (path.resolve(src.file) === path.resolve(wikiFile)) return '出处指向词条自己'
   if (writtenThisTurn && writtenThisTurn.has(path.resolve(src.file))) return `出处文件 ${path.basename(src.file)} 本轮被你改写过，不算现有原文`
   let text
@@ -222,7 +223,7 @@ function wikiReason(raw, userPromptText, lastMessage) {
   return [
     '回合末词条核对（机械比对，不经模型）：',
     ...out,
-    '词条只装本机文件的逐字原文（三章 3.14）：自写的句子删掉；摘录照出处文件逐字改正，或改注正确的文件与行号；找不到原文的那段删掉，整份词条没有摘录就删掉文件，正文里对应的释义改成「未找到出处」。改完把整条回复完整重写一遍；只有词条问题时不写更正块。',
+    '词条只装客观来源的逐字原文（三章 3.14；本机文件，或读取命令直接落盘的远端快照）：自写的句子删掉；摘录照出处文件逐字改正，或改注正确的文件与行号；找不到原文的那段删掉，整份词条没有摘录就删掉文件，正文里对应的释义改成「未找到出处」。改完把整条回复完整重写一遍；只有词条问题时不写更正块。',
   ].join('\n')
 }
 
