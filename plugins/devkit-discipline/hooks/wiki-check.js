@@ -227,4 +227,4 @@ function wikiReason(raw, userPromptText, lastMessage) {
   ].join('\n')
 }
 
-module.exports = { wikiReason, wikiFilesThisTurn, wikiFilesInReply, checkWikiFile, checkExcerpt, parseSource, norm, isWikiPath }
+module.exports = { wikiReason, turnWrites, wikiFilesThisTurn, wikiFilesInReply, checkWikiFile, checkExcerpt, parseSource, norm, isWikiPath }

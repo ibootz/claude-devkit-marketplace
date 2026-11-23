@@ -208,7 +208,7 @@ c. 加一条比对整张表的 AC
     ```bash
     curl -sL '<网址>' | python3 -c 'import html,re,sys; t=re.sub(r"(?is)<(script|style)\b.*?</\1>","",sys.stdin.read()); sys.stdout.write(html.unescape(re.sub(r"<[^>]+>","",t)))'
     ```
-  - 不用 `Write` / `Edit` 写快照、不手改快照：手一碰就成了你的文字。词条的回合末核对把本轮 `Write` / `Edit` 过的出处文件判为不算原文。
+  - 不用 `Write` / `Edit` 写快照、不手改快照：手一碰就成了你的文字。词条的回合末核对把本轮 `Write` / `Edit` 过的出处文件判为不算原文；回复正文括注的出处若是 `claude-sources/` 下本轮 `Write` / `Edit` 过的快照，同样打回。
   - 扩展名按第二行起的正文取：md 存 `.md`，去过标签的网页与其余纯文本存 `.txt`。接口返回 JSON 信封时先取出正文字段再存，不存整个信封。
   - 位置：系统临时目录下 `claude-sources/<仓库目录名>/`，与 `claude-wiki/` 同根；文件名 ASCII kebab-case。同一来源已有快照就复用；要最新内容时重新读一遍覆盖。
 - **找不到原文**：不建词条、不写释义，原词后括注「（未找到出处）」。读者确实需要你的理解才能往下读时，那是主线内容：写在正文，按 3.4 标「推断」并写依据，受回合末出处审查——不要把它包装成释义放进链接。

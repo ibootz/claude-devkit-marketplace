@@ -10,6 +10,8 @@
 //    词至少 2 个字符，纯数字与纯标点不算。
 //
 // 4. 链接后紧跟的括注原文（「…」）要能在链接处逐字找到：带行号的按行号附近比，词条文件比全文。
+// 5. 4.22.0：括注的出处是 claude-sources/ 下的远端快照、且本轮被 Write / Edit / MultiEdit 过 → 打回。
+//    本轮写过哪些文件由 stop-audit.js 用 wiki-check 的 turnWrites 从 transcript 取，取不到就不查这一条。
 //
 // 【不核什么】从没挂过链接的词（该不该挂要猜语义，归模型那路与注入）；跨回复的一致性。
 // 【失灵时怎样】任何异常返回 ''，不打回。
@@ -17,6 +19,7 @@
 'use strict'
 
 const fs = require('fs')
+const path = require('path')
 const { checkExcerpt, norm } = require('./wiki-check')
 
 const LINK_RE = /\[([^\]\n]+)\]\(([^)\s]+)\)/g
@@ -89,7 +92,21 @@ function bareRepeats(message) {
 // （词条文件）在整个文件里逐字比对——词条里装的就是摘录。返回 [{ label, quote, problem }]。
 const QUOTE_RE = /\[([^\]\n]+)\]\(((?:file:\/\/|vscode:\/\/file)[^)\s]+)\)\s*[（(]\s*「([^」\n]+)」[^）)\n]{0,40}[）)]/g
 
-function quoteProblems(message) {
+// 4.21.0（用户 2026-11-23 拍板 a）：出处是远端内容的快照（路径含 claude-sources 目录段）且本轮被
+// Write / Edit / MultiEdit 过 → 打回：快照只能由读取命令直接落盘，手写的不是原文。只认这个目录，
+// 引用本轮刚改过的项目文件不受影响。Bash heredoc 手写的快照认不出，只靠注入。
+const SNAPSHOT_DIR_RE = /[\\/]claude-sources[\\/]/
+
+function urlFile(url) {
+  const m = /^(?:file:\/\/|vscode:\/\/file)(\/[^#]+?)(?:#L?\d+|:\d+(?::\d+)?)?$/.exec(url)
+  if (!m) return null
+  let f = m[1]
+  try { f = decodeURIComponent(f) } catch { /* 原样 */ }
+  if (/^\/[A-Za-z]:/.test(f)) f = f.slice(1)
+  return f
+}
+
+function quoteProblems(message, writtenThisTurn) {
   const text = stripFences(String(message || ''))
   const out = []
   for (const m of text.matchAll(QUOTE_RE)) {
@@ -97,7 +114,10 @@ function quoteProblems(message) {
     const url = m[2]
     const quote = m[3]
     let problem = null
-    if (/^file:\/\/\/.+#L?\d+$/.test(url) || /^vscode:\/\/file\/.+:\d+(?::\d+)?$/.test(url)) {
+    const file = urlFile(url)
+    if (file && writtenThisTurn && SNAPSHOT_DIR_RE.test(file) && writtenThisTurn.has(path.resolve(file))) {
+      problem = `出处快照 ${path.basename(file)} 本轮被你用 Write / Edit 写过，不算原文；快照只能由读取命令直接重定向落盘`
+    } else if (/^file:\/\/\/.+#L?\d+$/.test(url) || /^vscode:\/\/file\/.+:\d+(?::\d+)?$/.test(url)) {
       problem = checkExcerpt([quote], url, '/nonexistent/claude-wiki-reply.md', null)
       if (problem && /词条目录/.test(problem)) problem = null
     } else if (/^file:\/\/\/[^#]+$/.test(url)) {
@@ -117,9 +137,9 @@ function quoteProblems(message) {
   return out
 }
 
-function termLinksReason(message) {
+function termLinksReason(message, writtenThisTurn) {
   const hits = bareRepeats(message)
-  const quotes = quoteProblems(message)
+  const quotes = quoteProblems(message, writtenThisTurn)
   if (!hits.length && !quotes.length) return ''
   const lines = ['回合末链接核对（机械比对，不经模型）：']
   if (hits.length) {

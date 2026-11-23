@@ -568,6 +568,20 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 4.22.0 回复正文括注：出处快照本轮被手写就打回
+
+**起因**：4.21.0 之后留了一条路——用 `Write` 写一份 `claude-sources/` 下的假快照，再在回复正文括注里引用它，词条核对管不到（不是词条），括注逐字比对也会通过（比对的就是这份假快照）。用户说过「绝对不能以ai的自我臆想的内容为准」。
+
+**拍板**（用户 2026-11-23，Q1-a）：补窄判据，只认快照目录。
+
+**改了什么**：`hooks/term-links.js` 的 `quoteProblems(message, writtenThisTurn)`：括注出处路径含 `claude-sources` 目录段、且在本轮 `Write` / `Edit` / `MultiEdit` 过的文件集合里 → 打回，文案指明「快照只能由读取命令直接重定向落盘」。集合由 `stop-audit.js` 调 `wiki-check` 的 `turnWrites`（新导出）从 transcript 取，取不到就不查这一条。`file://`（带不带 `#行号`）与 `vscode://file`（带 `:行号`）三种链接都认。
+
+**不影响**：引用本轮刚改过的项目文件（不在 `claude-sources/` 下）照旧只做逐字比对。
+
+**已知漏网**：用 Bash heredoc 手写的快照仍认不出——判据只认 `Write` / `Edit` 工具，而 Bash 也是正规的读取命令落盘通道，两者在 transcript 里没法机械区分。
+
+**回归**：`test/stop-audit-verify.js` 194/194，新增 7 条：没写过 → 不报；`file://#行号`、`vscode://file:行号`、不带行号三种被 `Write` 过 → 报；项目文件本轮改过且逐字对得上 → 不报；端到端 transcript 里 `Write` 了快照再引用 → 打回；快照由 Bash 读取命令落盘 → 放行。`guard-verify` 204/204、`compact-agent-status-verify` 26/26、`codex-host-verify` 16/16（注入未变）。
+
 ### 4.21.0 3.14 原文来源放宽到一切客观内容，远端内容先落快照
 
 **起因**（用户 2026-11-23）：一个会话把钉钉文档 `dws doc read` 的输出直接存成 `.md` 当「本机原文」，存下的其实是 JSON 信封 `{docUrl, logId, markdown}`。根子在 3.14 只认本机文件：远端内容要引用就得先落盘，而落盘没有任何规矩。用户随后拍板：
@@ -582,7 +596,7 @@
 - **措辞同步**：`references/expression.md` 的 `SEC:wiki`（来源、找的范围、快照规则、三级出口表、回合末核对一句）；`SessionStart` 注入 3.14 一句改为「只逐字摘客观原文（远端先落快照）」，同句压掉几字后注入 5000 字（软线 5000）；释义、卡点、链接三路提示词；`hooks/wiki-check.js` 的打回文案与文件头。
 - **配套**：钉钉文档怎么取正文（`dws doc read … | python3 -c '…["markdown"]'`）写进了钉钉 CLI 所在插件的 skill，不在本插件。
 
-**机械核对没改判据**：`wiki-check` 本来就拒「本轮 `Write` / `Edit` 过的出处文件」，快照若被手写同样被拒；`claude-sources/` 目录本身不加特判。回复正文括注（`term-links.js` 的 `quoteProblems`）仍不查「本轮写过」——加上会误伤引用自己刚改的项目文件，按 hook 克制原则不加。
+**机械核对没改判据**：`wiki-check` 本来就拒「本轮 `Write` / `Edit` 过的出处文件」，快照若被手写同样被拒；`claude-sources/` 目录本身不加特判。回复正文括注（`term-links.js` 的 `quoteProblems`）当时不查「本轮写过」，4.22.0 按用户拍板补了只认 `claude-sources/` 的窄判据，见下一节。
 
 **已知漏网**：用 Bash heredoc 手写一份「快照」不会被机械核对认出（只认 `Write` / `Edit`），只靠注入约束。
 

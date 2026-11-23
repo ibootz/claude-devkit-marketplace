@@ -53,7 +53,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync, spawn } = require('child_process')
-const { wikiReason } = require('./wiki-check')
+const { wikiReason, turnWrites } = require('./wiki-check')
 const { termLinksReason } = require('./term-links')
 
 const MODEL = 'claude-sonnet-5-5'
@@ -482,7 +482,13 @@ async function main() {
   let wiki = ''
   try { if (wikiAuditEnabled(process.env)) wiki = wikiReason(raw, userPromptText, hookInput.last_assistant_message) } catch { /* 词条核对失灵就不核 */ }
   let terms = ''
-  try { if (linkAuditEnabled(process.env)) terms = termLinksReason(hookInput.last_assistant_message) } catch { /* 失灵就不核 */ }
+  try {
+    if (linkAuditEnabled(process.env)) {
+      let written = null
+      try { if (raw) written = turnWrites(raw, userPromptText).all } catch { /* 读不出本轮写过哪些文件就不查快照 */ }
+      terms = termLinksReason(hookInput.last_assistant_message, written)
+    }
+  } catch { /* 失灵就不核 */ }
 
   const claudeBin = resolveClaude()
   const t0 = Date.now()

@@ -426,6 +426,28 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   const many = Array.from({ length: 9 }, (_, i) => `[词${i}号](${U}#2) 词${i}号`).join('\n')
   check('不截断：9 个词全列', (termLinksReason(many).match(/号」1 处/g) || []).length === 9)
   check('全合格 → 空串', termLinksReason(`[词](${U}#2)（「不调模型」）`) === '')
+  // 4.21.0 拍板 a：claude-sources/ 下的快照本轮被 Write / Edit 过 → 打回；不在这个目录的本轮改过的文件不受影响
+  {
+    const snapDir = path.join(DIR, 'claude-sources', 'tl'); fs.mkdirSync(snapDir, { recursive: true })
+    const snap = path.join(snapDir, 'remote.md'); fs.writeFileSync(snap, '<!-- 原址：x -->\n归档任务每晚两点运行。\n')
+    const msgFile = `[定时归档](file://${snap}#2)（「归档任务每晚两点运行」）`
+    const msgVs = `[定时归档](vscode://file${snap}:2)（「归档任务每晚两点运行」）`
+    const w = new Set([path.resolve(snap)])
+    check('快照本轮没写过 → 不报', quoteProblems(msgFile, new Set()).length === 0 && quoteProblems(msgFile).length === 0)
+    check('快照本轮被 Write 过（file:// 带 #行号）→ 报', (quoteProblems(msgFile, w)[0] || {}).problem?.includes('本轮被你用 Write / Edit 写过'), JSON.stringify(quoteProblems(msgFile, w)))
+    check('快照本轮被 Write 过（vscode://file 带 :行号）→ 报', quoteProblems(msgVs, w).length === 1)
+    check('快照本轮被 Write 过（不带行号）→ 报', quoteProblems(`[定时归档](file://${snap})（「归档任务每晚两点运行」）`, w).length === 1)
+    check('项目文件本轮改过、括注逐字对得上 → 不报（只查 claude-sources/）', quoteProblems(`[放行](${U}#2)（「本轮打回过一次就直接放行」）`, new Set([path.resolve(src)])).length === 0)
+    const tp = path.join(DIR, 'tl-snap.jsonl')
+    fs.writeFileSync(tp, jsonl([user('查一下归档'), toolUse('Write', { file_path: snap, content: 'x' }), toolResult('ok')]))
+    const r = run({ ...base, transcript_path: tp, last_assistant_message: msgFile }, { STUB_MODE: 'pass' })
+    let j = null
+    try { j = JSON.parse(r.stdout) } catch { /* 下面断言会报 */ }
+    check('端到端：本轮 Write 了快照再引用 → 打回', j && j.decision === 'block' && j.reason.includes('出处快照 remote.md'), r.stdout)
+    fs.writeFileSync(tp, jsonl([user('查一下归档'), toolUse('Bash', { command: 'curl -sL x > remote.md' }), toolResult('ok')]))
+    const r2 = run({ ...base, transcript_path: tp, last_assistant_message: msgFile }, { STUB_MODE: 'pass' })
+    check('端到端：快照由 Bash 读取命令落盘 → 放行', r2.stdout.trim() === '', r2.stdout)
+  }
   const r = run({ ...base, last_assistant_message: `[定时催办](${U}#2) 然后定时催办。` }, { STUB_MODE: 'pass' })
   let j = null
   try { j = JSON.parse(r.stdout) } catch { /* 下面断言会报 */ }
