@@ -31,19 +31,28 @@ function check(name, cond, detail) {
   }
 }
 
-// 桩：STUB_MODE=block 吐 ok=false，pass 吐 ok=true，garbage 吐非 JSON，exit1 以退出码 1 结束；
+// 桩：STUB_MODE=block 吐 ok=false，pass 吐 ok=true，garbage 吐非 JSON，exit1 以退出码 1 结束，
+// badtext 吐合法外层 JSON 但 result 里没有判定；带 --json-schema 时吐 structured_output，否则吐 result 文本；
 // 每次被调用都在 STUB_LOG 追加一行，用来断言「没调模型」。
 const STUB = path.join(DIR, 'stub-claude')
 fs.writeFileSync(STUB, `#!/usr/bin/env node
 const fs = require('fs')
 const inp = fs.readFileSync(0, 'utf8')
-const isLink = inp.includes('回合末链接审查')
-if (process.env.STUB_LOG) fs.appendFileSync(process.env.STUB_LOG, (isLink ? 'link' : 'source') + '\\n')
-const m = isLink ? (process.env.STUB_LINK || 'pass') : process.env.STUB_MODE
+const kind = inp.includes('回合末链接审查') ? 'link' : inp.includes('回合末卡点审查') ? 'stuck' : inp.includes('回合末释义审查') ? 'gloss' : 'source'
+const argv = process.argv.slice(2)
+const third = argv.includes('--settings')
+if (process.env.STUB_ROUTE_LOG) fs.appendFileSync(process.env.STUB_ROUTE_LOG, kind + ':' + (third ? 'third:' + argv[argv.indexOf('--model') + 1] : 'sub:' + argv[argv.indexOf('--model') + 1]) + ':' + (process.env.ANTHROPIC_BASE_URL || '-') + '\\n')
+if (process.env.STUB_LOG) fs.appendFileSync(process.env.STUB_LOG, kind + '\\n')
+if (third && process.env.STUB_THIRD) { const t = process.env.STUB_THIRD; if (t === 'exit1') process.exit(1); if (t === 'garbage') { process.stdout.write('not json'); process.exit(0) } }
+const m = kind === 'source' ? process.env.STUB_MODE : (process.env['STUB_' + kind.toUpperCase()] || 'pass')
 if (m === 'exit1') process.exit(1)
 if (m === 'garbage') { process.stdout.write('not json'); process.exit(0) }
-const so = m === 'block' ? { ok: false, reason: isLink ? '回合末链接审查：\\n- 链接' : '回合末出处审查：\\n- 测试' } : { ok: true }
-process.stdout.write(JSON.stringify({ structured_output: so }))
+const R = { source: '回合末出处审查：\\n- 测试', link: '回合末链接审查：\\n- 链接', stuck: '回合末卡点审查：\\n- 卡点', gloss: '回合末释义审查：\\n- 释义' }
+const so = m === 'block' ? { ok: false, reason: R[kind] } : { ok: true, reason: '' }
+if (process.env.STUB_TAIL_LOG) fs.appendFileSync(process.env.STUB_TAIL_LOG, (inp.includes('只输出一行 JSON') ? 'tail' : 'notail') + ':' + (argv.includes('--json-schema') ? 'schema' : 'text') + '\\n')
+if (m === 'badtext') { process.stdout.write(JSON.stringify({ result: '我认为满足条件。' })); process.exit(0) }
+if (argv.includes('--json-schema')) process.stdout.write(JSON.stringify({ structured_output: so }))
+else process.stdout.write(JSON.stringify({ result: '\\u0060\\u0060\\u0060json\\n' + JSON.stringify(so) + '\\n\\u0060\\u0060\\u0060' }))
 `)
 fs.chmodSync(STUB, 0o755)
 
@@ -118,8 +127,10 @@ const jsonl = (rows) => rows.map((r) => JSON.stringify(r)).join('\n') + '\n'
     toolUse('Agent', { description: '查 X', prompt: '去查' }),
     toolResult('done'),
   ]))
-  check('轮起点取最后一条真实用户提问', L[0] === '[user]: 本轮的问题', L[0])
-  check('tool_result 行与 isMeta 行不当轮起点', !L.join('\n').includes('上一轮') && !L.join('\n').includes('注入'), L.join(' | '))
+  const cur = L.slice(L.indexOf('[…以下是本轮…]') + 1)
+  check('轮起点取最后一条真实用户提问', cur[0] === '[user]: 本轮的问题', L.join(' | '))
+  check('tool_result 行与 isMeta 行不当轮起点', !cur.join('\n').includes('上一轮') && !L.join('\n').includes('注入'), L.join(' | '))
+  check('上一轮的工具调用不进摘录', !L.join('\n').includes('ls old'), L.join(' | '))
   check('tool_use 摘录命令', L.includes('[tool_use Bash]: ls /tmp'), L.join(' | '))
   check('tool_result 数组形态拼成文本、换行转 ⏎', L.includes('[tool_result]: a ⏎ b'), L.join(' | '))
   check('Agent 摘录 description | prompt', L.includes('[tool_use Agent]: 查 X | 去查'), L.join(' | '))
@@ -134,6 +145,42 @@ const jsonl = (rows) => rows.map((r) => JSON.stringify(r)).join('\n') + '\n'
   const L = buildContextLines(jsonl(rows))
   check('超出预算时保留最近的、标出省略条数', L[1].startsWith('[…本轮更早的') && L[L.length - 1].includes('cmd-199'), L[1])
   check('摘录总量不超过预算', L.join('\n').length <= 12000 + 40, String(L.join('\n').length))
+}
+// ---- 前几轮问答（4.19.0 Q1-a）----
+const said = (text) => ({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } })
+{
+  const rows = []
+  for (let i = 1; i <= 5; i++) rows.push(user(`第${i}问`), said(`第${i}答-中间`), toolUse('Bash', { command: 'x' }), toolResult('y'), said(`第${i}答-最终`))
+  rows.push(user('本轮'), toolUse('Bash', { command: 'ls' }))
+  const L = buildContextLines(jsonl(rows))
+  const s = L.join('\n')
+  check('前几轮：只带最近 3 轮、标明不在审查范围', L[0] === '[…前 3 轮问答，只供理解上下文，不在审查范围…]' && !s.includes('第2问') && s.includes('第3问') && s.includes('第5问'), L.join(' | '))
+  check('前几轮：每轮取助手最后一段文字', s.includes('[前轮 assistant]: 第4答-最终') && !s.includes('第4答-中间'), L.join(' | '))
+  check('前几轮：按时间正序、本轮在最后', L.indexOf('[前轮 user]: 第3问') < L.indexOf('[前轮 user]: 第5问') && L.indexOf('[…以下是本轮…]') < L.indexOf('[user]: 本轮'), L.join(' | '))
+}
+{
+  const L = buildContextLines(jsonl([user('旧'), said('x'.repeat(5000)), user('q'.repeat(3000))]))
+  const s = L.join('\n')
+  check('前几轮：助手回复截到 800 字', L.find((l) => l.startsWith('[前轮 assistant]:')).length <= '[前轮 assistant]: '.length + 800, s.length)
+  check('本轮提问截到 1500 字', L.find((l) => l.startsWith('[user]: q')).length === '[user]: '.length + 1500, s.length)
+}
+{
+  const rows = []
+  for (let i = 0; i < 3; i++) rows.push(user(`问${i}` + 'p'.repeat(700)), said(`答${i}` + 'r'.repeat(900)))
+  rows.push(user('本轮'))
+  const L = buildContextLines(jsonl(rows))
+  const prev = L.slice(1, L.indexOf('[…以下是本轮…]')).join('\n')
+  check('前几轮：3 轮都截满时合计仍在 6000 字内', prev.length <= 6000 && prev.includes('问0') && prev.includes('问2'), prev.length)
+}
+{
+  const L = buildContextLines(jsonl([user('有答的一问'), said('答了'), user('被打断的一问'), toolUse('Bash', { command: 'ls' }), user('本轮')]))
+  check('前几轮：没有文字回复的轮不占名额', L[0] === '[…前 1 轮问答，只供理解上下文，不在审查范围…]' && L.includes('[前轮 user]: 有答的一问') && !L.join('').includes('被打断'), L.join(' | '))
+  const one = buildContextLines(jsonl([user('只有一问')]))
+  check('只有本轮时不加前几轮标记', one[0] === '[user]: 只有一问' && one.length === 1, one.join(' | '))
+}
+{
+  const L = buildContextLines(jsonl([user('真实提问'), toolUse('Bash', { command: 'a' }), user('This session is being continued…', { isCompactSummary: true, isVisibleInTranscriptOnly: true }), toolUse('Bash', { command: 'b' })]))
+  check('auto-compact 摘要行不当轮起点', L[0] === '[user]: 真实提问' && L.includes('[tool_use Bash]: b'), L.join(' | '))
 }
 {
   check('无用户提问时返回空', buildContextLines(jsonl([toolResult('x')])).length === 0)
@@ -158,21 +205,29 @@ const jsonl = (rows) => rows.map((r) => JSON.stringify(r)).join('\n') + '\n'
   check('端点写错（解析不了）→ 按第三方处理', !('ANTHROPIC_BASE_URL' in childEnv({ ANTHROPIC_BASE_URL: 'not a url' })))
   const e4 = childEnv({ CLAUDE_CODE_EFFORT_LEVEL: 'high', API_TIMEOUT_MS: '600000' })
   check('子进程推理强度固定 medium、不继承用户的 high', e4.CLAUDE_CODE_EFFORT_LEVEL === 'medium', JSON.stringify(e4))
-  check('子进程单次请求超时固定 25 秒、不继承用户的 600 秒', e4.API_TIMEOUT_MS === '25000', JSON.stringify(e4))
+  check('子进程单次请求超时固定 85 秒、不继承用户的 600 秒', e4.API_TIMEOUT_MS === '85000', JSON.stringify(e4))
 }
 
 // ---- 4.17.0 两路并行判定：出处 + 链接 ----
 {
   const { loadAudits, mergeReasons } = require(HOOK)
   const on = loadAudits({})
-  check('默认跑两路：source 在前、link 在后', on.length === 2 && on[0].kind === 'source' && on[1].kind === 'link')
+  check('默认跑四路：source、link、stuck、gloss', on.map((a) => a.kind).join(',') === 'source,link,stuck,gloss')
+  check('卡点那路只审卡点、带 $ARGUMENTS', on[2].template.includes('回合末卡点审查') && on[2].template.includes('$ARGUMENTS') && !on[2].template.includes('释义自写：「'))
+  check('释义那路只审释义、带 $ARGUMENTS', on[3].template.includes('回合末释义审查') && on[3].template.includes('$ARGUMENTS') && !on[3].template.includes('卡点没挂：'))
+  check('四路提示词都要求全部列出、不再有条数上限', on.every((a) => a.template.includes('只跑一次') && a.template.includes('不设上限') && !a.template.includes('最多')))
+  for (const v of ['off', '0', 'false']) {
+    check(`DEVKIT_WIKI_AUDIT=${v} → 去掉卡点、释义两路`, loadAudits({ DEVKIT_WIKI_AUDIT: v }).map((a) => a.kind).join(',') === 'source,link')
+  }
   check('出处那路提示词不含链接类', !on[0].template.includes('编号没给链接') && on[0].template.includes('二、能查没查'))
   check('链接那路提示词只审链接、带 $ARGUMENTS', on[1].template.includes('回合末链接审查') && on[1].template.includes('$ARGUMENTS') && !on[1].template.includes('能查没查'))
   for (const v of ['off', 'OFF', '0', 'false']) {
     const off = loadAudits({ CLICKABLE_PATHS: v })
-    check(`CLICKABLE_PATHS=${v} → 只跑出处一路`, off.length === 1 && off[0].kind === 'source')
+    check(`CLICKABLE_PATHS=${v} → 去掉链接那路`, off.map((a) => a.kind).join(',') === 'source,stuck,gloss')
   }
-  check('CLICKABLE_PATHS=on → 两路', loadAudits({ CLICKABLE_PATHS: 'on' }).length === 2)
+  check('CLICKABLE_PATHS=on → 四路', loadAudits({ CLICKABLE_PATHS: 'on' }).length === 4)
+  const K = (kind, r) => ({ kind, verdict: { ok: false, reason: r } })
+  check('合并：四路都打回 → 按出处、链接、卡点、释义排', mergeReasons([K('gloss', 'D'), K('stuck', 'C'), K('link', 'B'), K('source', 'A')]) === 'A\n\nB\n\nC\n\nD')
   const S = { kind: 'source', verdict: { ok: false, reason: 'A' } }
   const L = { kind: 'link', verdict: { ok: false, reason: 'B' } }
   check('合并：两路都打回 → 出处在前、空一行', mergeReasons([L, S]) === 'A\n\nB')
@@ -195,10 +250,21 @@ const jsonl = (rows) => rows.map((r) => JSON.stringify(r)).join('\n') + '\n'
   const log = path.join(DIR, 'kinds-default')
   run(base, { STUB_MODE: 'pass', STUB_LOG: log, CLICKABLE_PATHS: '' })
   const kinds = fs.readFileSync(log, 'utf8').trim().split('\n').sort().join(',')
-  check('端到端：默认两路各调一次', kinds === 'link,source', kinds)
+  check('端到端：默认四路各调一次', kinds === 'gloss,link,source,stuck', kinds)
   const log2 = path.join(DIR, 'kinds-off')
   run(base, { STUB_MODE: 'pass', STUB_LOG: log2, CLICKABLE_PATHS: 'off' })
-  check('端到端：CLICKABLE_PATHS=off 只调出处一路', fs.readFileSync(log2, 'utf8').trim() === 'source')
+  check('端到端：CLICKABLE_PATHS=off 不调链接那路', fs.readFileSync(log2, 'utf8').trim().split('\n').sort().join(',') === 'gloss,source,stuck')
+  const log3 = path.join(DIR, 'kinds-wiki-off')
+  run(base, { STUB_MODE: 'pass', STUB_LOG: log3, DEVKIT_WIKI_AUDIT: 'off' })
+  check('端到端：DEVKIT_WIKI_AUDIT=off 只调出处、链接两路', fs.readFileSync(log3, 'utf8').trim().split('\n').sort().join(',') === 'link,source')
+}
+{
+  const r = run(base, { STUB_MODE: 'block', STUB_LINK: 'block', STUB_STUCK: 'block', STUB_GLOSS: 'block' })
+  let j = null
+  try { j = JSON.parse(r.stdout) } catch { /* 下面断言会报 */ }
+  check('端到端：四路都打回 → 一次打回里四路问题全在', j && j.reason === '回合末出处审查：\n- 测试\n\n回合末链接审查：\n- 链接\n\n回合末卡点审查：\n- 卡点\n\n回合末释义审查：\n- 释义', r.stdout)
+  const r2 = run({ ...base, stop_hook_active: true }, { STUB_MODE: 'block', STUB_STUCK: 'block', STUB_GLOSS: 'block' })
+  check('端到端：已打回过一次 → 卡点、释义两路也不再审', r2.stdout.trim() === '', r2.stdout)
 }
 {
   const r = run(base, { STUB_MODE: 'exit1', STUB_LINK: 'block' })
@@ -322,15 +388,174 @@ const jsonl = (rows) => rows.map((r) => JSON.stringify(r)).join('\n') + '\n'
   check('端到端：stop_hook_active=true 时词条也不核（每轮只打回一次）', r3.stdout === '', r3.stdout)
 }
 
+// ---- 4.19.0 链接核对（term-links.js，不经模型）：每次出现都挂、括注原文逐字 ----
+{
+  const { bareRepeats, quoteProblems, termLinksReason } = require(path.join(__dirname, '..', 'hooks', 'term-links.js'))
+  const src = path.join(DIR, 'tl-src.md')
+  fs.writeFileSync(src, ['第一行', '本轮打回过一次就直接放行，不调模型。', '第三行'].join('\n'))
+  const U = `file://${src}`
+  const count = (m) => Object.fromEntries(bareRepeats(m).map((h) => [h.term, h.count]))
+  check('裸写两次 → 计 2', count(`[定时催办](${U}#2) 是什么。定时催办会发提醒，定时催办之后再说。`)['定时催办'] === 2)
+  check('每次都挂链接 → 不报', bareRepeats(`[定时催办](${U}#2) 与 [定时催办](${U}#2)`).length === 0)
+  check('文件名:行号 标签 → 文件名裸写也算', count(`见 [tl-src.md:2](${U}#2)，tl-src.md 里写了`)['tl-src.md'] === 1)
+  check('长词先数不重复：README.md:12 与 README.md', JSON.stringify(count(`[README.md:12](${U}#2) 然后 README.md:12 和 README.md`)) === '{"README.md:12":1,"README.md":1}')
+  check('路径中段与 data.md 不算', bareRepeats(`[a.md](${U}#1) 见 data.md 与 x/a.md/y`).length === 0)
+  check('围栏代码块与 https 链接不算', bareRepeats(`[keeper](${U}#1)\n\`\`\`\nkeeper run\n\`\`\`\n[x](https://e.com/keeper)`).length === 0)
+  check('行内代码恰好等于词 → 算裸写', count(`[keeper](${U}#1) 和 \`keeper\``)['keeper'] === 1)
+  check('行内代码里更长的命令 → 不算', bareRepeats(`[keeper](${U}#1) 跑 \`keeper run --all\``).length === 0)
+  check('非本机链接的标签不进词表', bareRepeats(`[keeper](https://e.com) 与 keeper`).length === 0)
+  check('括注是原文 → 不报', quoteProblems(`[放行](${U}#2)（「本轮打回过一次就直接放行」）`).length === 0)
+  check('括注用 …… 删节 → 不报', quoteProblems(`[放行](${U}#2)（「本轮打回过……不调模型」）`).length === 0)
+  {
+    const sideDir = path.join(DIR, 'claude-side', 'r'); fs.mkdirSync(sideDir, { recursive: true })
+    const side = path.join(sideDir, 'bg.md'); fs.writeFileSync(side, '模型写的一句背景说明文字\n')
+    check('括注摘自外挂文档（claude-side）→ 报：那是模型生成的', quoteProblems(`[背景](file://${side}#1)（「模型写的一句背景说明文字」）`).length === 1)
+  }
+  check('括注是改写 → 报', quoteProblems(`[放行](${U}#2)（「打回一次后就不再审」）`).length === 1)
+  check('括注不带「」 → 不归这里', quoteProblems(`[放行](${U}#2)（我说的白话）`).length === 0)
+  check('不带行号的文件按全文比对', quoteProblems(`[词条](${U})（「不调模型」）`).length === 0 && quoteProblems(`[词条](${U})（「随便编的」）`).length === 1)
+  const many = Array.from({ length: 9 }, (_, i) => `[词${i}号](${U}#2) 词${i}号`).join('\n')
+  check('不截断：9 个词全列', (termLinksReason(many).match(/号」1 处/g) || []).length === 9)
+  check('全合格 → 空串', termLinksReason(`[词](${U}#2)（「不调模型」）`) === '')
+  const r = run({ ...base, last_assistant_message: `[定时催办](${U}#2) 然后定时催办。` }, { STUB_MODE: 'pass' })
+  let j = null
+  try { j = JSON.parse(r.stdout) } catch { /* 下面断言会报 */ }
+  check('端到端：模型全放行、机械核对仍打回', j && j.decision === 'block' && j.reason.includes('「定时催办」1 处'), r.stdout)
+  const r2 = run({ ...base, last_assistant_message: `[定时催办](${U}#2) 然后定时催办。` }, { STUB_MODE: 'pass', CLICKABLE_PATHS: 'off' })
+  check('端到端：CLICKABLE_PATHS=off 不跑链接核对', r2.stdout.trim() === '', r2.stdout)
+}
+
+// ---- 4.19.0 第三方判定：opus 映射、失败回落订阅、成功也记日志 ----
+{
+  const { thirdPartySettings, routeArgs, routeEnv } = require(HOOK)
+  const sf = path.join(DIR, 'settings.third.json')
+  fs.writeFileSync(sf, '{"env":{}}')
+  check('没设开关 → 不走第三方', thirdPartySettings({}) === null)
+  check('文件不存在 → 当没开', thirdPartySettings({ DEVKIT_STOP_AUDIT_SETTINGS: path.join(DIR, 'nope.json') }) === null)
+  check('文件存在 → 返回路径', thirdPartySettings({ DEVKIT_STOP_AUDIT_SETTINGS: sf }) === sf)
+  const a = routeArgs(sf)
+  check('第三方参数：带 --settings、模型改 opus 别名', a.includes('--settings') && a[a.indexOf('--settings') + 1] === sf && a[a.indexOf('--model') + 1] === 'opus')
+  check('订阅参数：模型仍是 claude-sonnet-5-5', routeArgs(null)[routeArgs(null).indexOf('--model') + 1] === 'claude-sonnet-5-5')
+  check('订阅参数：不带 --json-schema（单轮文本判定）', !routeArgs(null).includes('--json-schema'))
+  check('第三方参数：带 --json-schema', a.includes('--json-schema'))
+  check('两条路都带 --effort medium（settings 文件盖不掉）', [routeArgs(null), a].every((x) => x[x.indexOf('--effort') + 1] === 'medium'))
+  check('routeArgs 不改共享的订阅参数', !routeArgs(null).includes('--settings') && !routeArgs(null).includes('--json-schema'))
+  const e = routeEnv({ ANTHROPIC_BASE_URL: 'https://api.anthropic.com', ANTHROPIC_AUTH_TOKEN: 'x' }, sf)
+  check('第三方子进程剥掉父进程的 ANTHROPIC_*', e.ANTHROPIC_BASE_URL === undefined && e.ANTHROPIC_AUTH_TOKEN === undefined)
+
+  const rl = path.join(DIR, 'route-ok')
+  const lg = path.join(DIR, 'route-ok.log')
+  run(base, { STUB_MODE: 'pass', STUB_ROUTE_LOG: rl, DEVKIT_STOP_AUDIT_SETTINGS: sf, DEVKIT_STOP_AUDIT_LOG: lg, ANTHROPIC_BASE_URL: 'https://api.anthropic.com' })
+  const rows = fs.readFileSync(rl, 'utf8').trim().split('\n')
+  check('端到端：开第三方 → 四路都只走第三方一次、模型 opus、不带父进程端点', rows.length === 4 && rows.every((r) => r.endsWith(':third:opus:-')), rows.join(' | '))
+  const lgRows = fs.readFileSync(lg, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+  const oks = lgRows.filter((o) => o.kind === 'ok')
+  check('成功判定也记日志、带 route', oks.length === 4 && oks.every((o) => o.route === 'third-party'), JSON.stringify(oks[0]))
+  check('成功判定带 audit（哪一路），四路各一行', oks.map((o) => o.audit).sort().join(',') === 'gloss,link,source,stuck', JSON.stringify(oks.map((o) => o.audit)))
+  const runRow = lgRows.filter((o) => o.kind === 'run')
+  check('整次审查记一行 kind=run，带 thirdParty 与 blocked', runRow.length === 1 && runRow[0].thirdParty === true && runRow[0].blocked === false && typeof runRow[0].ms === 'number', JSON.stringify(runRow))
+
+  const rl2 = path.join(DIR, 'route-fb')
+  const r = run(base, { STUB_MODE: 'block', STUB_THIRD: 'exit1', STUB_ROUTE_LOG: rl2, DEVKIT_STOP_AUDIT_SETTINGS: sf })
+  const rows2 = fs.readFileSync(rl2, 'utf8').trim().split('\n')
+  check('端到端：第三方失败 → 每路改用订阅重判一次', rows2.filter((x) => x.includes(':third:')).length === 4 && rows2.filter((x) => x.includes(':sub:claude-sonnet-5-5')).length === 4, rows2.join(' | '))
+  check('端到端：回落后的打回照常生效', r.stdout.includes('回合末出处审查'), r.stdout)
+
+  const rl3 = path.join(DIR, 'route-off')
+  run(base, { STUB_MODE: 'pass', STUB_ROUTE_LOG: rl3 })
+  check('端到端：不开第三方 → 只走订阅', fs.readFileSync(rl3, 'utf8').trim().split('\n').every((x) => x.includes(':sub:claude-sonnet-5-5')))
+}
+
+// ---- 订阅路文本判定解析 ----
+{
+  const { parseVerdictText } = require(HOOK)
+  check('解析：一行 JSON', JSON.stringify(parseVerdictText('{"ok": false, "reason": "x"}')) === '{"ok":false,"reason":"x"}')
+  check('解析：代码块围栏与前后文字', parseVerdictText('结论如下\n```json\n{"ok": true, "reason": ""}\n```\n完').ok === true)
+  check('解析：reason 缺省补空串', parseVerdictText('{"ok": true}').reason === '')
+  check('解析：ok 不是布尔 → null', parseVerdictText('{"ok": "false"}') === null)
+  check('解析：被截断的 JSON → null', parseVerdictText('{"ok": false, "reason": "回合末') === null)
+  check('解析：只有后半段（gemini 式截断）→ null', parseVerdictText('改完把整条回复完整重写一遍"}') === null)
+  check('解析：非字符串 → null', parseVerdictText(undefined) === null)
+  const tl = path.join(DIR, 'tail-sub')
+  const r = run(base, { STUB_MODE: 'block', STUB_TAIL_LOG: tl })
+  const tails = fs.readFileSync(tl, 'utf8').trim().split('\n')
+  check('端到端：订阅路输入末尾带「只输出一行 JSON」、不带 schema', tails.length === 4 && tails.every((x) => x === 'tail:text'), tails.join(' | '))
+  check('端到端：订阅路文本判定的打回照常生效', r.stdout.includes('回合末出处审查'), r.stdout)
+  const sf2 = path.join(DIR, 'tail-settings.json')
+  fs.writeFileSync(sf2, '{}')
+  const tl2 = path.join(DIR, 'tail-third')
+  run(base, { STUB_MODE: 'pass', STUB_TAIL_LOG: tl2, DEVKIT_STOP_AUDIT_SETTINGS: sf2 })
+  const tails2 = fs.readFileSync(tl2, 'utf8').trim().split('\n')
+  check('端到端：第三方路带 schema、输入不加文本指令', tails2.length === 4 && tails2.every((x) => x === 'notail:schema'), tails2.join(' | '))
+  const lg = path.join(DIR, 'badtext.log')
+  const r2 = run(base, { STUB_MODE: 'badtext', DEVKIT_STOP_AUDIT_LOG: lg })
+  const kinds = fs.readFileSync(lg, 'utf8').trim().split('\n').map((l) => JSON.parse(l).kind)
+  check('端到端：文本里没有判定 → 放行并记 bad-verdict-text', r2.stdout === '' && kinds.includes('bad-verdict-text'), JSON.stringify(kinds) + ' ' + r2.stdout)
+}
+
 // ---- 失败日志 ----
 {
   const logFile = path.join(DIR, 'audit.log')
   run(base, { STUB_MODE: 'exit1', DEVKIT_STOP_AUDIT_LOG: logFile })
   run(base, { STUB_MODE: 'garbage', DEVKIT_STOP_AUDIT_LOG: logFile })
   run(base, { STUB_MODE: 'pass', DEVKIT_STOP_AUDIT_LOG: logFile })
-  const rows = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : []
-  check('失败日志：退出码非 0 与输出不是 JSON 各记一行，判定成功不记', rows.length === 2 && rows[0].kind === 'exit-nonzero' && rows[0].status === 1 && rows[1].kind === 'bad-json', JSON.stringify(rows))
+  const all = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : []
+  const rows = all.filter((r) => r.kind !== 'ok' && r.kind !== 'run')
+  check('日志：成功判定记 kind=ok（4.19.0 起，用来算失败率）', all.filter((r) => r.kind === 'ok').length === 10, JSON.stringify(all.map((r) => r.kind)))
+  check('失败日志：退出码非 0 与输出不是 JSON 各记一行', rows.length === 2 && rows[0].kind === 'exit-nonzero' && rows[0].status === 1 && rows[1].kind === 'bad-json', JSON.stringify(rows))
   check('失败日志：带耗时与截断后的 stdout', typeof rows[1]?.ms === 'number' && rows[1].stdout === 'not json', JSON.stringify(rows[1]))
+  check('失败日志：带 route 与 audit', rows.every((r) => r.route === 'subscription' && r.audit === 'source'), JSON.stringify(rows))
+  const runs = all.filter((r) => r.kind === 'run')
+  check('三次审查各记一行 kind=run、都没打回、都没开第三方', runs.length === 3 && runs.every((r) => r.blocked === false && r.thirdParty === false), JSON.stringify(runs))
+  const r = run(base, { STUB_MODE: 'block', DEVKIT_STOP_AUDIT_LOG: logFile })
+  const last = fs.readFileSync(logFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l)).pop()
+  check('打回时 kind=run 记 blocked=true', r.stdout.includes('block') && last.kind === 'run' && last.blocked === true, JSON.stringify(last))
+}
+
+// ---- 日志轮转：超过上限改名为 .1 再重写，不清空 ----
+{
+  const logFile = path.join(DIR, 'rot.log')
+  const big = JSON.stringify({ kind: 'ok', pad: 'x'.repeat(1024) }) + '\n'
+  fs.writeFileSync(logFile, big.repeat(4 * 1024 + 8))
+  run(base, { STUB_MODE: 'pass', DEVKIT_STOP_AUDIT_LOG: logFile })
+  check('轮转：旧日志整份改名为 .1', fs.existsSync(logFile + '.1') && fs.statSync(logFile + '.1').size > 4 * 1024 * 1024)
+  check('轮转：新日志只剩新写的几行', fs.statSync(logFile).size < 64 * 1024)
+}
+
+// ---- 统计脚本 scripts/stop-audit-stats.py ----
+{
+  const { spawnSync } = require('child_process')
+  const py = ['python3', 'python'].find((c) => spawnSync(c, ['--version']).status === 0)
+  if (!py) {
+    check('统计脚本：找不到 python，跳过', true)
+  } else {
+    const logFile = path.join(DIR, 'stats.log')
+    const now = new Date().toISOString()
+    const L = (o) => JSON.stringify({ at: now, ...o })
+    fs.writeFileSync(logFile, [
+      JSON.stringify({ at: '2026-10-29T00:00:00Z', kind: 'timeout', ms: 75000 }), // 旧格式，默认不算
+      L({ kind: 'ok', route: 'third-party', audit: 'source', ms: 10000 }),
+      L({ kind: 'ok', route: 'third-party', audit: 'link', ms: 20000 }),
+      L({ kind: 'timeout', route: 'third-party', audit: 'stuck', ms: 90000 }),
+      L({ kind: 'ok', route: 'fallback', audit: 'stuck', ms: 6000 }),
+      L({ kind: 'run', ms: 96000, thirdParty: true, blocked: true }),
+    ].join('\n') + '\n')
+    const STATS = path.join(__dirname, '..', 'scripts', 'stop-audit-stats.py')
+    const p = spawnSync(py, [STATS, '--log', logFile, '--json'], { encoding: 'utf8' })
+    let j = null
+    try { j = JSON.parse(p.stdout) } catch { /* 下面断言会报 */ }
+    const tp = j && j.routes['third-party']
+    check('统计脚本：第三方 3 次、成功 2、失败 1、超时 1', !!tp && tp.total === 3 && tp.ok === 2 && tp.fail === 1 && tp.fail_kinds.timeout === 1, p.stdout + p.stderr)
+    check('统计脚本：第三方成功平均 15 秒', !!tp && tp.avg_ms === 15000, JSON.stringify(tp))
+    check('统计脚本：回落订阅单列', !!j && j.routes.fallback && j.routes.fallback.ok === 1, JSON.stringify(j && j.routes))
+    check('统计脚本：旧格式行默认不算', !!j && !j.routes.subscription, JSON.stringify(j && j.routes))
+    check('统计脚本：整次审查按开第三方分组', !!j && j.runs['third-party on'] && j.runs['third-party on'].n === 1 && j.runs['third-party on'].blocked === 1, JSON.stringify(j && j.runs))
+    const p2 = spawnSync(py, [STATS, '--log', logFile, '--json', '--all'], { encoding: 'utf8' })
+    const j2 = JSON.parse(p2.stdout || '{}')
+    check('统计脚本：--all 才算旧格式行', j2.routes && j2.routes.subscription && j2.routes.subscription.fail === 1, p2.stdout)
+    const p3 = spawnSync(py, [STATS, '--log', logFile], { encoding: 'utf8' })
+    check('统计脚本：表格输出含「第三方」一行', p3.status === 0 && p3.stdout.includes('| 第三方（third-party） | 3 | 2 | 1 | 66.7%'), p3.stdout + p3.stderr)
+  }
 }
 
 fs.rmSync(DIR, { recursive: true, force: true })

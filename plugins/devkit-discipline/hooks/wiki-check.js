@@ -21,7 +21,6 @@
 const fs = require('fs')
 const path = require('path')
 
-const MAX_PROBLEMS = 6
 const MIN_FRAG = 4
 const WIN_BEFORE = 5
 const WIN_AFTER = 40
@@ -112,6 +111,8 @@ function checkExcerpt(quoteLines, url, wikiFile, writtenThisTurn) {
   const src = parseSource(url)
   if (!src) return '出处链接认不出文件与行号，写成 vscode://file/绝对路径:行号'
   if (/[\\/]claude-wiki[\\/]/.test(src.file)) return '出处指向词条目录本身，原文必须来自项目文件'
+  // 外挂文档（claude-side 目录）由模型后台生成，不是现有原文
+  if (/[\\/]claude-side[\\/]/.test(src.file)) return '出处指向外挂文档，那是模型生成的，原文必须来自项目文件'
   if (path.resolve(src.file) === path.resolve(wikiFile)) return '出处指向词条自己'
   if (writtenThisTurn && writtenThisTurn.has(path.resolve(src.file))) return `出处文件 ${path.basename(src.file)} 本轮被你改写过，不算现有原文`
   let text
@@ -218,11 +219,9 @@ function wikiReason(raw, userPromptText, lastMessage) {
     for (const p of ps) out.push(`- ${f}：${p}`)
   }
   if (!out.length) return ''
-  const shown = out.slice(0, MAX_PROBLEMS)
-  if (out.length > MAX_PROBLEMS) shown.push(`- ……另有 ${out.length - MAX_PROBLEMS} 处，改完自查一遍`)
   return [
     '回合末词条核对（机械比对，不经模型）：',
-    ...shown,
+    ...out,
     '词条只装本机文件的逐字原文（三章 3.14）：自写的句子删掉；摘录照出处文件逐字改正，或改注正确的文件与行号；找不到原文的那段删掉，整份词条没有摘录就删掉文件，正文里对应的释义改成「未找到出处」。改完把整条回复完整重写一遍；只有词条问题时不写更正块。',
   ].join('\n')
 }
