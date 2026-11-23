@@ -21,6 +21,9 @@
 //    「并进同一次判定后前两类漏拦从 4/20 升到 7/20」复测不成立：只跑出处那一路也是 5/20，四次抽样
 //    在 3～7 之间波动，见 README 4.17.0。）
 //    CLICKABLE_PATHS 为 off / 0 / false（devkit-clickable-paths 的关闭开关）时不跑链接那一路。
+// 3d. 4.20.0 起本脚本只走订阅（用户 2026-11-23 拍板 Q1-c：同步四路全留、全走 sonnet）。
+//    DEVKIT_STOP_AUDIT_SETTINGS 不再影响这里，改由 stop-fact-audit.js 在后台用那份第三方 settings
+//    审核心事实与漏答（asyncRewake，不阻塞本轮）。4.19.0 的「先第三方、失败回落订阅」已删。
 // 3b. 4.17.0 起再加一路不经模型的词条核对（wiki-check.js）：本轮 Write / Edit 过的
 //    claude-wiki 词条逐行查自写句子、逐段把摘录与出处文件逐字比对。找不到 claude 也照跑。
 // 3b'. 4.19.0 起模型判定再加两路审 3.14：stop-audit-stuck-prompt.txt 审读者会卡住的内部名词没挂链接
@@ -54,11 +57,10 @@ const { wikiReason } = require('./wiki-check')
 const { termLinksReason } = require('./term-links')
 
 const MODEL = 'claude-sonnet-5-5'
-// 4.19.0 用户拍板（2026-11-22「整体调大到90秒」）：单路等待 90 秒。走第三方失败后还要用订阅重判一次，
-// 两段合计不超过 HOOK_BUDGET_MS（重判只拿剩余预算）；hooks.json 的 Stop timeout 相应设为 160 秒。
+// 4.19.0 用户拍板（2026-11-22「整体调大到90秒」）：单路等待 90 秒。4.20.0 起同步只走订阅、没有回落，
+// hooks.json 里本脚本的 Stop timeout 相应从 160 改为 100 秒。
 const CHILD_TIMEOUT_MS = 90000
 const CHILD_API_TIMEOUT_MS = 85000
-const HOOK_BUDGET_MS = 150000
 const THIRD_PARTY_MODEL = 'opus'
 const CHILD_EFFORT = 'medium'
 const LOG_MAX_BYTES = 4 * 1024 * 1024 // 每轮约 5～9 行、每行约 300 字节，够记几千轮
@@ -286,8 +288,8 @@ function resolveClaude() {
 // 静默放行），要么被映射成第三方模型跑出未评测的判定，还把本轮摘录发给第三方。
 // 用户拍板（2026-10-29，1a）：此时剥掉端点、凭据与模型覆盖，判定固定走本机的 Claude 登录；
 // 本机没有 Claude 登录时子进程报错、本脚本按 fail-open 放行。官方地址与 Bedrock / Vertex 不动。
-// 【4.19.0 覆盖】上面这条现在只管默认路径：用户显式设 DEVKIT_STOP_AUDIT_SETTINGS 时判定先走那份 settings
-// 的第三方端点（用户 2026-11-21 拍板，见 thirdPartySettings），失败再回落到这里的订阅路径。
+// 【4.20.0】本脚本的同步判定恒走这里的订阅路径；DEVKIT_STOP_AUDIT_SETTINGS 指的第三方端点只给
+// stop-fact-audit.js 的后台事实审查用（见 thirdPartySettings）。
 const THIRD_PARTY_KEYS = [
   'ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_CUSTOM_HEADERS',
   'ANTHROPIC_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL',
@@ -364,8 +366,8 @@ const JUDGE_ARGS = [
 ]
 
 // judge 的异步版：多路判定并行时用。失败语义与 judge 相同（记日志、返回 null）。
-// 第三方判定（4.19.0，用户拍板，覆盖 2026-10-29 1a 的「判定固定走本机 Claude 登录」：改为默认仍走
-// 订阅，用户设 DEVKIT_STOP_AUDIT_SETTINGS=<settings 文件> 时先走该文件里的第三方端点）。
+// 第三方 settings（4.19.0 引入；4.20.0 起只给 stop-fact-audit.js 的后台事实审查用，同步四路不再走）：
+// 用户设 DEVKIT_STOP_AUDIT_SETTINGS=<settings 文件> 时，后台审查走该文件里的第三方端点。
 // 模型用 opus 别名，由那份文件的 ANTHROPIC_DEFAULT_OPUS_MODEL 映射（用户拍板：用 opus 映射，不用 sonnet）。
 // 父进程的 ANTHROPIC_* 一律剥掉，端点与凭据只认那份文件。文件读不到就当没开。
 function thirdPartySettings(env) {
@@ -415,29 +417,16 @@ function logOk(route, ms, j, audit) {
   logFailure('ok', { status: 0 }, ms, { route, audit, models: Object.keys((j && j.modelUsage) || {}) })
 }
 
-// 一路判定：开了第三方就先走第三方，失败（超时、报错、无结构化输出）再用订阅重判一次（用户拍板 Q1-a）。
-// 重判的超时取 CHILD_TIMEOUT_MS 与本次 hook 剩余预算中较小的一个。
-async function judgeRoute(claudeBin, input, env, startedAt, audit) {
-  const settings = thirdPartySettings(env)
-  if (settings) {
-    const v = await judgeAsync(claudeBin, input, { settings, timeout: CHILD_TIMEOUT_MS, audit })
-    if (v) return v
-    const left = HOOK_BUDGET_MS - (Date.now() - startedAt)
-    if (left < 5000) { logFailure('no-budget', {}, 0, { route: 'fallback', audit }); return null }
-    return judgeAsync(claudeBin, input, { settings: null, timeout: Math.min(CHILD_TIMEOUT_MS, left), fallback: true, audit })
-  }
-  return judgeAsync(claudeBin, input, { settings: null, timeout: CHILD_TIMEOUT_MS, audit })
-}
-
+// route.args / route.env 给了就用它们（后台事实审查自带工具、提示词与单次请求超时），否则按 settings 取同步判定的参数与环境。
 function judgeAsync(claudeBin, input, route = { settings: null, timeout: CHILD_TIMEOUT_MS }) {
   const timeout = route.timeout || CHILD_TIMEOUT_MS
-  const routeName = route.settings ? 'third-party' : route.fallback ? 'fallback' : 'subscription'
+  const routeName = route.settings ? 'third-party' : 'subscription'
   return new Promise((resolve) => {
     const t0 = Date.now()
     let child
     let structured = false
     try {
-      child = spawn(claudeBin, routeArgs(route.settings), { cwd: os.tmpdir(), env: routeEnv(process.env, route.settings), timeout })
+      child = spawn(claudeBin, route.args || routeArgs(route.settings), { cwd: os.tmpdir(), env: route.env || routeEnv(process.env, route.settings), timeout })
       structured = !!route.settings
     } catch (e) {
       logFailure('spawn-error', { error: e }, 0, { route: routeName, audit: route.audit })
@@ -469,11 +458,10 @@ function judgeAsync(claudeBin, input, route = { settings: null, timeout: CHILD_T
   })
 }
 
-// 并行跑全部判定，返回 [{ kind, verdict }]。评测脚本也走这里。
+// 并行跑全部判定，返回 [{ kind, verdict }]。评测脚本也走这里。4.20.0 起恒走订阅。
 async function runAudits(claudeBin, hookInput, contextLines, env) {
   const audits = loadAudits(env)
-  const startedAt = Date.now()
-  const verdicts = await Promise.all(audits.map((a) => judgeRoute(claudeBin, buildJudgeInput(hookInput, contextLines, a.template), env, startedAt, a.kind).catch(() => null)))
+  const verdicts = await Promise.all(audits.map((a) => judgeAsync(claudeBin, buildJudgeInput(hookInput, contextLines, a.template), { settings: null, timeout: CHILD_TIMEOUT_MS, audit: a.kind }).catch(() => null)))
   return audits.map((a, i) => ({ kind: a.kind, verdict: verdicts[i] }))
 }
 
@@ -500,8 +488,8 @@ async function main() {
   const t0 = Date.now()
   const judged = claudeBin ? mergeReasons(await runAudits(claudeBin, hookInput, contextLines, process.env)) : ''
   const reason = [judged, terms, wiki].filter(Boolean).join('\n\n')
-  // 整次审查一行（kind=run）：总耗时、是否开了第三方、是否打回，供 scripts/stop-audit-stats.py 统计
-  if (claudeBin) logFailure('run', {}, Date.now() - t0, { thirdParty: !!thirdPartySettings(process.env), blocked: !!reason })
+  // 整次审查一行（kind=run，stage=sync）：总耗时、是否打回，供 scripts/stop-audit-stats.py 统计
+  if (claudeBin) logFailure('run', {}, Date.now() - t0, { stage: 'sync', blocked: !!reason })
   if (!reason) return
   // 同步写：紧接着 process.exit(0)，异步的 stdout.write 写管道时可能被截断
   fs.writeSync(1, JSON.stringify({ decision: 'block', reason }))
@@ -511,4 +499,4 @@ if (require.main === module) {
   main().catch(() => { /* fail-open */ }).finally(() => process.exit(0))
 }
 
-module.exports = { thirdPartySettings, routeArgs, parseVerdictText, TEXT_TAIL, routeEnv, wikiAuditEnabled, loadAudits, mergeReasons, runAudits, judgeAsync, linkAuditEnabled, buildContextLines, buildJudgeInput, userPromptText, previousRounds, cut, resolveClaude, judge, childEnv }
+module.exports = { SCHEMA, THIRD_PARTY_MODEL, CHILD_EFFORT, readTail, logFailure, thirdPartySettings, routeArgs, parseVerdictText, TEXT_TAIL, routeEnv, wikiAuditEnabled, loadAudits, mergeReasons, runAudits, judgeAsync, linkAuditEnabled, buildContextLines, buildJudgeInput, userPromptText, previousRounds, cut, resolveClaude, judge, childEnv }

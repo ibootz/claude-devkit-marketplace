@@ -2,12 +2,14 @@
 """回合末审查（hooks/stop-audit.js）的运行统计：按判定路径汇总成功、失败次数与耗时。
 
 读 stop-audit.js 写的日志（默认 $TMPDIR/devkit-stop-audit.log，连同轮转出的 .1 一起读），
-输出三张表：
-  1. 每条判定路径（third-party 第三方 / fallback 第三方失败后回落订阅 / subscription 订阅）
-     的成功、失败次数，成功率，成功判定的平均、中位、P90 耗时；
-  2. 失败原因分布（timeout 超时、exit-nonzero 退出码非 0、no-structured-output 没有结构化输出、
-     bad-verdict-text 文字判定解析不了、no-budget 预算用完没回落 等）；
-  3. 整次审查（kind=run）按「是否开第三方」分组的次数、打回次数与平均、P90 耗时。
+输出两张表：
+  1. 每条判定路径（subscription 订阅 / fact 后台事实审查，4.20.0 起；third-party 第三方、fallback 第三方
+     失败后回落订阅，只出现在 4.19.0 的旧行里）的成功、失败次数，成功率，成功判定的平均、中位、P90 耗时，
+     以及失败原因分布；
+     失败原因：timeout 超时、exit-nonzero 退出码非 0、no-structured-output 没有结构化输出、
+     bad-verdict-text 文字判定解析不了 等；
+  2. 整次审查（kind=run）分组的次数、打回次数与平均、P90 耗时：sync 同步四路审查、fact 后台事实审查
+     （这一组的「打回」指叫醒了主模型）；4.19.0 的旧行按「是否开第三方」另列两组。
 
 用法：
   python3 stop-audit-stats.py                 # 全部记录
@@ -28,7 +30,7 @@ import sys
 import tempfile
 from collections import Counter, defaultdict
 
-ROUTES = ('third-party', 'fallback', 'subscription')
+ROUTES = ('subscription', 'fact', 'third-party', 'fallback')
 
 
 def default_log():
@@ -85,13 +87,14 @@ def summarize(rows):
             last = at if last is None or at > last else last
         kind = r.get('kind')
         if kind == 'run':
-            g = runs['third-party on' if r.get('thirdParty') else 'third-party off']
+            # 4.20.0 起带 stage（sync / fact）；4.19.0 的旧行只有 thirdParty，按它分两组
+            g = runs[r.get('stage') or ('third-party on' if r.get('thirdParty') else 'third-party off')]
             g['n'] += 1
             g['blocked'] += 1 if r.get('blocked') else 0
             if isinstance(r.get('ms'), (int, float)):
                 g['ms'].append(r['ms'])
             continue
-        route = r.get('route') or 'subscription'  # 旧失败行没有 route，那时只有订阅路
+        route = 'fact' if r.get('audit') == 'fact' else (r.get('route') or 'subscription')  # 旧失败行没有 route，那时只有订阅路
         g = by_route[route]
         if kind == 'ok':
             g['ok'] += 1
@@ -130,7 +133,7 @@ def print_table(s, log):
     print()
     print('| 判定路径 | 总次数 | 成功 | 失败 | 成功率 | 成功平均耗时 | 中位 | P90 | 失败原因 |')
     print('|---|---|---|---|---|---|---|---|---|')
-    names = {'third-party': '第三方', 'fallback': '回落订阅', 'subscription': '订阅'}
+    names = {'third-party': '第三方', 'fallback': '回落订阅', 'subscription': '订阅', 'fact': '后台事实审查'}
     for route, g in s['routes'].items():
         rate = '-' if g['ok_rate'] is None else f'{g["ok_rate"] * 100:.1f}%'
         kinds = '、'.join(f'{k} {v}' for k, v in g['fail_kinds'].items()) or '-'
@@ -139,10 +142,12 @@ def print_table(s, log):
     if not s['routes']:
         print('| （无记录；4.19.0 之前的旧行默认不算，加 --all 才算） | | | | | | | | |')
     print()
-    print('| 整次审查 | 次数 | 打回 | 平均耗时 | P90 |')
+    print('| 整次审查 | 次数 | 打回或叫醒 | 平均耗时 | P90 |')
     print('|---|---|---|---|---|')
+    labels = {'sync': '同步四路审查', 'fact': '后台事实审查（叫醒次数）',
+              'third-party on': '开第三方（4.19.0 旧行）', 'third-party off': '只走订阅（4.19.0 旧行）'}
     for k, g in s['runs'].items():
-        label = '开第三方' if k == 'third-party on' else '只走订阅'
+        label = labels.get(k, k)
         print(f'| {label} | {g["n"]} | {g["blocked"]} | {sec(g["avg_ms"])} | {sec(g["p90_ms"])} |')
     if not s['runs']:
         print('| （无记录） | | | | |')

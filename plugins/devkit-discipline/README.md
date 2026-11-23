@@ -568,6 +568,43 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 4.20.0 回合末审查拆成同步、后台两层：同步四路全走订阅，第三方改做后台事实审查
+
+**起因**（用户 2026-11-23）：同步审查太慢。开 gemini 第三方后每轮要等 90 秒以上，用户问能否像 Claude Code 的 heads-up 那样放到后台，只审核心事实错误与漏答，不再审链接、措辞这类小问题，以及后台结果怎么交回主模型。
+
+**拍板**（2026-11-23，Q1-c、Q2-a）：
+
+- Q1-c：同步四路（出处、链接、卡点、释义）全留，全走订阅 sonnet；gemini 只做后台事实审查，用 `asyncRewake` 叫醒主模型。
+- Q2-a：后台审查只给 `Read` / `Grep` / `Glob`，不给 `Bash` 与写工具；超时放宽到约 5 分钟。
+
+**改了什么**：
+
+| 层 | 脚本 | 跑什么 | 发现问题时 | 用户要等吗 |
+|---|---|---|---|---|
+| 同步 | `hooks/stop-audit.js` | 四路判定，恒走订阅 `claude-sonnet-5-5` | 输出 `decision=block`，本轮继续 | 等，约 6～9 秒 |
+| 后台 | `hooks/stop-fact-audit.js`（新） | 一路判定，走 `DEVKIT_STOP_AUDIT_SETTINGS` 指的第三方 settings，模型 `opus` 别名 | 退出码 2，stderr 作为「Stop hook feedback」叫醒主模型开新一轮 | 不等 |
+
+- **同步层**：删掉 4.19.0 的「先第三方、失败回落订阅」与剩余预算计算（`judgeRoute`、`HOOK_BUDGET_MS`）。`DEVKIT_STOP_AUDIT_SETTINGS` 不再影响同步层。`hooks.json` 的 Stop timeout 160 → 100 秒（单路超时仍是 90 秒）。
+- **后台层**：`hooks.json` 新挂一条 `"asyncRewake": true`、`"timeout": 330`。提示词在 `hooks/stop-fact-audit-prompt.txt`，只审两类：回复里关于代码、配置、文件内容、数字、版本、状态的陈述与工具结果或本机文件矛盾（最多核 5 处），以及用户本轮明确提出的问题没有回应。证据确凿才判不满足，拿不准一律判满足。子进程参数：`--allowedTools Read,Grep,Glob`、`--disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent`、`--add-dir <会话 cwd>`、`--json-schema`；整体超时 300 秒，单次 API 请求超时 150 秒（同步层是 85 秒；`settings.gemini.json` 没设 `API_TIMEOUT_MS`，不会盖掉它）。
+- **只在开了第三方时跑**：没设 `DEVKIT_STOP_AUDIT_SETTINGS` 或文件读不到时，后台层直接退出，不调模型。`DEVKIT_FACT_AUDIT=off` 单独关后台层；`DEVKIT_STOP_AUDIT=off` 两层一起关。
+- **不会循环**：叫醒那一轮的 Stop 带 `stop_hook_active=true`，两层都直接放行。
+- **失灵时**：超时、报错、没有结构化输出，只记日志，退出码 0，不叫醒。
+- **日志与统计**：后台层的判定行带 `audit=fact`；每次审查的 `kind=run` 行改带 `stage`（`sync` / `fact`），不再写 `thirdParty`。`scripts/stop-audit-stats.py` 把 `audit=fact` 的行单列为 `fact` 路径，整次审查按 `stage` 分组；4.19.0 的旧行照旧按「开没开第三方」另列。
+
+**为什么不是「裁掉工具数据、只留近三轮结论」**：2026-11-23 实测，sonnet 单路 6～8 秒，输入长短几乎不影响；gemini 基础延迟约 35 秒，再加 2000～16000 token 的推理输出（约 100 token/秒），常到 90～150 秒，`--effort low` 对它无效。慢在推理输出，不在输入，裁输入提不了速；裁掉工具结果后出处、链接、卡点三路会漏判。
+
+**实测**：
+
+- `asyncRewake`：Claude Code 2.1.330 字段说明原文「If true, hook runs in background and wakes the model on exit code 2 (blocking error). Implies async.」。headless 下用探针 hook 实测，退出码 2 后主模型被叫醒、收到 stderr。**交互模式未实测**，要在新会话里看。
+- gemini 带只读工具：一次构造探针 43 秒、4 轮，没有权限拒绝。整条 `stop-fact-audit.js` 用 gemini-4-neon 跑两条构造回复：说错常量值（「60000」，文件第 62 行实为 `90000`）的那条 124 秒后退出码 2，理由逐字摘了文件行；说对的那条 23 秒放行。`--add-dir` 之外的文件（如 `/etc/shells`）也读得到，只读工具的范围不止项目目录。
+
+**代价**：后台层每轮多一次第三方调用，本轮摘录与它读到的本机文件内容会发给第三方。叫醒时主模型可能已经往下做了，所以叫醒文案点明审的是哪条回复（开头 40 字），并要求先核实再改。后台层判定质量未评测。
+
+- **同步层打回时，后台审的是改写前那条**：两层同时由同一次 Stop 拉起。同步层打回后主模型重写，重写那一轮的 Stop 带 `stop_hook_active=true`，两层都不跑，所以改写后的回复不经事实审查；后台层叫醒时引用的可能是已被替换的旧回复。
+- **headless `claude -p` 会等后台层跑完再退出**：2026-11-23 用探针 hook（等 8 秒后退出码 2）跑 headless，`claude -p` 的 `result` 在叫醒那一轮之后才出，总耗时 11.8 秒。`DEVKIT_STOP_AUDIT_SETTINGS` 写在 `~/.claude/settings.json` 的 `env` 里时，本机所有 headless 会话（后台会话、别的插件起的 `claude -p`）每次结束都要多等一次第三方判定（实测 23～124 秒），还可能多出一轮。判定子进程自己带 `DEVKIT_STOP_AUDIT_CHILD=1`，不受影响。
+
+**回归**：`test/stop-audit-verify.js` 185/185。新增后台层一组：参数（settings、opus、只读工具、禁用列表、`--add-dir`、单次请求超时、剥父进程端点）、输入（`$CWD` 替换、不带同步层的文本指令）、判满足与叫醒、七种不调模型的情形、四种 fail-open、日志、`hooks.json` 挂载；同步层第三方一组改为「设了 settings 仍只走订阅」；统计脚本加 `fact` 路径与 `stage` 分组。`guard-verify` 204/204、`compact-agent-status-verify` 26/26、`codex-host-verify` 16/16。
+
 ### 4.19.0 回合末审查四路并行、一次列全：3.14 交给独立模型审，链接每次出现都挂
 
 **起因**（用户 2026-11-21 原话）：
@@ -605,6 +642,8 @@
 **代价**：每轮回合末多两次 sonnet 调用（共四次，并行）。卡点、释义两路判据含语义判断，打回多了先用 `DEVKIT_WIKI_AUDIT=off` 单独关。
 
 **改了什么 · 判定可切第三方、等待延长**（用户 2026-11-21 拍板）：
+
+> 4.20.0 起被覆盖（用户 2026-11-23 拍板 Q1-c）：同步四路恒走订阅，下面的「可选第三方」「失败回落订阅」不再适用于同步层；第三方改做后台事实审查，见 4.20.0。Stop timeout 已改回 100 秒。
 
 - **可选第三方**：设 `DEVKIT_STOP_AUDIT_SETTINGS=~/.claude/settings.xxx.json` 后，四路判定先走那份 settings 的端点，模型用 `opus` 别名、由文件里的 `ANTHROPIC_DEFAULT_OPUS_MODEL` 映射（用户指定用 opus 映射，不用 sonnet）；父进程的 `ANTHROPIC_*` 一律剥掉。不设时与以前一样走订阅。这一条覆盖 2026-10-29 拍板 1a「判定固定走本机 Claude 登录」：那条现在只管默认路径。开启后本轮摘录会发给第三方，第三方判定质量未评测。
 - **失败回落订阅**（Q1-a）：第三方超时、报错或没有结构化输出时，该路改用订阅重判一次，超时取 90 秒与本次 hook 剩余预算（150 秒）中较小的一个。
@@ -1597,11 +1636,11 @@ node ${CLAUDE_PLUGIN_ROOT}/hooks/guards/write-guard.js
 plugins/devkit-discipline/
 ├── .claude-plugin/plugin.json          # Claude Code 清单（不含 hooks）
 ├── .codex-plugin/plugin.json           # Codex 清单（不含 hooks）
-├── hooks/hooks.json                    # hook 注册（3 个注入脚本 + 4 个 guard + 1 个回合末审查，共 11 处挂载：
+├── hooks/hooks.json                    # hook 注册（3 个注入脚本 + 4 个 guard + 2 个回合末审查，共 12 处挂载：
 │                                       #   PreToolUse×3 + PostToolUse×1 + 三个注入时机×1
 │                                       #   + UserPromptSubmit 上多挂一个 dispatch-ledger
 │                                       #   + PreCompact、SessionStart:compact 各挂一个 compact-agent-status
-│                                       #   + Stop 挂 stop-audit）
+│                                       #   + Stop 挂 stop-audit 与 stop-fact-audit）
 ├── hooks/
 │   ├── working-discipline.js           # SessionStart / UserPromptSubmit / SubagentStart 注入
 │   │                                   #   + 有图轮次条件注入图片路径清单
@@ -1612,6 +1651,9 @@ plugins/devkit-discipline/
 │   ├── stop-audit-link-prompt.txt      #   4.17.0：链接那路判定提示词，与出处那路并行跑；CLICKABLE_PATHS=off 时不跑
 │   ├── stop-audit-stuck-prompt.txt     #   4.19.0：卡点那路（3.14 卡点没挂）；DEVKIT_WIKI_AUDIT=off 时不跑
 │   ├── stop-audit-gloss-prompt.txt     #   4.19.0：释义那路（3.14 释义自写）；DEVKIT_WIKI_AUDIT=off 时不跑
+│   ├── stop-fact-audit.js              #   4.20.0：后台事实审查（asyncRewake），只在设了 DEVKIT_STOP_AUDIT_SETTINGS 时跑；
+│   │                                   #   第三方模型带 Read/Grep/Glob 核事实与漏答，发现问题退出码 2 叫醒主模型
+│   ├── stop-fact-audit-prompt.txt      #   4.20.0：后台事实审查提示词
 │   ├── term-links.js                   #   4.19.0：链接核对，不经模型——挂过链接的词处处挂、括注原文逐字
 │   ├── wiki-check.js                   #   4.17.0：词条核对，stop-audit 调用、不经模型——本轮写的 claude-wiki
 │   │                                   #   词条逐行查自写句子、摘录与出处文件逐字比对
@@ -1648,7 +1690,7 @@ plugins/devkit-discipline/
 │   │                                   #   （3.26.0 起 cd 用例在 devkit-cd-blocker 插件，这里只留一条
 │   │                                   #   反向断言：裸 cd 必须已经不被 bash-guard 拦）
 │   ├── compact-agent-status-verify.js  # compact-agent-status 回归 26 条
-│   └── stop-audit-verify.js            # stop-audit 回归 79 条（判定模型用桩，只测脚本分支、摘录、两路合并、词条核对）
+│   └── stop-audit-verify.js            # stop-audit 与 stop-fact-audit 回归 185 条（判定模型用桩，只测脚本分支、摘录、四路合并、词条核对、后台事实审查）
 └── README.md
 ```
 

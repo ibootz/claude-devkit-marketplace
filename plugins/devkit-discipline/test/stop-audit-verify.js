@@ -38,16 +38,17 @@ const STUB = path.join(DIR, 'stub-claude')
 fs.writeFileSync(STUB, `#!/usr/bin/env node
 const fs = require('fs')
 const inp = fs.readFileSync(0, 'utf8')
-const kind = inp.includes('回合末链接审查') ? 'link' : inp.includes('回合末卡点审查') ? 'stuck' : inp.includes('回合末释义审查') ? 'gloss' : 'source'
+const kind = inp.includes('回合末后台事实审查') ? 'fact' : inp.includes('回合末链接审查') ? 'link' : inp.includes('回合末卡点审查') ? 'stuck' : inp.includes('回合末释义审查') ? 'gloss' : 'source'
 const argv = process.argv.slice(2)
 const third = argv.includes('--settings')
 if (process.env.STUB_ROUTE_LOG) fs.appendFileSync(process.env.STUB_ROUTE_LOG, kind + ':' + (third ? 'third:' + argv[argv.indexOf('--model') + 1] : 'sub:' + argv[argv.indexOf('--model') + 1]) + ':' + (process.env.ANTHROPIC_BASE_URL || '-') + '\\n')
 if (process.env.STUB_LOG) fs.appendFileSync(process.env.STUB_LOG, kind + '\\n')
+if (process.env.STUB_ARGV_LOG) fs.appendFileSync(process.env.STUB_ARGV_LOG, JSON.stringify({ kind, argv, apiTimeout: process.env.API_TIMEOUT_MS, base: process.env.ANTHROPIC_BASE_URL || null, child: process.env.DEVKIT_STOP_AUDIT_CHILD, input: inp }) + '\\n')
 if (third && process.env.STUB_THIRD) { const t = process.env.STUB_THIRD; if (t === 'exit1') process.exit(1); if (t === 'garbage') { process.stdout.write('not json'); process.exit(0) } }
 const m = kind === 'source' ? process.env.STUB_MODE : (process.env['STUB_' + kind.toUpperCase()] || 'pass')
 if (m === 'exit1') process.exit(1)
 if (m === 'garbage') { process.stdout.write('not json'); process.exit(0) }
-const R = { source: '回合末出处审查：\\n- 测试', link: '回合末链接审查：\\n- 链接', stuck: '回合末卡点审查：\\n- 卡点', gloss: '回合末释义审查：\\n- 释义' }
+const R = { fact: '事实错误：回复说「X 不存在」，但 /tmp/a.js:3 写的是「function X」', source: '回合末出处审查：\\n- 测试', link: '回合末链接审查：\\n- 链接', stuck: '回合末卡点审查：\\n- 卡点', gloss: '回合末释义审查：\\n- 释义' }
 const so = m === 'block' ? { ok: false, reason: R[kind] } : { ok: true, reason: '' }
 if (process.env.STUB_TAIL_LOG) fs.appendFileSync(process.env.STUB_TAIL_LOG, (inp.includes('只输出一行 JSON') ? 'tail' : 'notail') + ':' + (argv.includes('--json-schema') ? 'schema' : 'text') + '\\n')
 if (m === 'badtext') { process.stdout.write(JSON.stringify({ result: '我认为满足条件。' })); process.exit(0) }
@@ -425,7 +426,7 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   check('端到端：CLICKABLE_PATHS=off 不跑链接核对', r2.stdout.trim() === '', r2.stdout)
 }
 
-// ---- 4.19.0 第三方判定：opus 映射、失败回落订阅、成功也记日志 ----
+// ---- 第三方 settings 解析与参数（4.20.0 起只给后台事实审查用；同步四路恒走订阅）----
 {
   const { thirdPartySettings, routeArgs, routeEnv } = require(HOOK)
   const sf = path.join(DIR, 'settings.third.json')
@@ -433,37 +434,99 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   check('没设开关 → 不走第三方', thirdPartySettings({}) === null)
   check('文件不存在 → 当没开', thirdPartySettings({ DEVKIT_STOP_AUDIT_SETTINGS: path.join(DIR, 'nope.json') }) === null)
   check('文件存在 → 返回路径', thirdPartySettings({ DEVKIT_STOP_AUDIT_SETTINGS: sf }) === sf)
-  const a = routeArgs(sf)
-  check('第三方参数：带 --settings、模型改 opus 别名', a.includes('--settings') && a[a.indexOf('--settings') + 1] === sf && a[a.indexOf('--model') + 1] === 'opus')
   check('订阅参数：模型仍是 claude-sonnet-5-5', routeArgs(null)[routeArgs(null).indexOf('--model') + 1] === 'claude-sonnet-5-5')
   check('订阅参数：不带 --json-schema（单轮文本判定）', !routeArgs(null).includes('--json-schema'))
-  check('第三方参数：带 --json-schema', a.includes('--json-schema'))
-  check('两条路都带 --effort medium（settings 文件盖不掉）', [routeArgs(null), a].every((x) => x[x.indexOf('--effort') + 1] === 'medium'))
-  check('routeArgs 不改共享的订阅参数', !routeArgs(null).includes('--settings') && !routeArgs(null).includes('--json-schema'))
+  check('订阅参数：带 --effort medium', routeArgs(null)[routeArgs(null).indexOf('--effort') + 1] === 'medium')
   const e = routeEnv({ ANTHROPIC_BASE_URL: 'https://api.anthropic.com', ANTHROPIC_AUTH_TOKEN: 'x' }, sf)
   check('第三方子进程剥掉父进程的 ANTHROPIC_*', e.ANTHROPIC_BASE_URL === undefined && e.ANTHROPIC_AUTH_TOKEN === undefined)
 
-  const rl = path.join(DIR, 'route-ok')
-  const lg = path.join(DIR, 'route-ok.log')
-  run(base, { STUB_MODE: 'pass', STUB_ROUTE_LOG: rl, DEVKIT_STOP_AUDIT_SETTINGS: sf, DEVKIT_STOP_AUDIT_LOG: lg, ANTHROPIC_BASE_URL: 'https://api.anthropic.com' })
+  const rl = path.join(DIR, 'route-sync')
+  const lg = path.join(DIR, 'route-sync.log')
+  const r = run(base, { STUB_MODE: 'block', STUB_ROUTE_LOG: rl, DEVKIT_STOP_AUDIT_SETTINGS: sf, DEVKIT_STOP_AUDIT_LOG: lg })
   const rows = fs.readFileSync(rl, 'utf8').trim().split('\n')
-  check('端到端：开第三方 → 四路都只走第三方一次、模型 opus、不带父进程端点', rows.length === 4 && rows.every((r) => r.endsWith(':third:opus:-')), rows.join(' | '))
+  check('端到端：设了 DEVKIT_STOP_AUDIT_SETTINGS，同步四路仍只走订阅各一次', rows.length === 4 && rows.every((x) => x.includes(':sub:claude-sonnet-5-5')), rows.join(' | '))
+  check('端到端：同步路的打回照常生效', r.stdout.includes('回合末出处审查'), r.stdout)
   const lgRows = fs.readFileSync(lg, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
   const oks = lgRows.filter((o) => o.kind === 'ok')
-  check('成功判定也记日志、带 route', oks.length === 4 && oks.every((o) => o.route === 'third-party'), JSON.stringify(oks[0]))
-  check('成功判定带 audit（哪一路），四路各一行', oks.map((o) => o.audit).sort().join(',') === 'gloss,link,source,stuck', JSON.stringify(oks.map((o) => o.audit)))
+  check('成功判定记日志、route=subscription、四路各一行', oks.length === 4 && oks.every((o) => o.route === 'subscription') && oks.map((o) => o.audit).sort().join(',') === 'gloss,link,source,stuck', JSON.stringify(oks))
   const runRow = lgRows.filter((o) => o.kind === 'run')
-  check('整次审查记一行 kind=run，带 thirdParty 与 blocked', runRow.length === 1 && runRow[0].thirdParty === true && runRow[0].blocked === false && typeof runRow[0].ms === 'number', JSON.stringify(runRow))
+  check('整次审查记一行 kind=run、stage=sync、blocked=true', runRow.length === 1 && runRow[0].stage === 'sync' && runRow[0].blocked === true && typeof runRow[0].ms === 'number', JSON.stringify(runRow))
+}
 
-  const rl2 = path.join(DIR, 'route-fb')
-  const r = run(base, { STUB_MODE: 'block', STUB_THIRD: 'exit1', STUB_ROUTE_LOG: rl2, DEVKIT_STOP_AUDIT_SETTINGS: sf })
-  const rows2 = fs.readFileSync(rl2, 'utf8').trim().split('\n')
-  check('端到端：第三方失败 → 每路改用订阅重判一次', rows2.filter((x) => x.includes(':third:')).length === 4 && rows2.filter((x) => x.includes(':sub:claude-sonnet-5-5')).length === 4, rows2.join(' | '))
-  check('端到端：回落后的打回照常生效', r.stdout.includes('回合末出处审查'), r.stdout)
+// ---- 4.20.0 后台事实审查 stop-fact-audit.js（asyncRewake）----
+{
+  const FACT = path.join(__dirname, '..', 'hooks', 'stop-fact-audit.js')
+  const sf = path.join(DIR, 'settings.fact.json')
+  fs.writeFileSync(sf, '{"env":{}}')
+  const runFact = (input, env = {}) => {
+    const log = path.join(DIR, `flog-${pass + fail}`)
+    const r = spawnSync('node', [FACT], {
+      input: typeof input === 'string' ? input : JSON.stringify(input),
+      encoding: 'utf8',
+      env: { ...process.env, DEVKIT_STOP_AUDIT: '', DEVKIT_STOP_AUDIT_CHILD: '', DEVKIT_FACT_AUDIT: '', DEVKIT_STOP_AUDIT_SETTINGS: sf, DEVKIT_STOP_AUDIT_CLAUDE: STUB, DEVKIT_STOP_AUDIT_LOG: path.join(DIR, 'fact-default.log'), STUB_LOG: log, ...env },
+    })
+    return { status: r.status, stdout: r.stdout, stderr: r.stderr, called: fs.existsSync(log) }
+  }
+  const fb = { ...base, cwd: '/proj/demo', last_assistant_message: '结论：X 不存在，见 a.js。' }
 
-  const rl3 = path.join(DIR, 'route-off')
-  run(base, { STUB_MODE: 'pass', STUB_ROUTE_LOG: rl3 })
-  check('端到端：不开第三方 → 只走订阅', fs.readFileSync(rl3, 'utf8').trim().split('\n').every((x) => x.includes(':sub:claude-sonnet-5-5')))
+  const al = path.join(DIR, 'fact-argv')
+  const lg = path.join(DIR, 'fact-pass.log')
+  const r1 = runFact(fb, { STUB_FACT: 'pass', STUB_ARGV_LOG: al, DEVKIT_STOP_AUDIT_LOG: lg, ANTHROPIC_BASE_URL: 'https://api.anthropic.com' })
+  check('事实审查：判满足 → 退出码 0、不写 stderr', r1.status === 0 && r1.stderr === '' && r1.called, `${r1.status} ${r1.stderr}`)
+  const calls = fs.readFileSync(al, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+  const a = calls[0].argv
+  const after = (f) => a[a.indexOf(f) + 1]
+  check('事实审查：只调一次模型，且是 fact 提示词', calls.length === 1 && calls[0].kind === 'fact', JSON.stringify(calls.map((c) => c.kind)))
+  check('事实审查：带 --settings 第三方文件、模型 opus、带 schema', after('--settings') === sf && after('--model') === 'opus' && a.includes('--json-schema'), JSON.stringify(a))
+  check('事实审查：只放 Read,Grep,Glob', after('--allowedTools') === 'Read,Grep,Glob', JSON.stringify(a))
+  check('事实审查：禁 Bash、Write、Edit、WebFetch、Agent', ['Bash', 'Write', 'Edit', 'WebFetch', 'Agent'].every((t) => after('--disallowedTools').split(',').includes(t)), after('--disallowedTools'))
+  check('事实审查：--add-dir 加会话 cwd', after('--add-dir') === '/proj/demo', JSON.stringify(a))
+  check('事实审查：子进程剥掉父进程端点、带防递归标记、单次请求超时 150 秒', calls[0].base === null && calls[0].child === '1' && calls[0].apiTimeout === '150000', JSON.stringify(calls[0]))
+  check('事实审查：输入里 $CWD 已替换、带被审回复', calls[0].input.includes('项目目录：/proj/demo') && !calls[0].input.includes('$CWD') && calls[0].input.includes('[assistant]: 结论：X 不存在'), calls[0].input.slice(0, 300))
+  check('事实审查：输入不带同步路的「只输出一行 JSON」', !calls[0].input.includes('只输出一行 JSON'))
+  const rows = fs.readFileSync(lg, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+  check('事实审查：成功记 kind=ok、audit=fact、route=third-party', rows.some((o) => o.kind === 'ok' && o.audit === 'fact' && o.route === 'third-party'), JSON.stringify(rows))
+  check('事实审查：记 kind=run、stage=fact、blocked=false', rows.some((o) => o.kind === 'run' && o.stage === 'fact' && o.blocked === false), JSON.stringify(rows))
+
+  const lg2 = path.join(DIR, 'fact-block.log')
+  const r2 = runFact(fb, { STUB_FACT: 'block', DEVKIT_STOP_AUDIT_LOG: lg2 })
+  check('事实审查：判不满足 → 退出码 2（叫醒主模型）', r2.status === 2, `${r2.status} ${r2.stderr}`)
+  check('事实审查：stderr 带判定理由与被审回复开头', r2.stderr.includes('/tmp/a.js:3') && r2.stderr.includes('「结论：X 不存在'), r2.stderr)
+  check('事实审查：stderr 要求先核实再改', r2.stderr.includes('先用工具逐条核实'), r2.stderr)
+  check('事实审查：stdout 为空（不走 decision=block）', r2.stdout === '', r2.stdout)
+  check('事实审查：叫醒时 run 行 blocked=true', fs.readFileSync(lg2, 'utf8').trim().split('\n').map((l) => JSON.parse(l)).some((o) => o.kind === 'run' && o.stage === 'fact' && o.blocked === true))
+
+  for (const [name, input, env] of [
+    ['没设 DEVKIT_STOP_AUDIT_SETTINGS', fb, { STUB_FACT: 'block', DEVKIT_STOP_AUDIT_SETTINGS: '' }],
+    ['settings 文件不存在', fb, { STUB_FACT: 'block', DEVKIT_STOP_AUDIT_SETTINGS: path.join(DIR, 'nope.json') }],
+    ['DEVKIT_FACT_AUDIT=off', fb, { STUB_FACT: 'block', DEVKIT_FACT_AUDIT: 'off' }],
+    ['DEVKIT_STOP_AUDIT=off', fb, { STUB_FACT: 'block', DEVKIT_STOP_AUDIT: 'off' }],
+    ['判定子进程里', fb, { STUB_FACT: 'block', DEVKIT_STOP_AUDIT_CHILD: '1' }],
+    ['stop_hook_active=true（叫醒那一轮）', { ...fb, stop_hook_active: true }, { STUB_FACT: 'block' }],
+    ['没有 last_assistant_message', { ...fb, last_assistant_message: '' }, { STUB_FACT: 'block' }],
+  ]) {
+    const r = runFact(input, env)
+    check(`事实审查：${name} → 不调模型、退出码 0`, r.status === 0 && !r.called && r.stderr === '', `${r.status} ${r.called} ${r.stderr}`)
+  }
+  const lg3 = path.join(DIR, 'fact-fail.log')
+  for (const [name, env] of [
+    ['判定进程退出码非 0', { STUB_FACT: 'exit1' }],
+    ['判定输出不是 JSON', { STUB_FACT: 'garbage' }],
+    ['claude 路径不存在', { STUB_FACT: 'block', DEVKIT_STOP_AUDIT_CLAUDE: path.join(DIR, 'nope') }],
+    ['stdin 不是 JSON', { STUB_FACT: 'block' }, 'oops'],
+  ]) {
+    const r = runFact(name === 'stdin 不是 JSON' ? 'oops' : fb, { ...env, DEVKIT_STOP_AUDIT_LOG: lg3 })
+    check(`事实审查 fail-open：${name} → 退出码 0、不叫醒`, r.status === 0 && r.stderr === '', `${r.status} ${r.stderr}`)
+  }
+  const fr = fs.readFileSync(lg3, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+  check('事实审查：失败记日志、audit=fact', fr.some((o) => o.kind === 'exit-nonzero' && o.audit === 'fact') && fr.some((o) => o.kind === 'bad-json' && o.audit === 'fact'), JSON.stringify(fr.map((o) => o.kind + '/' + o.audit)))
+
+  const hj = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'hooks', 'hooks.json'), 'utf8'))
+  const stop = hj.hooks.Stop.flatMap((g) => g.hooks)
+  const sync = stop.find((h) => h.command.endsWith('/stop-audit.js'))
+  const fact = stop.find((h) => h.command.endsWith('/stop-fact-audit.js'))
+  check('hooks.json：同步审查 timeout 100、不是 async', sync && sync.timeout === 100 && !sync.async && !sync.asyncRewake, JSON.stringify(sync))
+  check('hooks.json：事实审查 asyncRewake、timeout ≥ 300', fact && fact.asyncRewake === true && fact.timeout >= 300, JSON.stringify(fact))
 }
 
 // ---- 订阅路文本判定解析 ----
@@ -481,12 +544,6 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   const tails = fs.readFileSync(tl, 'utf8').trim().split('\n')
   check('端到端：订阅路输入末尾带「只输出一行 JSON」、不带 schema', tails.length === 4 && tails.every((x) => x === 'tail:text'), tails.join(' | '))
   check('端到端：订阅路文本判定的打回照常生效', r.stdout.includes('回合末出处审查'), r.stdout)
-  const sf2 = path.join(DIR, 'tail-settings.json')
-  fs.writeFileSync(sf2, '{}')
-  const tl2 = path.join(DIR, 'tail-third')
-  run(base, { STUB_MODE: 'pass', STUB_TAIL_LOG: tl2, DEVKIT_STOP_AUDIT_SETTINGS: sf2 })
-  const tails2 = fs.readFileSync(tl2, 'utf8').trim().split('\n')
-  check('端到端：第三方路带 schema、输入不加文本指令', tails2.length === 4 && tails2.every((x) => x === 'notail:schema'), tails2.join(' | '))
   const lg = path.join(DIR, 'badtext.log')
   const r2 = run(base, { STUB_MODE: 'badtext', DEVKIT_STOP_AUDIT_LOG: lg })
   const kinds = fs.readFileSync(lg, 'utf8').trim().split('\n').map((l) => JSON.parse(l).kind)
@@ -506,7 +563,7 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   check('失败日志：带耗时与截断后的 stdout', typeof rows[1]?.ms === 'number' && rows[1].stdout === 'not json', JSON.stringify(rows[1]))
   check('失败日志：带 route 与 audit', rows.every((r) => r.route === 'subscription' && r.audit === 'source'), JSON.stringify(rows))
   const runs = all.filter((r) => r.kind === 'run')
-  check('三次审查各记一行 kind=run、都没打回、都没开第三方', runs.length === 3 && runs.every((r) => r.blocked === false && r.thirdParty === false), JSON.stringify(runs))
+  check('三次审查各记一行 kind=run、stage=sync、都没打回', runs.length === 3 && runs.every((r) => r.blocked === false && r.stage === 'sync'), JSON.stringify(runs))
   const r = run(base, { STUB_MODE: 'block', DEVKIT_STOP_AUDIT_LOG: logFile })
   const last = fs.readFileSync(logFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l)).pop()
   check('打回时 kind=run 记 blocked=true', r.stdout.includes('block') && last.kind === 'run' && last.blocked === true, JSON.stringify(last))
@@ -539,22 +596,30 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
       L({ kind: 'timeout', route: 'third-party', audit: 'stuck', ms: 90000 }),
       L({ kind: 'ok', route: 'fallback', audit: 'stuck', ms: 6000 }),
       L({ kind: 'run', ms: 96000, thirdParty: true, blocked: true }),
+      L({ kind: 'ok', route: 'subscription', audit: 'source', ms: 7000 }),
+      L({ kind: 'ok', route: 'third-party', audit: 'fact', ms: 60000 }),
+      L({ kind: 'timeout', route: 'third-party', audit: 'fact', ms: 300000 }),
+      L({ kind: 'run', ms: 8000, stage: 'sync', blocked: false }),
+      L({ kind: 'run', ms: 60000, stage: 'fact', blocked: true }),
     ].join('\n') + '\n')
     const STATS = path.join(__dirname, '..', 'scripts', 'stop-audit-stats.py')
     const p = spawnSync(py, [STATS, '--log', logFile, '--json'], { encoding: 'utf8' })
     let j = null
     try { j = JSON.parse(p.stdout) } catch { /* 下面断言会报 */ }
     const tp = j && j.routes['third-party']
+    check('统计脚本：后台事实审查单列为 fact，不混进第三方', !!j && j.routes.fact && j.routes.fact.total === 2 && j.routes.fact.ok === 1 && j.routes.fact.fail_kinds.timeout === 1, JSON.stringify(j && j.routes))
+    check('统计脚本：整次审查按 stage 分 sync 与 fact', !!j && j.runs.sync && j.runs.sync.n === 1 && j.runs.fact && j.runs.fact.blocked === 1, JSON.stringify(j && j.runs))
     check('统计脚本：第三方 3 次、成功 2、失败 1、超时 1', !!tp && tp.total === 3 && tp.ok === 2 && tp.fail === 1 && tp.fail_kinds.timeout === 1, p.stdout + p.stderr)
     check('统计脚本：第三方成功平均 15 秒', !!tp && tp.avg_ms === 15000, JSON.stringify(tp))
     check('统计脚本：回落订阅单列', !!j && j.routes.fallback && j.routes.fallback.ok === 1, JSON.stringify(j && j.routes))
-    check('统计脚本：旧格式行默认不算', !!j && !j.routes.subscription, JSON.stringify(j && j.routes))
+    check('统计脚本：旧格式行默认不算（订阅只有新格式那 1 行）', !!j && j.routes.subscription && j.routes.subscription.total === 1, JSON.stringify(j && j.routes))
     check('统计脚本：整次审查按开第三方分组', !!j && j.runs['third-party on'] && j.runs['third-party on'].n === 1 && j.runs['third-party on'].blocked === 1, JSON.stringify(j && j.runs))
     const p2 = spawnSync(py, [STATS, '--log', logFile, '--json', '--all'], { encoding: 'utf8' })
     const j2 = JSON.parse(p2.stdout || '{}')
-    check('统计脚本：--all 才算旧格式行', j2.routes && j2.routes.subscription && j2.routes.subscription.fail === 1, p2.stdout)
+    check('统计脚本：--all 才算旧格式行', j2.routes && j2.routes.subscription && j2.routes.subscription.fail === 1 && j2.routes.subscription.total === 2, p2.stdout)
     const p3 = spawnSync(py, [STATS, '--log', logFile], { encoding: 'utf8' })
     check('统计脚本：表格输出含「第三方」一行', p3.status === 0 && p3.stdout.includes('| 第三方（third-party） | 3 | 2 | 1 | 66.7%'), p3.stdout + p3.stderr)
+    check('统计脚本：表格输出含「后台事实审查」两行', p3.stdout.includes('| 后台事实审查（fact） | 2 | 1 | 1 | 50.0%') && p3.stdout.includes('| 后台事实审查（叫醒次数） | 1 | 1 |'), p3.stdout)
   }
 }
 

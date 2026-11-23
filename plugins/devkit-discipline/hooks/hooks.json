@@ -1,5 +1,5 @@
 {
-  "description": "AI 工作纪律：会话级 / 每轮 / 子代理三层注入，Agent 与 Bash 的 PreToolUse 硬拦，Write/Edit 事后提醒，压缩前后校准子代理状态，Stop 回合末出处与链接审查。",
+  "description": "AI 工作纪律：会话级 / 每轮 / 子代理三层注入，Agent 与 Bash 的 PreToolUse 硬拦，Write/Edit 事后提醒，压缩前后校准子代理状态，Stop 回合末同步审查（出处、链接、卡点、词条）与后台事实审查（第三方模型，发现问题时叫醒主模型）。",
   "hooks": {
     "PreToolUse": [
       {
@@ -96,7 +96,13 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop-audit.js",
-            "timeout": 160
+            "timeout": 100
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/stop-fact-audit.js",
+            "asyncRewake": true,
+            "timeout": 330
           }
         ]
       }
