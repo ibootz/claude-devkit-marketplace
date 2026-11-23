@@ -25,15 +25,23 @@ function hasUnquotedShellOperator(command) {
   let quote = ''
   for (let i = 0; i < command.length; i++) {
     const char = command[i]
-    if (quote) {
-      if (char === quote) quote = ''
+    if (quote === "'") {
+      // 单引号里 bash 不解释任何字符，反斜杠只是普通字符
+      if (char === "'") quote = ''
       continue
     }
+    if (quote === '"') {
+      // 双引号里只有 \ " $ ` 换行 被反斜杠转义；其余反斜杠是字面量（Windows 路径就是这种）
+      if (char === '\\' && '"\\$`\n'.includes(command[i + 1] || '\n')) { i++; continue }
+      if (char === '"') quote = ''
+      continue
+    }
+    if (char === '\\') { i++; continue }
     if (char === "'" || char === '"') {
       quote = char
       continue
     }
-    if (';&|<>`$\\\n'.includes(char)) return true
+    if (';&|<>`$\n'.includes(char)) return true
   }
   return false
 }
@@ -56,14 +64,15 @@ function isWorktree(cwd) {
 }
 
 function submoduleWorkingTree(cwd) {
-  const commonDir = git(cwd, ['rev-parse', '--git-common-dir'])
-  const marker = `${path.sep}.git${path.sep}modules${path.sep}`
+  // git 输出统一用正斜杠，Windows 的 path.sep 是反斜杠——按 path.sep 拼标记在 Windows 上永远匹配不到
+  const commonDir = git(cwd, ['rev-parse', '--git-common-dir']).replace(/\\/g, '/')
+  const marker = '/.git/modules/'
   const markerIndex = commonDir.indexOf(marker)
   if (markerIndex < 0) return ''
 
   const aggregateRoot = commonDir.slice(0, markerIndex)
   const modulePath = commonDir.slice(markerIndex + marker.length)
-    .replace(new RegExp(`${path.sep}worktrees${path.sep}[^${path.sep}]+$`), '')
+    .replace(/\/worktrees\/[^/]+$/, '')
   const candidate = path.join(aggregateRoot, modulePath)
   return fs.existsSync(candidate) ? candidate : ''
 }

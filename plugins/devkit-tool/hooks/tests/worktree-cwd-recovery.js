@@ -53,6 +53,14 @@ try {
   const quoted = payload(worktree, `git -C ${parent} worktree remove --force \"${worktree}\"`)
   assert.strictEqual(quoted.command, `git -C ${parent} worktree remove --force \"${worktree}\" && cd '${parentCanonical}'`)
 
+  // 反斜杠在 bash 里是转义符，但 Windows 路径里的它是字面量——按「出现即操作符」拒掉，
+  // 这个 hook 在 Windows 上就一条命令也不会改写（2026-11-23 实测：整份单测在 Windows 上红）。
+  // 这条用例与平台无关：喂一个反斜杠形状的命令，断言它仍被认作可改写的删除命令。
+  const windowsShaped = 'git -C C:\\repo worktree remove --force C:\\repo-wt'
+  assert.strictEqual(payload(worktree, windowsShaped).command, `${windowsShaped} && cd '${parentCanonical}'`)
+  // 真正会被转义掉的分隔符仍要拦：未转义的 ; 就是命令分隔符，追加的 cd 会被甩到第二条命令上
+  assert.strictEqual(payload(worktree, `git -C ${parent} worktree remove --force x; rm -rf y`), null)
+
   const submodule = path.join(tempRoot, 'submodule')
   const aggregate = path.join(tempRoot, 'aggregate')
   const submoduleWorktree = path.join(tempRoot, 'submodule-worktree')
