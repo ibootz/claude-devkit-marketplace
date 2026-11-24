@@ -568,6 +568,18 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 4.26.0 后台事实审查超时也叫醒主模型
+
+**拍板**（用户 2026-11-24）：超时也叫醒。
+
+**起因**：11-24 当天 32 次后台事实审查里 14 次跑满 300 秒被杀（`$TMPDIR/devkit-stop-audit.log` 的 `stage=fact` 行按天计数），按 4.20.0 的设计只记日志、不叫醒。真正叫醒只有 1 次，用户据此以为机制没生效。
+
+**改了什么**：`hooks/stop-fact-audit.js` 判定子进程超时（未出结果且耗时达到超时阈值，口径同 `judgeAsync`）时同样以退出码 2 结束，stderr 换成另一段文案：点明哪条回复没经过事实审查，要求主模型不复查、不重写，只回用户一句「后台事实审查超时，没有审到」就结束本轮。run 日志行新增 `timed_out` 字段；`blocked` 仍只记发现问题的叫醒，统计脚本的「叫醒次数」口径不变。报错、无结构化输出仍只记日志、不叫醒。新增只供测试用的 `DEVKIT_FACT_AUDIT_TIMEOUT_MS`（小于 300000 的正整数才生效）。
+
+**代价**：每次超时多一轮主模型回合（只输出一句话）。叫醒那一轮带 `stop_hook_active=true`，同步、后台两层都直接放行，不会循环。
+
+**回归**：`stop-audit-verify` 201/201（新增超时叫醒、文案、日志字段、超时覆盖取值 5 条）、`guard-verify` 204/204、`compact-agent-status-verify` 26/26、`codex-host-verify` 16/16。
+
 ### 4.25.0 释义审查打回「括注只是提到这个词」
 
 **拍板**（用户 2026-11-23，Q1-a）：4.23.0 只在规则文字里要求「链到定义句」，没有审查兜底；这次给释义审查加一类打回。
@@ -668,7 +680,7 @@
 - **后台层**：`hooks.json` 新挂一条 `"asyncRewake": true`、`"timeout": 330`。提示词在 `hooks/stop-fact-audit-prompt.txt`，只审两类：回复里关于代码、配置、文件内容、数字、版本、状态的陈述与工具结果或本机文件矛盾（最多核 5 处），以及用户本轮明确提出的问题没有回应。证据确凿才判不满足，拿不准一律判满足。子进程参数：`--allowedTools Read,Grep,Glob`、`--disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent`、`--add-dir <会话 cwd>`、`--json-schema`；整体超时 300 秒，单次 API 请求超时 150 秒（同步层是 85 秒；`settings.gemini.json` 没设 `API_TIMEOUT_MS`，不会盖掉它）。
 - **只在开了第三方时跑**：没设 `DEVKIT_STOP_AUDIT_SETTINGS` 或文件读不到时，后台层直接退出，不调模型。`DEVKIT_FACT_AUDIT=off` 单独关后台层；`DEVKIT_STOP_AUDIT=off` 两层一起关。
 - **不会循环**：叫醒那一轮的 Stop 带 `stop_hook_active=true`，两层都直接放行。
-- **失灵时**：超时、报错、没有结构化输出，只记日志，退出码 0，不叫醒。
+- **失灵时**：超时、报错、没有结构化输出，只记日志，退出码 0，不叫醒。（4.26.0 起超时改为也叫醒，见 4.26.0。）
 - **日志与统计**：后台层的判定行带 `audit=fact`；每次审查的 `kind=run` 行改带 `stage`（`sync` / `fact`），不再写 `thirdParty`。`scripts/stop-audit-stats.py` 把 `audit=fact` 的行单列为 `fact` 路径，整次审查按 `stage` 分组；4.19.0 的旧行照旧按「开没开第三方」另列。
 
 **为什么不是「裁掉工具数据、只留近三轮结论」**：2026-11-23 实测，sonnet 单路 6～8 秒，输入长短几乎不影响；gemini 基础延迟约 35 秒，再加 2000～16000 token 的推理输出（约 100 token/秒），常到 90～150 秒，`--effort low` 对它无效。慢在推理输出，不在输入，裁输入提不了速；裁掉工具结果后出处、链接、卡点三路会漏判。
@@ -1732,7 +1744,7 @@ plugins/devkit-discipline/
 │   ├── stop-audit-stuck-prompt.txt     #   4.19.0：卡点那路（3.14 卡点没挂）；DEVKIT_WIKI_AUDIT=off 时不跑
 │   ├── stop-audit-gloss-prompt.txt     #   4.19.0：释义那路（3.14 释义自写）；DEVKIT_WIKI_AUDIT=off 时不跑
 │   ├── stop-fact-audit.js              #   4.20.0：后台事实审查（asyncRewake），只在设了 DEVKIT_STOP_AUDIT_SETTINGS 时跑；
-│   │                                   #   第三方模型带 Read/Grep/Glob 核事实与漏答，发现问题退出码 2 叫醒主模型
+│   │                                   #   第三方模型带 Read/Grep/Glob 核事实与漏答，发现问题退出码 2 叫醒主模型；4.26.0 起超时也叫醒
 │   ├── stop-fact-audit-prompt.txt      #   4.20.0：后台事实审查提示词
 │   ├── term-links.js                   #   4.19.0：链接核对，不经模型——挂过链接的词处处挂、括注原文逐字
 │   ├── wiki-check.js                   #   4.17.0：词条核对，stop-audit 调用、不经模型——本轮写的 claude-wiki

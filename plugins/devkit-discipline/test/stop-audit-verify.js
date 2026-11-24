@@ -47,6 +47,7 @@ if (process.env.STUB_ARGV_LOG) fs.appendFileSync(process.env.STUB_ARGV_LOG, JSON
 if (third && process.env.STUB_THIRD) { const t = process.env.STUB_THIRD; if (t === 'exit1') process.exit(1); if (t === 'garbage') { process.stdout.write('not json'); process.exit(0) } }
 const m = kind === 'source' ? process.env.STUB_MODE : (process.env['STUB_' + kind.toUpperCase()] || 'pass')
 if (m === 'exit1') process.exit(1)
+if (m === 'sleep') Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000)
 if (m === 'garbage') { process.stdout.write('not json'); process.exit(0) }
 const R = { fact: '事实错误：回复说「X 不存在」，但 /tmp/a.js:3 写的是「function X」', source: '回合末出处审查：\\n- 测试', link: '回合末链接审查：\\n- 链接', stuck: '回合末卡点审查：\\n- 卡点', gloss: '回合末释义审查：\\n- 释义' }
 const so = m === 'block' ? { ok: false, reason: R[kind] } : { ok: true, reason: '' }
@@ -550,7 +551,18 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
     const r = runFact(name === 'stdin 不是 JSON' ? 'oops' : fb, { ...env, DEVKIT_STOP_AUDIT_LOG: lg3 })
     check(`事实审查 fail-open：${name} → 退出码 0、不叫醒`, r.status === 0 && r.stderr === '', `${r.status} ${r.stderr}`)
   }
+  const lg4 = path.join(DIR, 'fact-timeout.log')
+  const r4 = runFact(fb, { STUB_FACT: 'sleep', DEVKIT_FACT_AUDIT_TIMEOUT_MS: '1000', DEVKIT_STOP_AUDIT_LOG: lg4 })
+  check('事实审查：超时 → 退出码 2（也叫醒）', r4.status === 2, `${r4.status} ${r4.stderr}`)
+  check('事实审查：超时叫醒文案点明没审到、带被审回复开头、不要求复查', r4.stderr.includes('超时') && r4.stderr.includes('没有经过事实审查') && r4.stderr.includes('「结论：X 不存在') && r4.stderr.includes('不复查、不重写') && !r4.stderr.includes('先用工具逐条核实'), r4.stderr)
+  const tr = fs.readFileSync(lg4, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+  check('事实审查：超时记 kind=timeout，run 行 timed_out=true、blocked=false', tr.some((o) => o.kind === 'timeout' && o.audit === 'fact') && tr.some((o) => o.kind === 'run' && o.stage === 'fact' && o.timed_out === true && o.blocked === false), JSON.stringify(tr))
+  {
+    const fa = require(path.join(__dirname, '..', 'hooks', 'stop-fact-audit.js'))
+    check('事实审查：超时覆盖只接受小于默认值的正整数', fa.factTimeout({}) === fa.FACT_TIMEOUT_MS && fa.factTimeout({ DEVKIT_FACT_AUDIT_TIMEOUT_MS: 'x' }) === fa.FACT_TIMEOUT_MS && fa.factTimeout({ DEVKIT_FACT_AUDIT_TIMEOUT_MS: '999999' }) === fa.FACT_TIMEOUT_MS && fa.factTimeout({ DEVKIT_FACT_AUDIT_TIMEOUT_MS: '1000' }) === 1000)
+  }
   const fr = fs.readFileSync(lg3, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+  check('事实审查：非超时失败的 run 行 timed_out=false', fr.filter((o) => o.kind === 'run').every((o) => o.timed_out === false), JSON.stringify(fr.filter((o) => o.kind === 'run')))
   check('事实审查：失败记日志、audit=fact', fr.some((o) => o.kind === 'exit-nonzero' && o.audit === 'fact') && fr.some((o) => o.kind === 'bad-json' && o.audit === 'fact'), JSON.stringify(fr.map((o) => o.kind + '/' + o.audit)))
 
   const hj = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'hooks', 'hooks.json'), 'utf8'))

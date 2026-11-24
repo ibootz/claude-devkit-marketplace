@@ -13,7 +13,9 @@
 // 【什么时候跑】只在设了 DEVKIT_STOP_AUDIT_SETTINGS（第三方 settings 文件，读得到）时跑；
 // DEVKIT_FACT_AUDIT=off 单独关掉本审查。没开第三方时不跑，避免给所有人每轮多一次订阅判定。
 //
-// 【失灵时怎样】超时、报错、无结构化输出：只写日志（audit=fact），退出码 0，不叫醒。
+// 【失灵时怎样】超时：也叫醒（4.26.0，用户 2026-11-24 拍板），只让主模型告诉用户「这条回复没审完」，
+// 不复查不重写——11-24 实测 32 次里 14 次跑满 300 秒，原先静默丢掉，用户以为机制没生效。
+// 报错、无结构化输出：只写日志（audit=fact），退出码 0，不叫醒。
 // 判定子进程：cwd 在临时目录、--setting-sources project、DEVKIT_STOP_AUDIT_CHILD=1（同 stop-audit.js 的防递归），
 // 只放 Read / Grep / Glob，--add-dir 加上会话的项目目录。
 
@@ -24,6 +26,11 @@ const path = require('path')
 const m = require('./stop-audit')
 
 const FACT_TIMEOUT_MS = 300000 // 用户拍板 Q2-a 给工具后多轮读文件，超时放宽到 5 分钟；hooks.json timeout 330
+// 只给测试缩短超时用；取值必须是小于 FACT_TIMEOUT_MS 的正整数，否则用 FACT_TIMEOUT_MS
+function factTimeout(env) {
+  const n = Number(env.DEVKIT_FACT_AUDIT_TIMEOUT_MS)
+  return Number.isInteger(n) && n > 0 && n < FACT_TIMEOUT_MS ? n : FACT_TIMEOUT_MS
+}
 // 单次 API 请求超时：同步判定给 85 秒（CHILD_API_TIMEOUT_MS），gemini 一次推理常超过 90 秒（2026-11-23 实测），这里放到 150 秒
 const FACT_API_TIMEOUT_MS = 150000
 const FACT_TOOLS = 'Read,Grep,Glob'
@@ -59,6 +66,12 @@ function wakeText(reason, last) {
     '先用工具逐条核实。确有错：在回复开头写更正块（原说、实为、错因）后改正；核实后原文无误：用一两句说明依据，不必重写整条回复。'
 }
 
+// 超时叫醒的消息：只为让用户知道这条没审到。主模型不复查、不重写，回一句就结束本轮。
+function timeoutText(sec, last) {
+  return `后台事实审查（第三方模型）审你开头为「${m.cut(last, 40)}」的那条回复时超时（${sec} 秒没有出结果），这条回复没有经过事实审查。\n` +
+    `不复查、不重写。只回用户一句：「上一条回复（开头为「${m.cut(last, 20)}」）的后台事实审查超时，没有审到。」然后结束本轮。`
+}
+
 async function main() {
   if (process.env.DEVKIT_STOP_AUDIT === 'off' || process.env.DEVKIT_STOP_AUDIT_CHILD === '1') return 0
   if (!factAuditEnabled(process.env)) return 0
@@ -73,20 +86,24 @@ async function main() {
   let contextLines = []
   try { if (hookInput.transcript_path) contextLines = m.buildContextLines(m.readTail(hookInput.transcript_path)) } catch { /* 只审最后一条回复 */ }
   const template = fs.readFileSync(path.join(__dirname, 'stop-fact-audit-prompt.txt'), 'utf8').trimEnd()
+  const timeout = factTimeout(process.env)
   const t0 = Date.now()
   const v = await m.judgeAsync(claudeBin, buildFactInput(hookInput, contextLines, template), {
-    settings, timeout: FACT_TIMEOUT_MS, audit: 'fact', args: factArgs(settings, hookInput.cwd),
+    settings, timeout, audit: 'fact', args: factArgs(settings, hookInput.cwd),
     env: { ...m.routeEnv(process.env, settings), API_TIMEOUT_MS: String(FACT_API_TIMEOUT_MS) },
   })
+  const ms = Date.now() - t0
   const wake = !!(v && v.ok === false && typeof v.reason === 'string' && v.reason.trim())
-  m.logFailure('run', {}, Date.now() - t0, { stage: 'fact', blocked: wake })
-  if (!wake) return 0
-  fs.writeSync(2, wakeText(v.reason, hookInput.last_assistant_message))
-  return 2
+  // 判超时的口径同 judgeAsync：claude 被 SIGTERM 后以 143 退出、signal 为空，只能按耗时判
+  const timedOut = !v && ms >= timeout - 200
+  m.logFailure('run', {}, ms, { stage: 'fact', blocked: wake, timed_out: timedOut })
+  if (wake) { fs.writeSync(2, wakeText(v.reason, hookInput.last_assistant_message)); return 2 }
+  if (timedOut) { fs.writeSync(2, timeoutText(Math.round(timeout / 1000), hookInput.last_assistant_message)); return 2 }
+  return 0
 }
 
 if (require.main === module) {
   main().then((code) => process.exit(code), () => process.exit(0))
 }
 
-module.exports = { factArgs, buildFactInput, wakeText, factAuditEnabled, FACT_TIMEOUT_MS }
+module.exports = { factArgs, buildFactInput, wakeText, timeoutText, factAuditEnabled, factTimeout, FACT_TIMEOUT_MS }
