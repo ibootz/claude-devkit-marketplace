@@ -145,8 +145,9 @@ function detectHost(env, payload) {
 //
 // 【非 Windows 保留 file:】
 // `file:` 加 `#行号` 能跳行是 iTerm2 Semantic History 的能力，2026-08-04 在 iTerm2
-// 实测可用，**同一次实测里 vscode: 走不通**。macOS 侧至今没有新数据推翻这条，
-// 把它一并切成 vscode: 会拿一个已验证可用的配置去换一个没验证过的。
+// 实测可用，**同一次实测里 vscode: 走不通**。把它一并切成 vscode: 会拿一个已验证可用的
+// 配置去换一个没验证过的。2026-11-24 在 iTerm2 3.7.7 复测：目录的 vscode: 链接能点，
+// 所以 2.4.0 只把目录切过去（规则在 inlineSpec 的 file-absolute 那支），文件仍走 file:。
 function pickInlineForm(host, platform) {
   if (host === 'codex') return 'codex-inline'
   if (host === 'vscode-webview') return 'workspace-relative'
@@ -230,12 +231,16 @@ function inlineSpec(form, cwd) {
         '例外：给人看渲染效果的 md（如 mermaid 图示文件）整条不带 `#`——带了 iTerm2 会按 ' +
         'Semantic History 交给编辑器跳行，不带才交给系统默认 md 应用（如 Typora）渲染打开。',
       '- href 用绝对路径：`file://` 后紧跟以斜杠开头的路径，合起来三条斜杠。',
+      '- **链接指向目录时换 scheme**：写成 [hooks/](vscode://file/abs/path/hooks/)——' +
+        '圆括号里写 `vscode://file/`，接绝对路径，以斜杠结尾，不带行号；方括号里写目录名加斜杠。' +
+        '点开由 VS Code 打开这个目录。目录写成 `file:` 而漏了 `#` 时，' +
+        'iTerm2 交给 Finder，只打开到上一层目录。',
     ],
     driftNote:
       '**落盘 md 换一个 scheme，同样整条裸露**：' + PERSISTED_SAMPLE +
       '——写进文件的 md 里提到本机文件时用这个形态，行号跟在 `:` 后面' +
       '（可再跟一个 `:` 与列号）。' + PERSISTED_WHY +
-      '反过来对话正文只用 `file:`——Claude Code 只对 `file:` 发 OSC 8。',
+      '对话正文里的文件仍用 `file:`——跳行靠的是 iTerm2 Semantic History，它只认 `file:` 加 `#行号`。',
     queueHref: (dir, sample, file) => `file://${toUrlPath(dir)}/${sample}/${file}#1`,
   }
 }

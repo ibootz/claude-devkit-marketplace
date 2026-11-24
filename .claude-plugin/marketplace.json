@@ -126,7 +126,7 @@
       "source": "./plugins/devkit-clickable-paths",
       "category": "Productivity",
       "description": "文件路径可点击 - 链接整条裸露不套反引号，对话正文按宿主切形态，落盘 md 恒用 vscode:；Windows 启动查超链接",
-      "version": "2.3.0"
+      "version": "2.4.0"
     },
     {
       "name": "devkit-worktree-flow",
