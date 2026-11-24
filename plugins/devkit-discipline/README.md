@@ -568,6 +568,20 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 4.28.0 后台事实审查：上游硬错误几秒内失败，失败也叫醒并带报错原文
+
+**起因**（用户 2026-11-24）：「这个对话中 经常出现后台异步审查超时了的报错，你查查啥原因」。查明：本地网关已下架 `gemini-4-neon`，直连立即返回 503 `model_not_found`；审查子进程却继承了用户 settings 里的 `CLAUDE_CODE_RETRY_WATCHDOG=1`，约 35 秒重试一次，跑满 300 秒被杀，记成超时。日志里 UTC 06–12 点（北京时间 14:00 起）的 fact 审查几乎全部超时。用户拍板 Q1-a（插件快速失败并叫醒）、Q2 改用 gpt 配置。
+
+**改了什么**：
+
+- `hooks/stop-fact-audit.js`：判定子进程的环境剥掉 `CLAUDE_CODE_RETRY_WATCHDOG`、设 `CLAUDE_CODE_MAX_RETRIES=2`。实测同一个下架模型 2 秒内以退出码 1 结束。
+- 非超时失败（退出码非 0、输出不是 JSON、没有结构化输出、起进程失败）也以退出码 2 叫醒，文本同样以 `🔍【异步审查 · <模型名>】` 开头，带报错原文（取 `claude -p` JSON 里 `is_error=true` 时的 `result`，没有就取 stderr 最后一行），要求主模型不复查、只回一句。`run` 日志行新增 `failed` 字段。
+- `hooks/stop-audit.js` 的 `judgeAsync` 增加可选的 `route.onFail(kind, p, ms)` 回调，同步审查不传，行为不变。
+
+**本机配置**（不在仓里）：`~/.claude/settings.json` 的 `DEVKIT_STOP_AUDIT_SETTINGS` 从 `settings.gemini.json` 改为 `settings.gpt.json`（opus 档映射 `gpt-6.2-sol`，直连 1.95 秒返回 200）。
+
+**回归**：`stop-audit-verify` 209/209（原两条「失败不叫醒」改为「失败也叫醒」，新增看门狗剥离、上游报错原文、`failDetail` 取值、`failed` 字段等）。
+
 ### 4.27.0 后台事实审查的叫醒文本加标识
 
 **起因**（用户 2026-11-24）：「能否在gemini异步审核的反馈文本最前面添加一个标识」。harness 把叫醒消息显示成 `Stop hook blocking error from command "Stop": <文本>`，和同步审查的打回长得很像，分不出是谁审的。
@@ -688,7 +702,7 @@
 - **后台层**：`hooks.json` 新挂一条 `"asyncRewake": true`、`"timeout": 330`。提示词在 `hooks/stop-fact-audit-prompt.txt`，只审两类：回复里关于代码、配置、文件内容、数字、版本、状态的陈述与工具结果或本机文件矛盾（最多核 5 处），以及用户本轮明确提出的问题没有回应。证据确凿才判不满足，拿不准一律判满足。子进程参数：`--allowedTools Read,Grep,Glob`、`--disallowedTools Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent`、`--add-dir <会话 cwd>`、`--json-schema`；整体超时 300 秒，单次 API 请求超时 150 秒（同步层是 85 秒；`settings.gemini.json` 没设 `API_TIMEOUT_MS`，不会盖掉它）。
 - **只在开了第三方时跑**：没设 `DEVKIT_STOP_AUDIT_SETTINGS` 或文件读不到时，后台层直接退出，不调模型。`DEVKIT_FACT_AUDIT=off` 单独关后台层；`DEVKIT_STOP_AUDIT=off` 两层一起关。
 - **不会循环**：叫醒那一轮的 Stop 带 `stop_hook_active=true`，两层都直接放行。
-- **失灵时**：超时、报错、没有结构化输出，只记日志，退出码 0，不叫醒。（4.26.0 起超时改为也叫醒，见 4.26.0。）
+- **失灵时**：超时、报错、没有结构化输出，只记日志，退出码 0，不叫醒。（4.26.0 起超时改为也叫醒；4.28.0 起报错与没有结构化输出也叫醒并带报错原文。）
 - **日志与统计**：后台层的判定行带 `audit=fact`；每次审查的 `kind=run` 行改带 `stage`（`sync` / `fact`），不再写 `thirdParty`。`scripts/stop-audit-stats.py` 把 `audit=fact` 的行单列为 `fact` 路径，整次审查按 `stage` 分组；4.19.0 的旧行照旧按「开没开第三方」另列。
 
 **为什么不是「裁掉工具数据、只留近三轮结论」**：2026-11-23 实测，sonnet 单路 6～8 秒，输入长短几乎不影响；gemini 基础延迟约 35 秒，再加 2000～16000 token 的推理输出（约 100 token/秒），常到 90～150 秒，`--effort low` 对它无效。慢在推理输出，不在输入，裁输入提不了速；裁掉工具结果后出处、链接、卡点三路会漏判。
@@ -1752,7 +1766,7 @@ plugins/devkit-discipline/
 │   ├── stop-audit-stuck-prompt.txt     #   4.19.0：卡点那路（3.14 卡点没挂）；DEVKIT_WIKI_AUDIT=off 时不跑
 │   ├── stop-audit-gloss-prompt.txt     #   4.19.0：释义那路（3.14 释义自写）；DEVKIT_WIKI_AUDIT=off 时不跑
 │   ├── stop-fact-audit.js              #   4.20.0：后台事实审查（asyncRewake），只在设了 DEVKIT_STOP_AUDIT_SETTINGS 时跑；
-│   │                                   #   第三方模型带 Read/Grep/Glob 核事实与漏答，发现问题退出码 2 叫醒主模型；4.26.0 起超时也叫醒
+│   │                                   #   第三方模型带 Read/Grep/Glob 核事实与漏答，发现问题退出码 2 叫醒主模型；4.26.0 起超时也叫醒，4.28.0 起报错也叫醒
 │   ├── stop-fact-audit-prompt.txt      #   4.20.0：后台事实审查提示词
 │   ├── term-links.js                   #   4.19.0：链接核对，不经模型——挂过链接的词处处挂、括注原文逐字
 │   ├── wiki-check.js                   #   4.17.0：词条核对，stop-audit 调用、不经模型——本轮写的 claude-wiki

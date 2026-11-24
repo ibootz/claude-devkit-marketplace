@@ -43,10 +43,11 @@ const argv = process.argv.slice(2)
 const third = argv.includes('--settings')
 if (process.env.STUB_ROUTE_LOG) fs.appendFileSync(process.env.STUB_ROUTE_LOG, kind + ':' + (third ? 'third:' + argv[argv.indexOf('--model') + 1] : 'sub:' + argv[argv.indexOf('--model') + 1]) + ':' + (process.env.ANTHROPIC_BASE_URL || '-') + '\\n')
 if (process.env.STUB_LOG) fs.appendFileSync(process.env.STUB_LOG, kind + '\\n')
-if (process.env.STUB_ARGV_LOG) fs.appendFileSync(process.env.STUB_ARGV_LOG, JSON.stringify({ kind, argv, apiTimeout: process.env.API_TIMEOUT_MS, base: process.env.ANTHROPIC_BASE_URL || null, child: process.env.DEVKIT_STOP_AUDIT_CHILD, input: inp }) + '\\n')
+if (process.env.STUB_ARGV_LOG) fs.appendFileSync(process.env.STUB_ARGV_LOG, JSON.stringify({ kind, argv, apiTimeout: process.env.API_TIMEOUT_MS, base: process.env.ANTHROPIC_BASE_URL || null, child: process.env.DEVKIT_STOP_AUDIT_CHILD, watchdog: process.env.CLAUDE_CODE_RETRY_WATCHDOG || null, maxRetries: process.env.CLAUDE_CODE_MAX_RETRIES || null, input: inp }) + '\\n')
 if (third && process.env.STUB_THIRD) { const t = process.env.STUB_THIRD; if (t === 'exit1') process.exit(1); if (t === 'garbage') { process.stdout.write('not json'); process.exit(0) } }
 const m = kind === 'source' ? process.env.STUB_MODE : (process.env['STUB_' + kind.toUpperCase()] || 'pass')
 if (m === 'exit1') process.exit(1)
+if (m === 'apierr') { process.stdout.write(JSON.stringify({ type: 'result', is_error: true, result: 'API Error: 503 No available channel for model gemini-4-neon under group default (distributor)' })); process.exit(1) }
 if (m === 'sleep') Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000)
 if (m === 'garbage') { process.stdout.write('not json'); process.exit(0) }
 const R = { fact: '事实错误：回复说「X 不存在」，但 /tmp/a.js:3 写的是「function X」', source: '回合末出处审查：\\n- 测试', link: '回合末链接审查：\\n- 链接', stuck: '回合末卡点审查：\\n- 卡点', gloss: '回合末释义审查：\\n- 释义' }
@@ -504,7 +505,7 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
 
   const al = path.join(DIR, 'fact-argv')
   const lg = path.join(DIR, 'fact-pass.log')
-  const r1 = runFact(fb, { STUB_FACT: 'pass', STUB_ARGV_LOG: al, DEVKIT_STOP_AUDIT_LOG: lg, ANTHROPIC_BASE_URL: 'https://api.anthropic.com' })
+  const r1 = runFact(fb, { STUB_FACT: 'pass', STUB_ARGV_LOG: al, DEVKIT_STOP_AUDIT_LOG: lg, ANTHROPIC_BASE_URL: 'https://api.anthropic.com', CLAUDE_CODE_RETRY_WATCHDOG: '1' })
   check('事实审查：判满足 → 退出码 0、不写 stderr', r1.status === 0 && r1.stderr === '' && r1.called, `${r1.status} ${r1.stderr}`)
   const calls = fs.readFileSync(al, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
   const a = calls[0].argv
@@ -515,6 +516,7 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   check('事实审查：禁 Bash、Write、Edit、WebFetch、Agent', ['Bash', 'Write', 'Edit', 'WebFetch', 'Agent'].every((t) => after('--disallowedTools').split(',').includes(t)), after('--disallowedTools'))
   check('事实审查：--add-dir 加会话 cwd', after('--add-dir') === '/proj/demo', JSON.stringify(a))
   check('事实审查：子进程剥掉父进程端点、带防递归标记、单次请求超时 150 秒', calls[0].base === null && calls[0].child === '1' && calls[0].apiTimeout === '150000', JSON.stringify(calls[0]))
+  check('事实审查：子进程剥掉重试看门狗、重试限 2 次', calls[0].watchdog === null && calls[0].maxRetries === '2', JSON.stringify({ w: calls[0].watchdog, r: calls[0].maxRetries }))
   check('事实审查：输入里 $CWD 已替换、带被审回复', calls[0].input.includes('项目目录：/proj/demo') && !calls[0].input.includes('$CWD') && calls[0].input.includes('[assistant]: 结论：X 不存在'), calls[0].input.slice(0, 300))
   check('事实审查：输入不带同步路的「只输出一行 JSON」', !calls[0].input.includes('只输出一行 JSON'))
   const rows = fs.readFileSync(lg, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
@@ -548,13 +550,25 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   }
   const lg3 = path.join(DIR, 'fact-fail.log')
   for (const [name, env] of [
-    ['判定进程退出码非 0', { STUB_FACT: 'exit1' }],
-    ['判定输出不是 JSON', { STUB_FACT: 'garbage' }],
     ['claude 路径不存在', { STUB_FACT: 'block', DEVKIT_STOP_AUDIT_CLAUDE: path.join(DIR, 'nope') }],
     ['stdin 不是 JSON', { STUB_FACT: 'block' }, 'oops'],
   ]) {
     const r = runFact(name === 'stdin 不是 JSON' ? 'oops' : fb, { ...env, DEVKIT_STOP_AUDIT_LOG: lg3 })
-    check(`事实审查 fail-open：${name} → 退出码 0、不叫醒`, r.status === 0 && r.stderr === '', `${r.status} ${r.stderr}`)
+    check(`事实审查 没跑判定：${name} → 退出码 0、不叫醒`, r.status === 0 && r.stderr === '', `${r.status} ${r.stderr}`)
+  }
+  for (const [name, env, want] of [
+    ['判定进程退出码非 0', { STUB_FACT: 'exit1' }, 'exit-nonzero'],
+    ['判定输出不是 JSON', { STUB_FACT: 'garbage' }, 'bad-json'],
+  ]) {
+    const r = runFact(fb, { ...env, DEVKIT_STOP_AUDIT_LOG: lg3 })
+    check(`事实审查 失败也叫醒：${name} → 退出码 2、标识开头、只回一句、带失败类别`, r.status === 2 && r.stderr.startsWith('🔍【异步审查 · 第三方模型】') && r.stderr.includes('时失败') && r.stderr.includes('不复查、不重写') && r.stderr.includes(want), `${r.status} ${r.stderr}`)
+  }
+  const ra = runFact(fb, { STUB_FACT: 'apierr', DEVKIT_STOP_AUDIT_LOG: lg3 })
+  check('事实审查 失败也叫醒：上游 API 报错原文进叫醒文本（取 JSON 的 result）', ra.status === 2 && ra.stderr.includes('API Error: 503 No available channel for model gemini-4-neon') && ra.stderr.includes('「结论：X 不存在'), `${ra.status} ${ra.stderr}`)
+  {
+    const fa = require(path.join(__dirname, '..', 'hooks', 'stop-fact-audit.js'))
+    check('failDetail：无 JSON 时取 stderr 最后一行', fa.failDetail('exit-nonzero', { stdout: '', stderr: 'a\nboom\n' }) === 'boom')
+    check('failDetail：什么都没有时退回失败类别', fa.failDetail('bad-json', { stdout: 'x', stderr: '' }) === 'bad-json')
   }
   const lg4 = path.join(DIR, 'fact-timeout.log')
   const r4 = runFact(fb, { STUB_FACT: 'sleep', DEVKIT_FACT_AUDIT_TIMEOUT_MS: '1000', DEVKIT_STOP_AUDIT_LOG: lg4 })
@@ -569,6 +583,7 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   }
   const fr = fs.readFileSync(lg3, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
   check('事实审查：非超时失败的 run 行 timed_out=false', fr.filter((o) => o.kind === 'run').every((o) => o.timed_out === false), JSON.stringify(fr.filter((o) => o.kind === 'run')))
+  check('事实审查：非超时失败的 run 行 failed=true', fr.filter((o) => o.kind === 'run').every((o) => o.failed === true) && fr.filter((o) => o.kind === 'run').length === 3, JSON.stringify(fr.filter((o) => o.kind === 'run')))
   check('事实审查：失败记日志、audit=fact', fr.some((o) => o.kind === 'exit-nonzero' && o.audit === 'fact') && fr.some((o) => o.kind === 'bad-json' && o.audit === 'fact'), JSON.stringify(fr.map((o) => o.kind + '/' + o.audit)))
 
   const hj = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'hooks', 'hooks.json'), 'utf8'))

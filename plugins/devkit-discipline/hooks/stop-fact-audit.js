@@ -15,7 +15,9 @@
 //
 // 【失灵时怎样】超时：也叫醒（4.26.0，用户 2026-11-24 拍板），只让主模型告诉用户「这条回复没审完」，
 // 不复查不重写——11-24 实测 32 次里 14 次跑满 300 秒，原先静默丢掉，用户以为机制没生效。
-// 报错、无结构化输出：只写日志（audit=fact），退出码 0，不叫醒。
+// 报错、无结构化输出：也叫醒（4.28.0，用户 2026-11-24 拍板 Q1-a），叫醒文本带上游报错原文，同样只回一句。
+// 11-24 下午的超时根因是网关下架了 gemini-4-neon（立即 503 model_not_found），子进程却继承了
+// CLAUDE_CODE_RETRY_WATCHDOG=1，约 35 秒重试一次、跑满 300 秒才被杀。现在剥掉它、重试限 2 次，硬错误几秒内失败。
 // 判定子进程：cwd 在临时目录、--setting-sources project、DEVKIT_STOP_AUDIT_CHILD=1（同 stop-audit.js 的防递归），
 // 只放 Read / Grep / Glob，--add-dir 加上会话的项目目录。
 
@@ -33,6 +35,8 @@ function factTimeout(env) {
 }
 // 单次 API 请求超时：同步判定给 85 秒（CHILD_API_TIMEOUT_MS），gemini 一次推理常超过 90 秒（2026-11-23 实测），这里放到 150 秒
 const FACT_API_TIMEOUT_MS = 150000
+// 子进程最多重试 2 次：瞬时 529/5xx 仍有机会恢复，上游配置错（模型下架、鉴权失败）几秒内失败。
+const FACT_MAX_RETRIES = '2'
 const FACT_TOOLS = 'Read,Grep,Glob'
 const FACT_DISALLOWED = 'Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent'
 const SYS_FACT = 'You are a background fact-checker for a Claude Code session. Use Read, Grep and Glob to check the last assistant reply against local files and the transcript. You never modify anything.'
@@ -52,6 +56,13 @@ function factArgs(settings, cwd) {
   if (cwd) a.push('--add-dir', cwd)
   a.push('--no-session-persistence', '--output-format', 'json', '--json-schema', m.SCHEMA)
   return a
+}
+
+// 判定子进程的环境：在 routeEnv 之上放宽单次请求超时、剥掉重试看门狗、限重试次数
+function factEnv(parentEnv, settings) {
+  const env = { ...m.routeEnv(parentEnv, settings), API_TIMEOUT_MS: String(FACT_API_TIMEOUT_MS), CLAUDE_CODE_MAX_RETRIES: FACT_MAX_RETRIES }
+  delete env.CLAUDE_CODE_RETRY_WATCHDOG
+  return env
 }
 
 function buildFactInput(hookInput, contextLines, template) {
@@ -84,6 +95,23 @@ function timeoutText(sec, last) {
     `不复查、不重写。只回用户一句：「上一条回复（开头为「${m.cut(last, 20)}」）的后台事实审查超时，没有审到。」然后结束本轮。`
 }
 
+// 失败原因：claude -p 的 JSON 里 is_error=true 时 result 是上游报错原文（如「API Error: 503 No available channel
+// for model …」，2026-11-24 实测）；没有就取 stderr 最后一行，再没有就用失败类别。
+function failDetail(kind, p) {
+  try {
+    const j = JSON.parse(p.stdout)
+    if (j && j.is_error && typeof j.result === 'string' && j.result.trim()) return j.result.trim()
+  } catch { /* stdout 不是 JSON */ }
+  const line = String(p.stderr || (p.error && (p.error.code || p.error.message)) || '').trim().split('\n').filter(Boolean).pop()
+  return line || kind
+}
+
+// 非超时失败的叫醒消息：带报错原文，让用户知道是哪里坏了（模型下架、鉴权、网关不通），主模型同样只回一句。
+function failText(detail, last) {
+  return `后台事实审查（第三方模型）审你开头为「${m.cut(last, 40)}」的那条回复时失败，报错：${m.cut(detail, 300)}\n这条回复没有经过事实审查。\n` +
+    `不复查、不重写。只回用户一句：「上一条回复（开头为「${m.cut(last, 20)}」）的后台事实审查失败，没有审到；报错：${m.cut(detail, 120)}」然后结束本轮。`
+}
+
 async function main() {
   if (process.env.DEVKIT_STOP_AUDIT === 'off' || process.env.DEVKIT_STOP_AUDIT_CHILD === '1') return 0
   if (!factAuditEnabled(process.env)) return 0
@@ -100,17 +128,21 @@ async function main() {
   const template = fs.readFileSync(path.join(__dirname, 'stop-fact-audit-prompt.txt'), 'utf8').trimEnd()
   const timeout = factTimeout(process.env)
   const t0 = Date.now()
+  let failure = null
   const v = await m.judgeAsync(claudeBin, buildFactInput(hookInput, contextLines, template), {
-    settings, timeout, audit: 'fact', args: factArgs(settings, hookInput.cwd),
-    env: { ...m.routeEnv(process.env, settings), API_TIMEOUT_MS: String(FACT_API_TIMEOUT_MS) },
+    settings, timeout, audit: 'fact', args: factArgs(settings, hookInput.cwd), env: factEnv(process.env, settings),
+    onFail: (kind, p) => { failure = { kind, p } },
   })
   const ms = Date.now() - t0
   const wake = !!(v && v.ok === false && typeof v.reason === 'string' && v.reason.trim())
   // 判超时的口径同 judgeAsync：claude 被 SIGTERM 后以 143 退出、signal 为空，只能按耗时判
-  const timedOut = !v && ms >= timeout - 200
-  m.logFailure('run', {}, ms, { stage: 'fact', blocked: wake, timed_out: timedOut })
-  if (wake) { fs.writeSync(2, tag(settings) + wakeText(v.reason, hookInput.last_assistant_message)); return 2 }
-  if (timedOut) { fs.writeSync(2, tag(settings) + timeoutText(Math.round(timeout / 1000), hookInput.last_assistant_message)); return 2 }
+  const timedOut = !v && (failure ? failure.kind === 'timeout' : ms >= timeout - 200)
+  const failed = !v && !timedOut && !!failure
+  m.logFailure('run', {}, ms, { stage: 'fact', blocked: wake, timed_out: timedOut, failed })
+  const last = hookInput.last_assistant_message
+  if (wake) { fs.writeSync(2, tag(settings) + wakeText(v.reason, last)); return 2 }
+  if (timedOut) { fs.writeSync(2, tag(settings) + timeoutText(Math.round(timeout / 1000), last)); return 2 }
+  if (failed) { fs.writeSync(2, tag(settings) + failText(failDetail(failure.kind, failure.p), last)); return 2 }
   return 0
 }
 
@@ -118,4 +150,4 @@ if (require.main === module) {
   main().then((code) => process.exit(code), () => process.exit(0))
 }
 
-module.exports = { factArgs, buildFactInput, wakeText, timeoutText, modelLabel, tag, factAuditEnabled, factTimeout, FACT_TIMEOUT_MS }
+module.exports = { factArgs, factEnv, buildFactInput, wakeText, timeoutText, failText, failDetail, modelLabel, tag, factAuditEnabled, factTimeout, FACT_TIMEOUT_MS }
