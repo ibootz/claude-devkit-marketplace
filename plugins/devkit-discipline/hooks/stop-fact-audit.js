@@ -60,6 +60,18 @@ function buildFactInput(hookInput, contextLines, template) {
   return `<transcript>\n${pre}\n\n[assistant]: ${hookInput.last_assistant_message}\n</transcript>\n\n${cond}`
 }
 
+// 叫醒消息最前面的标识（4.27.0，用户 2026-11-24 要求）：harness 显示成「Stop hook blocking error from command "Stop": <stderr>」，
+// 与同步审查的打回长得很像，加标识让人一眼认出这是第三方异步审查、是哪个模型审的。
+// 模型名取第三方 settings 里 opus 档映射的那个（本脚本用 --model opus 调），读不到写「第三方模型」。
+function modelLabel(settings) {
+  try {
+    const v = JSON.parse(fs.readFileSync(settings, 'utf8')).env.ANTHROPIC_DEFAULT_OPUS_MODEL
+    if (typeof v === 'string' && v.trim()) return v.trim()
+  } catch { /* 读不到就用通用名 */ }
+  return '第三方模型'
+}
+function tag(settings) { return `🔍【异步审查 · ${modelLabel(settings)}】` }
+
 // 叫醒主模型的消息：点明审的是哪条回复（审查耗时长，叫醒时主模型可能已经往下做了），要求先核实再改。
 function wakeText(reason, last) {
   return `后台事实审查（第三方模型，可读本机文件）审的是你开头为「${m.cut(last, 40)}」的那条回复，发现：\n${reason.trim()}\n` +
@@ -97,8 +109,8 @@ async function main() {
   // 判超时的口径同 judgeAsync：claude 被 SIGTERM 后以 143 退出、signal 为空，只能按耗时判
   const timedOut = !v && ms >= timeout - 200
   m.logFailure('run', {}, ms, { stage: 'fact', blocked: wake, timed_out: timedOut })
-  if (wake) { fs.writeSync(2, wakeText(v.reason, hookInput.last_assistant_message)); return 2 }
-  if (timedOut) { fs.writeSync(2, timeoutText(Math.round(timeout / 1000), hookInput.last_assistant_message)); return 2 }
+  if (wake) { fs.writeSync(2, tag(settings) + wakeText(v.reason, hookInput.last_assistant_message)); return 2 }
+  if (timedOut) { fs.writeSync(2, tag(settings) + timeoutText(Math.round(timeout / 1000), hookInput.last_assistant_message)); return 2 }
   return 0
 }
 
@@ -106,4 +118,4 @@ if (require.main === module) {
   main().then((code) => process.exit(code), () => process.exit(0))
 }
 
-module.exports = { factArgs, buildFactInput, wakeText, timeoutText, factAuditEnabled, factTimeout, FACT_TIMEOUT_MS }
+module.exports = { factArgs, buildFactInput, wakeText, timeoutText, modelLabel, tag, factAuditEnabled, factTimeout, FACT_TIMEOUT_MS }
