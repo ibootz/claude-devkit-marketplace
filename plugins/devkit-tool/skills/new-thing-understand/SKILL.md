@@ -137,7 +137,7 @@ uv run '<本 skill 目录>/../tech-doc/scripts/html_pack.py' assemble \
 - 默认 svg-diagram：调 `devkit-svg-diagram:svg-diagram`，产出 `figures/<篇号>-<主题>.png` 与同名 `.svg`、JSON 描述；用户点名 Excalidraw 才调 `devkit-excalidraw-diagram:excalidraw-diagram`，产出 `.excalidraw` 与同名 `.png`。md 文章里用 `![图注](figures/<篇号>-<主题>.png)` 引 PNG；HTML 片段里写 `<img src="figures/<篇号>-<主题>.png" alt="图注">`，合成时 PNG 连同源稿（同名 `.svg` 里的描述或 `.excalidraw`）一起内嵌。状态图、时序图、流程图同样用 svg-diagram，整套产物里没有 mermaid 代码块。
 - 先表后图：图上每个节点与每条边都能在本篇的表格或正文里找到出处。
 - 渲染后核对 PNG 的修改时间晚于本次渲染开始；渲染命令的输出原样看完，不接 `tail`、`head`。实测渲染会因页面加载超时静默失败，PNG 停在旧版，截断输出会把报错一起截掉。
-- `devkit-svg-diagram` 未安装时先退到 `devkit-excalidraw-diagram`；两者都没装或渲染跑不通时，原位放一个文本箭头图代码块，标「待补图」并写原因。
+- `devkit-svg-diagram` 用不了时按 `show-me` 的「svg-diagram 用不了时」三步走：没装先问用户要不要代装；只是转 PNG 跑不通就用 SVG；都不行才在原位放一个文本箭头图代码块，标「待补图」并写原因。不退到 Excalidraw：它的坐标靠 AI 手算，没有穿线、重叠检查。
 
 ## 参考文件
 

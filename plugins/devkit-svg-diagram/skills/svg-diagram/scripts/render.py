@@ -47,19 +47,49 @@ def text_w(s: str, size: float, latin: float) -> float:
 NO_LINE_START = set("，。、；：？！）》」』】,.;:?!)]}%")
 
 
+def is_cjk(ch: str) -> bool:
+    o = ord(ch)
+    return o >= 0x2E80 or 0xFF00 <= o <= 0xFFEF
+
+
+def is_orphan(line: str) -> bool:
+    """A wrapped last line holding one CJK character (plus closing punctuation), e.g. 「象」 or 「象。」."""
+    core = [c for c in line if c not in NO_LINE_START]
+    return len(core) == 1 and is_cjk(core[0]) and all(is_cjk(c) or c in NO_LINE_START for c in line)
+
+
+def _fix_orphan(lines: list[str], size: float, latin: float, maxw: float) -> None:
+    """Pull the previous line's last CJK character down so the last line holds at least two."""
+    if len(lines) < 2 or not is_orphan(lines[-1]):
+        return
+    prev = lines[-2]
+    k = 1
+    while k < len(prev) and prev[-k] in NO_LINE_START:
+        k += 1
+    moved = prev[-k:]
+    if len(prev) - k < 2 or not is_cjk(moved[0]) or not all(is_cjk(c) or c in NO_LINE_START for c in moved):
+        return
+    if text_w(moved + lines[-1], size, latin) > maxw:
+        return
+    lines[-2], lines[-1] = prev[:-k].rstrip(), moved + lines[-1]
+
+
 def wrap(s: str, size: float, latin: float, maxw: float) -> list[str]:
-    """Greedy wrap: break at spaces/punctuation for Latin, anywhere for CJK."""
+    """Greedy wrap: break at spaces/punctuation for Latin, anywhere for CJK; no single-CJK-character last line."""
     out: list[str] = []
     for para in s.split("\n"):
+        lines: list[str] = []
         line = ""
         tokens = re.findall(r"[A-Za-z0-9_\-./:@#()\[\]{}<>=+*&%$!?'\"`~|^]+|\s+|.", para)
         for t in tokens:
             if text_w(line + t, size, latin) <= maxw or not line or t in NO_LINE_START:
                 line += t
             else:
-                out.append(line.rstrip())
+                lines.append(line.rstrip())
                 line = t.lstrip()
-        out.append(line.rstrip())
+        lines.append(line.rstrip())
+        _fix_orphan(lines, size, latin, maxw)
+        out.extend(lines)
     return out
 
 
@@ -266,23 +296,69 @@ def top_offset(spec, th):
 
 
 # ---------------------------------------------------------------- edge routing
-def route(a: Box, b: Box, mode: str) -> list[tuple[float, float]]:
+DETOUR_GAP = 20  # px between a detouring edge and the cards it goes around; draw_edges passes half the
+# theme's zone_pad instead, so a detour runs between card and zone border rather than on the border
+
+
+def _route_candidates(a: Box, b: Box, mode: str, blockers: list, gap: float = DETOUR_GAP) -> list[list[tuple[float, float]]]:
+    """Paths from a to b, the plain default first; the rest are tried only when the default crosses a card."""
     ov_x = min(a.r, b.r) - max(a.x, b.x)
     ov_y = min(a.b, b.b) - max(a.y, b.y)
+    right, down = b.cx > a.cx, b.cy > a.cy
+    sx, ex = (a.r, b.x) if right else (a.x, b.r)  # facing sides
+    sy, ey = (a.b, b.y) if down else (a.y, b.b)  # facing top / bottom
     if ov_y > 8 and (b.x >= a.r or a.x >= b.r):  # side by side
         y = max(a.y, b.y) + ov_y / 2
-        return [(a.r, y), (b.x, y)] if b.x >= a.r else [(a.x, y), (b.r, y)]
+        out = [[(sx, y), (ex, y)]]
+        if blockers:  # go over or under the cards in between
+            top = min(o.y for o in blockers) - gap
+            bot = max(o.b for o in blockers) + gap
+            out += [[(a.cx, a.y), (a.cx, top), (b.cx, top), (b.cx, b.y)],
+                    [(a.cx, a.b), (a.cx, bot), (b.cx, bot), (b.cx, b.b)]]
+        return out
     if ov_x > 8:  # stacked
         x = max(a.x, b.x) + ov_x / 2
-        return [(x, a.b), (x, b.y)] if b.y >= a.b else [(x, a.y), (x, b.b)]
-    if mode == "grid" and abs(a.cy - b.cy) < abs(a.cx - b.cx):  # horizontal-first elbow
-        sx = a.r if b.cx > a.cx else a.x
-        ey = b.y if b.cy > a.cy else b.b
-        return [(sx, a.cy), (b.cx, a.cy), (b.cx, ey)]
-    down = b.cy > a.cy
-    sy, ey = (a.b, b.y) if down else (a.y, b.b)
-    my = (sy + ey) / 2
-    return [(a.cx, sy), (a.cx, my), (b.cx, my), (b.cx, ey)]
+        out = [[(x, sy), (x, ey)]]
+        if blockers:  # go round the right or left of the cards in between
+            rx = max([a.r, b.r] + [o.r for o in blockers]) + gap
+            lx = min([a.x, b.x] + [o.x for o in blockers]) - gap
+            out += [[(a.r, a.cy), (rx, a.cy), (rx, b.cy), (b.r, b.cy)],
+                    [(a.x, a.cy), (lx, a.cy), (lx, b.cy), (b.x, b.cy)]]
+        return out
+    hv = [(sx, a.cy), (b.cx, a.cy), (b.cx, ey)]  # leave sideways, enter top / bottom
+    vh = [(a.cx, sy), (a.cx, b.cy), (ex, b.cy)]  # leave top / bottom, enter sideways
+    zv = lambda my: [(a.cx, sy), (a.cx, my), (b.cx, my), (b.cx, ey)]
+    zh = lambda mx: [(sx, a.cy), (mx, a.cy), (mx, b.cy), (ex, b.cy)]
+    near = lambda s, e: (s + (e - s) * 0.2, e - (e - s) * 0.2)
+    out = [hv] if mode == "grid" and abs(a.cy - b.cy) < abs(a.cx - b.cx) else [zv((sy + ey) / 2)]
+    out += [hv, vh, zv((sy + ey) / 2), *map(zv, near(sy, ey))]
+    if b.x >= a.r or a.x >= b.r:  # a horizontal gap exists between the two cards
+        out += [zh((sx + ex) / 2), *map(zh, near(sx, ex))]
+    return out
+
+
+def route(a: Box, b: Box, mode: str, obstacles=None, soft=(), gap: float = DETOUR_GAP) -> list[tuple[float, float]]:
+    """Orthogonal path from a to b. With `obstacles` (all boxes), the first candidate path that crosses
+    no third card wins; `soft` boxes (zone titles, the diagram header) are avoided too when some path allows,
+    never at the price of crossing a card. When every candidate crosses a card, the default comes back and
+    the caller lints it. Paths leaving the canvas (negative x / y) are never picked."""
+    cards = [o for o in (obstacles or []) if o is not a and o is not b]
+    hits = lambda pts, boxes: [o for o in boxes if any(seg_hits_box(p, q, o) for p, q in zip(pts, pts[1:]))]
+    first = _route_candidates(a, b, mode, [])[0]
+    blockers = hits(first, cards + list(soft))
+    if not blockers:
+        return first
+    cands = [pts for pts in _route_candidates(a, b, mode, [o for o in blockers if o in cards] or blockers, gap)[1:]
+             if min(min(p) for p in pts) >= 4]
+    for pts in cands:
+        if not hits(pts, cards + list(soft)):
+            return pts
+    if not hits(first, cards):
+        return first
+    for pts in cands:
+        if not hits(pts, cards):
+            return pts
+    return first
 
 
 def seg_hits_box(p, q, box: Box, pad=2) -> bool:
@@ -563,6 +639,11 @@ def draw_node(n, b: Box, th, findings):
     for line, size in [(l, ts) for l in tl] + [(l, ds) for l in dl]:
         if text_w(line, size, F["latin_w"]) > maxw * 1.05:
             findings.append(f"node {n['id']!r}: {line!r} is wider than its card and has no break point; shorten it, add \\n, or raise col_width")
+    for lines, src in ((tl, n.get("title", "")), (dl, n.get("desc") or "")):
+        authored = {p.strip() for p in str(src).split("\n")}  # a short line the author put after \n is intended
+        for prev, line in zip(lines, lines[1:]):
+            if is_orphan(line) and line not in authored:
+                findings.append(f"node {n['id']!r}: line {line!r} after {prev!r} is a single character on its own line; reword, add \\n earlier, or raise col_width")
     y = b.cy - block / 2
     tcol = st.get("text", th["text"]["title"]) if not bare else th["text"]["title"]
     dcol = st.get("desc", th["text"]["desc"]) if not bare else th["text"]["desc"]
@@ -616,16 +697,44 @@ def draw_zone(zb: Box, th):
     return "".join(parts)
 
 
-def draw_edges(spec, th, boxes, mode, findings):
-    """Returns (edge paths, label svg, label holes). A `gap` label sits in a hole cut out of the edges."""
+def zone_title_boxes(zboxes, th) -> list:
+    """Boxes around zone titles; edges route around them so a line never strikes through a title."""
+    L, Z, out = th["layout"], th["zone"], []
+    ts = L["zone_title_size"]
+    for zb in zboxes:
+        if not zb.zone.get("title"):
+            continue
+        ty = zb.y + (Z["rule"] + L["zone_pad"] * 0.5 if Z.get("style") == "rule" else L["zone_pad"]) + ts * 0.7
+        out.append(Box(f"title:{zb.id}", zb.x + L["zone_pad"] - 4, ty - ts * 0.65, text_w(zb.zone["title"], ts, th["font"]["latin_w"]) + 8, ts * 1.3))
+    return out
+
+
+def header_box(spec, th) -> list:
+    """The diagram title and subtitle band, for edges to route around."""
+    if not (spec.get("title") or spec.get("subtitle")):
+        return []
+    return [Box("header", 0, 0, 1e5, top_offset(spec, th) - th["layout"].get("title_gap", 0) / 2)]
+
+
+def draw_edges(spec, th, boxes, mode, findings, avoid=(), extent=None):
+    """Returns (edge paths, label svg, label holes). A `gap` label sits in a hole cut out of the edges.
+    `avoid`: extra boxes (zone titles) routing steers around; `extent`: dict that receives the right / bottom
+    reached by edges and labels, so a detour outside the cards still fits on the canvas."""
     E, Lb = th["edge"], th["edge_label"]
-    body, labels, holes, label_boxes = [], [], [], []
+    body, labels, holes, label_boxes, tips = [], [], [], [], {}
+    ext = extent if extent is not None else {}
     for i, e in enumerate(spec.get("edges") or []):
         a, b = boxes.get(e.get("from")), boxes.get(e.get("to"))
         if not a or not b:
             findings.append(f"edge {i} ({e.get('from')}->{e.get('to')}): unknown node id")
             continue
-        pts = route(a, b, mode)
+        pts = route(a, b, mode, list(boxes.values()), avoid, th["layout"]["zone_pad"] / 2)
+        ext["right"] = max([ext.get("right", 0)] + [p[0] for p in pts])
+        ext["bottom"] = max([ext.get("bottom", 0)] + [p[1] for p in pts])
+        tip = (round(pts[-1][0] / 6), round(pts[-1][1] / 6))  # arrowheads within ~6px draw as one blob
+        if tip in tips:
+            findings.append(f"edges {tips[tip]} and {e['from']}->{e['to']} end at the same point, their arrowheads stack; move one source to another row/col, or merge them")
+        tips.setdefault(tip, f"{e['from']}->{e['to']}")
         for p, q in zip(pts, pts[1:]):
             for other in boxes.values():
                 if other is a or other is b:
@@ -638,14 +747,27 @@ def draw_edges(spec, th, boxes, mode, findings):
         width = E["width"] * (1.5 if e.get("accent") and E.get("accent_wider") else 1)
         body.append(draw_arrow(pts, th, col, width, f"edge:{e['from']}>{e['to']}:{i}", dashed=e.get("dashed"), both=e.get("both")))
         if e.get("label"):
-            segs = list(zip(pts, pts[1:]))
-            p, q = max(segs, key=lambda s: abs(s[0][0] - s[1][0]) + abs(s[0][1] - s[1][1]))
-            mx, my = (p[0] + q[0]) / 2, (p[1] + q[1]) / 2
+            segs = sorted(zip(pts, pts[1:]), key=lambda s: -(abs(s[0][0] - s[1][0]) + abs(s[0][1] - s[1][1])))
             ls = th["layout"]["label_size"]
             tw = text_w(e["label"], ls, th["font"]["latin_w"])
             chip = Lb.get("style") == "chip"
             w, h = tw + (16 if chip else 12), ls * (1.7 if chip else 1.5)
-            lb = Box("", mx - w / 2, my - h / 2, w, h)
+            # on the line at a segment midpoint, longest segment first; then beside the line (a detour runs
+            # close to the cards it goes round, leaving no room on it); else on the longest segment
+            spots = [((p[0] + q[0]) / 2, (p[1] + q[1]) / 2) for p, q in segs]
+            for p, q in segs:
+                mx, my = (p[0] + q[0]) / 2, (p[1] + q[1]) / 2
+                if abs(p[0] - q[0]) < 1:  # vertical: left or right of it
+                    spots += [(mx + w / 2 + 6, my), (mx - w / 2 - 6, my)]
+                else:  # horizontal: above or below it
+                    spots += [(mx, my - h / 2 - 4), (mx, my + h / 2 + 4)]
+            clear = lambda bx: bx.x >= 0 and not any(seg_hits_box((bx.x, bx.y), (bx.r, bx.b), o, pad=0) for o in list(boxes.values()) + label_boxes)
+            for mx, my in spots + spots[:1]:
+                lb = Box("", mx - w / 2, my - h / 2, w, h)
+                if clear(lb):
+                    break
+            ext["right"] = max(ext.get("right", 0), lb.r)
+            ext["bottom"] = max(ext.get("bottom", 0), lb.b)
             for other in boxes.values():
                 if seg_hits_box((lb.x, lb.y), (lb.r, lb.b), other, pad=0):
                     findings.append(f"label {e['label']!r} overlaps node {other.id!r}; shorten the label or leave an empty row/col between the nodes")
@@ -788,7 +910,9 @@ def render(spec: dict, theme_name: str | None = None) -> tuple[str, list[str]]:
         if mode == "sequence":
             edges, labels, holes = draw_sequence(spec, th, boxes, bottom, findings)
         else:
-            edges, labels, holes = draw_edges(spec, th, boxes, mode, findings)
+            ext = {}
+            edges, labels, holes = draw_edges(spec, th, boxes, mode, findings, header_box(spec, th) + zone_title_boxes(zboxes, th), ext)
+            right, bottom = max(right, ext.get("right", 0)), max(bottom, ext.get("bottom", 0))
     pad = L["canvas_pad"]
     y = bottom + L["section_gap"]
     code_svg, code_bottom, code_right = draw_code(spec, th, pad, y)

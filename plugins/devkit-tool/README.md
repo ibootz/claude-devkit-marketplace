@@ -14,6 +14,12 @@
 
 ---
 
+## 6.44.0：svg-diagram 用不了时先代装、再出 SVG、最后才退 Mermaid，不再退 Excalidraw
+
+`show-me` 的「svg-diagram 用不了时」、`tech-doc` 的 `references/figures.md`、`new-thing-understand` 的配图一节改为三步：调用返回 `Unknown skill` 时先问用户要不要代装（同意则 AI 执行 `claude plugin install`、用户 `/reload-plugins` 后照常出图）；只有转 PNG 跑不通（缺 `uv` / Chromium）时用 SVG 交付（`render.py` 只用标准库）；都不行才改写 Mermaid（`new-thing-understand` 原位放文本箭头图标「待补图」）。不再退到 `devkit-excalidraw-diagram`。原因：Excalidraw 的坐标全靠 AI 手算，没有穿线、重叠、越框检查，2026-11-24 一个会话就因 svg-diagram 未装退到 Excalidraw，出了箭头起点错、分支线折回、两个箭头叠在一起的图。Excalidraw 仍在用户点名时使用。下一节 6.43.0 里的「降级链」以本节为准。
+
+---
+
 ## 6.43.0：默认出图从 Excalidraw 改为 svg-diagram
 
 `show-me`、`tech-doc`、`new-thing-understand`、`new-thing-leverage` 里「默认 / 一律 Excalidraw」的地方，改为默认调 `devkit-svg-diagram:svg-diagram`（JSON 描述加脚本渲染成 SVG 与 PNG，默认 mac 主题）。Excalidraw 只在用户点名要 Excalidraw、`.excalidraw` 文件，或要能拖拽编辑的白板图时才用。降级链：未装 svg-diagram 退到 devkit-excalidraw-diagram，两者都没装或渲染跑不通再退 mermaid。`tech-doc` 的 `html_pack.py` 同步支持 svg-diagram：`pack` 时图片本身或同名 `.svg` 里内嵌的描述（没有时取同名 `.json`）嵌进 `<script class="diagram-src">`，`<img>` 记 `data-diagram`；`extract` 还原成 `<名>.json`；同名 `.excalidraw` 仍优先按 Excalidraw 源稿处理。`references/html.md`、`figures.md`（配色表加 svg-diagram `role` 一列）、`SKILL.md` 第零步表格同步。

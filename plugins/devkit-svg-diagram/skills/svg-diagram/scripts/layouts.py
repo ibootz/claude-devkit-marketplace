@@ -16,7 +16,7 @@ import math
 import re
 from datetime import date
 
-from render import (Box, ROUND_SHAPES, column_width, corner_radius, draw_arrow, draw_edges, draw_node, draw_shape,
+from render import (Box, ROUND_SHAPES, header_box, zone_title_boxes, column_width, corner_radius, draw_arrow, draw_edges, draw_node, draw_shape,
                     ellipse_segs, esc, line_seg, node_metrics, rect_segs, role_style, route, seg_hits_box, text_w,
                     top_offset, wrap, _dist, _lerp, _towards)
 
@@ -278,8 +278,10 @@ def layout_lanes(spec, th, findings):
             h = metrics[s["id"]]
             boxes[s["id"]] = Box(s["id"], x0 + gutter + s.get("col", 0) * (colw + gx), y + (lh - h) / 2, colw, h, node=s)
         y += lh + L["zone_gap"]
-    edges, labels, holes = draw_edges(spec, th, boxes, "grid", findings)
-    return dict(boxes=boxes, zboxes=zboxes, right=x0 + zone_w, bottom=y - L["zone_gap"], edges=edges, labels=labels, holes=holes)
+    ext = {}
+    edges, labels, holes = draw_edges(spec, th, boxes, "grid", findings, header_box(spec, th) + zone_title_boxes(zboxes, th), ext)
+    return dict(boxes=boxes, zboxes=zboxes, right=max(x0 + zone_w, ext.get("right", 0)), bottom=max(y - L["zone_gap"], ext.get("bottom", 0)),
+                edges=edges, labels=labels, holes=holes)
 
 
 # ---------------------------------------------------------------- tasks (gantt)
@@ -534,12 +536,14 @@ def layout_entities(spec, th, findings):
             fy += fh
     links = Links(th, boxes, findings)
     ls = L["label_size"]
+    rel_pts = []
     for i, r in enumerate(spec.get("relations") or []):
         a, b = boxes.get(r.get("from")), boxes.get(r.get("to"))
         if not a or not b:
             findings.append(f"relation {i} ({r.get('from')}->{r.get('to')}): unknown entity id")
             continue
-        pts = route(a, b, "grid")
+        pts = route(a, b, "grid", list(boxes.values()), header_box(spec, th), th["layout"]["zone_pad"] / 2)
+        rel_pts += pts
         links.add(pts, f"relation {r['from']}->{r['to']}", a, b, label=r.get("label"), dashed=r.get("dashed"), head=bool(r.get("arrow")))
         for card, p, q in ((r.get("from_card"), pts[0], pts[1]), (r.get("to_card"), pts[-1], pts[-2])):
             if not card:
@@ -552,8 +556,8 @@ def layout_entities(spec, th, findings):
                 cx, cy, anchor = p[0] + ux * 18, p[1] - ls * 0.8, "middle"
             links.labels.append(_text(cx, cy, card, ls, th["edge_label"]["text"], anchor,
                                       extra=f' stroke="{th["bg"]}" stroke-width="5" stroke-linejoin="round" paint-order="stroke"'))
-    right = max([b.r for b in boxes.values()] + [0])
-    bottom = max([b.b for b in boxes.values()] + [0])
+    right = max([b.r for b in boxes.values()] + [p[0] for p in rel_pts] + [0])
+    bottom = max([b.b for b in boxes.values()] + [p[1] for p in rel_pts] + [0])
     return links.scene(boxes=boxes, zboxes=[], right=right, bottom=bottom, nodes=("".join(backs), "".join(fronts)))
 
 
@@ -763,7 +767,10 @@ def layout_canvas(spec, th, findings):
             if b.x < ox or b.y < oy:
                 findings.append(f"element {b.id!r} has a negative x or y")
     zboxes.sort(key=lambda z: -z.w * z.h)  # outer zones first
-    edges, labels, holes = draw_edges(spec, th, boxes, "grid", findings)
+    ext = {}
+    edges, labels, holes = draw_edges(spec, th, boxes, "grid", findings, zone_title_boxes(zboxes, th), ext)
+    if W and H and (ext.get("right", 0) > ox + W or ext.get("bottom", 0) > oy + H):
+        findings.append(f"an edge or its label goes past the canvas ({W}x{H}); enlarge the canvas or move the boxes")
     E = th["edge"]
     for el, pts in lines:
         col = role_style(th, el.get("role", "plain"), findings, f"element {el.get('id')!r}").get("accent", E["color"]) if el.get("role") else E["color"]
@@ -773,8 +780,8 @@ def layout_canvas(spec, th, findings):
         else:
             segs = [line_seg(p, q) for p, q in zip(pts, pts[1:]) if _dist(p, q) > 0.01]
             edges.append(draw_shape(segs, th, key, stroke=col, sw=E["width"], dash=E.get("dash") if el.get("dashed") else None, closed=False, ends=0.6))
-    right = ox + W if W else max([b.r for b in sized] + [p[0] for _, ps in lines for p in ps] + [ox])
-    bottom = oy + H if H else max([b.b for b in sized] + [p[1] for _, ps in lines for p in ps] + [oy])
+    right = ox + W if W else max([b.r for b in sized] + [p[0] for _, ps in lines for p in ps] + [ox, ext.get("right", 0)])
+    bottom = oy + H if H else max([b.b for b in sized] + [p[1] for _, ps in lines for p in ps] + [oy, ext.get("bottom", 0)])
     return dict(boxes=boxes, zboxes=zboxes, right=right, bottom=bottom, edges=edges, labels=labels, holes=holes)
 
 

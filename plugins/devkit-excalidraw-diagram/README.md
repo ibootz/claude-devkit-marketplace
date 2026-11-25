@@ -14,7 +14,7 @@
 | 「画个架构图 / 流程图 / 时序图」，没提 Excalidraw | `devkit-svg-diagram:svg-diagram`（默认出图） |
 | 「画个图」「可视化一下」，没说图种 | `devkit-tool:show-me`（挑伪代码、调用树、成品图、HTML 等最小够用的视图；要成品图时默认转调 svg-diagram） |
 
-上游的触发描述是「任何想可视化流程、架构、概念的时候」，会和 `show-me` 抢同一批请求，所以这里收窄到点名 Excalidraw 或可编辑白板图。2026-11-21 起默认出图改由 `devkit-svg-diagram` 承担（devkit-tool 6.43.0），`show-me`、`tech-doc` 只在用户点名 Excalidraw 时转调本插件，或在未装 svg-diagram 时退到本插件。
+上游的触发描述是「任何想可视化流程、架构、概念的时候」，会和 `show-me` 抢同一批请求，所以这里收窄到点名 Excalidraw 或可编辑白板图。2026-11-21 起默认出图改由 `devkit-svg-diagram` 承担（devkit-tool 6.43.0），`show-me`、`tech-doc` 只在用户点名 Excalidraw 时转调本插件；未装 svg-diagram 时它们退到 Mermaid，不再退到本插件（devkit-tool 6.44.0 起）。
 
 
 ## 前置依赖

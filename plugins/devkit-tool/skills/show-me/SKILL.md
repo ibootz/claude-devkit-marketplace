@@ -79,7 +79,12 @@ plugins/devkit-tool/
 
 **点名 Excalidraw 才走 Excalidraw**：用户点名要 Excalidraw 图、`.excalidraw` 文件，或要能在 excalidraw.com / Obsidian 里拖拽编辑的白板图时，调 `devkit-excalidraw-diagram:excalidraw-diagram`，产物是 `<主题>.excalidraw` 和渲染出的同名 `<主题>.png`。
 
-**退路**：未安装 `devkit-svg-diagram` 时先退到 `devkit-excalidraw-diagram`；两者都没装、或渲染跑不通（缺 `uv`、拉不到 esm.sh）时，改写 Mermaid——调用与交互用 `sequenceDiagram`，流程与分支用 `flowchart`，状态用 `stateDiagram-v2`——源码写进 md 文件、正文给链接（Mermaid 终端不渲染，不贴进回复正文），并在回复里一句话说明没出 SVG / Excalidraw 图的原因。载体与落点见第二、三节。
+**svg-diagram 用不了时**，按缺的是哪一环处理，能出 SVG 就不退 Mermaid（Mermaid 终端不渲染，要另开 Typora 之类才看得到）：
+
+1. **调用返回 `Unknown skill`**（插件没装或没启用）：先问用户要不要现在装，同意就由你执行 `claude plugin install devkit-svg-diagram@claude-devkit-marketplace`，请用户敲 `/reload-plugins` 后照常出图。用户不装、或装失败，才走第 3 步。
+2. **只有转 PNG 跑不通**（缺 `uv`、Chromium 装不上）：`render.py` 只用 Python 标准库，SVG 照常出；交付 SVG，正文给链接（浏览器能直接打开），写一句没出 PNG 的原因。要嵌进不显示 SVG 的平台时才算跑不通。
+3. **都不行时退 Mermaid**：调用与交互用 `sequenceDiagram`，流程与分支用 `flowchart`，状态用 `stateDiagram-v2`；源码写进 md 文件、正文给链接，不贴进回复正文；回复里写一句没出 SVG 图的原因。
+最后一步选 Mermaid 而不是 Excalidraw：Mermaid 自动排版；Excalidraw 的坐标全靠 AI 手算，没有穿线、重叠、越框检查，2026-11-24 一个会话就这样出了箭头起点错、分支线折回、两个箭头叠在一起的图。Excalidraw 只在用户点名时用（见上一段）。载体与落点见第二、三节。
 
 ### 讲几个方案怎么取舍 → 对比表
 

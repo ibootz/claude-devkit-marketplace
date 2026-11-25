@@ -84,12 +84,12 @@ Each node takes `"row"` and `"col"` (0-based). Row heights fit their tallest car
 | Edge field | Notes |
 |---|---|
 | `from`, `to` | Node ids. |
-| `label` | Short pill on the longest segment. Keep under about 6 CJK characters. |
+| `label` | Short pill on the longest segment that leaves it clear of cards; a detour's label may sit beside the line. Keep under about 6 CJK characters. |
 | `dashed` | Async, return, optional. |
 | `accent` | A role name (`"success"`): the edge takes that role's accent color. Use on one edge at most, the one the reader should follow. |
 | `both` | Arrowheads at both ends. |
 
-Routing: same row → straight horizontal; same column → straight vertical; otherwise an elbow. Plan the grid so connected nodes share a row or column; a crossing elbow means the grid is wrong, not the router.
+Routing: same row → straight horizontal; same column → straight vertical; otherwise an elbow. When that path would cross a third card or a zone title, the router tries other elbows (into the target's side instead of its top, turning nearer one end) and then a detour round the outside of the blocking cards; the canvas grows to fit. Only when every option crosses does `LINT ... crosses node` fire. Still plan the grid so connected nodes share a row or column: a straight edge reads faster than a detour.
 
 `groups` draw a zone behind the listed nodes with the title above them. Keep groups to contiguous rectangles of cells.
 
@@ -224,7 +224,7 @@ The fallback when no layout above fits. Place each element by `x`, `y`, `w` (and
 | `elements[]` `line`, `arrow` | `points`: ≥2 `[x, y]` pairs in canvas px. `role` takes that role's accent color; `dashed`; `both` (arrow only). |
 | `edges` | Top level, as in Grid layout; `from` / `to` are element ids. |
 
-`edges` route like the grid layout, so one box fanning out to a column of boxes crosses the middle ones. Draw a fan-out or fan-in as a bus of `line` and `arrow` elements instead, as `examples/canvas-freeform.json` does.
+`edges` route like the grid layout, detours included: a fan-out to a column of boxes routes without crossings, and elbows leaving the same side overlap into one trunk. For full control of a bus's trunk position, draw it with `line` and `arrow` elements, as `examples/canvas-freeform.json` does.
 
 ## Findings
 
@@ -232,8 +232,10 @@ Exit 2 means the SVG was written and the stderr lines below need fixing. Fix the
 
 | Line starts with | Cause | Fix |
 |---|---|---|
-| `LINT edge X->Y crosses node` | The edge's path runs through a third card. | Move nodes so X and Y share a row or column, or move the blocker. |
+| `LINT edge X->Y crosses node` | Every path the router tried runs through a third card. | Move nodes so X and Y share a row or column, or move the blocker. |
+| `LINT edges X and Y end at the same point` | Two arrows reach one card at the same spot; their heads draw as one. | Move one source to another row / column, or merge the two edges into one with a two-line label. |
 | `LINT label ... overlaps` | Edge label collides with a card or another label. | Shorten the label, or leave an empty row / column between the nodes. |
+| `LINT node ...: line ... is a single character on its own line` | A wrapped title or desc leaves one CJK character (plus punctuation) alone on its last line; the renderer already tried pulling one more character down. | Reword, put a `\n` earlier, or raise `col_width`. |
 | `LINT nodes ... share row/col` | Two grid nodes in one cell. | Give one a free cell. |
 | `LINT ... unknown node id` / `unknown participant id` | Typo in `from` / `to` / group. | Use an existing `id`. |
 | `LINT ... unknown role` | Role not in the table above. | Pick a listed role. |
