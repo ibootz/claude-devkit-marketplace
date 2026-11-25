@@ -563,7 +563,7 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
     ['审查意见为空', { STUB_FACT: 'empty' }, 'empty-text'],
   ]) {
     const r = runFact(fb, { ...env, DEVKIT_STOP_AUDIT_LOG: lg3 })
-    check(`事实审查 失败也叫醒：${name} → 退出码 2、标识开头、只回一句、带失败类别`, r.status === 2 && r.stderr.startsWith('🔍【异步审查 · 第三方模型】') && r.stderr.includes('时失败') && r.stderr.includes('不复查、不重写') && r.stderr.includes(want), `${r.status} ${r.stderr}`)
+    check(`事实审查 失败也叫醒：${name} → 退出码 2、标识开头、只回一句、带失败类别`, r.status === 2 && r.stderr.startsWith('🔍【异步审查 · 第三方模型】') && r.stderr.includes('时失败') && r.stderr.includes('不复查、不重写') && r.stderr.includes('照常做完') && !r.stderr.includes('结束本轮') && r.stderr.includes(want), `${r.status} ${r.stderr}`)
   }
   const ra = runFact(fb, { STUB_FACT: 'apierr', DEVKIT_STOP_AUDIT_LOG: lg3 })
   check('事实审查 失败也叫醒：上游 API 报错原文进叫醒文本（取 JSON 的 result）', ra.status === 2 && ra.stderr.includes('API Error: 503 No available channel for model gemini-4-neon') && ra.stderr.includes('「结论：X 不存在'), `${ra.status} ${ra.stderr}`)
@@ -580,7 +580,7 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   const r4 = runFact(fb, { STUB_FACT: 'sleep', DEVKIT_FACT_AUDIT_TIMEOUT_MS: '1000', DEVKIT_STOP_AUDIT_LOG: lg4 })
   check('事实审查：超时 → 退出码 2（也叫醒）', r4.status === 2, `${r4.status} ${r4.stderr}`)
   check('事实审查：超时叫醒同样以标识开头', r4.stderr.startsWith('🔍【异步审查 · 第三方模型】'), r4.stderr.slice(0, 60))
-  check('事实审查：超时叫醒文案点明没审到、带被审回复开头、不要求复查', r4.stderr.includes('超时') && r4.stderr.includes('没有经过事实审查') && r4.stderr.includes('「结论：X 不存在') && r4.stderr.includes('不复查、不重写') && !r4.stderr.includes('先用工具逐条核实'), r4.stderr)
+  check('事实审查：超时叫醒文案点明没审到、带被审回复开头、不要求复查', r4.stderr.includes('超时') && r4.stderr.includes('没有经过事实审查') && r4.stderr.includes('「结论：X 不存在') && r4.stderr.includes('不复查、不重写') && r4.stderr.includes('照常做完') && !r4.stderr.includes('结束本轮') && !r4.stderr.includes('先用工具逐条核实'), r4.stderr)
   const tr = fs.readFileSync(lg4, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
   check('事实审查：超时记 kind=timeout，run 行 timed_out=true、blocked=false', tr.some((o) => o.kind === 'timeout' && o.audit === 'fact') && tr.some((o) => o.kind === 'run' && o.stage === 'fact' && o.timed_out === true && o.blocked === false), JSON.stringify(tr))
   {
