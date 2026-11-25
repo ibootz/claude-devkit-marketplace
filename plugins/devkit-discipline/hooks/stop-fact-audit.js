@@ -41,6 +41,9 @@ const FACT_API_TIMEOUT_MS = 150000
 const FACT_MAX_RETRIES = '2'
 const FACT_TOOLS = 'Read,Grep,Glob'
 const FACT_EFFORT = 'high'
+// 4.30.0 用户 2026-11-25 拍板：审查换 gemini-4-carbon，它在第三方 settings 里映射在 fable 档，故用 --model fable。
+// 模型名一律由 settings 的 ANTHROPIC_DEFAULT_FABLE_MODEL 决定，本脚本只写档位别名。
+const FACT_MODEL = 'fable'
 const FACT_DISALLOWED = 'Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent'
 const SYS_FACT = 'You are a background fact-checker for a Claude Code session. Use Read, Grep and Glob to check the last assistant reply against local files and the transcript. You never modify anything.'
 
@@ -51,7 +54,7 @@ function factAuditEnabled(env) {
 
 function factArgs(settings, cwd) {
   const a = [
-    '-p', '--settings', settings, '--model', m.THIRD_PARTY_MODEL, '--system-prompt', SYS_FACT,
+    '-p', '--settings', settings, '--model', FACT_MODEL, '--system-prompt', SYS_FACT,
     '--setting-sources', 'project', '--effort', FACT_EFFORT,
     '--strict-mcp-config', '--disable-slash-commands',
     '--allowedTools', FACT_TOOLS, '--disallowedTools', FACT_DISALLOWED,
@@ -89,10 +92,10 @@ function buildFactInput(hookInput, contextLines, template) {
 
 // 叫醒消息最前面的标识（4.27.0，用户 2026-11-24 要求）：harness 显示成「Stop hook blocking error from command "Stop": <stderr>」，
 // 与同步审查的打回长得很像，加标识让人一眼认出这是第三方异步审查、是哪个模型审的。
-// 模型名取第三方 settings 里 opus 档映射的那个（本脚本用 --model opus 调），读不到写「第三方模型」。
+// 模型名取第三方 settings 里 fable 档映射的那个（本脚本用 --model fable 调，4.30.0 起），读不到写「第三方模型」。
 function modelLabel(settings) {
   try {
-    const v = JSON.parse(fs.readFileSync(settings, 'utf8')).env.ANTHROPIC_DEFAULT_OPUS_MODEL
+    const v = JSON.parse(fs.readFileSync(settings, 'utf8')).env.ANTHROPIC_DEFAULT_FABLE_MODEL
     if (typeof v === 'string' && v.trim()) return v.trim()
   } catch { /* 读不到就用通用名 */ }
   return '第三方模型'
@@ -166,4 +169,4 @@ if (require.main === module) {
   main().then((code) => process.exit(code), () => process.exit(0))
 }
 
-module.exports = { parseFactText, FACT_EFFORT, factArgs, factEnv, buildFactInput, wakeText, timeoutText, failText, failDetail, modelLabel, tag, factAuditEnabled, factTimeout, FACT_TIMEOUT_MS }
+module.exports = { parseFactText, FACT_EFFORT, FACT_MODEL, factArgs, factEnv, buildFactInput, wakeText, timeoutText, failText, failDetail, modelLabel, tag, factAuditEnabled, factTimeout, FACT_TIMEOUT_MS }

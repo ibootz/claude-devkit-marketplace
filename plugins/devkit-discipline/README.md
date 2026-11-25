@@ -568,6 +568,14 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 4.30.0 后台事实审查改用 fable 档（本机映射 gemini-4-carbon）
+
+**起因**（2026-11-25）：本地网关对 `gpt-6.2-sol` 持续返回 `503 No available channel`。用户拍板：「把审核换成 gemini-4-carbon（对应 fable 模型）」。
+
+**改了什么**：`hooks/stop-fact-audit.js` 调审查模型时 `--model` 从 `opus` 改为 `fable`；叫醒标识里的模型名改读第三方 settings 的 `env.ANTHROPIC_DEFAULT_FABLE_MODEL`。具体模型仍由 `DEVKIT_STOP_AUDIT_SETTINGS` 指向的 settings 决定，插件只写档位别名。
+
+**本机配置**（不在仓里）：`~/.claude/settings.json` 的 `DEVKIT_STOP_AUDIT_SETTINGS` 从 `settings.gpt.json` 改回 `settings.gemini.json`（fable 档映射 `gemini-4-carbon`）。
+
 ### 4.29.0 后台事实审查改成纯文本审查意见，思考等级 high
 
 **起因**（2026-11-25）：日志里当天 43 次 fact 审查有 12 次 `no-structured-output`，stderr 都是 `[claude-code:unrecognized_model] {"model":"gpt-6.2-sol"...}`：gpt-6.2-sol 经网关回答了，但没按 `--json-schema` 给出 `structured_output`。4.28.0 之前启动的会话把这种失败当通过，静默丢掉。用户拍板：「不要结构化输出，就直接审核意见文本即可，思考等级设置为 high 即可」。

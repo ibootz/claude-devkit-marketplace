@@ -512,7 +512,7 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   const a = calls[0].argv
   const after = (f) => a[a.indexOf(f) + 1]
   check('事实审查：只调一次模型，且是 fact 提示词', calls.length === 1 && calls[0].kind === 'fact', JSON.stringify(calls.map((c) => c.kind)))
-  check('事实审查：带 --settings 第三方文件、模型 opus、不带 schema、effort high', after('--settings') === sf && after('--model') === 'opus' && !a.includes('--json-schema') && after('--effort') === 'high', JSON.stringify(a))
+  check('事实审查：带 --settings 第三方文件、模型 fable、不带 schema、effort high', after('--settings') === sf && after('--model') === 'fable' && !a.includes('--json-schema') && after('--effort') === 'high', JSON.stringify(a))
   check('事实审查：只放 Read,Grep,Glob', after('--allowedTools') === 'Read,Grep,Glob', JSON.stringify(a))
   check('事实审查：禁 Bash、Write、Edit、WebFetch、Agent', ['Bash', 'Write', 'Edit', 'WebFetch', 'Agent'].every((t) => after('--disallowedTools').split(',').includes(t)), after('--disallowedTools'))
   check('事实审查：--add-dir 加会话 cwd', after('--add-dir') === '/proj/demo', JSON.stringify(a))
@@ -531,9 +531,9 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   check('事实审查：stderr 要求先核实再改', r2.stderr.includes('先用工具逐条核实'), r2.stderr)
   check('事实审查：叫醒文本以标识开头，settings 没映射模型时写「第三方模型」', r2.stderr.startsWith('🔍【异步审查 · 第三方模型】后台事实审查'), r2.stderr.slice(0, 60))
   const sfm = path.join(DIR, 'settings.fact-model.json')
-  fs.writeFileSync(sfm, '{"env":{"ANTHROPIC_DEFAULT_OPUS_MODEL":"gemini-x"}}')
+  fs.writeFileSync(sfm, '{"env":{"ANTHROPIC_DEFAULT_OPUS_MODEL":"wrong-tier","ANTHROPIC_DEFAULT_FABLE_MODEL":"gemini-x"}}')
   const r2m = runFact(fb, { STUB_FACT: 'block', DEVKIT_STOP_AUDIT_SETTINGS: sfm, DEVKIT_STOP_AUDIT_LOG: lg2 })
-  check('事实审查：标识里写 settings 映射的 opus 模型名', r2m.status === 2 && r2m.stderr.startsWith('🔍【异步审查 · gemini-x】'), r2m.stderr.slice(0, 60))
+  check('事实审查：标识里写 settings 映射的 fable 模型名', r2m.status === 2 && r2m.stderr.startsWith('🔍【异步审查 · gemini-x】'), r2m.stderr.slice(0, 60))
   check('事实审查：stdout 为空（不走 decision=block）', r2.stdout === '', r2.stdout)
   check('事实审查：叫醒时 run 行 blocked=true', fs.readFileSync(lg2, 'utf8').trim().split('\n').map((l) => JSON.parse(l)).some((o) => o.kind === 'run' && o.stage === 'fact' && o.blocked === true))
 
