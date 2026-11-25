@@ -421,6 +421,7 @@ function logOk(route, ms, j, audit) {
 
 // route.args / route.env 给了就用它们（后台事实审查自带工具、提示词与单次请求超时），否则按 settings 取同步判定的参数与环境。
 // route.onFail 给了就在每种失败时回调一次，参数 (kind, p, ms)（后台事实审查拿它把上游报错带进叫醒文本，4.28.0）。
+// route.verdict 给了就用它从 claude -p 的 JSON 取判定，输入不追加 TEXT_TAIL（后台事实审查要纯文本审查意见，4.29.0）。
 function judgeAsync(claudeBin, input, route = { settings: null, timeout: CHILD_TIMEOUT_MS }) {
   const timeout = route.timeout || CHILD_TIMEOUT_MS
   const routeName = route.settings ? 'third-party' : 'subscription'
@@ -428,9 +429,10 @@ function judgeAsync(claudeBin, input, route = { settings: null, timeout: CHILD_T
     const t0 = Date.now()
     let child
     let structured = false
+    const custom = typeof route.verdict === 'function'
     try {
       child = spawn(claudeBin, route.args || routeArgs(route.settings), { cwd: os.tmpdir(), env: route.env || routeEnv(process.env, route.settings), timeout })
-      structured = !!route.settings
+      structured = !custom && !!route.settings
     } catch (e) {
       logFailure('spawn-error', { error: e }, 0, { route: routeName, audit: route.audit })
       if (route.onFail) route.onFail('spawn-error', { error: e }, 0)
@@ -443,7 +445,7 @@ function judgeAsync(claudeBin, input, route = { settings: null, timeout: CHILD_T
     child.stderr.setEncoding('utf8').on('data', (d) => { stderr += d })
     child.on('error', (e) => { error = e })
     child.stdin.on('error', () => { /* 子进程提前退出时写 stdin 会 EPIPE，按退出结果判 */ })
-    child.stdin.end(structured ? input : input + TEXT_TAIL)
+    child.stdin.end(structured || custom ? input : input + TEXT_TAIL)
     child.on('close', (status, signal) => {
       const ms = Date.now() - t0
       const p = { status, signal, stdout, stderr, error }
@@ -460,9 +462,9 @@ function judgeAsync(claudeBin, input, route = { settings: null, timeout: CHILD_T
         if (route.onFail) route.onFail('bad-json', p, ms)
         return resolve(null)
       }
-      const v = verdictOf(j, structured)
+      const v = custom ? route.verdict(j) : verdictOf(j, structured)
       if (!v) {
-        const kind = structured ? 'no-structured-output' : 'bad-verdict-text'
+        const kind = custom ? 'empty-text' : structured ? 'no-structured-output' : 'bad-verdict-text'
         logFailure(kind, p, ms, { route: routeName, audit: route.audit })
         if (route.onFail) route.onFail(kind, p, ms)
       }

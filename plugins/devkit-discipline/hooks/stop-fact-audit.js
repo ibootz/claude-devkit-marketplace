@@ -15,9 +15,11 @@
 //
 // 【失灵时怎样】超时：也叫醒（4.26.0，用户 2026-11-24 拍板），只让主模型告诉用户「这条回复没审完」，
 // 不复查不重写——11-24 实测 32 次里 14 次跑满 300 秒，原先静默丢掉，用户以为机制没生效。
-// 报错、无结构化输出：也叫醒（4.28.0，用户 2026-11-24 拍板 Q1-a），叫醒文本带上游报错原文，同样只回一句。
+// 报错、空输出：也叫醒（4.28.0，用户 2026-11-24 拍板 Q1-a），叫醒文本带上游报错原文，同样只回一句。
 // 11-24 下午的超时根因是网关下架了 gemini-4-neon（立即 503 model_not_found），子进程却继承了
 // CLAUDE_CODE_RETRY_WATCHDOG=1，约 35 秒重试一次、跑满 300 秒才被杀。现在剥掉它、重试限 2 次，硬错误几秒内失败。
+// 输出形态（4.29.0，用户 2026-11-25 拍板）：不用 --json-schema，审查模型直接写审查意见文本，没问题时只写一行 PASS。
+// 11-25 实测 gpt-6.2-sol 带 schema 时 43 次里 12 次没给 structured_output，旧版会话把这种失败当通过、静默丢掉。思考等级 high。
 // 判定子进程：cwd 在临时目录、--setting-sources project、DEVKIT_STOP_AUDIT_CHILD=1（同 stop-audit.js 的防递归），
 // 只放 Read / Grep / Glob，--add-dir 加上会话的项目目录。
 
@@ -38,6 +40,7 @@ const FACT_API_TIMEOUT_MS = 150000
 // 子进程最多重试 2 次：瞬时 529/5xx 仍有机会恢复，上游配置错（模型下架、鉴权失败）几秒内失败。
 const FACT_MAX_RETRIES = '2'
 const FACT_TOOLS = 'Read,Grep,Glob'
+const FACT_EFFORT = 'high'
 const FACT_DISALLOWED = 'Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent'
 const SYS_FACT = 'You are a background fact-checker for a Claude Code session. Use Read, Grep and Glob to check the last assistant reply against local files and the transcript. You never modify anything.'
 
@@ -49,14 +52,27 @@ function factAuditEnabled(env) {
 function factArgs(settings, cwd) {
   const a = [
     '-p', '--settings', settings, '--model', m.THIRD_PARTY_MODEL, '--system-prompt', SYS_FACT,
-    '--setting-sources', 'project', '--effort', m.CHILD_EFFORT,
+    '--setting-sources', 'project', '--effort', FACT_EFFORT,
     '--strict-mcp-config', '--disable-slash-commands',
     '--allowedTools', FACT_TOOLS, '--disallowedTools', FACT_DISALLOWED,
   ]
   if (cwd) a.push('--add-dir', cwd)
-  a.push('--no-session-persistence', '--output-format', 'json', '--json-schema', m.SCHEMA)
+  a.push('--no-session-persistence', '--output-format', 'json')
   return a
 }
+
+// 审查意见文本 → 判定：有一行恰为 PASS、且没有以「事实错误：」「漏答：」开头的行，判满足；
+// 其余非空文本整段当审查意见叫醒主模型；空文本返回 null，按失败处理（kind=empty-text）。
+function parseFactText(text) {
+  if (typeof text !== 'string' || !text.trim()) return null
+  const t = text.trim()
+  const lines = t.split('\n').map((l) => l.trim().replace(/^[-*]\s*/, ''))
+  const pass = lines.some((l) => /^\**PASS\**[。.]?$/i.test(l))
+  const issue = lines.some((l) => /^(事实错误|漏答)[:：]/.test(l))
+  if (pass && !issue) return { ok: true, reason: '' }
+  return { ok: false, reason: t }
+}
+function factVerdict(j) { return parseFactText(j && j.result) }
 
 // 判定子进程的环境：在 routeEnv 之上放宽单次请求超时、剥掉重试看门狗、限重试次数
 function factEnv(parentEnv, settings) {
@@ -131,7 +147,7 @@ async function main() {
   let failure = null
   const v = await m.judgeAsync(claudeBin, buildFactInput(hookInput, contextLines, template), {
     settings, timeout, audit: 'fact', args: factArgs(settings, hookInput.cwd), env: factEnv(process.env, settings),
-    onFail: (kind, p) => { failure = { kind, p } },
+    verdict: factVerdict, onFail: (kind, p) => { failure = { kind, p } },
   })
   const ms = Date.now() - t0
   const wake = !!(v && v.ok === false && typeof v.reason === 'string' && v.reason.trim())
@@ -150,4 +166,4 @@ if (require.main === module) {
   main().then((code) => process.exit(code), () => process.exit(0))
 }
 
-module.exports = { factArgs, factEnv, buildFactInput, wakeText, timeoutText, failText, failDetail, modelLabel, tag, factAuditEnabled, factTimeout, FACT_TIMEOUT_MS }
+module.exports = { parseFactText, FACT_EFFORT, factArgs, factEnv, buildFactInput, wakeText, timeoutText, failText, failDetail, modelLabel, tag, factAuditEnabled, factTimeout, FACT_TIMEOUT_MS }

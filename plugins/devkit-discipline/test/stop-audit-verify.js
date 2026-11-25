@@ -54,6 +54,7 @@ const R = { fact: '事实错误：回复说「X 不存在」，但 /tmp/a.js:3 �
 const so = m === 'block' ? { ok: false, reason: R[kind] } : { ok: true, reason: '' }
 if (process.env.STUB_TAIL_LOG) fs.appendFileSync(process.env.STUB_TAIL_LOG, (inp.includes('只输出一行 JSON') ? 'tail' : 'notail') + ':' + (argv.includes('--json-schema') ? 'schema' : 'text') + '\\n')
 if (m === 'badtext') { process.stdout.write(JSON.stringify({ result: '我认为满足条件。' })); process.exit(0) }
+if (kind === 'fact' && !argv.includes('--json-schema')) { process.stdout.write(JSON.stringify({ result: m === 'empty' ? '' : m === 'block' ? R.fact : 'PASS' })); process.exit(0) }
 if (argv.includes('--json-schema')) process.stdout.write(JSON.stringify({ structured_output: so }))
 else process.stdout.write(JSON.stringify({ result: '\\u0060\\u0060\\u0060json\\n' + JSON.stringify(so) + '\\n\\u0060\\u0060\\u0060' }))
 `)
@@ -511,7 +512,7 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   const a = calls[0].argv
   const after = (f) => a[a.indexOf(f) + 1]
   check('事实审查：只调一次模型，且是 fact 提示词', calls.length === 1 && calls[0].kind === 'fact', JSON.stringify(calls.map((c) => c.kind)))
-  check('事实审查：带 --settings 第三方文件、模型 opus、带 schema', after('--settings') === sf && after('--model') === 'opus' && a.includes('--json-schema'), JSON.stringify(a))
+  check('事实审查：带 --settings 第三方文件、模型 opus、不带 schema、effort high', after('--settings') === sf && after('--model') === 'opus' && !a.includes('--json-schema') && after('--effort') === 'high', JSON.stringify(a))
   check('事实审查：只放 Read,Grep,Glob', after('--allowedTools') === 'Read,Grep,Glob', JSON.stringify(a))
   check('事实审查：禁 Bash、Write、Edit、WebFetch、Agent', ['Bash', 'Write', 'Edit', 'WebFetch', 'Agent'].every((t) => after('--disallowedTools').split(',').includes(t)), after('--disallowedTools'))
   check('事实审查：--add-dir 加会话 cwd', after('--add-dir') === '/proj/demo', JSON.stringify(a))
@@ -559,6 +560,7 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   for (const [name, env, want] of [
     ['判定进程退出码非 0', { STUB_FACT: 'exit1' }, 'exit-nonzero'],
     ['判定输出不是 JSON', { STUB_FACT: 'garbage' }, 'bad-json'],
+    ['审查意见为空', { STUB_FACT: 'empty' }, 'empty-text'],
   ]) {
     const r = runFact(fb, { ...env, DEVKIT_STOP_AUDIT_LOG: lg3 })
     check(`事实审查 失败也叫醒：${name} → 退出码 2、标识开头、只回一句、带失败类别`, r.status === 2 && r.stderr.startsWith('🔍【异步审查 · 第三方模型】') && r.stderr.includes('时失败') && r.stderr.includes('不复查、不重写') && r.stderr.includes(want), `${r.status} ${r.stderr}`)
@@ -568,6 +570,10 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   {
     const fa = require(path.join(__dirname, '..', 'hooks', 'stop-fact-audit.js'))
     check('failDetail：无 JSON 时取 stderr 最后一行', fa.failDetail('exit-nonzero', { stdout: '', stderr: 'a\nboom\n' }) === 'boom')
+    check('parseFactText：单独一行 PASS → 满足', JSON.stringify(fa.parseFactText('PASS')) === '{"ok":true,"reason":""}' && fa.parseFactText('**PASS**\n').ok === true)
+    check('parseFactText：问题行 → 不满足、理由为整段文本', fa.parseFactText('事实错误：回复说「a」，但 /x:1 写的是「b」').ok === false && fa.parseFactText('- 漏答：用户问「q」，回复没有回应。\nPASS').ok === false)
+    check('parseFactText：非空但无 PASS 的文本也当审查意见', fa.parseFactText('回复第 3 段的数字对不上').ok === false)
+    check('parseFactText：空文本 → null', fa.parseFactText('') === null && fa.parseFactText('  ') === null && fa.parseFactText(undefined) === null)
     check('failDetail：什么都没有时退回失败类别', fa.failDetail('bad-json', { stdout: 'x', stderr: '' }) === 'bad-json')
   }
   const lg4 = path.join(DIR, 'fact-timeout.log')
@@ -583,7 +589,7 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   }
   const fr = fs.readFileSync(lg3, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
   check('事实审查：非超时失败的 run 行 timed_out=false', fr.filter((o) => o.kind === 'run').every((o) => o.timed_out === false), JSON.stringify(fr.filter((o) => o.kind === 'run')))
-  check('事实审查：非超时失败的 run 行 failed=true', fr.filter((o) => o.kind === 'run').every((o) => o.failed === true) && fr.filter((o) => o.kind === 'run').length === 3, JSON.stringify(fr.filter((o) => o.kind === 'run')))
+  check('事实审查：非超时失败的 run 行 failed=true', fr.filter((o) => o.kind === 'run').every((o) => o.failed === true) && fr.filter((o) => o.kind === 'run').length === 4, JSON.stringify(fr.filter((o) => o.kind === 'run')))
   check('事实审查：失败记日志、audit=fact', fr.some((o) => o.kind === 'exit-nonzero' && o.audit === 'fact') && fr.some((o) => o.kind === 'bad-json' && o.audit === 'fact'), JSON.stringify(fr.map((o) => o.kind + '/' + o.audit)))
 
   const hj = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'hooks', 'hooks.json'), 'utf8'))

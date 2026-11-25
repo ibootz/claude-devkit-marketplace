@@ -568,6 +568,18 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 4.29.0 后台事实审查改成纯文本审查意见，思考等级 high
+
+**起因**（2026-11-25）：日志里当天 43 次 fact 审查有 12 次 `no-structured-output`，stderr 都是 `[claude-code:unrecognized_model] {"model":"gpt-6.2-sol"...}`：gpt-6.2-sol 经网关回答了，但没按 `--json-schema` 给出 `structured_output`。4.28.0 之前启动的会话把这种失败当通过，静默丢掉。用户拍板：「不要结构化输出，就直接审核意见文本即可，思考等级设置为 high 即可」。
+
+**改了什么**：
+
+- `hooks/stop-fact-audit.js`：判定子进程去掉 `--json-schema`，`--effort` 从 `medium` 改为 `high`。新增 `parseFactText` 从 `result` 文本取判定：有一行恰为 `PASS`、且没有以「事实错误：」「漏答：」开头的行，判没有问题；其余非空文本整段作为审查意见叫醒主模型；空文本按失败处理（日志 kind 为 `empty-text`），照 4.28.0 的失败叫醒。
+- `hooks/stop-fact-audit-prompt.txt`：输出要求从 `ok` / `reason` 改为纯文本，没问题只写一行 `PASS`，有问题逐条写「事实错误：…」「漏答：…」。
+- `hooks/stop-audit.js` 的 `judgeAsync` 增加可选的 `route.verdict(j)`：给了就用它取判定，输入不追加「只输出一行 JSON」的尾巴。同步四路不传，行为不变。
+
+**回归**：`stop-audit-verify` 214/214（事实审查参数断言改为「不带 schema、effort high」，新增空文本失败叫醒与 `parseFactText` 四条）。
+
 ### 4.28.0 后台事实审查：上游硬错误几秒内失败，失败也叫醒并带报错原文
 
 **起因**（用户 2026-11-24）：「这个对话中 经常出现后台异步审查超时了的报错，你查查啥原因」。查明：本地网关已下架 `gemini-4-neon`，直连立即返回 503 `model_not_found`；审查子进程却继承了用户 settings 里的 `CLAUDE_CODE_RETRY_WATCHDOG=1`，约 35 秒重试一次，跑满 300 秒被杀，记成超时。日志里 UTC 06–12 点（北京时间 14:00 起）的 fact 审查几乎全部超时。用户拍板 Q1-a（插件快速失败并叫醒）、Q2 改用 gpt 配置。
