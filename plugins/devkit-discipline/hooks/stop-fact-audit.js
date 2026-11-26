@@ -13,7 +13,10 @@
 // 此前经 claude -p + DEVKIT_STOP_AUDIT_SETTINGS 指的第三方 settings 调，那条路已删。
 // agy 参数（2026-11-26 实测 agy 本机版本）：
 //   - 提示词必须挂在 --print=<全文> 上：裸 -p 后面跟别的选项会被当成提示词（报「-p took "--model" as its prompt」），也不读 stdin。
-//   - --mode plan：只读。实测要它建文件、跑 shell 时什么都没做，JSON 里列出 denied_actions。
+//   - 4.34.0 起（用户 2026-11-26 要求，等同本机别名 gy = agy --dangerously-skip-permissions）：带 --dangerously-skip-permissions、
+//     不再带 --mode plan，工具与目录都不限。plan 模式下读 --add-dir 之外的文件会被自动拒绝（headless 不能弹框），
+//     回复只剩空串：4.32.0 上线后 6 次审查 5 次因此失败（2026-11-26 日志与复现）。--add-dir <cwd> 保留，只是把项目目录设成工作区。
+//     hook 用 spawn 不经 shell，读不到 zsh 别名，所以直接拼出别名展开后的参数。
 //   - --output-format json 输出 {status, response, ...}；status 不是 SUCCESS 按失败处理。
 //   - 模型名写错时退出码非 0，stderr 第一行是「error: invalid model selection …」，后面跟整张模型清单。
 //   - 每次调用都会在 agy 里留一条会话（返回 conversation_id），agy 没有不落盘的开关。
@@ -40,7 +43,7 @@ function factTimeout(env) {
 }
 const FACT_MODEL = 'gemini-4-neon'
 const FACT_EFFORT = 'medium' // 用户 2026-11-26 指定
-const SYS_FACT = '你是 Claude Code 会话的后台事实审查员。只读：可以读本机文件、搜索文件名与内容，用来把最后一条助手回复与本机文件、会话记录对照；不修改任何文件，不执行命令。'
+const SYS_FACT = '你是 Claude Code 会话的后台事实审查员。可以读任意本机文件、搜索文件名与内容、跑命令查状态，用来把最后一条助手回复与本机文件、命令结果、会话记录对照；审查只看不改，不修改任何文件。'
 
 function factAuditEnabled(env) {
   const flag = String(env.DEVKIT_FACT_AUDIT || '').toLowerCase()
@@ -64,7 +67,7 @@ function resolveAgy(env = process.env) {
 }
 
 function factArgs(input, cwd, timeout) {
-  const a = ['--model', FACT_MODEL, '--effort', FACT_EFFORT, '--mode', 'plan', '--output-format', 'json',
+  const a = ['--dangerously-skip-permissions', '--model', FACT_MODEL, '--effort', FACT_EFFORT, '--output-format', 'json',
     '--print-timeout', `${Math.max(1, Math.round(timeout / 1000))}s`]
   if (cwd) a.push('--add-dir', cwd)
   a.push(`--print=${input}`)
@@ -75,7 +78,7 @@ function factArgs(input, cwd, timeout) {
 // - 有以「事实错误：」「漏答：」开头的行 → 不满足，整段文本当审查意见叫醒主模型；
 // - 否则有一行恰为 PASS → 满足；
 // - 两样都没有（空文本、只有一句开场白之类）→ null，按失败处理（kind=empty-text）。
-//   4.32.0 起不再把「非空但无 PASS」当审查意见：agy 的 plan 模式在动作被拒时会只回一句开场白就结束（2026-11-26 实测）。
+//   4.32.0 起不再把「非空但无 PASS」当审查意见：agy 动作被拒时会只回一句开场白就结束（2026-11-26 实测，plan 模式下）。
 function parseFactText(text) {
   if (typeof text !== 'string' || !text.trim()) return null
   const t = text.trim()

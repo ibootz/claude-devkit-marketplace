@@ -568,6 +568,13 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 4.34.0 后台事实审查给 agy 全权限（等同别名 gy）
+
+- **为什么**：4.32.0 用 `--mode plan` 跑 agy。plan 模式下读 `--add-dir` 之外的文件（插件缓存、临时目录、`~/.claude`）会被自动拒绝，headless 没法弹框，agy 只回空串。2026-11-26 4.32.0 上线后 6 次审查里 5 次因此按「审查输出为空」失败；带全权限重跑同一条用例，读到了 cwd 之外的日志并给出了判定。
+- **改了什么**：`factArgs` 去掉 `--mode plan`，开头加 `--dangerously-skip-permissions`，等同用户本机别名 `gy`（`agy --dangerously-skip-permissions`）。hook 用 `spawn` 不经 shell、读不到 zsh 别名，所以直接拼出展开后的参数。`--add-dir <cwd>` 保留，只用来把项目目录设成工作区。
+- **提示词**：系统提示与 `stop-fact-audit-prompt.txt` 改成「可以读任意本机文件、跑命令查状态；只看不改」。不改文件只是写在提示词里，工具层面不再拦。
+- **回归**：`test/stop-audit-verify.js` 新增一条：参数带 `--dangerously-skip-permissions`、不带 `--mode`。
+
 ### 4.33.0 回合末打回相对路径链接（点不开的链接）
 
 **起因**（2026-11-26）：一条回复的改动清单写成 `[README.md](domains/…/README.md)`——模型刚写完那份 md，汇报时照抄了文档里的相对链接。终端照样画下划线，点了打不开。该项目自己的每轮注入早已逐字点名这个错，照犯；而项目设了 `CLICKABLE_PATHS=off`，回合末的链接核对也随之全关，没有任何一道检查。
@@ -1823,7 +1830,7 @@ plugins/devkit-discipline/
 │   ├── stop-audit-link-prompt.txt      #   4.17.0：链接那路判定提示词，与出处那路并行跑；CLICKABLE_PATHS=off 时不跑
 │   ├── stop-audit-stuck-prompt.txt     #   4.19.0：卡点那路（3.14 卡点没挂）；DEVKIT_WIKI_AUDIT=off 时不跑
 │   ├── stop-audit-gloss-prompt.txt     #   4.19.0：释义那路（3.14 释义自写）；DEVKIT_WIKI_AUDIT=off 时不跑
-│   ├── stop-fact-audit.js              #   4.20.0：后台事实审查（asyncRewake）；4.32.0 起调本机 agy（gemini-4-neon、plan 只读），找得到 agy 才跑；
+│   ├── stop-fact-audit.js              #   4.20.0：后台事实审查（asyncRewake）；4.32.0 起调本机 agy（gemini-4-neon）；4.34.0 起全权限（等同 gy），找得到 agy 才跑；
 │   │                                   #   核事实与漏答，发现问题退出码 2 叫醒主模型；超时、报错也叫醒
 │   ├── stop-fact-audit-prompt.txt      #   4.20.0：后台事实审查提示词
 │   ├── term-links.js                   #   4.19.0：链接核对，不经模型——挂过链接的词处处挂、括注原文逐字

@@ -531,7 +531,8 @@ out('SUCCESS', 'PASS\\n')
   const a = calls[0].argv
   const after = (f) => a[a.indexOf(f) + 1]
   check('事实审查：只调一次 agy', calls.length === 1, String(calls.length))
-  check('事实审查：模型 gemini-4-neon、effort medium、plan 模式、json 输出', after('--model') === 'gemini-4-neon' && after('--effort') === 'medium' && after('--mode') === 'plan' && after('--output-format') === 'json', JSON.stringify(a))
+  check('事实审查：模型 gemini-4-neon、effort medium、json 输出', after('--model') === 'gemini-4-neon' && after('--effort') === 'medium' && after('--output-format') === 'json', JSON.stringify(a))
+  check('事实审查：全权限（等同 gy 别名）——带 --dangerously-skip-permissions、不带 --mode', a[0] === '--dangerously-skip-permissions' && !a.includes('--mode'), JSON.stringify(a))
   check('事实审查：--print-timeout 按超时秒数、--add-dir 加会话 cwd', after('--print-timeout') === '300s' && after('--add-dir') === '/proj/demo', JSON.stringify(a))
   check('事实审查：提示词挂在最后一个参数 --print= 上', a[a.length - 1].startsWith('--print=') && !a.includes('-p'), JSON.stringify(a.slice(-1)).slice(0, 80))
   check('事实审查：子进程带防递归标记', calls[0].child === '1', JSON.stringify(calls[0].child))
