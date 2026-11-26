@@ -2,7 +2,7 @@
   "mac": {
     "label": "Mac 扁平 + 柔和色块 + 等宽（默认）",
     "bg": "#ffffff",
-    "font": {"family": "Cascadia,Menlo,Consolas,'PingFang SC','Microsoft YaHei',monospace", "code": "Cascadia,Menlo,Consolas,'Courier New',monospace", "embed": ["Cascadia"], "latin_w": 0.6, "title_weight": 400, "zone_weight": 400, "diagram_title_weight": 400},
+    "font": {"family": "Nunito,'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif", "code": "Cascadia,Menlo,Consolas,'Courier New',monospace", "embed": ["Nunito", "Cascadia"], "latin_w": 0.54, "title_weight": 400, "zone_weight": 400, "diagram_title_weight": 400},
     "layout": {"canvas_pad": 28, "title_gap": 24, "diagram_title_size": 28, "title_size": 20, "desc_size": 16, "zone_title_size": 20, "label_size": 16, "card_pad_x": 20, "card_pad_y": 18, "desc_gap": 6, "card_min_h": 72, "col_min": 200, "col_max": 300, "gap_x": 40, "gutter": 200, "zone_pad": 24, "zone_gap": 24, "grid_gap_x": 100, "grid_gap_y": 80, "section_gap": 36},
     "card": {"radius": 32, "radius_ratio": 0.25, "stroke_width": 1, "dash": "8 9", "dash_width": 1.5, "text_align": "middle"},
     "zone": {"fill": "#f5f5f7", "stroke": "none", "radius": 32, "radius_ratio": 0.25, "dash_stroke": "#aeaeb2"},
@@ -81,7 +81,7 @@
   "isometric": {
     "label": "伪等轴测（Mac 配色 + 立体侧面）",
     "bg": "#fbfbfd",
-    "font": {"family": "Cascadia,Menlo,Consolas,'PingFang SC','Microsoft YaHei',monospace", "code": "Cascadia,Menlo,Consolas,'Courier New',monospace", "embed": ["Cascadia"], "latin_w": 0.6, "title_weight": 400, "zone_weight": 400, "diagram_title_weight": 400},
+    "font": {"family": "Nunito,'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif", "code": "Cascadia,Menlo,Consolas,'Courier New',monospace", "embed": ["Nunito", "Cascadia"], "latin_w": 0.54, "title_weight": 400, "zone_weight": 400, "diagram_title_weight": 400},
     "layout": {"canvas_pad": 28, "title_gap": 24, "diagram_title_size": 28, "title_size": 20, "desc_size": 16, "zone_title_size": 20, "label_size": 16, "card_pad_x": 20, "card_pad_y": 18, "desc_gap": 6, "card_min_h": 72, "col_min": 200, "col_max": 300, "gap_x": 44, "gutter": 200, "zone_pad": 24, "zone_gap": 26, "grid_gap_x": 104, "grid_gap_y": 84, "section_gap": 36},
     "card": {"radius": 6, "stroke_width": 1, "dash": "8 9", "dash_width": 1.5, "text_align": "middle"},
     "zone": {"fill": "#efeff3", "stroke": "none", "radius": 32, "radius_ratio": 0.25, "dash_stroke": "#aeaeb2"},
@@ -160,7 +160,7 @@
   "dark": {
     "label": "深色扁平",
     "bg": "#1c1c1e",
-    "font": {"family": "Cascadia,Menlo,Consolas,'PingFang SC','Microsoft YaHei',monospace", "code": "Cascadia,Menlo,Consolas,'Courier New',monospace", "embed": ["Cascadia"], "latin_w": 0.6, "title_weight": 400, "zone_weight": 400, "diagram_title_weight": 400},
+    "font": {"family": "Nunito,'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif", "code": "Cascadia,Menlo,Consolas,'Courier New',monospace", "embed": ["Nunito", "Cascadia"], "latin_w": 0.54, "title_weight": 400, "zone_weight": 400, "diagram_title_weight": 400},
     "layout": {"canvas_pad": 28, "title_gap": 24, "diagram_title_size": 28, "title_size": 20, "desc_size": 16, "zone_title_size": 20, "label_size": 16, "card_pad_x": 20, "card_pad_y": 18, "desc_gap": 6, "card_min_h": 72, "col_min": 200, "col_max": 300, "gap_x": 40, "gutter": 200, "zone_pad": 24, "zone_gap": 24, "grid_gap_x": 100, "grid_gap_y": 80, "section_gap": 36},
     "card": {"radius": 32, "radius_ratio": 0.25, "stroke_width": 1, "dash": "8 9", "dash_width": 1.5, "text_align": "middle"},
     "zone": {"fill": "#2a2a2d", "stroke": "none", "radius": 32, "radius_ratio": 0.25, "dash_stroke": "#8e8e93"},

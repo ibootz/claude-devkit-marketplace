@@ -21,6 +21,8 @@ import sys
 import zlib
 from pathlib import Path
 
+from outline import snap_ends
+
 HERE = Path(__file__).resolve().parent
 THEMES = json.loads((HERE.parent / "themes" / "themes.json").read_text(encoding="utf-8"))
 META_RE = re.compile(r'<metadata id="diagram-spec"><!\[CDATA\[(.*?)\]\]></metadata>', re.S)
@@ -627,6 +629,12 @@ def shape_segs(n, b: Box, th):
     return rect_segs(b.x, b.y, b.w, b.h, corner_radius(C, b.w, b.h))
 
 
+def node_outline(b: Box, th):
+    """Drawn outline of a node that sits inside its box (diamond, pill, circle, ellipse); None for cards."""
+    n = b.node or {}
+    return shape_segs(n, b, th) if n.get("shape") in ("diamond", "pill") + ROUND_SHAPES else None
+
+
 def draw_node(n, b: Box, th, findings):
     L, F = th["layout"], th["font"]
     st = role_style(th, n.get("role", "plain"), findings, f"node {n['id']!r}")
@@ -760,7 +768,7 @@ def draw_edges(spec, th, boxes, mode, findings, avoid=(), extent=None):
         if not a or not b:
             findings.append(f"edge {i} ({e.get('from')}->{e.get('to')}): unknown node id")
             continue
-        pts = route(a, b, mode, list(boxes.values()), avoid, th["layout"]["zone_pad"] / 2)
+        pts = snap_ends(route(a, b, mode, list(boxes.values()), avoid, th["layout"]["zone_pad"] / 2), a, b, lambda bx: node_outline(bx, th))
         ext["right"] = max([ext.get("right", 0)] + [p[0] for p in pts])
         ext["bottom"] = max([ext.get("bottom", 0)] + [p[1] for p in pts])
         tip = (round(pts[-1][0] / 6), round(pts[-1][1] / 6))  # arrowheads within ~6px draw as one blob

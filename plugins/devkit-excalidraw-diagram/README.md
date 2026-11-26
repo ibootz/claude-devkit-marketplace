@@ -50,6 +50,7 @@
 | `SKILL.md` Styles 表加第五种风格及其规则；`references/color-palette.md` 末尾新增 Pastel Style 色板；`references/design-guide.md` 第 3.4 条注明例外 | 1.7.0：新增「柔和色块」风格（pastel）：低饱和分区底色 + 同色系浅描边、大分区里嵌小卡片、卡片上标题下灰色说明、三角箭头、范围外用虚线框；只有这种风格换色板，容器描边对比度低于 3:1 属有意为之，文字与箭头仍达标 | 2026-11-19 用户要能用 Excalidraw 复刻 nb 组方案文档里的柔和色块分层架构图；色值取自该样板 SVG |
 | `references/color-palette.md` 通用色板、文字色、代码块配色全部重写，末尾新增 Brutal Style；`SKILL.md` Styles 表、Text Rules、Reference Gallery、Render 一节、Checklist 第 17 条；`references/element-templates.md`、`json-schema.md`、`design-guide.md` 第 4.5、7.3 条；`render_excalidraw.py` 与 `render_template.html`；`references/gallery/` 由 PNG 换成 SVG | 1.8.0：默认风格改为「Mac 扁平」（mac：等宽字体 + 柔和色块 + 细描边 + 卡片柔和投影 + 三角箭头 + 卡片文字居中），原「柔和色块」并入它；除新野兽派外所有风格共用一套 Mac 色板（浅底、同色相细描边、Apple 灰阶文字，文字对 4.5:1 达标，卡片细描边低于 3:1 属有意为之），代码块改浅底 Xcode 配色；新增「新野兽派」（brutal，保留自己的高饱和色板）；渲染脚本支持输出内嵌场景的 SVG、把 SVG 转成 PNG；图库 69 张改用 Mac 色板重渲染为内嵌场景的 SVG | 2026-11-21 用户嫌原商务配色丑，选定「Mac 扁平 + 柔和色块 + 等宽」为默认，并要求其他风格统一用这套颜色；同意收录新野兽派；图库要换成 SVG 或 Excalidraw 原始文件 |
 | `references/design-guide.md` 第 1.6 条 | 1.9.0：箭头标签写给对业务零上下文的读者：业务动作在前，接口、表、字段放次行小字或目标节点的注释，不单独出现；状态值带含义 | 一张时序图的箭头全是接口名，不熟业务的人看不出每步做了什么；与 svg-diagram、tech-doc 同一口径 |
+| `SKILL.md` Styles 表、Text Rules、Quality Checklist 第 17 条；`references/element-templates.md`；`references/json-schema.md` 的 `roughness`、`fontFamily` 行；`references/design-guide.md` 第 4.5 条 | 1.10.0：Mac 扁平的正文字体由 Cascadia 等宽（`fontFamily: 3`）改为 Nunito 圆体（`fontFamily: 6`），配色、投影不变；原「圆体」风格并入 Mac 扁平，新增「等宽」风格（Mac 扁平 + Cascadia 正文），点名「等宽」「工程风」才用；代码 / JSON 片段仍用等宽 | 2026-11-26 用户嫌等宽字体丑，要与 svg-diagram 1.3.0 一起换成 Excalidraw 的圆体 |
 | `references/pyproject.toml`、`.gitignore`、上游 `README.md` | 未移植 | 依赖已内联进脚本；安装说明并入本文件 |
 
 改配色：编辑 `skills/excalidraw-diagram/references/color-palette.md`，所有图跟着变。
@@ -57,17 +58,17 @@
 
 ## 风格（1.8.0 起五种）
 
-默认 Mac 扁平（1.8.0 起；1.5.0–1.7.0 默认圆体，1.1.0–1.4.0 默认手绘）。用户说出下表的说法时，整张图换成对应风格，一张图只用一种。
+默认 Mac 扁平（1.8.0 起；1.10.0 起正文字体由等宽改为 Nunito 圆体；1.5.0–1.7.0 默认圆体，1.1.0–1.4.0 默认手绘）。用户说出下表的说法时，整张图换成对应风格，一张图只用一种。
 
 | 风格 | 用户怎么说 | 线条 | 正文字体 | 实测代价 |
 |---|---|---|---|---|
-| Mac 扁平（默认） | 不提风格；「Mac 扁平」「苹果风」「柔和色块」「色块卡片」「等宽」「工程风」，或给一张柔和色块分层图当样板 | 直线 | Cascadia 等宽 | 卡片下多一层柔和投影（7% 黑，下移 5px），白卡片靠它从白底浮起；标识符不会认错；中文字距偏大，O 与 0 难分，`->` 显示成 →；Cascadia 不带中文字形，中文回退系统黑体 |
-| 圆体 | 「圆体」「Nunito」 | 直线 | Nunito | 大写 I 与小写 l 同形，`skuId` 会读成 `skuld`；Nunito 不带中文字形，中文为主的图和「干净」几乎一样 |
+| Mac 扁平（默认） | 不提风格；「Mac 扁平」「苹果风」「柔和色块」「色块卡片」「圆体」「Nunito」，或给一张柔和色块分层图当样板 | 直线 | Nunito 圆体 | 卡片下多一层柔和投影（7% 黑，下移 5px），白卡片靠它从白底浮起；大写 I 与小写 l 同形，`skuId` 会读成 `skuld`；Nunito 不带中文字形，中文回退系统黑体 |
+| 等宽 | 「等宽」「工程风」「monospace」 | 直线 | Cascadia 等宽 | 与 Mac 扁平只差正文字体，同样带投影；标识符不会认错；中文字距偏大，O 与 0 难分，`->` 显示成 → |
 | 手绘 | 「手绘」「草图」 | 手绘抖动 | Excalifont 手写体 | 读起来像草稿 |
 | 干净 | 「干净」「正式」「给客户看」 | 直线 | Helvetica | 大写 I 与小写 l 同形，`skuId` 会读成 `skuld` |
 | 新野兽派 | 「野兽派」「新野兽派」「野蛮风格」「neo-brutalism」 | 直线 | Helvetica | 4px 纯黑粗边、黑色实心投影、直角、高饱和填充、箭头标签黑底白字；视觉很重，不适合正式文档；投影要占 10px 间距 |
 
-前四种风格共用同一套 Mac 色板与结构规则：圆角框、实心浅底、同色相细描边、灰色三角箭头、卡片文字水平垂直都居中、分层图用浅灰分区嵌卡片；只有 Mac 扁平加投影。新野兽派用自己的高饱和色板。代码与 JSON 片段在任何风格下都用等宽字体。
+前四种风格共用同一套 Mac 色板与结构规则：圆角框、实心浅底、同色相细描边、灰色三角箭头、卡片文字水平垂直都居中、分层图用浅灰分区嵌卡片；只有 Mac 扁平与等宽加投影。新野兽派用自己的高饱和色板。代码与 JSON 片段在任何风格下都用等宽字体。
 
 
 ## 参考图库（1.4.0 起）

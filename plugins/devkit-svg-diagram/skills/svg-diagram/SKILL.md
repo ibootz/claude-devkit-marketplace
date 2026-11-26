@@ -45,7 +45,7 @@ Write a small JSON **spec**; `scripts/render.py` lays it out and draws it in a f
    uv run <skill-dir>/scripts/to_png.py <name>.svg          # writes <name>.png beside it
    ```
 
-   `to_png.py` also embeds the theme's fonts into the SVG: it cuts the bundled fonts in `assets/fonts/` (Cascadia, Excalifont, Xiaolai; OFL) down to the characters the diagram uses, so the SVG looks the same on any machine. Nothing is downloaded. Always run it before sharing an SVG; `--no-embed-fonts` leaves the SVG relying on system fonts.
+   `to_png.py` also embeds the theme's fonts into the SVG: it cuts the bundled fonts in `assets/fonts/` (Nunito, Cascadia, Excalifont, Xiaolai; OFL) down to the characters the diagram uses, so the SVG looks the same on any machine. Nothing is downloaded. Always run it before sharing an SVG; `--no-embed-fonts` leaves the SVG relying on system fonts.
 
    Exit 2 from either script means it drew the diagram but found problems, printed as `LINT ...` or `OVERFLOW ...` lines on stderr. Fix the spec and render again until both exit 0. The findings and their usual fixes are in `references/dsl.md` § Findings. First run of `to_png.py` on a machine: `uv run <skill-dir>/scripts/to_png.py --install-browser`. Windows: `python` or `py -3` instead of `python3`.
 
@@ -59,7 +59,7 @@ Use `mac` unless the user names another style. The theme goes in the spec (`"the
 
 | Theme | Look | Pick when the user says |
 |---|---|---|
-| `mac` | Gray zones, pale tinted cards, hairline edge, faint shadow under the bottom edge, monospace | default |
+| `mac` | Gray zones, pale tinted cards, hairline edge, faint shadow under the bottom edge, rounded sans (Nunito, Excalidraw's Normal font) | default |
 | `brutal` | Saturated fills, thick black outlines, hard offset shadow | 新野兽派、neo-brutalism、醒目 |
 | `swiss` | Bauhaus blue / yellow / red blocks, square corners, black rules, no shadow | 瑞士、包豪斯、极简、海报感 |
 | `isometric` | `mac` colors plus a tinted side face on each card | 伪等轴测、立体、2.5D |

@@ -374,8 +374,8 @@ Five styles. One style per diagram, applied to every element; the default is mac
 
 | Style | Pick when the user says | `roughness` | prose `fontFamily` | code / JSON evidence `fontFamily` |
 |---|---|---|---|---|
-| **mac** (default) | nothing about style; Mac 扁平, 苹果风, 柔和色块, 色块卡片, 等宽, 工程风, pastel, monospace; or hands over a pastel layered-card image as the style sample | 0 | 3 (Cascadia) | 3 |
-| **rounded-sans** | 圆体, Nunito, rounded font, soft | 0 | 6 (Nunito) | 3 |
+| **mac** (default) | nothing about style; Mac 扁平, 苹果风, 柔和色块, 色块卡片, 圆体, Nunito, pastel; or hands over a pastel layered-card image as the style sample | 0 | 6 (Nunito) | 3 |
+| **mono** | 等宽, 工程风, monospace; or asks that identifiers stay unambiguous | 0 | 3 (Cascadia) | 3 |
 | **hand-drawn** | 手绘, 草图, sketch, whiteboard | 1 | 5 (Excalifont) | 3 |
 | **clean** | 干净, 正式, 无衬线, clean, formal, client-facing | 0 | 2 (Helvetica) | 3 |
 | **brutal** | 野兽派, 新野兽派, 野蛮风格, neo-brutalism, brutalist | 0 | 2 (Helvetica) | 3 |
@@ -387,9 +387,9 @@ The first four share one palette (the shared tables in `color-palette.md`) and t
 - Layered diagrams (architecture, deployment, context maps) nest: big `#f5f5f7` zones with no visible edge, each holding cards and small white tag chips. For these, checklist items 9 (no uniform containers), 10 (minimal containers) and 20 (container ratio) do not apply.
 - Out-of-scope, planned, or external parts: white fill, dashed `#aeaeb2` outline (`strokeStyle: "dashed"`), and a legend entry for it.
 
-To switch among the four, change `roughness` on every element and `fontFamily` on every text element, add or remove the mac shadows, then re-render: widths shift between fonts. Switching to or from brutal swaps every color, stroke width, and shadow, per its rules below.
+To switch among the four, change `roughness` on every element and `fontFamily` on every text element, add or remove the mac shadows (mono keeps them: it is mac with Cascadia prose), then re-render: widths shift between fonts. Switching to or from brutal swaps every color, stroke width, and shadow, per its rules below.
 
-**mac** adds a soft drop shadow under every card, chip, and diamond: a copy of the shape offset `0, +5`, fill `#000000`, `strokeColor: "transparent"`, `opacity: 7`, placed before the shape in `elements` so it draws underneath. Shadow and shape share one `groupIds` entry; arrows bind to the shape, never the shadow. Zones, dashed out-of-scope shapes, dots, and code blocks get no shadow. The shadow is what lifts a white card off a white canvas, since its hairline outline is nearly invisible by design.
+**mac** and **mono** add a soft drop shadow under every card, chip, and diamond: a copy of the shape offset `0, +5`, fill `#000000`, `strokeColor: "transparent"`, `opacity: 7`, placed before the shape in `elements` so it draws underneath. Shadow and shape share one `groupIds` entry; arrows bind to the shape, never the shadow. Zones, dashed out-of-scope shapes, dots, and code blocks get no shadow. The shadow is what lifts a white card off a white canvas, since its hairline outline is nearly invisible by design.
 
 **brutal** is neo-brutalism: loud, flat, and blocky. Colors come only from the **Brutal Style** section of `color-palette.md`.
 - Every shape: `strokeWidth: 4`, stroke `#1e1e1e`, `roundness: null` (square corners), one saturated fill per role.
@@ -399,9 +399,9 @@ To switch among the four, change `roughness` on every element and `fontFamily` o
 - Waived for brutal: checklist item 32's "exactly one accent" (every outline is `4`) and the 20px grid for shadows only (the `+10` offset is off-grid by design; shapes stay on the grid). Every other item applies, including the legend when fills carry meaning.
 
 What each style costs, measured on 2026-10-25 by rendering 4 identifier-heavy technical diagrams in every style with this skill's renderer:
-- **clean and rounded-sans:** uppercase `I` and lowercase `l` are the same glyph, so `skuId` reads as `skuld`. On diagrams dense with identifiers (sequence, ER, class, API) prefer mac; when the user asked for one of these two, mention the misreading in the reply.
-- **rounded-sans:** Nunito has no CJK glyphs; Chinese falls back to the system sans-serif, so on a mostly-Chinese diagram it looks almost the same as clean. Only Latin text gets rounded letterforms.
-- **mac:** every identifier stays distinct, but CJK characters take a full 1em each, so size containers from the estimate in Text Rules plus one character of slack. `O` and `0` are hard to tell apart. Cascadia draws `->` as → and `<=` as ≤ (ligatures; the text itself is unchanged). Cascadia has no CJK glyphs: Chinese renders in the viewer's system sans-serif, so only Latin, digits, and identifiers look monospaced.
+- **mac and clean:** uppercase `I` and lowercase `l` are the same glyph, so `skuId` reads as `skuld`. When a mac or clean diagram carries identifiers where this matters (sequence, ER, class, API), mention the misreading in the reply and offer mono.
+- **mac:** Nunito has no CJK glyphs; Chinese falls back to the system sans-serif, so on a mostly-Chinese diagram it looks almost the same as clean. Only Latin text gets rounded letterforms.
+- **mono:** every identifier stays distinct, but CJK characters take a full 1em each, so size containers from the estimate in Text Rules plus one character of slack. `O` and `0` are hard to tell apart. Cascadia draws `->` as → and `<=` as ≤ (ligatures; the text itself is unchanged). Cascadia has no CJK glyphs: Chinese renders in the viewer's system sans-serif, so only Latin, digits, and identifiers look monospaced.
 
 ### Stroke Width
 Excalidraw's own presets are `1`, `2`, and `4`; other widths have no button in the editor.
@@ -452,9 +452,9 @@ Position alone doesn't show relationships. If A relates to B, there must be an a
 }
 ```
 
-Settings: `fontFamily` from the chosen row of **Styles** (`3` for the default mac style), `textAlign: "center"`, `verticalAlign: "middle"`. Text inside code / JSON evidence artifacts uses `fontFamily: 3` (monospace) in every style so code stays aligned.
+Settings: `fontFamily` from the chosen row of **Styles** (`6` for the default mac style), `textAlign: "center"`, `verticalAlign: "middle"`. Text inside code / JSON evidence artifacts uses `fontFamily: 3` (monospace) in every style so code stays aligned.
 
-Width estimate for sizing containers: each CJK character ≈ 1 × font size, each Latin character ≈ 0.6 × font size in the default mac style (0.62 in the other styles); add the container's padding on top.
+Width estimate for sizing containers: each CJK character ≈ 1 × font size, each Latin character ≈ 0.6 × font size in the mono style (0.62 in the other styles); add the container's padding on top.
 
 Font sizes: at most three per diagram, from Excalidraw's presets — title `28` (`36` for a single poster-style diagram), section labels `20`, body and arrow labels `16`. Nothing below 16.
 
@@ -640,7 +640,7 @@ Keeping the file name and path means links in earlier replies and documents now 
 
 ### Technical
 16. **Text clean**: `text` contains only readable words
-17. **Font**: every prose text element uses the chosen style's `fontFamily` (`3` by default); code / JSON evidence uses `3`
+17. **Font**: every prose text element uses the chosen style's `fontFamily` (`6` by default); code / JSON evidence uses `3`
 18. **Roughness**: every element uses the chosen style's `roughness` (`0` by default); one style per diagram
 19. **Opacity**: `opacity: 100` for all elements except mac shadow copies (`opacity: 7`)
 20. **Container ratio**: <30% of text elements should be inside containers

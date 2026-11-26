@@ -44,18 +44,18 @@
 
 | 主题 | 样子 | 示例 |
 |---|---|---|
-| `mac`（默认） | 浅灰分区、淡色卡片、细描边、卡片底边下一道淡灰投影、等宽字体（Cascadia） | [看图](gallery/layers-mac.svg) |
+| `mac`（默认） | 浅灰分区、淡色卡片、细描边、卡片底边下一道淡灰投影、圆体字（英文 Nunito，与 Excalidraw 的 Normal 字体同款；中文用系统苹方 / 微软雅黑） | [看图](gallery/layers-mac.svg) |
 | `brutal` | 新野兽派：饱和色块、粗黑描边、黑色硬投影 | [看图](gallery/layers-brutal.svg) |
 | `swiss` | 瑞士 / 包豪斯：蓝黄红黑色块、直角、粗黑分隔线、无阴影 | [看图](gallery/layers-swiss.svg) |
-| `isometric` | 伪等轴测：`mac` 配色，卡片右下多一个同色系侧面 | [看图](gallery/layers-isometric.svg) |
+| `isometric` | 伪等轴测：`mac` 配色与字体，卡片右下多一个同色系侧面 | [看图](gallery/layers-isometric.svg) |
 | `sketchnote` | 手绘速写笔记：米白纸底，描边、箭头都是手绘抖动线，手写字体（英文 Excalifont、中文小赖，与 Excalidraw 手绘体同款），分区标题带荧光笔底色 | [看图](gallery/layers-sketchnote.svg) |
 | `ligne` | 黑白线稿加一种蓝色强调：十个角色靠灰度与线型（粗细、虚线、点线）区分，黑白打印也分得清 | [看图](gallery/lanes-ligne.svg) |
-| `dark` | 深色扁平：近黑底、深色调卡片、中间调描边，无渐变、无发光 | [看图](gallery/lanes-dark.svg) |
+| `dark` | 深色扁平：近黑底、深色调卡片、中间调描边，无渐变、无发光，字体同 `mac` | [看图](gallery/lanes-dark.svg) |
 
 所有主题的文字与底色对比度都达到 WCAG 4.5:1；`ligne`、`dark` 的描边与连线对画布和分区底色也都在 3:1 以上。
-字体随插件内置在 `skills/svg-diagram/assets/fonts/`（约 2 MB，不联网下载）：Cascadia（等宽）、Excalifont（英文手写）、小赖（中文手写，裁到 GB 2312 的 7000 来个常用字）。
+字体随插件内置在 `skills/svg-diagram/assets/fonts/`（约 2 MB，不联网下载）：Nunito（英文圆体，正文用）、Cascadia（等宽，代码块用）、Excalifont（英文手写）、小赖（中文手写，裁到 GB 2312 的 7000 来个常用字）。
 `to_png.py` 转图时只把图里用到的字抽出来嵌进 SVG（每张图多 7～35 KB），所以 SVG 发给谁、在哪台电脑上打开都一样。
-GB 2312 以外的生僻字落到系统字体（楷体、苹方 / 微软雅黑）。三款字体均为 SIL OFL 1.1 许可，许可原文与出处见 [`LICENSE-OFL.txt`](skills/svg-diagram/assets/fonts/LICENSE-OFL.txt)。
+GB 2312 以外的生僻字落到系统字体（楷体、苹方 / 微软雅黑）。Nunito 不带中文字形，`mac`、`isometric`、`dark` 里的中文由系统苹方 / 微软雅黑显示；Nunito 的大写 I 与小写 l 长得一样，标识符易认错时放进代码块（Cascadia）。四款字体均为 SIL OFL 1.1 许可，许可原文与出处见 [`LICENSE-OFL.txt`](skills/svg-diagram/assets/fonts/LICENSE-OFL.txt)。
 主题定义集中在 [`skills/svg-diagram/themes/themes.json`](skills/svg-diagram/themes/themes.json)，加一个主题只需加一个对象，不改代码，做法见 [`references/themes.md`](skills/svg-diagram/references/themes.md)。
 
 
@@ -86,6 +86,7 @@ SVG 里嵌着原始 JSON 描述（`theme` 字段记的是实际用的主题）�
 
 | 版本 | 变更 |
 |---|---|
+| 1.3.0 | `mac`、`isometric`、`dark` 三套主题的正文字体由等宽 Cascadia 改为圆体 Nunito（取自 Excalidraw 0.18.1 的 Normal 字体，内置拉丁与拉丁扩展两个分片约 31 KB），中文仍走系统苹方 / 微软雅黑，代码块仍用 Cascadia；`to_png.py` 新增嵌入 Nunito；图库里这三套主题的 11 张图重渲，只有字体变了。连线端点改为落在菱形、胶囊、圆、椭圆的实际轮廓上：此前连线停在外接矩形边上，圆角菱形的左右尖角被圆角削进约宽度的 1/16，箭头与菱形之间留出一截空白（新增 `scripts/outline.py`）；不含这几种形状的示例渲染结果与改前逐字节一致，`grid-flow` 示例与图库 `flow-mac.svg` 随之重渲。 |
 | 1.2.0 | 时序消息新增 `desc`：箭头上方写业务上发生了什么，下方灰色小字写接口、表、字段，按两条生命线的间距折行，行高随之加高；SKILL.md 与 dsl.md 要求连线说明写给不懂这块业务的人看，代码名降到次行；时序示例改成这种写法。其余八个示例渲染结果与 1.1.0 逐字节一致。 |
 | 1.1.0 | 连线避让：默认折线会穿过第三张卡片或分区标题时，依次改走侧面进入、靠近一端转弯的折线，再不行从外侧绕行，画布随绕行线与标签扩大；标签优先放在不压卡片的线段上，放不下时放到线旁。中文折行末行只剩一个字时自动从上一行挪一个字下来，挪不动报 lint；新增「两个箭头终点重合」lint。九个示例渲染结果与 1.0.0 逐字节一致。 |
 | 1.0.0 | 首版：分层 / 网格 / 时序 / 树 / 泳道 / 甘特 / ER / 四象限八种布局加自由坐标兜底（配色仍走主题角色），七套主题（含黑白单强调色 `ligne` 与深色扁平 `dark`；元素画法取自 Excalidraw 导出），圆形与椭圆节点，sketchnote 手绘线条与手写字体，字体内置并在转 PNG 时嵌入 SVG，渲染期 lint 与 PNG 期文字溢出检查，SVG 内嵌描述可回取。 |

@@ -1,8 +1,11 @@
 Fonts bundled with devkit-svg-diagram (skills/svg-diagram/assets/fonts/), all under the
 SIL Open Font License 1.1 reproduced below. Files are taken from the npm package
-@excalidraw/excalidraw@0.18.0 (dist/prod/fonts/); scripts/to_png.py subsets them into
-each rendered SVG.
+@excalidraw/excalidraw@0.18.0 (dist/prod/fonts/; Nunito from 0.18.1); scripts/to_png.py
+subsets them into each rendered SVG.
 
+- Nunito/     Nunito (Excalidraw's "Normal" font, Medium instance), Copyright 2014
+              The Nunito Project Authors. Only the latin and latin-ext slices are
+              bundled; files unmodified.
 - Cascadia/   Cascadia Code, Copyright (c) 2019 - Present, Microsoft Corporation,
               with Reserved Font Name Cascadia. Unmodified.
 - Excalifont/ Excalifont, Copyright (c) 2024 by Excalidraw. Unmodified.

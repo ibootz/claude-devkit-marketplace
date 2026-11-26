@@ -13,7 +13,7 @@ Usage:
     uv run <skill-dir>/scripts/to_png.py out.svg --no-embed-fonts             # leave the SVG untouched
     uv run <skill-dir>/scripts/to_png.py --install-browser                    # first-time setup
 
-Fonts: the SVG root's data-fonts names the families the theme draws with (Cascadia, Excalifont, Xiaolai --
+Fonts: the SVG root's data-fonts names the families the theme draws with (Nunito, Cascadia, Excalifont, Xiaolai --
 the fonts Excalidraw ships, SIL OFL 1.1, see assets/fonts/LICENSE-OFL.txt). They are bundled in
 <skill-dir>/assets/fonts (Xiaolai cut to GB 2312, about 2 MB in all), so nothing is downloaded. Each run
 subsets them to the characters the diagram uses and writes them into the SVG as <style class="sd-fonts">,
@@ -43,7 +43,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 INSTALL_HINT = f"uv run '{Path(__file__).resolve()}' --install-browser"
 FONTS = Path(__file__).resolve().parent.parent / "assets" / "fonts"
-FAMILIES = ("Cascadia", "Excalifont", "Xiaolai")
+FAMILIES = ("Nunito", "Cascadia", "Excalifont", "Xiaolai")
 STYLE_RE = re.compile(r'<style class="sd-fonts">.*?</style>', re.S)
 TEXT_RE = re.compile(r"<text\b([^>]*)>(.*?)</text>", re.S)
 FAMILY_ATTR_RE = re.compile(r'font-family="([^"]*)"')

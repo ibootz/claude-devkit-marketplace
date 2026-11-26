@@ -60,7 +60,7 @@ All values come from `color-palette.md`; this section is about *how much* and *w
 2. **≤ 2 dominant elements**: the title and one focal element. Everything else is visibly smaller. [sourced: NNg-hierarchy]
 3. **One accent.** Exactly one element or group breaks the pattern — one arrow or path drawn in its role's accent color (`color-palette.md` Accent column) while every other arrow stays gray. An eye lands on the single thing that differs; emphasis everywhere is emphasis nowhere. [sourced: SWD; "only strokeWidth 4" inferred]
 4. **Emphasize by quieting the rest.** Push secondary text to the body color and secondary lines to `strokeWidth: 1` instead of enlarging the hero. Opacity stays 100 (SKILL.md rule). [sourced: RefactoringUI-review]
-5. **Fonts.** The prose font comes from the chosen style in SKILL.md **Styles** (`3` Cascadia by default; `6`, `5`, or `2` for the other styles); code uses `3`. One prose family per diagram. [sourced: Excalidraw-src, HN-thread]
+5. **Fonts.** The prose font comes from the chosen style in SKILL.md **Styles** (`6` Nunito by default; `3`, `5`, or `2` for the other styles); code uses `3`. One prose family per diagram. [sourced: Excalidraw-src, HN-thread]
 6. **Squint test after render.** Look at the PNG as a thumbnail: the first place the eye lands must be the intended focal element. If it lands elsewhere, lower the contrast *there*; do not add more weight to the focal element. [sourced: NNg-hierarchy, SWD]
 
 ---

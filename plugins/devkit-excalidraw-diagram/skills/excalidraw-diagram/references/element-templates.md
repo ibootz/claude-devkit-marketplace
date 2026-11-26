@@ -2,7 +2,7 @@
 
 Copy-paste JSON templates for each Excalidraw element type. The `strokeColor` and `backgroundColor` values are placeholders — always pull actual colors from `color-palette.md` based on the element's semantic purpose.
 
-Templates carry the mac defaults (`roughness: 0`, `fontFamily: 3`, hairline shapes at `strokeWidth: 1`, `triangle` arrowheads). For another style, swap fields per the **Styles** section in SKILL.md; the mac shadow copy is described there. Text inside code / JSON evidence artifacts uses `fontFamily: 3` in every style.
+Templates carry the mac defaults (`roughness: 0`, `fontFamily: 6`, hairline shapes at `strokeWidth: 1`, `triangle` arrowheads). For another style, swap fields per the **Styles** section in SKILL.md; the mac shadow copy is described there. Text inside code / JSON evidence artifacts uses `fontFamily: 3` in every style.
 
 ## Free-Floating Text (no container)
 ```json
@@ -14,7 +14,7 @@ Templates carry the mac defaults (`roughness: 0`, `fontFamily: 3`, hairline shap
   "text": "Section Title",
   "originalText": "Section Title",
   "fontSize": 20,
-  "fontFamily": 3,
+  "fontFamily": 6,
   "textAlign": "left",
   "verticalAlign": "top",
   "strokeColor": "<title color from palette>",
@@ -127,7 +127,7 @@ Templates carry the mac defaults (`roughness: 0`, `fontFamily: 3`, hairline shap
   "text": "Process",
   "originalText": "Process",
   "fontSize": 16,
-  "fontFamily": 3,
+  "fontFamily": 6,
   "textAlign": "center",
   "verticalAlign": "middle",
   "strokeColor": "<text color — 'On fills' from palette; description line uses Secondary>",
