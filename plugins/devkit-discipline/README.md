@@ -568,6 +568,26 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 4.32.0 后台事实审查改调本机 agy CLI（gemini-4-neon，思考等级 medium）
+
+**起因**（2026-11-26）：用户要求「改成使用本机的 agy cli 调用 gemini-4-neon 进行审核」，思考等级 medium。
+
+**改了什么**：
+- `hooks/stop-fact-audit.js` 不再经 `claude -p` + `DEVKIT_STOP_AUDIT_SETTINGS` 调第三方，改调 `agy --model gemini-4-neon --effort medium --mode plan --output-format json --print=<提示词>`。
+  - 什么时候跑：找得到 agy 就跑（`DEVKIT_FACT_AUDIT_AGY` 指定绝对路径，否则查 PATH 与 `~/.local/bin`）。`DEVKIT_STOP_AUDIT_SETTINGS` 不再影响事实审查；`DEVKIT_FACT_AUDIT=off` 仍可单独关掉。
+  - `--mode plan` 只读：实测要它建文件、跑 shell 时什么都没做，JSON 里列出 `denied_actions`。
+  - 提示词挂在 `--print=` 上：裸 `-p` 后跟别的选项会被当成提示词，agy 也不读 stdin。
+  - 判定：有「事实错误：」「漏答：」开头的行就叫醒；否则有一行 `PASS` 就放行；两样都没有（空文本、只有一句开场白）按失败处理，叫醒文本带输出原文。原先「非空但无 PASS 也当审查意见」改掉，因为 plan 模式动作被拒时会只回一句开场白。
+  - 失败原因：`status` 不是 `SUCCESS` 时取 `error`；退出码非 0 时取 stderr 里 `error:` 开头那行（模型名写错时 stderr 末尾是整张模型清单）。
+  - 超时：`--print-timeout` 与子进程超时都设 300 秒；到点时 agy 以 `status=ERROR`、`context canceled` 退出，按耗时判为超时。
+- `hooks/stop-fact-audit-prompt.txt`：工具名从 `Read、Grep、Glob` 改成「读本机文件、按文件名与内容搜索」，agy 的工具名不同。
+- `hooks.json`：事实审查加 `"rewakeSummary"`，叫醒时界面那一行摘要写成「后台事实审查（gemini-4-neon）：结果已交给 Claude」，默认是 `Stop hook feedback`。字段在 2.1.332 二进制的 hook 配置 schema 里，标 `@internal`，本插件是否生效未实测。
+- 同步审查（`stop-audit.js`）不变：用户看过时序代价后拍板「保持现状」——同步 Stop hook 的打回文字在 Claude Code 里一定整段上屏，要藏只能改成后台叫醒，回复会先结束、20～90 秒后才重写。
+
+**实测**（2026-11-26，真调 agy）：说错 `plugin.json` 的 version 与 author 的那条，24.8 秒叫醒，两处都指到 `plugin.json:3`、`:6`；说对的那条 14.0 秒放行；`DEVKIT_FACT_AUDIT_TIMEOUT_MS=3000` 时 3.7 秒判超时并叫醒。
+
+**残留**：agy 每次调用都会留一条会话（返回 `conversation_id`），没有不落盘的开关。
+
 ### 4.31.0 后台事实审查没审到时，不再打断手上的事
 
 - 审查超时或失败叫醒主模型时，原来的文案要求「只回用户一句……然后结束本轮」。
@@ -1791,8 +1811,8 @@ plugins/devkit-discipline/
 │   ├── stop-audit-link-prompt.txt      #   4.17.0：链接那路判定提示词，与出处那路并行跑；CLICKABLE_PATHS=off 时不跑
 │   ├── stop-audit-stuck-prompt.txt     #   4.19.0：卡点那路（3.14 卡点没挂）；DEVKIT_WIKI_AUDIT=off 时不跑
 │   ├── stop-audit-gloss-prompt.txt     #   4.19.0：释义那路（3.14 释义自写）；DEVKIT_WIKI_AUDIT=off 时不跑
-│   ├── stop-fact-audit.js              #   4.20.0：后台事实审查（asyncRewake），只在设了 DEVKIT_STOP_AUDIT_SETTINGS 时跑；
-│   │                                   #   第三方模型带 Read/Grep/Glob 核事实与漏答，发现问题退出码 2 叫醒主模型；4.26.0 起超时也叫醒，4.28.0 起报错也叫醒
+│   ├── stop-fact-audit.js              #   4.20.0：后台事实审查（asyncRewake）；4.32.0 起调本机 agy（gemini-4-neon、plan 只读），找得到 agy 才跑；
+│   │                                   #   核事实与漏答，发现问题退出码 2 叫醒主模型；超时、报错也叫醒
 │   ├── stop-fact-audit-prompt.txt      #   4.20.0：后台事实审查提示词
 │   ├── term-links.js                   #   4.19.0：链接核对，不经模型——挂过链接的词处处挂、括注原文逐字
 │   ├── wiki-check.js                   #   4.17.0：词条核对，stop-audit 调用、不经模型——本轮写的 claude-wiki
@@ -1830,7 +1850,7 @@ plugins/devkit-discipline/
 │   │                                   #   （3.26.0 起 cd 用例在 devkit-cd-blocker 插件，这里只留一条
 │   │                                   #   反向断言：裸 cd 必须已经不被 bash-guard 拦）
 │   ├── compact-agent-status-verify.js  # compact-agent-status 回归 26 条
-│   └── stop-audit-verify.js            # stop-audit 与 stop-fact-audit 回归 185 条（判定模型用桩，只测脚本分支、摘录、四路合并、词条核对、后台事实审查）
+│   └── stop-audit-verify.js            # stop-audit 与 stop-fact-audit 回归 211 条（判定模型用桩，只测脚本分支、摘录、四路合并、词条核对、后台事实审查）
 └── README.md
 ```
 

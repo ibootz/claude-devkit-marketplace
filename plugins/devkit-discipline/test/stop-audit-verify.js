@@ -488,116 +488,126 @@ const said = (text) => ({ type: 'assistant', message: { role: 'assistant', conte
   check('整次审查记一行 kind=run、stage=sync、blocked=true', runRow.length === 1 && runRow[0].stage === 'sync' && runRow[0].blocked === true && typeof runRow[0].ms === 'number', JSON.stringify(runRow))
 }
 
-// ---- 4.20.0 后台事实审查 stop-fact-audit.js（asyncRewake）----
+// ---- 后台事实审查 stop-fact-audit.js（asyncRewake；4.32.0 起调 agy）----
 {
   const FACT = path.join(__dirname, '..', 'hooks', 'stop-fact-audit.js')
-  const sf = path.join(DIR, 'settings.fact.json')
-  fs.writeFileSync(sf, '{"env":{}}')
+  // agy 桩：提示词取自 --print=<全文>；STUB_AGY 选输出形态；每次调用在 STUB_LOG 追加一行
+  const AGY = path.join(DIR, 'stub-agy')
+  fs.writeFileSync(AGY, `#!/usr/bin/env node
+const fs = require('fs')
+const argv = process.argv.slice(2)
+const pr = (argv.find((a) => a.startsWith('--print=')) || '').slice(8)
+if (process.env.STUB_LOG) fs.appendFileSync(process.env.STUB_LOG, 'fact\\n')
+if (process.env.STUB_ARGV_LOG) fs.appendFileSync(process.env.STUB_ARGV_LOG, JSON.stringify({ argv, child: process.env.DEVKIT_STOP_AUDIT_CHILD, input: pr }) + '\\n')
+const m = process.env.STUB_AGY || 'pass'
+const out = (status, response, extra = {}) => process.stdout.write(JSON.stringify({ conversation_id: 'c1', status, response, ...extra }))
+if (m === 'exit1') { process.stderr.write('error: invalid model selection (--model "x"): model x is not recognized\\nAvailable models:\\n  Gemini 4 Neon (High)\\n'); process.exit(1) }
+if (m === 'sleep') Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000)
+if (m === 'garbage') { process.stdout.write('not json'); process.exit(0) }
+if (m === 'staterr') { out('ERROR', '', { error: 'quota exhausted' }); process.exit(0) }
+if (m === 'empty') { out('SUCCESS', ''); process.exit(0) }
+if (m === 'preamble') { out('SUCCESS', 'I will check the file first.', { denied_actions: [{ action: 'command' }] }); process.exit(0) }
+if (m === 'block') { out('SUCCESS', '事实错误：回复说「X 不存在」，但 /tmp/a.js:3 写的是「function X」'); process.exit(0) }
+out('SUCCESS', 'PASS\\n')
+`)
+  fs.chmodSync(AGY, 0o755)
   const runFact = (input, env = {}) => {
     const log = path.join(DIR, `flog-${pass + fail}`)
     const r = spawnSync('node', [FACT], {
       input: typeof input === 'string' ? input : JSON.stringify(input),
       encoding: 'utf8',
-      env: { ...process.env, DEVKIT_STOP_AUDIT: '', DEVKIT_STOP_AUDIT_CHILD: '', DEVKIT_FACT_AUDIT: '', DEVKIT_STOP_AUDIT_SETTINGS: sf, DEVKIT_STOP_AUDIT_CLAUDE: STUB, DEVKIT_STOP_AUDIT_LOG: path.join(DIR, 'fact-default.log'), STUB_LOG: log, ...env },
+      env: { ...process.env, DEVKIT_STOP_AUDIT: '', DEVKIT_STOP_AUDIT_CHILD: '', DEVKIT_FACT_AUDIT: '', DEVKIT_FACT_AUDIT_AGY: AGY, DEVKIT_STOP_AUDIT_LOG: path.join(DIR, 'fact-default.log'), STUB_LOG: log, ...env },
     })
     return { status: r.status, stdout: r.stdout, stderr: r.stderr, called: fs.existsSync(log) }
   }
   const fb = { ...base, cwd: '/proj/demo', last_assistant_message: '结论：X 不存在，见 a.js。' }
+  const TAG = '🔍【异步审查 · gemini-4-neon（agy）】'
 
   const al = path.join(DIR, 'fact-argv')
   const lg = path.join(DIR, 'fact-pass.log')
-  const r1 = runFact(fb, { STUB_FACT: 'pass', STUB_ARGV_LOG: al, DEVKIT_STOP_AUDIT_LOG: lg, ANTHROPIC_BASE_URL: 'https://api.anthropic.com', CLAUDE_CODE_RETRY_WATCHDOG: '1' })
+  const r1 = runFact(fb, { STUB_AGY: 'pass', STUB_ARGV_LOG: al, DEVKIT_STOP_AUDIT_LOG: lg })
   check('事实审查：判满足 → 退出码 0、不写 stderr', r1.status === 0 && r1.stderr === '' && r1.called, `${r1.status} ${r1.stderr}`)
   const calls = fs.readFileSync(al, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
   const a = calls[0].argv
   const after = (f) => a[a.indexOf(f) + 1]
-  check('事实审查：只调一次模型，且是 fact 提示词', calls.length === 1 && calls[0].kind === 'fact', JSON.stringify(calls.map((c) => c.kind)))
-  check('事实审查：带 --settings 第三方文件、模型 fable、不带 schema、effort high', after('--settings') === sf && after('--model') === 'fable' && !a.includes('--json-schema') && after('--effort') === 'high', JSON.stringify(a))
-  check('事实审查：只放 Read,Grep,Glob', after('--allowedTools') === 'Read,Grep,Glob', JSON.stringify(a))
-  check('事实审查：禁 Bash、Write、Edit、WebFetch、Agent', ['Bash', 'Write', 'Edit', 'WebFetch', 'Agent'].every((t) => after('--disallowedTools').split(',').includes(t)), after('--disallowedTools'))
-  check('事实审查：--add-dir 加会话 cwd', after('--add-dir') === '/proj/demo', JSON.stringify(a))
-  check('事实审查：子进程剥掉父进程端点、带防递归标记、单次请求超时 150 秒', calls[0].base === null && calls[0].child === '1' && calls[0].apiTimeout === '150000', JSON.stringify(calls[0]))
-  check('事实审查：子进程剥掉重试看门狗、重试限 2 次', calls[0].watchdog === null && calls[0].maxRetries === '2', JSON.stringify({ w: calls[0].watchdog, r: calls[0].maxRetries }))
-  check('事实审查：输入里 $CWD 已替换、带被审回复', calls[0].input.includes('项目目录：/proj/demo') && !calls[0].input.includes('$CWD') && calls[0].input.includes('[assistant]: 结论：X 不存在'), calls[0].input.slice(0, 300))
+  check('事实审查：只调一次 agy', calls.length === 1, String(calls.length))
+  check('事实审查：模型 gemini-4-neon、effort medium、plan 模式、json 输出', after('--model') === 'gemini-4-neon' && after('--effort') === 'medium' && after('--mode') === 'plan' && after('--output-format') === 'json', JSON.stringify(a))
+  check('事实审查：--print-timeout 按超时秒数、--add-dir 加会话 cwd', after('--print-timeout') === '300s' && after('--add-dir') === '/proj/demo', JSON.stringify(a))
+  check('事实审查：提示词挂在最后一个参数 --print= 上', a[a.length - 1].startsWith('--print=') && !a.includes('-p'), JSON.stringify(a.slice(-1)).slice(0, 80))
+  check('事实审查：子进程带防递归标记', calls[0].child === '1', JSON.stringify(calls[0].child))
+  check('事实审查：输入里 $CWD 已替换、带被审回复、带审查员身份', calls[0].input.includes('项目目录：/proj/demo') && !calls[0].input.includes('$CWD') && calls[0].input.includes('[assistant]: 结论：X 不存在') && calls[0].input.startsWith('你是 Claude Code 会话的后台事实审查员'), calls[0].input.slice(0, 300))
   check('事实审查：输入不带同步路的「只输出一行 JSON」', !calls[0].input.includes('只输出一行 JSON'))
   const rows = fs.readFileSync(lg, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
-  check('事实审查：成功记 kind=ok、audit=fact、route=third-party', rows.some((o) => o.kind === 'ok' && o.audit === 'fact' && o.route === 'third-party'), JSON.stringify(rows))
+  check('事实审查：成功记 kind=ok、audit=fact、route=agy', rows.some((o) => o.kind === 'ok' && o.audit === 'fact' && o.route === 'agy'), JSON.stringify(rows))
   check('事实审查：记 kind=run、stage=fact、blocked=false', rows.some((o) => o.kind === 'run' && o.stage === 'fact' && o.blocked === false), JSON.stringify(rows))
 
   const lg2 = path.join(DIR, 'fact-block.log')
-  const r2 = runFact(fb, { STUB_FACT: 'block', DEVKIT_STOP_AUDIT_LOG: lg2 })
+  const r2 = runFact(fb, { STUB_AGY: 'block', DEVKIT_STOP_AUDIT_LOG: lg2 })
   check('事实审查：判不满足 → 退出码 2（叫醒主模型）', r2.status === 2, `${r2.status} ${r2.stderr}`)
   check('事实审查：stderr 带判定理由与被审回复开头', r2.stderr.includes('/tmp/a.js:3') && r2.stderr.includes('「结论：X 不存在'), r2.stderr)
   check('事实审查：stderr 要求先核实再改', r2.stderr.includes('先用工具逐条核实'), r2.stderr)
-  check('事实审查：叫醒文本以标识开头，settings 没映射模型时写「第三方模型」', r2.stderr.startsWith('🔍【异步审查 · 第三方模型】后台事实审查'), r2.stderr.slice(0, 60))
-  const sfm = path.join(DIR, 'settings.fact-model.json')
-  fs.writeFileSync(sfm, '{"env":{"ANTHROPIC_DEFAULT_OPUS_MODEL":"wrong-tier","ANTHROPIC_DEFAULT_FABLE_MODEL":"gemini-x"}}')
-  const r2m = runFact(fb, { STUB_FACT: 'block', DEVKIT_STOP_AUDIT_SETTINGS: sfm, DEVKIT_STOP_AUDIT_LOG: lg2 })
-  check('事实审查：标识里写 settings 映射的 fable 模型名', r2m.status === 2 && r2m.stderr.startsWith('🔍【异步审查 · gemini-x】'), r2m.stderr.slice(0, 60))
+  check('事实审查：叫醒文本以 gemini-4-neon（agy）标识开头', r2.stderr.startsWith(TAG + '后台事实审查'), r2.stderr.slice(0, 60))
   check('事实审查：stdout 为空（不走 decision=block）', r2.stdout === '', r2.stdout)
   check('事实审查：叫醒时 run 行 blocked=true', fs.readFileSync(lg2, 'utf8').trim().split('\n').map((l) => JSON.parse(l)).some((o) => o.kind === 'run' && o.stage === 'fact' && o.blocked === true))
 
   for (const [name, input, env] of [
-    ['没设 DEVKIT_STOP_AUDIT_SETTINGS', fb, { STUB_FACT: 'block', DEVKIT_STOP_AUDIT_SETTINGS: '' }],
-    ['settings 文件不存在', fb, { STUB_FACT: 'block', DEVKIT_STOP_AUDIT_SETTINGS: path.join(DIR, 'nope.json') }],
-    ['DEVKIT_FACT_AUDIT=off', fb, { STUB_FACT: 'block', DEVKIT_FACT_AUDIT: 'off' }],
-    ['DEVKIT_STOP_AUDIT=off', fb, { STUB_FACT: 'block', DEVKIT_STOP_AUDIT: 'off' }],
-    ['判定子进程里', fb, { STUB_FACT: 'block', DEVKIT_STOP_AUDIT_CHILD: '1' }],
-    ['stop_hook_active=true（叫醒那一轮）', { ...fb, stop_hook_active: true }, { STUB_FACT: 'block' }],
-    ['没有 last_assistant_message', { ...fb, last_assistant_message: '' }, { STUB_FACT: 'block' }],
+    ['DEVKIT_FACT_AUDIT=off', fb, { STUB_AGY: 'block', DEVKIT_FACT_AUDIT: 'off' }],
+    ['DEVKIT_STOP_AUDIT=off', fb, { STUB_AGY: 'block', DEVKIT_STOP_AUDIT: 'off' }],
+    ['判定子进程里', fb, { STUB_AGY: 'block', DEVKIT_STOP_AUDIT_CHILD: '1' }],
+    ['stop_hook_active=true（叫醒那一轮）', { ...fb, stop_hook_active: true }, { STUB_AGY: 'block' }],
+    ['没有 last_assistant_message', { ...fb, last_assistant_message: '' }, { STUB_AGY: 'block' }],
+    ['agy 路径不存在', fb, { STUB_AGY: 'block', DEVKIT_FACT_AUDIT_AGY: path.join(DIR, 'nope') }],
   ]) {
     const r = runFact(input, env)
     check(`事实审查：${name} → 不调模型、退出码 0`, r.status === 0 && !r.called && r.stderr === '', `${r.status} ${r.called} ${r.stderr}`)
   }
-  const lg3 = path.join(DIR, 'fact-fail.log')
-  for (const [name, env] of [
-    ['claude 路径不存在', { STUB_FACT: 'block', DEVKIT_STOP_AUDIT_CLAUDE: path.join(DIR, 'nope') }],
-    ['stdin 不是 JSON', { STUB_FACT: 'block' }, 'oops'],
-  ]) {
-    const r = runFact(name === 'stdin 不是 JSON' ? 'oops' : fb, { ...env, DEVKIT_STOP_AUDIT_LOG: lg3 })
-    check(`事实审查 没跑判定：${name} → 退出码 0、不叫醒`, r.status === 0 && r.stderr === '', `${r.status} ${r.stderr}`)
+  {
+    const r = runFact('oops', { STUB_AGY: 'block' })
+    check('事实审查 没跑判定：stdin 不是 JSON → 退出码 0、不叫醒', r.status === 0 && r.stderr === '', `${r.status} ${r.stderr}`)
   }
+  const lg3 = path.join(DIR, 'fact-fail.log')
   for (const [name, env, want] of [
-    ['判定进程退出码非 0', { STUB_FACT: 'exit1' }, 'exit-nonzero'],
-    ['判定输出不是 JSON', { STUB_FACT: 'garbage' }, 'bad-json'],
-    ['审查意见为空', { STUB_FACT: 'empty' }, 'empty-text'],
+    ['agy 退出码非 0：取 error: 开头那行，不取模型清单末行', { STUB_AGY: 'exit1' }, 'error: invalid model selection'],
+    ['输出不是 JSON', { STUB_AGY: 'garbage' }, 'bad-json'],
+    ['status 不是 SUCCESS：带 status 与 error', { STUB_AGY: 'staterr' }, 'status=ERROR：quota exhausted'],
+    ['审查意见为空', { STUB_AGY: 'empty' }, '审查输出为空'],
+    ['只有开场白、既无 PASS 也无问题行', { STUB_AGY: 'preamble' }, '既没有 PASS 也没有问题行：I will check'],
   ]) {
     const r = runFact(fb, { ...env, DEVKIT_STOP_AUDIT_LOG: lg3 })
-    check(`事实审查 失败也叫醒：${name} → 退出码 2、标识开头、只回一句、带失败类别`, r.status === 2 && r.stderr.startsWith('🔍【异步审查 · 第三方模型】') && r.stderr.includes('时失败') && r.stderr.includes('不复查、不重写') && r.stderr.includes('照常做完') && !r.stderr.includes('结束本轮') && r.stderr.includes(want), `${r.status} ${r.stderr}`)
+    check(`事实审查 失败也叫醒：${name}`, r.status === 2 && r.stderr.startsWith(TAG) && r.stderr.includes('时失败') && r.stderr.includes('不复查、不重写') && r.stderr.includes('照常做完') && !r.stderr.includes('结束本轮') && r.stderr.includes(want) && !r.stderr.includes('Gemini 4 Neon (High)'), `${r.status} ${r.stderr}`)
   }
-  const ra = runFact(fb, { STUB_FACT: 'apierr', DEVKIT_STOP_AUDIT_LOG: lg3 })
-  check('事实审查 失败也叫醒：上游 API 报错原文进叫醒文本（取 JSON 的 result）', ra.status === 2 && ra.stderr.includes('API Error: 503 No available channel for model gemini-4-neon') && ra.stderr.includes('「结论：X 不存在'), `${ra.status} ${ra.stderr}`)
   {
-    const fa = require(path.join(__dirname, '..', 'hooks', 'stop-fact-audit.js'))
-    check('failDetail：无 JSON 时取 stderr 最后一行', fa.failDetail('exit-nonzero', { stdout: '', stderr: 'a\nboom\n' }) === 'boom')
+    const fa = require(FACT)
     check('parseFactText：单独一行 PASS → 满足', JSON.stringify(fa.parseFactText('PASS')) === '{"ok":true,"reason":""}' && fa.parseFactText('**PASS**\n').ok === true)
-    check('parseFactText：问题行 → 不满足、理由为整段文本', fa.parseFactText('事实错误：回复说「a」，但 /x:1 写的是「b」').ok === false && fa.parseFactText('- 漏答：用户问「q」，回复没有回应。\nPASS').ok === false)
-    check('parseFactText：非空但无 PASS 的文本也当审查意见', fa.parseFactText('回复第 3 段的数字对不上').ok === false)
+    check('parseFactText：问题行 → 不满足、理由为整段文本（同时有 PASS 也算不满足）', fa.parseFactText('事实错误：回复说「a」，但 /x:1 写的是「b」').ok === false && fa.parseFactText('- 漏答：用户问「q」，回复没有回应。\nPASS').ok === false)
+    check('parseFactText：非空但既无 PASS 也无问题行 → null（按失败处理）', fa.parseFactText('回复第 3 段的数字对不上') === null)
     check('parseFactText：空文本 → null', fa.parseFactText('') === null && fa.parseFactText('  ') === null && fa.parseFactText(undefined) === null)
+    check('factVerdict：status 不是 SUCCESS → null', fa.factVerdict({ status: 'ERROR', response: 'PASS' }) === null && fa.factVerdict({ status: 'SUCCESS', response: 'PASS' }).ok === true)
+    check('failDetail：无 JSON、无 error: 行时取 stderr 最后一行', fa.failDetail('exit-nonzero', { stdout: '', stderr: 'a\nboom\n' }) === 'boom')
     check('failDetail：什么都没有时退回失败类别', fa.failDetail('bad-json', { stdout: 'x', stderr: '' }) === 'bad-json')
+    check('resolveAgy：DEVKIT_FACT_AUDIT_AGY 不可执行时返回 null', fa.resolveAgy({ DEVKIT_FACT_AUDIT_AGY: path.join(DIR, 'nope') }) === null && fa.resolveAgy({ DEVKIT_FACT_AUDIT_AGY: AGY }) === AGY)
   }
   const lg4 = path.join(DIR, 'fact-timeout.log')
-  const r4 = runFact(fb, { STUB_FACT: 'sleep', DEVKIT_FACT_AUDIT_TIMEOUT_MS: '1000', DEVKIT_STOP_AUDIT_LOG: lg4 })
+  const r4 = runFact(fb, { STUB_AGY: 'sleep', DEVKIT_FACT_AUDIT_TIMEOUT_MS: '1000', DEVKIT_STOP_AUDIT_LOG: lg4 })
   check('事实审查：超时 → 退出码 2（也叫醒）', r4.status === 2, `${r4.status} ${r4.stderr}`)
-  check('事实审查：超时叫醒同样以标识开头', r4.stderr.startsWith('🔍【异步审查 · 第三方模型】'), r4.stderr.slice(0, 60))
+  check('事实审查：超时叫醒同样以标识开头', r4.stderr.startsWith(TAG), r4.stderr.slice(0, 60))
   check('事实审查：超时叫醒文案点明没审到、带被审回复开头、不要求复查', r4.stderr.includes('超时') && r4.stderr.includes('没有经过事实审查') && r4.stderr.includes('「结论：X 不存在') && r4.stderr.includes('不复查、不重写') && r4.stderr.includes('照常做完') && !r4.stderr.includes('结束本轮') && !r4.stderr.includes('先用工具逐条核实'), r4.stderr)
   const tr = fs.readFileSync(lg4, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
   check('事实审查：超时记 kind=timeout，run 行 timed_out=true、blocked=false', tr.some((o) => o.kind === 'timeout' && o.audit === 'fact') && tr.some((o) => o.kind === 'run' && o.stage === 'fact' && o.timed_out === true && o.blocked === false), JSON.stringify(tr))
   {
-    const fa = require(path.join(__dirname, '..', 'hooks', 'stop-fact-audit.js'))
+    const fa = require(FACT)
     check('事实审查：超时覆盖只接受小于默认值的正整数', fa.factTimeout({}) === fa.FACT_TIMEOUT_MS && fa.factTimeout({ DEVKIT_FACT_AUDIT_TIMEOUT_MS: 'x' }) === fa.FACT_TIMEOUT_MS && fa.factTimeout({ DEVKIT_FACT_AUDIT_TIMEOUT_MS: '999999' }) === fa.FACT_TIMEOUT_MS && fa.factTimeout({ DEVKIT_FACT_AUDIT_TIMEOUT_MS: '1000' }) === 1000)
   }
   const fr = fs.readFileSync(lg3, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
-  check('事实审查：非超时失败的 run 行 timed_out=false', fr.filter((o) => o.kind === 'run').every((o) => o.timed_out === false), JSON.stringify(fr.filter((o) => o.kind === 'run')))
-  check('事实审查：非超时失败的 run 行 failed=true', fr.filter((o) => o.kind === 'run').every((o) => o.failed === true) && fr.filter((o) => o.kind === 'run').length === 4, JSON.stringify(fr.filter((o) => o.kind === 'run')))
-  check('事实审查：失败记日志、audit=fact', fr.some((o) => o.kind === 'exit-nonzero' && o.audit === 'fact') && fr.some((o) => o.kind === 'bad-json' && o.audit === 'fact'), JSON.stringify(fr.map((o) => o.kind + '/' + o.audit)))
+  check('事实审查：非超时失败的 run 行 timed_out=false、failed=true、共 5 行', fr.filter((o) => o.kind === 'run').every((o) => o.timed_out === false && o.failed === true) && fr.filter((o) => o.kind === 'run').length === 5, JSON.stringify(fr.filter((o) => o.kind === 'run')))
+  check('事实审查：失败记日志、audit=fact、route=agy', fr.some((o) => o.kind === 'exit-nonzero' && o.audit === 'fact' && o.route === 'agy') && fr.some((o) => o.kind === 'bad-json' && o.audit === 'fact'), JSON.stringify(fr.map((o) => o.kind + '/' + o.audit)))
 
   const hj = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'hooks', 'hooks.json'), 'utf8'))
   const stop = hj.hooks.Stop.flatMap((g) => g.hooks)
   const sync = stop.find((h) => h.command.endsWith('/stop-audit.js'))
   const fact = stop.find((h) => h.command.endsWith('/stop-fact-audit.js'))
   check('hooks.json：同步审查 timeout 100、不是 async', sync && sync.timeout === 100 && !sync.async && !sync.asyncRewake, JSON.stringify(sync))
-  check('hooks.json：事实审查 asyncRewake、timeout ≥ 300', fact && fact.asyncRewake === true && fact.timeout >= 300, JSON.stringify(fact))
+  check('hooks.json：事实审查 asyncRewake、timeout ≥ 300、带一行 rewakeSummary', fact && fact.asyncRewake === true && fact.timeout >= 300 && typeof fact.rewakeSummary === 'string' && !fact.rewakeSummary.includes('\n'), JSON.stringify(fact))
 }
 
 // ---- 订阅路文本判定解析 ----

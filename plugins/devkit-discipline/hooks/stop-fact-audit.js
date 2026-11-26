@@ -1,136 +1,139 @@
-// stop-fact-audit.js — 回合末后台事实审查（4.20.0，Stop hook，asyncRewake）
+// stop-fact-audit.js — 回合末后台事实审查（4.20.0 起，Stop hook，asyncRewake）
 //
-// 【为什么有它】用户 2026-11-23 拍板 Q1-c、Q2-a：同步审查（stop-audit.js）四路全留、全走订阅 sonnet；
-// 第三方模型（gemini 等）挪到后台，只审核心事实错误与漏答，可用只读工具对照本机文件核实。
-// 第三方判定一次要 30～150 秒（2026-11-23 实测），放在同步路径上用户每轮都要干等。
+// 【为什么有它】用户 2026-11-23 拍板 Q1-c、Q2-a：同步审查（stop-audit.js）四路全走订阅 sonnet；
+// 第三方模型挪到后台，只审核心事实错误与漏答，可读本机文件核实。第三方判定一次要 30～150 秒（2026-11-23 实测），
+// 放在同步路径上用户每轮都要干等。
 //
 // 【它怎么把结果交回主模型】hooks.json 给本脚本配 asyncRewake: true。Claude Code 不等它，回复立即结束；
-// 本脚本以退出码 2 结束时，stderr 作为「Stop hook feedback」消息叫醒主模型开新一轮（Claude Code 2.1.330
-// 字段说明原文：「If true, hook runs in background and wakes the model on exit code 2 (blocking error).
-// Implies async.」；headless 下实测叫醒成功）。叫醒那一轮的 Stop 带 stop_hook_active=true，
-// 本脚本与 stop-audit.js 都直接放行，不会循环。
+// 本脚本以退出码 2 结束时，stderr 进给模型的 system-reminder 叫醒主模型开新一轮，界面上只显示
+// hooks.json 里 rewakeSummary 那一行（2.1.332 二进制：叫醒消息是 <task-notification><summary>…</summary>，
+// 正文在其后的 system-reminder 里）。叫醒那一轮的 Stop 带 stop_hook_active=true，本脚本与 stop-audit.js 都直接放行，不会循环。
 //
-// 【什么时候跑】只在设了 DEVKIT_STOP_AUDIT_SETTINGS（第三方 settings 文件，读得到）时跑；
-// DEVKIT_FACT_AUDIT=off 单独关掉本审查。没开第三方时不跑，避免给所有人每轮多一次订阅判定。
+// 【审查走哪个模型】4.32.0 起（用户 2026-11-26 要求）改调本机 agy CLI（Antigravity），模型 gemini-4-neon、思考等级 medium。
+// 此前经 claude -p + DEVKIT_STOP_AUDIT_SETTINGS 指的第三方 settings 调，那条路已删。
+// agy 参数（2026-11-26 实测 agy 本机版本）：
+//   - 提示词必须挂在 --print=<全文> 上：裸 -p 后面跟别的选项会被当成提示词（报「-p took "--model" as its prompt」），也不读 stdin。
+//   - --mode plan：只读。实测要它建文件、跑 shell 时什么都没做，JSON 里列出 denied_actions。
+//   - --output-format json 输出 {status, response, ...}；status 不是 SUCCESS 按失败处理。
+//   - 模型名写错时退出码非 0，stderr 第一行是「error: invalid model selection …」，后面跟整张模型清单。
+//   - 每次调用都会在 agy 里留一条会话（返回 conversation_id），agy 没有不落盘的开关。
 //
-// 【失灵时怎样】超时：也叫醒（4.26.0，用户 2026-11-24 拍板），只让主模型告诉用户「这条回复没审完」，
-// 不复查不重写——11-24 实测 32 次里 14 次跑满 300 秒，原先静默丢掉，用户以为机制没生效。
-// 报错、空输出：也叫醒（4.28.0，用户 2026-11-24 拍板 Q1-a），叫醒文本带上游报错原文，同样只回一句。
-// 11-24 下午的超时根因是网关下架了 gemini-4-neon（立即 503 model_not_found），子进程却继承了
-// CLAUDE_CODE_RETRY_WATCHDOG=1，约 35 秒重试一次、跑满 300 秒才被杀。现在剥掉它、重试限 2 次，硬错误几秒内失败。
-// 输出形态（4.29.0，用户 2026-11-25 拍板）：不用 --json-schema，审查模型直接写审查意见文本，没问题时只写一行 PASS。
-// 11-25 实测 gpt-6.2-sol 带 schema 时 43 次里 12 次没给 structured_output，旧版会话把这种失败当通过、静默丢掉。思考等级 high。
-// 判定子进程：cwd 在临时目录、--setting-sources project、DEVKIT_STOP_AUDIT_CHILD=1（同 stop-audit.js 的防递归），
-// 只放 Read / Grep / Glob，--add-dir 加上会话的项目目录。
+// 【什么时候跑】找得到 agy（DEVKIT_FACT_AUDIT_AGY 指定绝对路径，或 PATH、~/.local/bin 里有 agy）就跑；
+// DEVKIT_FACT_AUDIT=off 单独关掉本审查，DEVKIT_STOP_AUDIT=off 连同步审查一起关。
+//
+// 【失灵时怎样】超时、报错、输出不合格式都叫醒（4.26.0 / 4.28.0 用户拍板），只让主模型告诉用户「这条回复没审到」，
+// 不复查不重写；失败的叫醒文本带报错原文。
+// 输出形态（4.29.0 用户拍板）：审查模型直接写审查意见文本，没问题时只写一行 PASS。
 
 'use strict'
 
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 const m = require('./stop-audit')
 
-const FACT_TIMEOUT_MS = 300000 // 用户拍板 Q2-a 给工具后多轮读文件，超时放宽到 5 分钟；hooks.json timeout 330
+const FACT_TIMEOUT_MS = 300000 // 给工具后多轮读文件，超时 5 分钟；hooks.json timeout 330
 // 只给测试缩短超时用；取值必须是小于 FACT_TIMEOUT_MS 的正整数，否则用 FACT_TIMEOUT_MS
 function factTimeout(env) {
   const n = Number(env.DEVKIT_FACT_AUDIT_TIMEOUT_MS)
   return Number.isInteger(n) && n > 0 && n < FACT_TIMEOUT_MS ? n : FACT_TIMEOUT_MS
 }
-// 单次 API 请求超时：同步判定给 85 秒（CHILD_API_TIMEOUT_MS），gemini 一次推理常超过 90 秒（2026-11-23 实测），这里放到 150 秒
-const FACT_API_TIMEOUT_MS = 150000
-// 子进程最多重试 2 次：瞬时 529/5xx 仍有机会恢复，上游配置错（模型下架、鉴权失败）几秒内失败。
-const FACT_MAX_RETRIES = '2'
-const FACT_TOOLS = 'Read,Grep,Glob'
-const FACT_EFFORT = 'high'
-// 4.30.0 用户 2026-11-25 拍板：审查换 gemini-4-carbon，它在第三方 settings 里映射在 fable 档，故用 --model fable。
-// 模型名一律由 settings 的 ANTHROPIC_DEFAULT_FABLE_MODEL 决定，本脚本只写档位别名。
-const FACT_MODEL = 'fable'
-const FACT_DISALLOWED = 'Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Agent'
-const SYS_FACT = 'You are a background fact-checker for a Claude Code session. Use Read, Grep and Glob to check the last assistant reply against local files and the transcript. You never modify anything.'
+const FACT_MODEL = 'gemini-4-neon'
+const FACT_EFFORT = 'medium' // 用户 2026-11-26 指定
+const SYS_FACT = '你是 Claude Code 会话的后台事实审查员。只读：可以读本机文件、搜索文件名与内容，用来把最后一条助手回复与本机文件、会话记录对照；不修改任何文件，不执行命令。'
 
 function factAuditEnabled(env) {
   const flag = String(env.DEVKIT_FACT_AUDIT || '').toLowerCase()
   return !(flag === 'off' || flag === '0' || flag === 'false')
 }
 
-function factArgs(settings, cwd) {
-  const a = [
-    '-p', '--settings', settings, '--model', FACT_MODEL, '--system-prompt', SYS_FACT,
-    '--setting-sources', 'project', '--effort', FACT_EFFORT,
-    '--strict-mcp-config', '--disable-slash-commands',
-    '--allowedTools', FACT_TOOLS, '--disallowedTools', FACT_DISALLOWED,
-  ]
+// agy 可执行文件：DEVKIT_FACT_AUDIT_AGY 优先（给了却不可执行就当没装），再按 PATH 逐项找，最后试 ~/.local/bin。
+function resolveAgy(env = process.env) {
+  const override = env.DEVKIT_FACT_AUDIT_AGY
+  if (override) return m.isExecutable(override) ? override : null
+  const names = process.platform === 'win32' ? ['agy.exe'] : ['agy']
+  const dirs = (env.PATH || '').split(path.delimiter).filter(Boolean)
+  dirs.push(path.join(os.homedir(), '.local', 'bin'))
+  for (const d of dirs) {
+    for (const n of names) {
+      const p = path.join(d, n)
+      if (m.isExecutable(p)) return p
+    }
+  }
+  return null
+}
+
+function factArgs(input, cwd, timeout) {
+  const a = ['--model', FACT_MODEL, '--effort', FACT_EFFORT, '--mode', 'plan', '--output-format', 'json',
+    '--print-timeout', `${Math.max(1, Math.round(timeout / 1000))}s`]
   if (cwd) a.push('--add-dir', cwd)
-  a.push('--no-session-persistence', '--output-format', 'json')
+  a.push(`--print=${input}`)
   return a
 }
 
-// 审查意见文本 → 判定：有一行恰为 PASS、且没有以「事实错误：」「漏答：」开头的行，判满足；
-// 其余非空文本整段当审查意见叫醒主模型；空文本返回 null，按失败处理（kind=empty-text）。
+// 审查意见文本 → 判定：
+// - 有以「事实错误：」「漏答：」开头的行 → 不满足，整段文本当审查意见叫醒主模型；
+// - 否则有一行恰为 PASS → 满足；
+// - 两样都没有（空文本、只有一句开场白之类）→ null，按失败处理（kind=empty-text）。
+//   4.32.0 起不再把「非空但无 PASS」当审查意见：agy 的 plan 模式在动作被拒时会只回一句开场白就结束（2026-11-26 实测）。
 function parseFactText(text) {
   if (typeof text !== 'string' || !text.trim()) return null
   const t = text.trim()
   const lines = t.split('\n').map((l) => l.trim().replace(/^[-*]\s*/, ''))
-  const pass = lines.some((l) => /^\**PASS\**[。.]?$/i.test(l))
-  const issue = lines.some((l) => /^(事实错误|漏答)[:：]/.test(l))
-  if (pass && !issue) return { ok: true, reason: '' }
-  return { ok: false, reason: t }
+  if (lines.some((l) => /^(事实错误|漏答)[:：]/.test(l))) return { ok: false, reason: t }
+  if (lines.some((l) => /^\**PASS\**[。.]?$/i.test(l))) return { ok: true, reason: '' }
+  return null
 }
-function factVerdict(j) { return parseFactText(j && j.result) }
+function factVerdict(j) { return j && j.status === 'SUCCESS' ? parseFactText(j.response) : null }
 
-// 判定子进程的环境：在 routeEnv 之上放宽单次请求超时、剥掉重试看门狗、限重试次数
-function factEnv(parentEnv, settings) {
-  const env = { ...m.routeEnv(parentEnv, settings), API_TIMEOUT_MS: String(FACT_API_TIMEOUT_MS), CLAUDE_CODE_MAX_RETRIES: FACT_MAX_RETRIES }
-  delete env.CLAUDE_CODE_RETRY_WATCHDOG
-  return env
+function factEnv(parentEnv) {
+  return { ...parentEnv, DEVKIT_STOP_AUDIT_CHILD: '1' }
 }
 
 function buildFactInput(hookInput, contextLines, template) {
   const pre = contextLines.length ? contextLines.join('\n') : '[user]: （本轮用户提问未能读取）'
   const cond = template.split('$CWD').join(hookInput.cwd || '（未知）')
-  return `<transcript>\n${pre}\n\n[assistant]: ${hookInput.last_assistant_message}\n</transcript>\n\n${cond}`
+  return `${SYS_FACT}\n\n<transcript>\n${pre}\n\n[assistant]: ${hookInput.last_assistant_message}\n</transcript>\n\n${cond}`
 }
 
-// 叫醒消息最前面的标识（4.27.0，用户 2026-11-24 要求）：harness 显示成「Stop hook blocking error from command "Stop": <stderr>」，
-// 与同步审查的打回长得很像，加标识让人一眼认出这是第三方异步审查、是哪个模型审的。
-// 模型名取第三方 settings 里 fable 档映射的那个（本脚本用 --model fable 调，4.30.0 起），读不到写「第三方模型」。
-function modelLabel(settings) {
-  try {
-    const v = JSON.parse(fs.readFileSync(settings, 'utf8')).env.ANTHROPIC_DEFAULT_FABLE_MODEL
-    if (typeof v === 'string' && v.trim()) return v.trim()
-  } catch { /* 读不到就用通用名 */ }
-  return '第三方模型'
-}
-function tag(settings) { return `🔍【异步审查 · ${modelLabel(settings)}】` }
+// 叫醒消息最前面的标识（4.27.0 用户要求）：让人与主模型一眼认出这是后台事实审查、是哪个模型审的。
+function tag() { return `🔍【异步审查 · ${FACT_MODEL}（agy）】` }
 
 // 叫醒主模型的消息：点明审的是哪条回复（审查耗时长，叫醒时主模型可能已经往下做了），要求先核实再改。
 function wakeText(reason, last) {
-  return `后台事实审查（第三方模型，可读本机文件）审的是你开头为「${m.cut(last, 40)}」的那条回复，发现：\n${reason.trim()}\n` +
+  return `后台事实审查（${FACT_MODEL}，可读本机文件）审的是你开头为「${m.cut(last, 40)}」的那条回复，发现：\n${reason.trim()}\n` +
     '先用工具逐条核实。确有错：在回复开头写更正块（原说、实为、错因）后改正；核实后原文无误：用一两句说明依据，不必重写整条回复。'
 }
 
 // 超时叫醒的消息：只为让用户知道这条没审到。主模型不复查、不重写，附一句提示。
-// 4.31.0：不再要求「然后结束本轮」——11-25 实测叫醒与同步审查的拦截撞在同一回合，模型照「回一句就结束」
-// 把同步审查要求的整条重写丢了。
+// 4.31.0：不要求「然后结束本轮」——叫醒与同步审查的叫醒撞在同一回合时，模型会把同步审查要求的整条重写丢掉。
 function timeoutText(sec, last) {
-  return `后台事实审查（第三方模型）审你开头为「${m.cut(last, 40)}」的那条回复时超时（${sec} 秒没有出结果），这条回复没有经过事实审查。\n` +
+  return `后台事实审查（${FACT_MODEL}）审你开头为「${m.cut(last, 40)}」的那条回复时超时（${sec} 秒没有出结果），这条回复没有经过事实审查。\n` +
     `不复查、不重写那条回复。告诉用户一句：「上一条回复（开头为「${m.cut(last, 20)}」）的后台事实审查超时，没有审到。」\n` +
     '本轮手上已有的事（其他 hook 要求的重写、用户的新消息）照常做完，这一句附在回复末尾；手上没别的事就只回这一句。'
 }
 
-// 失败原因：claude -p 的 JSON 里 is_error=true 时 result 是上游报错原文（如「API Error: 503 No available channel
-// for model …」，2026-11-24 实测）；没有就取 stderr 最后一行，再没有就用失败类别。
+// 失败原因：agy 的 JSON 里 status 不是 SUCCESS 时取 error / response；输出不合格式时摘 response 开头；
+// 都没有就取 stderr 里以 error: 开头的那行（模型名错时 stderr 后面跟整张模型清单，最后一行没用），再没有就取最后一行。
 function failDetail(kind, p) {
   try {
     const j = JSON.parse(p.stdout)
-    if (j && j.is_error && typeof j.result === 'string' && j.result.trim()) return j.result.trim()
+    if (j && j.status && j.status !== 'SUCCESS') {
+      const msg = [j.error, j.response].find((x) => typeof x === 'string' && x.trim())
+      return `status=${j.status}${msg ? `：${msg.trim()}` : ''}`
+    }
+    if (j && kind === 'empty-text') {
+      const r = typeof j.response === 'string' ? j.response.trim() : ''
+      return r ? `审查输出既没有 PASS 也没有问题行：${r}` : '审查输出为空'
+    }
   } catch { /* stdout 不是 JSON */ }
-  const line = String(p.stderr || (p.error && (p.error.code || p.error.message)) || '').trim().split('\n').filter(Boolean).pop()
-  return line || kind
+  const lines = String(p.stderr || (p.error && (p.error.code || p.error.message)) || '').split('\n').map((l) => l.trim()).filter(Boolean)
+  return lines.find((l) => /^error[:：]/i.test(l)) || lines.pop() || kind
 }
 
-// 非超时失败的叫醒消息：带报错原文，让用户知道是哪里坏了（模型下架、鉴权、网关不通），主模型同样只附一句、手上的事照常做完。
+// 非超时失败的叫醒消息：带报错原文，让用户知道是哪里坏了，主模型同样只附一句、手上的事照常做完。
 function failText(detail, last) {
-  return `后台事实审查（第三方模型）审你开头为「${m.cut(last, 40)}」的那条回复时失败，报错：${m.cut(detail, 300)}\n这条回复没有经过事实审查。\n` +
+  return `后台事实审查（${FACT_MODEL}）审你开头为「${m.cut(last, 40)}」的那条回复时失败，报错：${m.cut(detail, 300)}\n这条回复没有经过事实审查。\n` +
     `不复查、不重写那条回复。告诉用户一句：「上一条回复（开头为「${m.cut(last, 20)}」）的后台事实审查失败，没有审到；报错：${m.cut(detail, 120)}」\n` +
     '本轮手上已有的事（其他 hook 要求的重写、用户的新消息）照常做完，这一句附在回复末尾；手上没别的事就只回这一句。'
 }
@@ -141,10 +144,8 @@ async function main() {
   let hookInput
   try { hookInput = JSON.parse(fs.readFileSync(0, 'utf8')) } catch { return 0 }
   if (hookInput.stop_hook_active || !hookInput.last_assistant_message) return 0
-  const settings = m.thirdPartySettings(process.env)
-  if (!settings) return 0
-  const claudeBin = m.resolveClaude()
-  if (!claudeBin) return 0
+  const agy = resolveAgy(process.env)
+  if (!agy) return 0
 
   let contextLines = []
   try { if (hookInput.transcript_path) contextLines = m.buildContextLines(m.readTail(hookInput.transcript_path)) } catch { /* 只审最后一条回复 */ }
@@ -152,20 +153,21 @@ async function main() {
   const timeout = factTimeout(process.env)
   const t0 = Date.now()
   let failure = null
-  const v = await m.judgeAsync(claudeBin, buildFactInput(hookInput, contextLines, template), {
-    settings, timeout, audit: 'fact', args: factArgs(settings, hookInput.cwd), env: factEnv(process.env, settings),
+  const input = buildFactInput(hookInput, contextLines, template)
+  const v = await m.judgeAsync(agy, input, {
+    name: 'agy', timeout, audit: 'fact', args: factArgs(input, hookInput.cwd, timeout), env: factEnv(process.env),
     verdict: factVerdict, onFail: (kind, p) => { failure = { kind, p } },
   })
   const ms = Date.now() - t0
   const wake = !!(v && v.ok === false && typeof v.reason === 'string' && v.reason.trim())
-  // 判超时的口径同 judgeAsync：claude 被 SIGTERM 后以 143 退出、signal 为空，只能按耗时判
+  // 判超时的口径同 judgeAsync：子进程被 SIGTERM 后的退出码不定，只能按耗时判
   const timedOut = !v && (failure ? failure.kind === 'timeout' : ms >= timeout - 200)
   const failed = !v && !timedOut && !!failure
   m.logFailure('run', {}, ms, { stage: 'fact', blocked: wake, timed_out: timedOut, failed })
   const last = hookInput.last_assistant_message
-  if (wake) { fs.writeSync(2, tag(settings) + wakeText(v.reason, last)); return 2 }
-  if (timedOut) { fs.writeSync(2, tag(settings) + timeoutText(Math.round(timeout / 1000), last)); return 2 }
-  if (failed) { fs.writeSync(2, tag(settings) + failText(failDetail(failure.kind, failure.p), last)); return 2 }
+  if (wake) { fs.writeSync(2, tag() + wakeText(v.reason, last)); return 2 }
+  if (timedOut) { fs.writeSync(2, tag() + timeoutText(Math.round(timeout / 1000), last)); return 2 }
+  if (failed) { fs.writeSync(2, tag() + failText(failDetail(failure.kind, failure.p), last)); return 2 }
   return 0
 }
 
@@ -173,4 +175,4 @@ if (require.main === module) {
   main().then((code) => process.exit(code), () => process.exit(0))
 }
 
-module.exports = { parseFactText, FACT_EFFORT, FACT_MODEL, factArgs, factEnv, buildFactInput, wakeText, timeoutText, failText, failDetail, modelLabel, tag, factAuditEnabled, factTimeout, FACT_TIMEOUT_MS }
+module.exports = { parseFactText, factVerdict, FACT_EFFORT, FACT_MODEL, factArgs, factEnv, buildFactInput, wakeText, timeoutText, failText, failDetail, tag, factAuditEnabled, factTimeout, resolveAgy, FACT_TIMEOUT_MS }

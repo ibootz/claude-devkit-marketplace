@@ -422,9 +422,10 @@ function logOk(route, ms, j, audit) {
 // route.args / route.env 给了就用它们（后台事实审查自带工具、提示词与单次请求超时），否则按 settings 取同步判定的参数与环境。
 // route.onFail 给了就在每种失败时回调一次，参数 (kind, p, ms)（后台事实审查拿它把上游报错带进叫醒文本，4.28.0）。
 // route.verdict 给了就用它从 claude -p 的 JSON 取判定，输入不追加 TEXT_TAIL（后台事实审查要纯文本审查意见，4.29.0）。
+// route.name 给了就用它当日志里的 route（4.32.0 后台事实审查改走 agy，记 route=agy）。
 function judgeAsync(claudeBin, input, route = { settings: null, timeout: CHILD_TIMEOUT_MS }) {
   const timeout = route.timeout || CHILD_TIMEOUT_MS
-  const routeName = route.settings ? 'third-party' : 'subscription'
+  const routeName = route.name || (route.settings ? 'third-party' : 'subscription')
   return new Promise((resolve) => {
     const t0 = Date.now()
     let child
@@ -521,4 +522,4 @@ if (require.main === module) {
   main().catch(() => { /* fail-open */ }).finally(() => process.exit(0))
 }
 
-module.exports = { SCHEMA, THIRD_PARTY_MODEL, CHILD_EFFORT, readTail, logFailure, thirdPartySettings, routeArgs, parseVerdictText, TEXT_TAIL, routeEnv, wikiAuditEnabled, loadAudits, mergeReasons, runAudits, judgeAsync, linkAuditEnabled, buildContextLines, buildJudgeInput, userPromptText, previousRounds, cut, resolveClaude, judge, childEnv }
+module.exports = { isExecutable, SCHEMA, THIRD_PARTY_MODEL, CHILD_EFFORT, readTail, logFailure, thirdPartySettings, routeArgs, parseVerdictText, TEXT_TAIL, routeEnv, wikiAuditEnabled, loadAudits, mergeReasons, runAudits, judgeAsync, linkAuditEnabled, buildContextLines, buildJudgeInput, userPromptText, previousRounds, cut, resolveClaude, judge, childEnv }
