@@ -66,6 +66,12 @@
 // 仓外写绝对路径、`:行号`（用户 2026-11-10 拍板）。落盘 md 那一轨不跟宿主变，照旧。
 // 宿主判据见 isCodex()；Claude 侧四个宿主的输出逐字不变，由 tests/golden-claude 钉住。
 //
+// 【为什么 2.5.0 点名相对 href】
+// 2026-11-26 实测一条回复的改动清单全写成 `[README.md](domains/…/README.md)`：模型刚写完那份 md，
+// 汇报时把文档里落盘那一轨的相对链接原样照抄。终端照样画下划线、悬停显示 URL，点了打不开。
+// 注入里只给了正例，没点名这个来路；同日 devkit-discipline 4.33.0 在回合末机械打回相对 href。
+// 只进 file-absolute / vscode-absolute 两支：workspace-relative（webview）里相对路径正是规定形态。
+//
 // 【机制依赖（都已实测）】
 //   1. Claude Code 的 markdown 渲染器对 `file:` scheme 有专用处理：解析成绝对路径、
 //      **保留 `#片段`**、显示文本取方括号标签；终端支持超链接时发 OSC 8 序列。
@@ -169,6 +175,11 @@ const PERSISTED_WHY =
   '它的白名单里只有 `vscode:`。落盘这一轨**不跟宿主变**——文件 commit 之后会被别人、' +
   '别的机器、GitLab 网页读到，跟着本机宿主变只会在别处变成死链，而死链不报错。'
 
+const RELATIVE_HREF_NOTE = (head) =>
+  '- **圆括号里以 `' + head + '` 开头**。写成相对路径（`](docs/README.md)`、`](01-xx.md)`）' +
+  '终端照样画下划线、点了打不开。汇报刚写完的 md 时最容易犯——文档里的相对链接属于落盘那一轨，' +
+  '照抄进回复前换成绝对路径。devkit-discipline 的回合末核对会按当前目录解析并打回。'
+
 // 每种形态自带它在注入文本里的措辞与队列链接的算法。
 // 三支共享的那些规则（四种漏套、判据、适用面、与 3.3 的关系）不在这里，见 buildGuidance()
 // ——同一条规矩只写一处，改的时候不必三支各改一遍。
@@ -210,6 +221,7 @@ function inlineSpec(form, cwd) {
         '- href 用绝对路径，盘符照写、分隔符一律正斜杠。' +
           '**这个宿主里 `file:` 带行号点不动**——它被交给 `ShellExecute`，' +
           '后者把 `#1` 或 `:1` 当成文件名的一部分去找，找不到也不报错。',
+        RELATIVE_HREF_NOTE('vscode://file/'),
       ],
       driftNote:
         '**落盘 md 用同一个形态，同样整条裸露**：' + PERSISTED_SAMPLE +
@@ -231,6 +243,7 @@ function inlineSpec(form, cwd) {
         '例外：给人看渲染效果的 md（如 mermaid 图示文件）整条不带 `#`——带了 iTerm2 会按 ' +
         'Semantic History 交给编辑器跳行，不带才交给系统默认 md 应用（如 Typora）渲染打开。',
       '- href 用绝对路径：`file://` 后紧跟以斜杠开头的路径，合起来三条斜杠。',
+      RELATIVE_HREF_NOTE('file:///'),
       '- **链接指向目录时换 scheme**：写成 [hooks/](vscode://file/abs/path/hooks/)——' +
         '圆括号里写 `vscode://file/`，接绝对路径，以斜杠结尾，不带行号；方括号里写目录名加斜杠。' +
         '点开由 VS Code 打开这个目录。目录写成 `file:` 而漏了 `#` 时，' +

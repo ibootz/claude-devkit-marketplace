@@ -13,6 +13,14 @@
 // 5. 4.22.0：括注的出处是 claude-sources/ 下的远端快照、且本轮被 Write / Edit / MultiEdit 过 → 打回。
 //    本轮写过哪些文件由 stop-audit.js 用 wiki-check 的 turnWrites 从 transcript 取，取不到就不查这一条。
 //
+// 6. 4.33.0：href 是相对路径的链接（`[README.md](docs/README.md)`、`[x](file://docs/x.md)`）→ 打回。
+//    终端里它照样画下划线，点了打不开；最常见的来路是汇报刚写完的 md 时，把文档里落盘那一轨的相对
+//    链接照抄进回复。判据只看 href 的形态（无 scheme、不以 # 或 / 开头；或 file:// 后不是 /），
+//    按 Stop 入参的 cwd 解析，解析得到就在 reason 里给出可照抄的绝对链接。
+//    这一路不跟 CLICKABLE_PATHS：那个开关关的是「必须挂链接」的要求，链接写了却点不开在任何终端
+//    宿主里都是错。只在两个宿主跳过（由 stop-audit.js 判）：VS Code 侧边栏 webview（相对路径正是
+//    那里的规定形态）与 Codex（不用 markdown 链接）。
+//
 // 【不核什么】从没挂过链接的词（该不该挂要猜语义，归模型那路与注入）；跨回复的一致性。
 // 【失灵时怎样】任何异常返回 ''，不打回。
 
@@ -137,11 +145,63 @@ function quoteProblems(message, writtenThisTurn) {
   return out
 }
 
-function termLinksReason(message, writtenThisTurn) {
-  const hits = bareRepeats(message)
-  const quotes = quoteProblems(message, writtenThisTurn)
-  if (!hits.length && !quotes.length) return ''
+// 相对 href：没有 scheme、不以 # 或 / 开头；或 file:// 后面不是 /（file://docs/a.md）。
+// 无 scheme 的 /abs/path 没实测过点不点得开，不拦。
+const SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:/
+
+function isRelativeHref(href) {
+  if (/^file:\/\/(?!\/)/i.test(href)) return true
+  if (SCHEME_RE.test(href)) return false
+  return !/^[#/]/.test(href)
+}
+
+function absLinkFor(abs, isDir, frag) {
+  const u = abs.replace(/\\/g, '/').replace(/^\/?/, '/').replace(/ /g, '%20').replace(/\(/g, '%28').replace(/\)/g, '%29')
+  if (isDir) return `vscode://file${u.replace(/\/?$/, '/')}`
+  const line = /^L?(\d+)$/.exec(frag || '')
+  return `file://${u}#${line ? line[1] : 1}`
+}
+
+// 返回 [{ label, href, fix }]：fix 是按 cwd 解析出的绝对链接，解析不到为 null。
+function relativeLinks(message, cwd) {
+  const text = stripFences(String(message || '')).replace(/`[^`\n]+`/g, ' ')
+  const out = []
+  const seen = new Set()
+  for (const m of text.matchAll(LINK_RE)) {
+    const href = m[2]
+    const key = `${m[1]}\u0000${href}`
+    if (!isRelativeHref(href) || seen.has(key)) continue
+    seen.add(key)
+    let rel = href.replace(/^file:\/\//i, '')
+    const hash = rel.indexOf('#')
+    const frag = hash >= 0 ? rel.slice(hash + 1) : ''
+    if (hash >= 0) rel = rel.slice(0, hash)
+    try { rel = decodeURIComponent(rel) } catch { /* 原样 */ }
+    let fix = null
+    if (cwd && rel) {
+      const abs = path.resolve(cwd, rel)
+      try { fix = absLinkFor(abs, fs.statSync(abs).isDirectory(), frag) } catch { /* 解析不到 */ }
+    }
+    out.push({ label: cleanLabel(m[1]), href, fix })
+  }
+  return out
+}
+
+function termLinksReason(message, writtenThisTurn, opts = {}) {
+  const linkOn = opts.linkAudit !== false
+  const hits = linkOn ? bareRepeats(message) : []
+  const quotes = linkOn ? quoteProblems(message, writtenThisTurn) : []
+  const rels = opts.relativeAudit ? relativeLinks(message, opts.cwd) : []
+  if (!hits.length && !quotes.length && !rels.length) return ''
   const lines = ['回合末链接核对（机械比对，不经模型）：']
+  if (rels.length) {
+    lines.push('- 链接的圆括号里是相对路径，终端里点了打不开。对话正文的链接圆括号必须以 `file:///`（文件）或 `vscode://file/`（目录）开头；落盘 md 里的相对链接不能照抄进回复：')
+    for (const r of rels) {
+      lines.push(r.fix
+        ? `  - [${r.label}](${r.href}) → 改成 [${r.label}](${r.fix})`
+        : `  - [${r.label}](${r.href}) → 按当前目录解析不到，先用 ls 找到它的绝对路径再写；它若是从某份 md 里抄来的，相对的是那份 md 所在目录`)
+    }
+  }
   if (hits.length) {
     const shown = hits.map((h) => `「${h.term}」${h.count} 处`).join('、')
     lines.push(`- 挂过链接的词别处又裸写：${shown}。像 wiki 一样，本条回复里挂过链接的词每次出现都挂同一个链接；行内代码里单独写这个词也算，改成链接；围栏代码块与命令内部不算。`)
@@ -153,4 +213,4 @@ function termLinksReason(message, writtenThisTurn) {
   return lines.join('\n')
 }
 
-module.exports = { termLinksReason, quoteProblems, bareRepeats, termsOf, countBare }
+module.exports = { termLinksReason, relativeLinks, isRelativeHref, quoteProblems, bareRepeats, termsOf, countBare }

@@ -35,6 +35,7 @@
 //    （总耗时≈最慢一路），各路提示词都要求命中项全部列出、不设上限，机械核对同样不截断。
 // 3c. 4.19.0 起再加一路不经模型的链接核对（term-links.js）：最后一条回复里挂过本机链接的词，
 //    别处裸写就打回（wiki 式：每次出现都可点）。CLICKABLE_PATHS 关掉时不跑。
+//    4.33.0 起同一处再核相对 href（点不开的链接），这一项不跟 CLICKABLE_PATHS，见 relativeLinkAuditEnabled。
 // 4. ok=false 时 stdout 输出 {"decision":"block","reason":...}，harness 把 reason 交回主模型、
 //    本轮继续；其余一切情形（判定满足、超时、claude 找不到、输出解析失败）放行。
 //
@@ -231,6 +232,16 @@ function buildJudgeInput(hookInput, contextLines, promptTemplate) {
 function linkAuditEnabled(env) {
   const flag = String(env.CLICKABLE_PATHS || '').toLowerCase()
   return !(flag === 'off' || flag === '0' || flag === 'false')
+}
+
+// 4.33.0 相对 href 核对（term-links.js 第 6 条）不跟 CLICKABLE_PATHS：它不要求挂链接，只拦写了却
+// 点不开的链接。跳过两个宿主：VS Code 侧边栏 webview（相对路径是那里的规定形态，判据同
+// devkit-clickable-paths 的 detectHost）与 Codex（PLUGIN_ROOT 非空或入参含 turn_id）。
+function relativeLinkAuditEnabled(env, hookInput) {
+  if (env.CLAUDE_CODE_ENTRYPOINT === 'claude-vscode') return false
+  if (env.PLUGIN_ROOT) return false
+  if (hookInput && Object.prototype.hasOwnProperty.call(hookInput, 'turn_id')) return false
+  return true
 }
 
 // 返回本轮要跑的判定：[{ kind, template }]。kind=source 审出处，kind=link 审链接。
@@ -500,10 +511,12 @@ async function main() {
   try { if (wikiAuditEnabled(process.env)) wiki = wikiReason(raw, userPromptText, hookInput.last_assistant_message) } catch { /* 词条核对失灵就不核 */ }
   let terms = ''
   try {
-    if (linkAuditEnabled(process.env)) {
+    const linkAudit = linkAuditEnabled(process.env)
+    const relativeAudit = relativeLinkAuditEnabled(process.env, hookInput)
+    if (linkAudit || relativeAudit) {
       let written = null
-      try { if (raw) written = turnWrites(raw, userPromptText).all } catch { /* 读不出本轮写过哪些文件就不查快照 */ }
-      terms = termLinksReason(hookInput.last_assistant_message, written)
+      try { if (linkAudit && raw) written = turnWrites(raw, userPromptText).all } catch { /* 读不出本轮写过哪些文件就不查快照 */ }
+      terms = termLinksReason(hookInput.last_assistant_message, written, { linkAudit, relativeAudit, cwd: hookInput.cwd })
     }
   } catch { /* 失灵就不核 */ }
 
@@ -522,4 +535,4 @@ if (require.main === module) {
   main().catch(() => { /* fail-open */ }).finally(() => process.exit(0))
 }
 
-module.exports = { isExecutable, SCHEMA, THIRD_PARTY_MODEL, CHILD_EFFORT, readTail, logFailure, thirdPartySettings, routeArgs, parseVerdictText, TEXT_TAIL, routeEnv, wikiAuditEnabled, loadAudits, mergeReasons, runAudits, judgeAsync, linkAuditEnabled, buildContextLines, buildJudgeInput, userPromptText, previousRounds, cut, resolveClaude, judge, childEnv }
+module.exports = { relativeLinkAuditEnabled, isExecutable, SCHEMA, THIRD_PARTY_MODEL, CHILD_EFFORT, readTail, logFailure, thirdPartySettings, routeArgs, parseVerdictText, TEXT_TAIL, routeEnv, wikiAuditEnabled, loadAudits, mergeReasons, runAudits, judgeAsync, linkAuditEnabled, buildContextLines, buildJudgeInput, userPromptText, previousRounds, cut, resolveClaude, judge, childEnv }

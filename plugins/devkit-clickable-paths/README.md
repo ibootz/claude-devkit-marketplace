@@ -460,6 +460,14 @@ VS Code 而不是 Typora；不带 `#` 才交给系统默认 md 应用。本机�
 所以 `file-absolute` 那一支的行号规则补了一句例外：给人看渲染效果的 md 整条不带 `#`。
 只改这一支——另两支（VS Code 集成终端、Windows 终端）点链接本来就进编辑器，不存在这个分叉。
 
+## 2.5.0 点名相对路径 href
+
+2026-11-26 实测：一条回复的改动清单全写成 `[README.md](domains/…/README.md)`。模型刚写完那份 md，汇报时把文档里落盘那一轨的相对链接照抄进回复，终端照样画下划线、点了打不开。注入只给了正例，没点名这个来路。
+
+`file-absolute` 与 `vscode-absolute` 两支各加一条：圆括号以 `file:///`（Windows 为 `vscode://file/`）开头，相对路径点不开，汇报刚写的 md 时最容易犯。`workspace-relative`（webview）不加，那里相对路径是规定形态；Codex 分支不变。
+
+机械兜底在 `devkit-discipline` 4.33.0：回合末按当前目录解析相对 href 并打回。那一条不跟本插件的 `CLICKABLE_PATHS` 开关，关掉本插件注入的项目同样会被核对。
+
 ## 2.4.0 目录链接走 `vscode:`
 
 **现象**：对话正文里指向目录的链接，点开后 Finder 只打开到上一层目录，不进入目录本身。

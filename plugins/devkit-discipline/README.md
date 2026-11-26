@@ -568,6 +568,18 @@
 
 **未做**：本轮没有跑 A/B 评测。风险在于 3.34.0 评测里「跨服务调用说明」12/12 的遵循度来自 3.10 正文直接在场，改成「先调 skill」后多了一跳，模型可能跳过调用直接写字。若实测出现漏画，先加强 3.10 的指路措辞，再考虑把 mermaid 图种映射内联回来。
 
+### 4.33.0 回合末打回相对路径链接（点不开的链接）
+
+**起因**（2026-11-26）：一条回复的改动清单写成 `[README.md](domains/…/README.md)`——模型刚写完那份 md，汇报时照抄了文档里的相对链接。终端照样画下划线，点了打不开。该项目自己的每轮注入早已逐字点名这个错，照犯；而项目设了 `CLICKABLE_PATHS=off`，回合末的链接核对也随之全关，没有任何一道检查。
+
+**改了什么**：`term-links.js` 新增第 6 条机械核对。最后一条回复里，围栏代码块与行内代码之外的 `[标签](href)`，href 无 scheme 且不以 `#`、`/` 开头，或是 `file://` 后不接 `/`，即打回。按 Stop 入参的 `cwd` 解析，解析得到就在 reason 里给出可照抄的 `file:///…#行号`（目录给 `vscode://file/…/`）；解析不到时提示先 `ls` 找绝对路径。
+
+**开关**：这一条**不跟** `CLICKABLE_PATHS`——那个开关关的是「必须挂链接」，而写了却点不开的链接在任何终端宿主里都是错。关掉它用 `DEVKIT_STOP_AUDIT=off`（整个同步审查一起关）。宿主为 VS Code 侧边栏 webview（`CLAUDE_CODE_ENTRYPOINT=claude-vscode`，相对路径正是那里的规定形态）或 Codex（`PLUGIN_ROOT` 非空 / 入参含 `turn_id`）时不跑。
+
+**不拦**：无 scheme 的 `/abs/path`（没实测过能不能点）、`https:` / `mailto:` 等带 scheme 的、`#锚点`。
+
+**验证**：把出事那条回复原文喂给 `stop-audit.js`（`CLICKABLE_PATHS=off`、claude 不可用只跑机械路）——打回并列出 4 条，每条给出解析好的绝对链接；同一输入加 `CLAUDE_CODE_ENTRYPOINT=claude-vscode` 放行。`test/stop-audit-verify.js` 新增 11 条用例。
+
 ### 4.32.0 后台事实审查改调本机 agy CLI（gemini-4-neon，思考等级 medium）
 
 **起因**（2026-11-26）：用户要求「改成使用本机的 agy cli 调用 gemini-4-neon 进行审核」，思考等级 medium。

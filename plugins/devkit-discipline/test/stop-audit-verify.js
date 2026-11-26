@@ -704,6 +704,27 @@ out('SUCCESS', 'PASS\\n')
   }
 }
 
+// ---- 4.33.0 相对 href 核对：链接写了却点不开 ----
+{
+  const { relativeLinks, isRelativeHref, termLinksReason } = require(path.join(__dirname, '..', 'hooks', 'term-links.js'))
+  const { relativeLinkAuditEnabled } = require(path.join(__dirname, '..', 'hooks', 'stop-audit.js'))
+  const root = path.join(DIR, 'rel-root')
+  fs.mkdirSync(path.join(root, 'docs 2'), { recursive: true })
+  fs.writeFileSync(path.join(root, 'docs 2', 'a.md'), 'x')
+  check('相对 href 判定', isRelativeHref('docs/a.md') && isRelativeHref('./a.md') && isRelativeHref('../a.md#3') && isRelativeHref('file://docs/a.md'))
+  check('绝对与带 scheme 的不判', !isRelativeHref('file:///a/b.md#1') && !isRelativeHref('vscode://file/a/') && !isRelativeHref('https://e.com') && !isRelativeHref('#anchor') && !isRelativeHref('/abs/a.md') && !isRelativeHref('mailto:a@b.c'))
+  const r = relativeLinks('见 [a.md:3](docs%202/a.md#3) 与 [docs](docs%202) 与 [丢](nope/x.md)', root)
+  check('解析到文件 → 给 file:// 绝对链接带行号', r[0] && r[0].fix === `file://${path.join(root, 'docs%202', 'a.md').replace('docs%202', 'docs%202')}#3`, JSON.stringify(r))
+  check('解析到目录 → 给 vscode://file/ 以斜杠结尾', r[1] && r[1].fix === `vscode://file${root}/docs%202/`, JSON.stringify(r))
+  check('解析不到 → fix 为 null', r[2] && r[2].fix === null)
+  check('同 href 不同标签各列一条', relativeLinks('[A](x.md) [B](x.md) [A](x.md)', root).length === 2)
+  check('围栏代码块与行内代码里的不算', relativeLinks('```\n[a](docs/a.md)\n```\n写成 `[a](docs/a.md)` 是错的', root).length === 0)
+  check('只开相对核对时不跑裸写核对', termLinksReason('[词](file:///x.md#1) 词', null, { linkAudit: false, relativeAudit: true, cwd: root }) === '')
+  check('相对核对 reason 含改法', termLinksReason('[a](docs%202/a.md)', null, { linkAudit: false, relativeAudit: true, cwd: root }).includes('→ 改成 [a](file://'))
+  check('默认（旧调用形态）不跑相对核对', termLinksReason('[a](docs/a.md)') === '')
+  check('宿主门控：终端开、webview 与 Codex 关', relativeLinkAuditEnabled({}, {}) && !relativeLinkAuditEnabled({ CLAUDE_CODE_ENTRYPOINT: 'claude-vscode' }, {}) && !relativeLinkAuditEnabled({ PLUGIN_ROOT: '/x' }, {}) && !relativeLinkAuditEnabled({}, { turn_id: 't' }))
+}
+
 fs.rmSync(DIR, { recursive: true, force: true })
 console.log(`stop-audit: ${pass} passed, ${fail} failed`)
 process.exit(fail === 0 ? 0 : 1)
