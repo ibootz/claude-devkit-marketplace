@@ -14,6 +14,12 @@
 
 ---
 
+## 6.45.0：图上的箭头说明写业务上发生了什么，代码名降到次行
+
+`tech-doc` 的每图检查第 3 条（[`SKILL.md`](skills/tech-doc/SKILL.md)、[`references/figures.md`](skills/tech-doc/references/figures.md)）与 `references/html.md` 的手写 SVG 要求补上：箭头主说明写给对业务零上下文的读者看，接口、表、字段放次行小字或节点副注，不单独出现；状态值带含义；参与方配一句它是做什么的。起因是一张 17 步时序图的箭头全是 `tag/adopt(tagCode+tagId)` 这类代码名，不熟业务的人看不出每步做了什么。与 devkit-svg-diagram 1.2.0（时序消息加 `desc` 次行）、devkit-excalidraw-diagram 1.9.0 同一口径。
+
+---
+
 ## 6.44.0：svg-diagram 用不了时先代装、再出 SVG、最后才退 Mermaid，不再退 Excalidraw
 
 `show-me` 的「svg-diagram 用不了时」、`tech-doc` 的 `references/figures.md`、`new-thing-understand` 的配图一节改为三步：调用返回 `Unknown skill` 时先问用户要不要代装（同意则 AI 执行 `claude plugin install`、用户 `/reload-plugins` 后照常出图）；只有转 PNG 跑不通（缺 `uv` / Chromium）时用 SVG 交付（`render.py` 只用标准库）；都不行才改写 Mermaid（`new-thing-understand` 原位放文本箭头图标「待补图」）。不再退到 `devkit-excalidraw-diagram`。原因：Excalidraw 的坐标全靠 AI 手算，没有穿线、重叠、越框检查，2026-11-24 一个会话就因 svg-diagram 未装退到 Excalidraw，出了箭头起点错、分支线折回、两个箭头叠在一起的图。Excalidraw 仍在用户点名时使用。下一节 6.43.0 里的「降级链」以本节为准。

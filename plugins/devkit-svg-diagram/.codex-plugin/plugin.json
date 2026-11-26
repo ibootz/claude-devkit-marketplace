@@ -1,6 +1,6 @@
 {
   "name": "devkit-svg-diagram",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "SVG 图解（默认出图）- JSON 描述按固定主题渲染 SVG + PNG，自带重叠与溢出检查；九种布局、七套主题；转 PNG 需 uv 与 Chromium，见 README",
   "author": {
     "name": "zhangq"

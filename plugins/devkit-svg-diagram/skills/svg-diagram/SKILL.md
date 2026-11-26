@@ -36,6 +36,8 @@ Write a small JSON **spec**; `scripts/render.py` lays it out and draws it in a f
 
    Give every card a `title` of a few words; put the detail in `desc` (one short line). Use roles for meaning, not decoration: 2–4 roles per diagram plus `plain`, and a `legend` entry for each role used.
 
+   Write every label for a reader new to the system: the main text says what happens in business terms, and the code name rides underneath. A label made only of an endpoint, method, table or field (`tag/adopt(tagCode+tagId)`, `adopt_status=1`) tells that reader nothing. In sequence diagrams put the business sentence in `label` and the endpoint / table / field in the message's `desc`; in flows keep edge labels to a short business word and move the explanation into the node's `desc`. Give a status value its meaning (`adopt=0（未采纳）`). Give each participant a `desc` saying what it is ("AI 打标服务"), since service names alone rarely say.
+
 3. **Render**:
 
    ```bash

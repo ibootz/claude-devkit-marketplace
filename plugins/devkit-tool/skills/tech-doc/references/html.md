@@ -58,7 +58,7 @@ SKILL.md 第四步的六条照用。图注写在图前：`<p class="caption-lead
 **手写 SVG（只用于简单图：≤5 个方框、一条时间轴、几根柱子）**
 - 直接写 `<figure><svg viewBox="0 0 宽 高" role="img" aria-label="图注">…</svg></figure>`，不经过文件。
 - 配色用模板里的角色变量，与 `figures.md`「三、全篇统一」同一套，写在 `style` 里：`style="fill:var(--svc);stroke:var(--svc-s)"`；平台 `--plat`、外部 `--ext`、目标 `--target`、范围外 `--out`（各自带 `-s` 是描边）。写进 `style` 而不是 `fill="var(--svc)"` 属性：Chromium 实测两种都生效，其它浏览器对属性里的 `var()` 未核实，`style` 是标准 CSS，稳妥。
-- 每个方框有 `<text>` 标签，每条箭头旁有动作标签；文字写 `style="font-family:inherit"`，中文才不掉成衬线字体。
+- 每个方框有 `<text>` 标签，每条箭头旁有业务动作标签（接口、表、字段放下一行小字）；文字写 `style="font-family:inherit"`，中文才不掉成衬线字体。
 - 超过上面的规模就改用 svg-diagram：手写 SVG 的布局全靠算坐标，复杂图容易重叠。
 
 ## 五、打包与检查

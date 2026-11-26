@@ -8,13 +8,13 @@
     {"id": "user_svc", "title": "用户服务", "role": "platform"}
   ],
   "messages": [
-    {"from": "user", "to": "app", "label": "访问 /exam"},
-    {"from": "app", "to": "user", "label": "302 跳 SSO", "dashed": true},
-    {"from": "user", "to": "sso", "label": "登录"},
-    {"from": "sso", "to": "app", "label": "回调带 code"},
-    {"from": "app", "to": "user_svc", "label": "换 token"},
-    {"from": "user_svc", "to": "user_svc", "label": "建会话"},
-    {"from": "user_svc", "to": "app", "label": "token", "dashed": true},
+    {"from": "user", "to": "app", "label": "打开考试页", "desc": "GET /exam"},
+    {"from": "app", "to": "user", "label": "未登录，转去企业登录页", "desc": "302 跳 SSO", "dashed": true},
+    {"from": "user", "to": "sso", "label": "输入企业账号登录"},
+    {"from": "sso", "to": "app", "label": "登录成功，带回一次性凭证", "desc": "回调 /callback?code=…"},
+    {"from": "app", "to": "user_svc", "label": "用凭证换用户身份", "desc": "POST /token，code 换 token"},
+    {"from": "user_svc", "to": "user_svc", "label": "记下这次登录", "desc": "写会话表 session"},
+    {"from": "user_svc", "to": "app", "label": "返回用户身份", "desc": "token", "dashed": true},
     {"from": "app", "to": "user", "label": "进入考试", "accent": "success"}
   ],
   "legend": [

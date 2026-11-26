@@ -274,13 +274,38 @@ def layout_sequence(spec, th, findings):
         boxes[n["id"]] = Box(n["id"], x0 + i * (colw + gap), y0, colw, head_h, node=n)
     step = L["grid_gap_y"] * 0.8
     msgs = spec.get("messages") or []
-    bottom = y0 + head_h + step * (len(msgs) + 0.6)
+    rows = message_rows(spec, th, boxes)
+    bottom = y0 + head_h + step * (len(msgs) + 0.6) + sum(extra for _, extra in rows)
     right = x0 + len(parts) * (colw + gap) - gap
-    for i, m in enumerate(msgs):  # a self-call label sticks out to the right of its lifeline
+    latin = th["font"]["latin_w"]
+    for i, (m, (dl, _)) in enumerate(zip(msgs, rows)):  # a self-call label sticks out to the right of its lifeline
         b = boxes.get(m.get("from"))
         if b and m.get("from") == m.get("to") and m.get("label"):
-            right = max(right, b.cx + 36 + text_w(f"{i + 1}. {m['label']}", L["label_size"], th["font"]["latin_w"]))
+            right = max(right, b.cx + 36 + text_w(f"{i + 1}. {m['label']}", L["label_size"], latin))
+        if b and m.get("from") == m.get("to") and dl:
+            right = max(right, b.cx + 42 + max(text_w(line, msg_desc_size(th), latin) for line in dl))
     return boxes, [], right, bottom
+
+
+def msg_desc_size(th):
+    return round(th["layout"]["label_size"] * 0.88, 1)
+
+
+def message_rows(spec, th, boxes):
+    """Per message: (wrapped desc lines, extra height those lines add below the arrow)."""
+    dsz, latin = msg_desc_size(th), th["font"]["latin_w"]
+    xs = sorted(b.cx for b in boxes.values())
+    pitch = min([q - p for p, q in zip(xs, xs[1:])] or [max([b.w for b in boxes.values()] or [0])])
+    rows = []
+    for m in spec.get("messages") or []:
+        a, b = boxes.get(m.get("from")), boxes.get(m.get("to"))
+        if not m.get("desc") or not a or not b:
+            rows.append(([], 0))
+            continue
+        maxw = abs(b.cx - a.cx) - 16 if a is not b else pitch - 50  # self call: up to near the next lifeline
+        lines = wrap(m["desc"], dsz, latin, max(maxw, 80))
+        rows.append((lines, len(lines) * dsz * 1.4 + (6 if a is not b else 0)))
+    return rows
 
 
 
@@ -544,8 +569,10 @@ def draw_sequence(spec, th, boxes, bottom, findings):
         return body, labels, []
     step = L["grid_gap_y"] * 0.8
     y = max(b.b for b in boxes.values()) + step * 0.8
-    ls = L["label_size"]
+    ls, dsz = L["label_size"], msg_desc_size(th)
+    rows = message_rows(spec, th, boxes)
     for i, m in enumerate(spec.get("messages") or []):
+        dl, extra = rows[i]
         a, b = boxes.get(m.get("from")), boxes.get(m.get("to"))
         if not a or not b:
             findings.append(f"message {i} ({m.get('from')}->{m.get('to')}): unknown participant id")
@@ -568,7 +595,12 @@ def draw_sequence(spec, th, boxes, bottom, findings):
             labels.append(f'<text x="{lx:.1f}" y="{ly:.1f}" font-size="{ls}" fill="{th["edge_label"]["text"]}" text-anchor="{anchor}" dominant-baseline="central" stroke="{th["bg"]}" stroke-width="5" stroke-linejoin="round" paint-order="stroke">{esc(text)}</text>')
             if a is not b and text_w(text, ls, th["font"]["latin_w"]) > abs(b.cx - a.cx) - 12:
                 findings.append(f"message label {text!r} is wider than the gap between its lifelines; shorten it or raise col_width")
-        y += step
+        # desc: the technical detail (endpoint, table, field) in the secondary color under the arrow
+        dy = y + dsz * 0.95 if a is not b else y + ls * 1.25
+        for line in dl:
+            labels.append(f'<text x="{lx:.1f}" y="{dy:.1f}" font-size="{dsz}" fill="{th["text"]["desc"]}" text-anchor="{anchor}" dominant-baseline="central" stroke="{th["bg"]}" stroke-width="5" stroke-linejoin="round" paint-order="stroke">{esc(line)}</text>')
+            dy += dsz * 1.4
+        y += step + extra
     return body, labels, []
 
 

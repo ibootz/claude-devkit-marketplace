@@ -84,7 +84,7 @@ Each node takes `"row"` and `"col"` (0-based). Row heights fit their tallest car
 | Edge field | Notes |
 |---|---|
 | `from`, `to` | Node ids. |
-| `label` | Short pill on the longest segment that leaves it clear of cards; a detour's label may sit beside the line. Keep under about 6 CJK characters. |
+| `label` | Short pill on the longest segment that leaves it clear of cards; a detour's label may sit beside the line. Keep under about 6 CJK characters, in business words (「通过」「退回修改」), not a code name; the detail of what a step does goes in the target node's `desc`. |
 | `dashed` | Async, return, optional. |
 | `accent` | A role name (`"success"`): the edge takes that role's accent color. Use on one edge at most, the one the reader should follow. |
 | `both` | Arrowheads at both ends. |
@@ -98,13 +98,20 @@ Routing: same row → straight horizontal; same column → straight vertical; ot
 ```json
 "participants": [ {"id": "user", "title": "浏览器"}, {"id": "app", "title": "智测平台", "role": "primary"} ],
 "messages": [
-  {"from": "user", "to": "app", "label": "访问 /exam"},
-  {"from": "app", "to": "user", "label": "302", "dashed": true},
-  {"from": "app", "to": "app", "label": "校验"}
+  {"from": "user", "to": "app", "label": "打开考试页", "desc": "GET /exam"},
+  {"from": "app", "to": "user", "label": "未登录，转去企业登录页", "desc": "302 → SSO", "dashed": true},
+  {"from": "app", "to": "app", "label": "核对登录凭证是否有效", "desc": "校验 token 签名与过期时间"}
 ]
 ```
 
-Participants sit in a row; messages go top to bottom in array order and are numbered (`"numbered": false` at top level turns numbering off). `from` equal to `to` draws a self-call loop. Message fields: `label`, `dashed` (replies), `accent`.
+Participants sit in a row; messages go top to bottom in array order and are numbered (`"numbered": false` at top level turns numbering off). `from` equal to `to` draws a self-call loop.
+
+| Message field | Notes |
+|---|---|
+| `label` | Above the arrow, one line: what happens, in business words a newcomer understands ("管理员采纳推荐标签"). Must fit between the two lifelines. |
+| `desc` | Under the arrow in the secondary color, wraps to the gap: the technical handle — endpoint, table, field, status value with its meaning (`tag/adopt，带 tagCode + tagId`). The row grows to fit. |
+| `dashed` | Replies and callbacks. |
+| `accent` | A role name: the arrow takes that role's accent color. |
 
 ## Tree layout: `tree`
 

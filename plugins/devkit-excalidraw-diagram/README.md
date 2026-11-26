@@ -49,6 +49,7 @@
 | `SKILL.md` 新增 Handing the Diagram Over、Updating an Existing Diagram 两节，开头加改图指路，`description` 补改图触发说法 | 1.6.0：回复里 PNG 用普通链接、不加 `!`；同一话题已有图时在原文件上定点改、重渲染到原路径，只有布局整体变化才重画 | 实测 `![图注](file://…png)` 在 Claude Code 终端印成纯文本、点不动；整份重写要重新输出全部 JSON，还会冲掉用户在编辑器里的手改 |
 | `SKILL.md` Styles 表加第五种风格及其规则；`references/color-palette.md` 末尾新增 Pastel Style 色板；`references/design-guide.md` 第 3.4 条注明例外 | 1.7.0：新增「柔和色块」风格（pastel）：低饱和分区底色 + 同色系浅描边、大分区里嵌小卡片、卡片上标题下灰色说明、三角箭头、范围外用虚线框；只有这种风格换色板，容器描边对比度低于 3:1 属有意为之，文字与箭头仍达标 | 2026-11-19 用户要能用 Excalidraw 复刻 nb 组方案文档里的柔和色块分层架构图；色值取自该样板 SVG |
 | `references/color-palette.md` 通用色板、文字色、代码块配色全部重写，末尾新增 Brutal Style；`SKILL.md` Styles 表、Text Rules、Reference Gallery、Render 一节、Checklist 第 17 条；`references/element-templates.md`、`json-schema.md`、`design-guide.md` 第 4.5、7.3 条；`render_excalidraw.py` 与 `render_template.html`；`references/gallery/` 由 PNG 换成 SVG | 1.8.0：默认风格改为「Mac 扁平」（mac：等宽字体 + 柔和色块 + 细描边 + 卡片柔和投影 + 三角箭头 + 卡片文字居中），原「柔和色块」并入它；除新野兽派外所有风格共用一套 Mac 色板（浅底、同色相细描边、Apple 灰阶文字，文字对 4.5:1 达标，卡片细描边低于 3:1 属有意为之），代码块改浅底 Xcode 配色；新增「新野兽派」（brutal，保留自己的高饱和色板）；渲染脚本支持输出内嵌场景的 SVG、把 SVG 转成 PNG；图库 69 张改用 Mac 色板重渲染为内嵌场景的 SVG | 2026-11-21 用户嫌原商务配色丑，选定「Mac 扁平 + 柔和色块 + 等宽」为默认，并要求其他风格统一用这套颜色；同意收录新野兽派；图库要换成 SVG 或 Excalidraw 原始文件 |
+| `references/design-guide.md` 第 1.6 条 | 1.9.0：箭头标签写给对业务零上下文的读者：业务动作在前，接口、表、字段放次行小字或目标节点的注释，不单独出现；状态值带含义 | 一张时序图的箭头全是接口名，不熟业务的人看不出每步做了什么；与 svg-diagram、tech-doc 同一口径 |
 | `references/pyproject.toml`、`.gitignore`、上游 `README.md` | 未移植 | 依赖已内联进脚本；安装说明并入本文件 |
 
 改配色：编辑 `skills/excalidraw-diagram/references/color-palette.md`，所有图跟着变。
